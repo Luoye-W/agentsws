@@ -46,6 +46,7 @@ import type {
   PersonId,
   ReplySuggestion,
   SenderRule,
+  SenderRuleList,
   Todo,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -231,8 +232,18 @@ export interface MessagesPort {
     into: string,
   ): MaybePromise<{ moved: number; labels: MessageLabel[] }>
 
-  senderRules(actor: MessageActor): MaybePromise<{ rules: SenderRule[] }>
-  deleteSenderRule(actor: MessageActor, id: string): MaybePromise<{ deleted: boolean }>
+  /** WP439：规则清单（命中数、谁教的、刚删的几条）。老实现只回 `rules` 也认。 */
+  senderRules(actor: MessageActor): MaybePromise<SenderRuleList>
+  /** 删一条：当场生效。WP439：回删掉的那一条（「已删 · 撤回」要它）。 */
+  deleteSenderRule(
+    actor: MessageActor,
+    id: string,
+  ): MaybePromise<{ deleted: boolean; rule?: SenderRule }>
+  /** WP439：撤回刚删的那一条。不实现 = 这台机器删了就没了（路由回 501）。 */
+  restoreSenderRule?(
+    actor: MessageActor,
+    id: string,
+  ): MaybePromise<{ restored: boolean; rule?: SenderRule }>
 
   drafts(actor: MessageActor): MaybePromise<{ drafts: MessageDraft[] }>
   saveDraft(actor: MessageActor, input: MessageDraftInput): MaybePromise<{ draft: MessageDraft }>
@@ -570,12 +581,12 @@ export function messageRoutes(): Route[] {
         method: 'get',
         path: '/v1/messages/rules',
         operationId: 'listMessageSenderRules',
-        summary: '你教过的发件人规则（"以后这个发件人都这样"）',
+        summary: '你教过的发件人规则（"以后这个发件人都这样"）：命中数、谁教的、刚删的几条',
         tag: 'messages',
         auth: 'bearer',
         assignment: true,
         authz: READ,
-        returns: '{ rules: SenderRule[] }',
+        returns: 'SenderRuleList',
       },
       async (c, deps) => ok(c, await portOf(deps).senderRules(actorOf(c))),
     ),
@@ -584,14 +595,33 @@ export function messageRoutes(): Route[] {
         method: 'delete',
         path: '/v1/messages/rules/:id',
         operationId: 'deleteMessageSenderRule',
-        summary: '撤掉一条发件人规则',
+        summary: '撤掉一条发件人规则（当场生效：下一封那个发件人重新判）',
         tag: 'messages',
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
-        returns: '{ deleted: boolean }',
+        returns: '{ deleted: boolean; rule?: SenderRule }',
       },
       async (c, deps) => ok(c, await portOf(deps).deleteSenderRule(actorOf(c), param(c, 'id'))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/rules/:id/restore',
+        operationId: 'restoreMessageSenderRule',
+        summary: '撤回刚删的一条发件人规则（WP439，决策 243：删了能撤回）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: '{ restored: boolean; rule?: SenderRule }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.restoreSenderRule === undefined)
+          throw new ApiError('not_implemented', '这台机器上删掉的规则撤不回来')
+        return ok(c, await port.restoreSenderRule(actorOf(c), param(c, 'id')))
+      },
     ),
     route(
       {

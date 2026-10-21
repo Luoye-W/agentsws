@@ -66,18 +66,23 @@ import {
   POSITION_OF_ROUTE,
   positionForKind,
   ReplySuggester,
+  recordSenderRuleHit,
   restoreRemoteImages,
   routeOfPosition,
   SqliteMailboxStateStore,
   SqliteMessageStore,
+  SUGGEST_PROMPT_MARKER,
+  senderRuleForList,
   suggestFor,
   supportIntakeKey,
   supportMailboxSwitches,
   triageMessage,
+  undoableDeletedRules,
   userVerdict,
 } from '@agentsws/channels'
 import type {
   Clock,
+  DeletedSenderRule,
   EventEnvelope,
   Halt,
   Iso8601,
@@ -113,6 +118,8 @@ import type {
   ReplySuggestionKind,
   RoleId,
   SenderRule,
+  SenderRuleList,
+  SenderRuleView,
   Todo,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -134,6 +141,7 @@ import {
   type MailboxSwitchSettings,
   MailboxSwitchStore,
 } from './mailbox-switches.js'
+import { replyLanguage } from './reply-language.js'
 
 /** 客服岗位的那几条职责（开了其中任何一条就算"启用了客服岗位"）。 */
 const SUPPORT_ROLE_PREFIXES = ['dtc.support', 'dtc.aftersales', 'dtc.live-chat', 'support.']
@@ -177,8 +185,37 @@ export interface MessagesOptions {
     text: string,
     limit: number,
   ): Promise<{ source_id: string; title: string; text: string }[]>
-  /** 语气与签名（个人层技能 / 记忆，54 的六层）。 */
-  voice?(): string | undefined
+  /**
+   * 语气与签名（个人层技能 / 记忆，54 的六层）。
+   *
+   * WP439（docs/108 §5.7 ①）：回复建议带上**品牌口吻**——宿主按这封信所属品牌取：这封信已归某个岗位
+   * （`position_id`：交给过、或「交给 X」的主按钮）就用那条职责的口吻段，没人接的用品牌口吻。
+   * 取不到 / 没写过回 `undefined`（提示词里就没有这一段）。
+   */
+  voice?(ctx: {
+    position_id?: string | undefined
+  }): string | undefined | Promise<string | undefined>
+  /**
+   * WP439（决策 336）：品牌默认语言（ISO 639-1：`zh` / `en` / `de`……）。回复建议按来信语言写，
+   * 判不出来退回它，再不行中文。
+   */
+  brandLanguage?(): string | undefined
+  /** WP439：规则清单里「谁教的」写名字（同事 / 公司模式）。取不到就不写。 */
+  personName?(id: PersonId): string | undefined | Promise<string | undefined>
+  /**
+   * WP439（决策 243）：这个品牌是不是多人共用（同事互联 / 公司模式）——是的话规则清单写「谁教的」的名字，
+   * 删了通知同岗位、能撤回。不给 = 个人模式。
+   */
+  sharedRules?(): boolean | Promise<boolean>
+  /**
+   * WP439（决策 243）：共用模式里有人删了 / 撤回了一条发件人规则——告诉同岗位的人一声（WP429 铃铛「同事」类，
+   * 点了打开规则清单）。宿主决定发给谁（规则教过岗位 = 做那个岗位的人；没教过 = 品牌里的人），不发给 `by` 自己。
+   */
+  notifyRuleChange?(input: {
+    by: PersonId
+    action: 'deleted' | 'restored'
+    rule: SenderRule
+  }): void | Promise<void>
   /**
    * WP125（72 §P0-1）：**分拣判成 `support` 的来信交给客服判断层**。
    *
@@ -545,6 +582,16 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
   /** 发件人规则在同步那一轮里要被读很多次，开轮时刷一次就够。 */
   let rulesCache: SenderRule[] = []
 
+  /** WP439：一封信按发件人规则直达了——那条规则的命中账记一笔（按信的日期算，早于 30 天的不记）。 */
+  const noteRuleHit = async (record: MessageRecord): Promise<void> => {
+    const rule = matchSenderRule(rulesCache, record.from.email)
+    if (rule === undefined) return
+    const next = recordSenderRuleHit(rule, record.date, clock.now())
+    if (next === rule) return
+    await store.putSenderRule(next)
+    rulesCache = rulesCache.map((r) => (r.id === next.id ? next : r))
+  }
+
   /** WP163：每只邮箱最近一次没动成的邮箱动作（「消息」页左栏那一行）。 */
   const mailboxFailures = new MailboxActionFailures()
 
@@ -720,12 +767,20 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         },
         triageCtx(record.in_reply_to !== undefined || record.references.length > 0, record.account),
         triageModel,
-      ).then((verdict) => {
+      ).then(async (verdict) => {
         // WP172（docs/84 §5 第 5 条）：退订回信、硬退信分拣时直接进抑制名单，不等 Run
         try {
           options.b2b?.observe(record)
         } catch (e) {
           logQuiet('b2b_suppression_failed', record.account, e)
+        }
+        // WP439：按发件人规则直达的那一封——那条规则上记一笔（规则清单「最近 30 天命中几次」）
+        if (verdict.kind_by === 'sender_rule') {
+          try {
+            await noteRuleHit(record)
+          } catch (e) {
+            logQuiet('sender_rule_hit_failed', record.account, e)
+          }
         }
         return verdict
       }),
@@ -1128,6 +1183,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       labels: prior?.labels ?? [...row.labels],
       by,
       created_at: clock.now(),
+      // WP439：人教的盖过 AI 自己学的（docs/108 §5.2「人的优先」）
+      source: 'user',
       ...patch,
     }
     await store.putSenderRule(rule)
@@ -1295,13 +1352,19 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       }
       if (input.remember_sender !== true) return { message: next, writeback }
       // 「以后这个发件人都这样？」——教一次，下一封直达，不再花模型（63 §4 ②）
+      const ruleId = `rule_${sha256(`${workspace_id}|${row.from.email}`).slice(0, 16)}`
+      const prior = (await store.senderRules()).find((r) => r.id === ruleId)
       const rule: SenderRule = {
-        id: `rule_${sha256(`${workspace_id}|${row.from.email}`).slice(0, 16)}`,
+        id: ruleId,
         sender: row.from.email,
         route,
         labels: [...row.labels],
         by: actor.person_id,
         created_at: clock.now(),
+        source: 'user',
+        // WP439：重教一次不清命中账
+        ...(prior?.hit_days === undefined ? {} : { hit_days: prior.hit_days }),
+        ...(prior?.last_hit_at === undefined ? {} : { last_hit_at: prior.last_hit_at }),
       }
       await store.putSenderRule(rule)
       rulesCache = await store.senderRules()
@@ -1396,14 +1459,123 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       return { moved, labels: await store.labels() }
     },
 
-    async senderRules(): Promise<{ rules: SenderRule[] }> {
-      return { rules: await store.senderRules() }
+    /**
+     * WP439（docs/108 §5.1.5）：规则清单——你教过的发件人（命中数现算），共用模式写「谁教的」名字，
+     * 外加刚删的几条（能撤回）。
+     */
+    async senderRules(actor: MessageActor): Promise<SenderRuleList> {
+      const now = clock.now()
+      const shared = (await options.sharedRules?.()) === true
+      const names = new Map<string, string | undefined>()
+      const nameOf = async (id: PersonId): Promise<string | undefined> => {
+        if (!shared || options.personName === undefined) return undefined
+        if (!names.has(id))
+          names.set(id, await Promise.resolve(options.personName(id)).catch(() => undefined))
+        return names.get(id)
+      }
+      const rules: SenderRuleView[] = []
+      for (const r of await store.senderRules()) {
+        const by_name = await nameOf(r.by)
+        rules.push({
+          ...senderRuleForList(r, now),
+          ...(by_name === undefined ? {} : { by_name }),
+          ...(r.by === actor.person_id ? { by_me: true } : {}),
+        })
+      }
+      // 命中多的在前；一样多按最近命中、再按教的先后
+      rules.sort(
+        (a, b) =>
+          (b.hits_30d ?? 0) - (a.hits_30d ?? 0) ||
+          (b.last_hit_at ?? '').localeCompare(a.last_hit_at ?? '') ||
+          b.created_at.localeCompare(a.created_at),
+      )
+      const recently_deleted: DeletedSenderRule[] = []
+      for (const d of undoableDeletedRules((await store.deletedSenderRules?.()) ?? [], now)) {
+        const deleted_by_name = await nameOf(d.deleted_by)
+        recently_deleted.push({
+          ...d,
+          rule: senderRuleForList(d.rule, now),
+          ...(deleted_by_name === undefined ? {} : { deleted_by_name }),
+          ...(d.deleted_by === actor.person_id ? { deleted_by_me: true } : {}),
+        })
+      }
+      return { rules, shared, recently_deleted }
     },
 
-    async deleteSenderRule(_actor: MessageActor, id: string): Promise<{ deleted: boolean }> {
+    /**
+     * 删一条发件人规则：当场生效（下一封那个发件人重新走模型）。WP439：留一份「刚删的」能撤回；
+     * 共用模式里通知同岗位（决策 243：谁都能删、留名、通知、能撤回）。
+     */
+    async deleteSenderRule(
+      actor: MessageActor,
+      id: string,
+    ): Promise<{ deleted: boolean; rule?: SenderRule }> {
+      const prior = (await store.senderRules()).find((r) => r.id === id)
       const deleted = await store.deleteSenderRule(id)
       rulesCache = await store.senderRules()
-      return { deleted }
+      if (!deleted || prior === undefined) return { deleted }
+      const at = clock.now()
+      await store.putDeletedSenderRule?.({
+        rule: prior,
+        deleted_by: actor.person_id,
+        deleted_at: at,
+      })
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'messages.sender_rule_deleted',
+        actor: { kind: 'person', id: actor.person_id },
+        subject: { type: 'sender_rule', id },
+        correlation: { trace_id: `tr_msgrule_${id}_${at}` },
+        // 63 §10：只有域，没有完整地址
+        payload: { sender_domain: domainOf(prior.sender), source: prior.source ?? 'user' },
+      })
+      if ((await options.sharedRules?.()) === true) {
+        try {
+          await options.notifyRuleChange?.({ by: actor.person_id, action: 'deleted', rule: prior })
+        } catch (e) {
+          logQuiet('sender_rule_notify_failed', '', e)
+        }
+      }
+      return { deleted, rule: senderRuleForList(prior, at) }
+    },
+
+    /** WP439：撤回刚删的那一条（同一个 id 放回去，命中账一起回来）。已经又教过同一个发件人的不覆盖。 */
+    async restoreSenderRule(
+      actor: MessageActor,
+      id: string,
+    ): Promise<{ restored: boolean; rule?: SenderRule }> {
+      const now = clock.now()
+      const row = undoableDeletedRules((await store.deletedSenderRules?.()) ?? [], now).find(
+        (d) => d.rule.id === id,
+      )
+      if (row === undefined) return { restored: false }
+      await store.dropDeletedSenderRule?.(id)
+      const current = await store.senderRules()
+      if (current.some((r) => r.id === id)) return { restored: false }
+      await store.putSenderRule(row.rule)
+      rulesCache = await store.senderRules()
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'messages.sender_rule_restored',
+        actor: { kind: 'person', id: actor.person_id },
+        subject: { type: 'sender_rule', id },
+        correlation: { trace_id: `tr_msgrule_${id}_${now}` },
+        payload: { sender_domain: domainOf(row.rule.sender) },
+      })
+      if ((await options.sharedRules?.()) === true && actor.person_id !== row.deleted_by) {
+        try {
+          await options.notifyRuleChange?.({
+            by: actor.person_id,
+            action: 'restored',
+            rule: row.rule,
+          })
+        } catch (e) {
+          logQuiet('sender_rule_notify_failed', '', e)
+        }
+      }
+      return { restored: true, rule: senderRuleForList(row.rule, now) }
     },
 
     async drafts(): Promise<{ drafts: MessageDraft[] }> {
@@ -1512,17 +1684,41 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         .filter((m) => m.id !== row.id)
         .slice(-3)
         .map((m) => `${m.from.email}: ${m.snippet}`)
-      const voice = options.voice?.()
+      /*
+       * WP439（docs/108 §5.7 ①）：品牌口吻——已归某个岗位的（交给过 / 「交给 X」是主按钮的）用那条职责的
+       * 口吻段，没人接的用品牌口吻；语言按来信（决策 336），判不出退回品牌默认语言，再不行中文。
+       */
+      const handTo = needsReply
+        ? suggestFor(
+            {
+              kind: kindOfLegacy(row.triage, row.labels, row.route).kind,
+              needs_reply: true,
+              suggested_position: row.triage?.suggested_position,
+              suggested_route: row.triage?.suggested_route,
+            },
+            positionOptions(),
+          )
+        : undefined
+      const voicePosition =
+        row.handled?.position_id ?? (handTo?.action === 'hand' ? handTo.position : undefined)
+      const voice = needsReply
+        ? await Promise.resolve(options.voice?.({ position_id: voicePosition })).catch(
+            () => undefined,
+          )
+        : undefined
       const suggestions: ReplySuggestion[] = needsReply
         ? await suggester.suggest(row.id, {
             subject: row.subject,
             from: row.from.email,
             body: row.text.slice(0, 2000),
             context,
-            ...(voice === undefined ? {} : { voice }),
+            ...(voice === undefined || voice === '' ? {} : { voice }),
             knowledge,
             kinds: ['short', 'detailed', 'decline'],
-            lang: 'zh',
+            lang: replyLanguage(
+              `${row.subject}\n${row.text.slice(0, 2000)}`,
+              options.brandLanguage?.(),
+            ),
           })
         : []
       const todos =
@@ -2088,10 +2284,13 @@ async function classifyWithGateway(
 }
 
 const SUGGEST_SYSTEM = [
-  '你在帮一个人回一封邮件。给出若干条**互相有差别**的回复草稿——',
+  `${SUGGEST_PROMPT_MARKER}给出若干条**互相有差别**的回复草稿——`,
   '不是同义改写：短的那条只说结论，详细的那条把理由与下一步写清楚，婉拒的那条要礼貌但明确。',
   '只输出 JSON 数组，每项 `{ "kind": "short"|"detailed"|"decline", "text": "..." }`。',
-  '用发信人自己的语气；引用到知识库内容时照原意说，不要编造政策或承诺。',
+  // WP439（决策 336）：按来信语言写；口吻段是品牌话术，照它说话
+  '草稿一律用 `lang` 那种语言写（ISO 639-1，`zh` = 中文、`en` = 英文……），和来信同一种语言。',
+  '`voice` 不为空时是这个品牌的说话方式（语气、用词、签名），照它写；为空就用平实、礼貌的语气。',
+  '引用到知识库内容时照原意说，不要编造政策或承诺。',
 ].join('\n')
 
 function suggestModel(options: MessagesOptions, workspace_id: WorkspaceId): SuggestModel {

@@ -47,6 +47,7 @@ import type {
   SetModelDefaultsInput,
   SetModelImageInput,
 } from '@agentsws/api'
+import { replySuggestStubScript } from '@agentsws/channels'
 import type {
   Attribution,
   Clock,
@@ -2362,7 +2363,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (provider !== undefined) providers.push(provider)
     }
     if (providers.length === 0)
-      providers.push(stubProvider({ seed: 7, scripts: [chatAnswerStubScript] }))
+      providers.push(
+        stubProvider({ seed: 7, scripts: [chatAnswerStubScript, replySuggestStubScript] }),
+      )
     // WP127 / WP274：生图单独一档，每次出图前按 `imageRoute()` 现解析（单独指定 > 文字模型同厂商 > 云）
     gateway.reconfigure({
       providers,

@@ -83,7 +83,7 @@ import type {
   ResolveMx,
   WecomSocketFactory,
 } from '@agentsws/channels'
-import { routeOfPosition } from '@agentsws/channels'
+import { replySuggestStubScript, routeOfPosition } from '@agentsws/channels'
 import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
 import type {
   AdsCaps,
@@ -144,6 +144,7 @@ import {
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
+  marketLanguage,
   normalizeGenuiHost,
   OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS,
   PLACEHOLDER_OWNER_EMAIL,
@@ -2516,7 +2517,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const makeGateway = (halt: Halt = kernel.halt): ModelGatewayApi =>
     createModelGateway({
-      providers: [stubProvider({ seed: 7, scripts: [chatAnswerStubScript] })],
+      providers: [
+        stubProvider({ seed: 7, scripts: [chatAnswerStubScript, replySuggestStubScript] }),
+      ],
       /*
        * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
        *
@@ -8702,6 +8705,67 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           evidence: [{ quote: `${c.from ?? '—'} → ${c.to}`, at: c.at }],
           semantic_key: `message_${c.field}:${c.sender_domain}:${c.to}`,
         })
+      },
+      /*
+       * WP439（docs/108 §5.7 ①）：回复建议带品牌口吻——已归某个岗位的信用那条职责的口吻段（按做那个岗位的
+       * 职责解析 `brand-voice`），没人接的用品牌口吻（不叠职责层）。这个品牌自己写过话术才有，每次现取。
+       */
+      voice: async ({ position_id }) => {
+        const template =
+          position_id === undefined ? undefined : org.positions().find((t) => t.id === position_id)
+        const duties = template?.roles.map((r) => r.role) ?? []
+        const holder = duties.length === 0 ? undefined : positionFor(ws, duties)
+        const held = holder !== undefined && duties.includes(holder.role_id) ? holder : undefined
+        const role_id = held?.role_id ?? 'common.member'
+        const resolved = await skills.registry
+          .resolve(BRAND_VOICE_SKILL, {
+            person_id: held?.person_id ?? firstPositionOf(ws)?.person_id ?? person.id,
+            workspace_id: ws,
+            role_id,
+          })
+          .catch(() => undefined)
+        return supportVoiceSection(role_id, brandVoiceCard(resolved))?.text
+      },
+      // WP439（决策 336）：判不出来信语言时退回品牌默认语言——第一个目标市场的主要语言
+      brandLanguage: () => {
+        const profile = onboardingRef?.brandProfile(ws)
+        const market = profile?.markets?.[0]
+        return market === undefined ? undefined : marketLanguage(market, profile?.market_languages)
+      },
+      // WP439（决策 243）：② ③ 里规则是品牌共用的——清单写「谁教的」名字，删了通知同岗位、能撤回
+      sharedRules: async () => ((await modeOfWorkspace?.(ws)) ?? 'solo') !== 'solo',
+      personName: async (id) => (await identity.getPerson(id).catch(() => undefined))?.name,
+      notifyRuleChange: async ({ by, action, rule }) => {
+        const template =
+          rule.position === undefined
+            ? undefined
+            : org.positions().find((t) => t.id === rule.position)
+        const duties = new Set(template?.roles.map((r) => r.role) ?? [])
+        const to =
+          duties.size === 0
+            ? (await identity.members(ws))
+                .filter((m) => m.left_at === undefined)
+                .map((m) => m.person_id)
+            : roles.assignments
+                .listByWorkspace(ws)
+                .filter((a) => a.revoked_at === undefined && duties.has(a.role_id))
+                .map((a) => a.person_id)
+        const who = (await identity.getPerson(by).catch(() => undefined))?.name ?? by
+        const text =
+          action === 'deleted'
+            ? `${who} 删了发件人规则「${rule.sender}」，下一封会重新判`
+            : `${who} 撤回了发件人规则「${rule.sender}」的删除`
+        for (const person_id of new Set(to)) {
+          if (person_id === by) continue
+          notifications.notify({
+            workspace_id: ws,
+            person_id,
+            category: 'team',
+            text,
+            href: '/messages?panel=rules',
+            key: `sender_rule:${rule.id}`,
+          })
+        }
       },
     })
     lateMessages.current = messages

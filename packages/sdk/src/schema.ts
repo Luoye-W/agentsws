@@ -9159,7 +9159,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** 你教过的发件人规则（"以后这个发件人都这样"） */
+    /** 你教过的发件人规则（"以后这个发件人都这样"）：命中数、谁教的、刚删的几条 */
     get: operations['listMessageSenderRules']
     put?: never
     post?: never
@@ -9179,8 +9179,25 @@ export interface paths {
     get?: never
     put?: never
     post?: never
-    /** 撤掉一条发件人规则 */
+    /** 撤掉一条发件人规则（当场生效：下一封那个发件人重新判） */
     delete: operations['deleteMessageSenderRule']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/messages/rules/{id}/restore': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 撤回刚删的一条发件人规则（WP439，决策 243：删了能撤回） */
+    post: operations['restoreMessageSenderRule']
+    delete?: never
     options?: never
     head?: never
     patch?: never
@@ -70477,7 +70494,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { rules: SenderRule[] } */
+      /** @description SenderRuleList */
       200: {
         headers: {
           [name: string]: unknown
@@ -70557,7 +70574,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { deleted: boolean } */
+      /** @description { deleted: boolean; rule?: SenderRule } */
       200: {
         headers: {
           [name: string]: unknown
@@ -70595,6 +70612,106 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  restoreMessageSenderRule: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description { restored: boolean; rule?: SenderRule } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
         headers: {
           [name: string]: unknown
         }
