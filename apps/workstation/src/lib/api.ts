@@ -55,6 +55,7 @@ import type {
   ReplySuggestion,
   Review,
   SenderRule,
+  SenderRuleList,
   Todo,
   BattleReport as WorkBattleReport,
 } from '@agentsws/contracts'
@@ -6615,6 +6616,21 @@ export const handMessageToPosition = (
     method: 'POST',
     body: { route: 'position', position_id, remember_sender },
   })
+
+/** WP439：规则清单（你教过的发件人、命中数、谁教的、刚删的）。 */
+export const listMessageSenderRules = (): Promise<SenderRuleList> => api('/v1/messages/rules')
+
+/** WP439：删一条发件人规则（当场生效：下一封那个发件人重新判）。 */
+export const deleteMessageSenderRule = (
+  id: string,
+): Promise<{ deleted: boolean; rule?: SenderRule }> =>
+  api(`/v1/messages/rules/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/** WP439：撤回刚删的那一条。 */
+export const restoreMessageSenderRule = (
+  id: string,
+): Promise<{ restored: boolean; rule?: SenderRule }> =>
+  api(`/v1/messages/rules/${encodeURIComponent(id)}/restore`, { method: 'POST' })
 
 /** WP212：改判类型（✎）；`remember_sender` = 以后这个发件人都这样。 */
 export const setMessageKind = (

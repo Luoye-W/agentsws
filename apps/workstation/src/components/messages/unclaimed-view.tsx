@@ -15,6 +15,7 @@ import { ArrowRight, Check, LayoutList, ShieldAlert, Sparkles } from 'lucide-rea
 import { type ReactNode, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { GoButton, StatusPill, WsAvatar, WsCard } from '@/components/design'
+import { useRailState } from '@/components/rail/rail-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ackMessageNotices, listMessageThreads, messageQuery } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -23,6 +24,7 @@ import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { HandActions, type HandNotice, positionName, useMessageOverview } from './hand-actions'
 import { KindChip } from './kind-chip'
+import { MESSAGE_RULES_ADDRESS } from './rules-address'
 
 const RANK: Record<string, number> = { high: 0, normal: 1, low: 2 }
 
@@ -373,6 +375,7 @@ function NoticeGroup({
 /** 右边：这些信去了哪、你教过它。 */
 function SideColumn({ overview }: { overview: MessageOverview }): ReactNode {
   const { t, lang } = useApp()
+  const rail = useRailState()
   const total = Math.max(1, overview.handed + overview.notice + overview.unclaimed)
   const bars: { key: string; n: number; tone: string }[] = [
     { key: 'handed', n: overview.handed, tone: 'bg-ws-brand' },
@@ -429,9 +432,18 @@ function SideColumn({ overview }: { overview: MessageOverview }): ReactNode {
                 </li>
               ))}
             </ul>
-            <span className="text-[12px] text-ws-muted-fg">
+            {/* WP439：「共 N 条 →」在右栏打开「规则」（能看、能删） */}
+            <button
+              type="button"
+              data-testid="messages-taught-rules"
+              className="ws-link-muted flex w-fit items-center gap-1 text-[12px]"
+              onClick={() => {
+                rail.openAddress(MESSAGE_RULES_ADDRESS)
+              }}
+            >
               {t('messages.taught.rules', { n: overview.taught.rules })}
-            </span>
+              <ArrowRight aria-hidden className="size-3" />
+            </button>
           </>
         )}
       </WsCard>

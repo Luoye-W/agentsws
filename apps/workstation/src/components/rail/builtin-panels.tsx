@@ -32,6 +32,7 @@ import {
   Globe,
   GraduationCap,
   Handshake,
+  ListChecks,
   MessageSquareQuote,
   MessagesSquare,
   Package,
@@ -42,6 +43,7 @@ import {
 } from 'lucide-react'
 import { lazy } from 'react'
 import { registerKeywordBankBlock } from '@/components/amazon/keyword-bank-block'
+import { MESSAGE_RULES_ADDRESS } from '@/components/messages/rules-address'
 import {
   useConnectionsStatus,
   useConversationsStatus,
@@ -118,6 +120,11 @@ const OfficePreviewBody = lazy(async () => {
 const ConversationsBody = lazy(async () => {
   const m = await import('@/components/conversations/conversations-panel')
   return { default: m.ConversationsPanel }
+})
+/** WP439：消息页右栏「规则」（你教过的发件人……）。 */
+const MessageRulesBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/message-rules-panel')
+  return { default: m.MessageRulesPanel }
 })
 /** WP372（决策 1019）：报表——全部 + 看板，与看一份。 */
 const ReportsBody = lazy(async () => {
@@ -483,6 +490,17 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('amazon-keywords', AmazonKeywordsBody)
+  // WP439（docs/108 §5.1.5）：消息页「你教过它」的「共 N 条 →」、消息页右上那颗、铃铛里「X 删了发件人规则」都开它
+  registerPanelType({
+    id: 'message-rules',
+    label: 'rail.panel.message-rules',
+    icon: ListChecks,
+    priority: 'builtin',
+    group: 'context',
+    matches: [MESSAGE_RULES_ADDRESS],
+    hidden: true,
+  })
+  registerPanelBody('message-rules', MessageRulesBody)
   // WP398：岗位页「词库」块（WP395 的面板留的那一块）
   registerKeywordBankBlock()
 }
