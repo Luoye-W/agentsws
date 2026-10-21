@@ -266,6 +266,8 @@ import {
 import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-store.js'
 import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
+import { createAdsExportIntake } from './ads-data/export-intake.js'
+import { exportDeckData } from './ads-data/export-view.js'
 import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
 import { autoStopLoss, dayBefore, yesterdayBasis } from './ads-data/stop-loss.js'
 import { createAdsDataStore } from './ads-data/store.js'
@@ -5025,13 +5027,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           now,
           tz_offset_minutes: baseWorkData.tz_offset_minutes,
         })
-        return adsDeckData(ads, {
-          now,
-          attribution: attribution.rows,
-          unmatched_orders: attribution.unmatched_orders,
-          break_even: breakEvenNow(),
-          line_compare: summarizeLineCompare(ads.lineCompareRows()),
-        })
+        return {
+          ...adsDeckData(ads, {
+            now,
+            attribution: attribution.rows,
+            unmatched_orders: attribution.unmatched_orders,
+            break_even: breakEvenNow(),
+            line_compare: summarizeLineCompare(ads.lineCompareRows()),
+          }),
+          // WP447：六个新平台（拖进来的报表）的账户概况与体检；托管实例没有看数据的库就不给
+          ...(adsData === undefined ? {} : exportDeckData(adsData)),
+        }
       },
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
@@ -5800,6 +5806,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
           })
     const adsDataRef = adsData
+    /** WP447：拖进对话的投放报表入库（六个新平台；岗位页 / 事项输入框两处都走它）。 */
+    const adsExportIntake =
+      adsDataRef === undefined
+        ? undefined
+        : createAdsExportIntake({
+            service: () => adsDataRef,
+            held: (p) =>
+              roles.assignments
+                .listByWorkspace(ws)
+                .some((a) => a.revoked_at === undefined && a.role_id === `ads.${p}`),
+            now: () => clock.now(),
+            tzOffsetMinutes: () => workData.tz_offset_minutes,
+          })
     /**
      * WP224（docs/91 §2.2 #1）：本周经营一页纸。面板上下文用的就是工作台那一份端口
      * （同 `workstationPortFor` 的装法，这里直接建一份，免得引用一个还没走到的定义）。
@@ -7915,6 +7934,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const positionsAssembly = createPositions({
       workspace_id: ws,
       clock,
+      // WP447：拖进来的投放报表直接入库
+      ...(adsExportIntake === undefined ? {} : { fileIntake: adsExportIntake }),
       roles,
       work,
       approvals,
@@ -9860,6 +9881,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       adCreativeService,
       ...(adsActions === undefined ? {} : { adsActions }),
       ...(adsDataRef === undefined ? {} : { adsData: adsDataRef }),
+      ...(adsExportIntake === undefined ? {} : { adsExportIntake }),
       adsWiring: adsWiringNow,
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       // WP419：信息监控每天一份简报
@@ -12875,6 +12897,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP447：事项里附上的投放报表直接入库
+      ...(brand.adsExportIntake === undefined ? {} : { fileIntake: brand.adsExportIntake }),
       // WP388：手动「周复盘」也取上一周（目标市场时区）
       reportTz: () => reportTzOf(ws, brand.workData.tz_offset_minutes),
       // WP342：输入框左下角那个 AI 钮能选的 = 「设置 → 模型」已接的那几个

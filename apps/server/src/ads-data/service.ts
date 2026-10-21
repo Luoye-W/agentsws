@@ -11,6 +11,7 @@
  * 缺插件 → 工具回 `needs_connection: 'extension'`；缺账户 → `needs_setup: 'ads.accounts'`（WP324 卡）。
  */
 import { readFile, stat } from 'node:fs/promises'
+import { ACCOUNT_TOTAL_CAMPAIGN, type ExportPlatform } from '@agentsws/ads-core'
 import {
   type ActionAccount,
   type AdsPlatform as ActionAdsPlatform,
@@ -22,6 +23,7 @@ import type { AdsStore } from '../ads.js'
 import type { AdsActionEvent, AdsActionsService } from '../ads-actions/service.js'
 import type { SetupTarget } from '../setup-cards.js'
 import { type AdsAccounts, adsAccountsSetupTarget, showAccount } from './accounts.js'
+import { exportImportNote, parseExportFile } from './export-ingest.js'
 import { localDayOf, parseAdsFile, syncToAdsStore } from './ingest.js'
 import type { AdsDataImport, AdsDataPlatform, AdsDataSource, AdsDataStore } from './store.js'
 import { ADS_DATA_KEEP_DAYS } from './store.js'
@@ -167,6 +169,20 @@ export interface AdsDataService {
     job_id?: string
     message_id?: string
   }): { ok: true; import: AdsDataImport } | { ok: false; message: string }
+  /**
+   * WP447：六个新平台的报表（用户拖进对话的那一份）直接入库。`platform` 给了就按它认（在那条职责里拖的），
+   * 不给按列名 + 文件名认。回入库那一句（几行、哪几天、币种、时区）。不判止损（这六条只读）。
+   */
+  importExport(input: {
+    bytes: Uint8Array
+    name: string
+    platform?: ExportPlatform
+    source: AdsDataSource
+  }):
+    | { ok: true; platform: ExportPlatform; import: AdsDataImport; note: string }
+    | { ok: false; message: string; platform?: ExportPlatform }
+  /** WP447：最近几次导入（任何一家；卡上概况用）。 */
+  imports: AdsDataStore['imports']
   /** 读一遍邮箱里的定时报表（插件不在时 tick 会调）。回入库了几份。 */
   scanMail(platforms?: AdsDataPlatform[]): Promise<number>
   /** 本地「今天」。 */
@@ -367,7 +383,8 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
     // WP420（自查 A4）：数到了就判止损（不靠 AI 记得调）
     if (options.afterIngest !== undefined)
       void Promise.resolve()
-        .then(() => options.afterIngest?.(parsed.import.platform))
+        // 这条路（插件 / 邮箱 / `ingest`）只认 Google / Meta 的表（`parseAdsFile`），平台一定是那两家
+        .then(() => options.afterIngest?.(parsed.import.platform as AdsDataPlatform))
         .catch(() => undefined)
     return { ok: true, import: parsed.import }
   }
@@ -475,6 +492,53 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
     })
     emit('ads_data.export_finished', { platform: p, ok: done, files: rec.imports.length })
     if (imported) await seedOnce()
+  }
+
+  const importExport: AdsDataService['importExport'] = (input) => {
+    const id = options.newId('adsimp')
+    const at = options.now()
+    const parsed = parseExportFile({
+      id,
+      bytes: input.bytes,
+      name: input.name,
+      ...(input.platform === undefined ? {} : { platform: input.platform }),
+      source: input.source,
+      at,
+      tzOffsetMinutes: options.tzOffsetMinutes(),
+    })
+    if (!parsed.ok) {
+      emit('ads_data.import_failed', {
+        platform: parsed.platform ?? input.platform,
+        source: input.source,
+        message: parsed.message,
+      })
+      return parsed
+    }
+    store.replace({ import: parsed.import, rows: parsed.rows })
+    // 「今天」那一份同步进广告库（账户今天花了多少、广告系列的今天）。账户合计那条不是一条广告系列，不进
+    const day = today()
+    syncToAdsStore(
+      options.ads,
+      parsed.rows.filter((r) => r.campaign !== ACCOUNT_TOTAL_CAMPAIGN && r.day === day),
+      { today: day, at },
+    )
+    const cutoff = new Date(Date.parse(`${day}T00:00:00Z`) - ADS_DATA_KEEP_DAYS * 86_400_000)
+      .toISOString()
+      .slice(0, 10)
+    store.prune(cutoff)
+    emit('ads_data.imported', {
+      platform: parsed.platform,
+      source: input.source,
+      import_id: id,
+      rows: parsed.import.rows,
+      days: parsed.import.days.length,
+    })
+    return {
+      ok: true,
+      platform: parsed.platform,
+      import: parsed.import,
+      note: exportImportNote(parsed.import),
+    }
   }
 
   /** 邮箱备用：读平台发来的定时报表附件（只认 CSV / 制表符文字；读过的不再读）。 */
@@ -708,6 +772,8 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
     fetchNow,
     onActionEvent,
     ingest,
+    importExport,
+    imports: (f) => store.imports(f),
     scanMail,
     today,
     rows: (f) => store.rows(f),

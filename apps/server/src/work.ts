@@ -62,6 +62,7 @@ import {
   type StandbyRenewalLike,
   type Work,
 } from '@agentsws/work'
+import { type AdsExportIntake, withIntakeNote } from './ads-data/export-intake.js'
 import { attachedLine, attachmentsBrief, readAssistantFile } from './assistant-files.js'
 import { offsetToTz, reviewWindow } from './schedule.js'
 
@@ -98,6 +99,11 @@ function poolItemView(item: PoolItem): WorkPoolItem {
 }
 
 export interface WorkPortOptions {
+  /**
+   * WP447：事项里附上的文件有广告平台导出的报表就直接入库（`ads-data/export-intake.ts`），
+   * 每份回一句写在附件文字前面。不给 = 附件只读成文字（老口径）。
+   */
+  fileIntake?: AdsExportIntake
   /**
    * WP417（自查客服 D8）：社媒运营转过来的「转客服卡」（`form: 'support_handoff'`）点了「接」→
    * 在社群管理那条职责下开一件事（钉着那条线程）、起运行，起草回帖。以前点了只改卡状态，什么都不发生。
@@ -414,7 +420,20 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     },
     say: async (actor, id, text, files) => {
       // WP357：附上的资料与助理同一套读法（抹口令、截断、读不出照实说），运行拿到「话 + 附件」
-      const attachments = (files ?? []).map(readAssistantFile)
+      // WP447：拖进来的是投放平台的报表就先入库，那一句写在附件文字前面
+      const m0 = work.getMatter(id)
+      const intake =
+        files === undefined || options.fileIntake === undefined
+          ? []
+          : options.fileIntake(files, {
+              ...(m0?.role_id === undefined ? {} : { role_id: m0.role_id }),
+              ...(m0?.position_template_id === undefined
+                ? {}
+                : { position_template_id: m0.position_template_id }),
+            })
+      const attachments = (files ?? []).map((f, i) =>
+        withIntakeNote(readAssistantFile(f), intake[i]),
+      )
       const attached =
         attachments.length === 0
           ? undefined

@@ -1551,6 +1551,92 @@ const ADS_QUERIES: QueryDef[] = [
 ]
 
 /*
+ * WP447（docs/109 §6.2）：六个新平台（只读、走导出）那两块——账户概况与体检。
+ *
+ * 都走 `ads` 这个源（我们自己的库，永远算连上）：没有报表时概况那块照实空着、体检那块每一项写「未知」并说
+ * 去哪导；Apple 没有 App 时体检整块就一行「这条只适合推 App」（不出一张全是未知的空表）。
+ */
+const AUDIT_STATUS_ZH: Record<string, string> = {
+  ok: '没问题',
+  look: '要看一眼',
+  unknown: '未知',
+  not_applicable: '不适用',
+}
+ADS_QUERIES.push(
+  {
+    name: 'ads.export_overview',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'account', label: '账户' },
+        { key: 'range', label: '日期' },
+        { key: 'currency', label: '币种' },
+        { key: 'timezone', label: '时区' },
+        { key: 'cost', label: '花费', align: 'right' as const },
+        { key: 'impressions', label: '展示', align: 'right' as const, format: 'count' as const },
+        { key: 'clicks', label: '点击', align: 'right' as const, format: 'count' as const },
+        { key: 'conversions', label: '转化', align: 'right' as const, format: 'count' as const },
+        { key: 'conversion_value', label: '转化金额', align: 'right' as const },
+        {
+          key: 'roas',
+          label: 'ROAS（平台口径）',
+          align: 'right' as const,
+          format: 'ratio' as const,
+        },
+        { key: 'imported_at', label: '拖进来于' },
+      ],
+      rows: ofPlatform(ctx.ads?.exports ?? [], ctx).map((r) => ({
+        account: r.account,
+        range:
+          r.since === undefined
+            ? '没写'
+            : r.since === r.until || r.until === undefined
+              ? r.since
+              : `${r.since} ~ ${r.until}`,
+        currency: r.currency ?? '没写',
+        timezone: r.timezone ?? '没写',
+        // 币种各家各算：花费不按工作区币种格式化（那会把欧元念成美元）
+        cost: numOrBlank(r.metrics.cost),
+        impressions: numOrBlank(r.metrics.impressions),
+        clicks: numOrBlank(r.metrics.clicks),
+        conversions: numOrBlank(r.metrics.conversions),
+        conversion_value: numOrBlank(r.metrics.conversion_value),
+        roas: numOrBlank(r.metrics.roas),
+        imported_at: r.imported_at,
+      })),
+    }),
+  },
+  {
+    name: 'ads.export_audit',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => {
+      const audit = ofPlatform(ctx.ads?.audits ?? [], ctx)[0]
+      const columns = [
+        { key: 'check', label: '查什么' },
+        { key: 'status', label: '结果' },
+        { key: 'note', label: '凭什么' },
+      ]
+      if (audit === undefined) return { columns, rows: [] }
+      if (audit.app_only !== undefined)
+        return {
+          columns,
+          rows: [{ check: 'Apple 搜索广告', status: '不适用', note: audit.app_only }],
+        }
+      return {
+        columns,
+        rows: audit.items.map((i) => ({
+          check: i.title.zh,
+          status: AUDIT_STATUS_ZH[i.status] ?? i.status,
+          note: i.note,
+        })),
+      }
+    },
+  },
+)
+
+/*
  * 平台那一侧的两块：**一个平台一个查询**，因为它们各自的"连没连"不一样
  * （同社媒那两块）。查询名带平台后缀（`ads.pixel_health.meta`），
  * 积木那一层按职责挑对应那一条。

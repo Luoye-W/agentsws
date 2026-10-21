@@ -179,6 +179,17 @@ describe('其余五家', () => {
     })
   })
 
+  it('.xlsx 里的日期是 Excel 序号也认（46314 = 2026-10-19）', () => {
+    const out = parsePlatformExportGrid(
+      [
+        ['Day', 'Campaign Name', 'Spend', 'Taps'],
+        ['46314', 'Brand', '1', '2'],
+      ],
+      { platform: 'apple' },
+    )
+    expect(out.rows[0]?.day).toBe('2026-10-19')
+  })
+
   it('只按天、没有名字列的账户合计也收（记成「账户合计」）', () => {
     const out = parsePlatformExport('Date,Spend,Impressions,Pin clicks\n2026-10-19,10,100,4\n', {
       platform: 'pinterest',

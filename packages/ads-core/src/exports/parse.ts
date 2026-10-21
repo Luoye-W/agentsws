@@ -176,6 +176,15 @@ const isFooter = (cells: readonly string[]): boolean =>
 const isTotal = (cells: readonly string[]): boolean =>
   cells.some((c, i) => i < 3 && /^\s*(total|totals|grand total|总计|合计)\b/i.test(c))
 
+/** .xlsx 里的日期常是 Excel 序号（1899-12-30 起的天数）：认成 `YYYY-MM-DD`；不像序号的原样回。 */
+export function excelSerialDay(value: string): string {
+  const t = value.trim()
+  if (!/^\d{5}(\.\d+)?$/.test(t)) return value
+  const n = Math.floor(Number(t))
+  if (n < 30000 || n > 80000) return value
+  return new Date(Date.UTC(1899, 11, 30) + n * 86_400_000).toISOString().slice(0, 10)
+}
+
 /** ROAS 一格：带 `%` 的、或这家官方说是百分数的，÷ 100。 */
 function roasCell(value: string, percent: boolean): string {
   const t = value.trim()
@@ -268,7 +277,12 @@ export function parsePlatformExportGrid(
       raw[h] = val
       const f = fields[i]
       if (f === undefined || val === '') return
-      values[f] = f === 'roas' ? roasCell(val, format.roas_is_percent === true) : val
+      values[f] =
+        f === 'roas'
+          ? roasCell(val, format.roas_is_percent === true)
+          : f === 'day' || f === 'day_end'
+            ? excelSerialDay(val)
+            : val
     })
     parsedRows.push({ raw, values })
   }

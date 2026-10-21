@@ -10,15 +10,22 @@
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import type { AdsReportLevel, AdsReportRow } from '@agentsws/ads-core'
+import type { AdsPlatform } from '@agentsws/contracts'
 import type BetterSqlite3 from 'better-sqlite3'
 
-/** 看数据只管两家（插件 / 邮箱拿得到导出的那两家）。 */
+/** 插件 / 邮箱每天自动导的只有两家（插件动作通道只接这两家后台）。 */
 export type AdsDataPlatform = 'google' | 'meta'
 export const ADS_DATA_PLATFORMS: readonly AdsDataPlatform[] = ['google', 'meta']
 
+/**
+ * WP447：库里的行可以是任何一家——六个新平台的报表由用户拖进对话入库（同一张表），
+ * 只是不走插件每天导的那一套（`AdsDataPlatform` 还是那两家）。
+ */
+export type AdsStoredPlatform = AdsPlatform
+
 /** 存下来的一行（多了平台、账户、对象键、出自哪次导入）。`day` 一定有（表里没按天拆的按导入那天记）。 */
 export interface AdsDataRow extends AdsReportRow {
-  platform: AdsDataPlatform
+  platform: AdsStoredPlatform
   account: string
   day: string
   key: string
@@ -29,7 +36,7 @@ export type AdsDataSource = 'plugin' | 'email' | 'manual'
 
 export interface AdsDataImport {
   id: string
-  platform: AdsDataPlatform
+  platform: AdsStoredPlatform
   account: string
   source: AdsDataSource
   /** 文件名（不存路径）。 */
@@ -42,6 +49,13 @@ export interface AdsDataImport {
   notes: string[]
   job_id?: string
   message_id?: string
+  /** WP447：报表上写的币种 / 时区 / 日期范围（卡上照写；没写就没有，不编）。 */
+  currency?: string
+  timezone?: string
+  since?: string
+  until?: string
+  /** WP447：表里没按天拆（一段时间的合计）。 */
+  summary_only?: boolean
 }
 
 export interface AdsDataStore {
@@ -50,10 +64,10 @@ export interface AdsDataStore {
   rows(filter: {
     since: string
     until: string
-    platform?: AdsDataPlatform
+    platform?: AdsStoredPlatform
     levels?: readonly AdsReportLevel[]
   }): AdsDataRow[]
-  imports(filter?: { platform?: AdsDataPlatform; limit?: number }): AdsDataImport[]
+  imports(filter?: { platform?: AdsStoredPlatform; limit?: number }): AdsDataImport[]
   getState<T>(key: string): T | undefined
   setState(key: string, value: unknown): void
   /** 删掉某天之前的行（保留期）。 */
