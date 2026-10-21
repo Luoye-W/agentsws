@@ -7,14 +7,16 @@
 export const REDDIT_WRITE_ZH: Record<string, string> = {
   'redditw.title': '标题',
   'redditw.text': '正文',
-  'redditw.send': '发送',
+  // WP445（决策 1322）：工坊里只剩主管先批的那一种卡——按钮叫「批准」，批完进发起人的插件「等你发」
+  'redditw.send': '批准',
   'redditw.send.hint':
-    '点了就是批准，不会自己打开任何页面。到 Chrome 工具栏上的「Agents 工坊助手」侧边栏里点「打开这一条」，插件把这段填好，你看一眼、自己点发送。发出去才记进发出记录。',
-  // WP432：批了 = 等你在插件里发
-  'redditw.sent.awaiting': '已批，等你在浏览器插件里发',
-  'redditw.awaiting': '{n} 条已批，等你在浏览器插件里发',
+    '批了不会自己打开任何页面：这一条进发起人浏览器插件的「等你发」，由他在侧边栏里点「打开这一条」、自己点发送。发出去才记进发出记录。',
+  'redditw.sent.awaiting': '已批，进了发起人的浏览器插件「等你发」',
+  // WP445：看板上一行（不是卡）
+  'redditw.awaiting': '插件里 {n} 条等你发',
   'redditw.awaiting.hint':
-    '点 Chrome 工具栏上的插件图标打开侧边栏，点「打开这一条」：插件在新标签页里填好，你自己点发送。插件不会自己打开页面。',
+    'AI 起草的 Reddit 回帖 / 发帖不在工坊出卡，直接进浏览器插件。点 Chrome 工具栏上的「Agents 工坊助手」图标打开侧边栏，在「等你发」里看、改、点「打开这一条」，自己点发送；不发就点「不发」。',
+  'redditw.awaiting.go': '去浏览器插件里发：点 Chrome 工具栏上的「Agents 工坊助手」图标。',
   'extreload.title': '插件要重新加载一下',
   'extreload.stale': 'Chrome 里的插件还是 {running}，工坊带的是 {folder}。',
   'extreload.unseen': '这几分钟没看到 Chrome 里的插件（Chrome 没开，或者插件还是旧版）。',
@@ -45,13 +47,14 @@ export const REDDIT_WRITE_ZH: Record<string, string> = {
 export const REDDIT_WRITE_EN: Record<string, string> = {
   'redditw.title': 'Title',
   'redditw.text': 'Text',
-  'redditw.send': 'Send',
+  'redditw.send': 'Approve',
   'redditw.send.hint':
-    'This approves it; nothing opens on its own. In the Agents Workshop side panel in Chrome, click “Open this one”: the extension fills it in and you click send yourself. It is logged once it is posted.',
-  'redditw.sent.awaiting': 'Approved: send it from the browser extension',
-  'redditw.awaiting': '{n} approved, waiting for you to send from the browser extension',
+    'Nothing opens on its own: this goes to “Waiting to send” in the requester’s browser extension. They click “Open this one” in the side panel and send it themselves. It is logged once it is posted.',
+  'redditw.sent.awaiting': 'Approved: now waiting in the requester’s browser extension',
+  'redditw.awaiting': '{n} waiting to send in the extension',
   'redditw.awaiting.hint':
-    'Click the extension icon in the Chrome toolbar to open the side panel, then “Open this one”: it fills a new tab and you click send yourself. The extension never opens pages on its own.',
+    'AI-drafted Reddit replies and posts skip the app’s cards and go straight to the browser extension. Click the Agents Workshop icon in the Chrome toolbar to open the side panel; under “Waiting to send”, review, edit, click “Open this one” and send it yourself, or click “Don’t send”.',
+  'redditw.awaiting.go': 'Send it from the browser extension: click the Agents Workshop icon in the Chrome toolbar.',
   'extreload.title': 'Reload the extension',
   'extreload.stale': 'The extension in Chrome is {running}; the app ships {folder}.',
   'extreload.unseen':

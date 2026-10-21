@@ -16,17 +16,21 @@
  * - 新版的选择器按公开页面结构整理，**没有对真站核过**：那几步标 `soft`——对不上不乱点、不停，
  *   页面横条上照实说「对不上页面，草稿在侧边栏里复制，自己粘贴」，接着等人点发送、照样读回。
  * - 批了不自动开页面：这里拼出来的活进队就是「等你在插件里打开」（`queue.ts` 的 `needsHumanOpen`）。
+ *
+ * WP445（决策 1323，Luoye 10-21）：**一律新版 www.reddit.com**，新版 / 旧版开关去掉了。旧版那张表只作**页面兜底**：
+ * 新版每一步的选择器后面接 ` || <旧版>`（`dom.ts` 先按新版找，找不到再按旧版）——品牌号在 Reddit 设置里选了旧版界面、
+ * www 被跳到 old.reddit 时照样填得进去。本地假页面（测试）按地址认哪一版。
  */
 
 import type { ActionAccount, ActionJob, ActionPlan, ActionStep } from '../types.js'
 
-/** 写在哪个站上（测试指向本地假页面）。插件的可选站点权限用 WP328 那一份 `REDDIT_HOST_PERMISSIONS`。 */
+/** 旧版 old.reddit（WP445 起只作兜底：www 被跳到这里时白名单里有它）。 */
 export const REDDIT_WRITE_ORIGIN = 'https://old.reddit.com'
 
-/** WP432：新版 Reddit（默认）。 */
+/** WP432 / WP445：新版 Reddit——**一律在这里填**。插件的可选站点权限用 WP328 那一份 `REDDIT_HOST_PERMISSIONS`。 */
 export const REDDIT_WRITE_ORIGIN_NEW = 'https://www.reddit.com'
 
-/** WP432：在新版还是旧版 Reddit 上填（默认新版；用户在设置里选了旧版才走旧版）。 */
+/** 这一页是新版还是旧版（按地址认，只决定用哪一套步骤；WP445 起不是设置）。 */
 export type RedditSite = 'new' | 'old'
 
 /** 某个站该用哪一套选择器：`www.reddit.com` / `reddit.com` 是新版，别的（old.reddit、本地假页面）按旧版。 */
@@ -38,10 +42,6 @@ export function redditSiteOf(origin: string): RedditSite {
     return 'old'
   }
 }
-
-/** 设置里选的站 → 写在哪。 */
-export const redditWriteOrigin = (site: RedditSite): string =>
-  site === 'old' ? REDDIT_WRITE_ORIGIN : REDDIT_WRITE_ORIGIN_NEW
 
 /** 自动化页面能开的站。 */
 export const REDDIT_WRITE_HOSTS: readonly string[] = ['old.reddit.com', 'www.reddit.com']
@@ -158,7 +158,7 @@ const SEND_PROMPT = '草稿已填好，看一眼，自己点发送'
  */
 export function redditWritePlan(
   action: RedditWriteAction,
-  origin = REDDIT_WRITE_ORIGIN,
+  origin = REDDIT_WRITE_ORIGIN_NEW,
   options: { site?: RedditSite; author?: string } = {},
 ): ActionPlan {
   const text = action.text.trim()
@@ -298,7 +298,24 @@ function newRedditPlan(
   o: string,
   author: string | undefined,
 ): ActionPlan {
-  const S = REDDIT_WRITE_SELECTORS_NEW
+  const N = REDDIT_WRITE_SELECTORS_NEW
+  const O = REDDIT_WRITE_SELECTORS
+  /** WP445：新版找不到再按旧版（页面兜底）。 */
+  const or = (a: string, b: string): string => `${a} || ${b}`
+  const S = {
+    replyLink: (t1: string) => or(N.replyLink(t1), O.replyLink(t1)),
+    replyBox: (t1: string) => or(N.replyBox(t1), O.replyBox(t1)),
+    replyItems: (t1: string) => or(N.replyItems(t1), O.replyItems(t1)),
+    // 旧版没有「Join the conversation」那一条：评论框本来就摊开着，点一下它只是把光标放进去
+    commentOpener: or(N.commentOpener, O.commentBox),
+    commentBox: or(N.commentBox, O.commentBox),
+    commentItems: or(N.commentItems, O.commentItems),
+    commentBody: or(N.commentBody, O.commentBody),
+    submitTitle: or(N.submitTitle, O.submitTitle),
+    submitText: or(N.submitText, O.submitText),
+    postItem: or(N.postItem, O.postItem),
+    postTitle: or(N.postTitle, O.postTitle),
+  }
   const w = action.write
   const by = authorOf(author)
   const send = (selector: string, body: string, want: string): ActionStep => ({
@@ -392,8 +409,6 @@ export interface RedditJobInput {
   title?: string
   created_at: string
   origin?: string
-  /** WP432：新版 / 旧版（不给按 `origin` 认）。 */
-  site?: RedditSite
   /** WP432：品牌号（人改了字也认得出发出去的那一条）。 */
   author?: string
 }
@@ -405,8 +420,7 @@ export function buildRedditJob(input: RedditJobInput): ActionJob {
     id: input.id,
     workspace_id: input.workspace_id,
     account,
-    plan: redditWritePlan(input.action, input.origin ?? redditWriteOrigin(input.site ?? 'old'), {
-      ...(input.site === undefined ? {} : { site: input.site }),
+    plan: redditWritePlan(input.action, input.origin ?? REDDIT_WRITE_ORIGIN_NEW, {
       ...(input.author === undefined ? {} : { author: input.author }),
     }),
     approval_id: input.approval_id,

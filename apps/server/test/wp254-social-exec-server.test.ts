@@ -4,8 +4,7 @@
  *
  * | 钉的是什么 | 为什么 |
  * |---|---|
- * | 回帖 → 一张回帖卡（不直接发）→ 批了过取消窗口 → 经 Reddit 出口（没 OAuth → 官方号浏览器）发出去 | 回帖卡批了就发 |
- * | 卡上的施行记录 applied、线程标成已回、读回页面看得到那句话 | 结果有账 |
+ * | 回帖 → 一张回帖卡（不直接发）→ 批了过取消窗口 → 进插件「等你发」（WP445 决策 1324：官方号浏览器登着也不直发） | Reddit 只有插件 + 人点一条路 |
  * | 带承诺词的回帖打回（400），不出卡 | 同客服回信那道门 |
  * | 别的社群的版务卡：改动卡（批准执行 / 不做）；批了 → 经渠道适配器；没连上 → 账本 failed + 原话、不重试 | 失败照实报 |
  */
@@ -98,10 +97,7 @@ describe('WP254 回帖卡批了就发（Reddit：没有 OAuth → 官方号浏�
         own_subreddit: true,
       }),
     )
-    // WP329（决策 761）：Reddit 回帖默认走插件（人点发送）；这里打开「插件不在线时直发」开关，钉住官方号浏览器那条备用路
-    ;(await server.brands.forWorkspace(server.bootstrap.workspace.id)).redditWrites.setSettings({
-      direct_fallback: true,
-    })
+    // WP445（决策 1324）：「插件不在线时直发」那条备用路删了——官方号浏览器登着也不经它发 Reddit
     // 官方号：用户自己在窗口里登录
     await post('/v1/social/reddit-browser/login')
     site.loggedIn = true
@@ -141,26 +137,26 @@ describe('WP254 回帖卡批了就发（Reddit：没有 OAuth → 官方号浏�
 
     await approve(staged.approval_item_id)
     await tick()
-    // 取消窗口里：不发
+    // 取消窗口里：不交
     expect(site.posts).toEqual([])
     t += 121_000
     await tick()
-    expect(site.posts).toEqual(['POST /api/comment thing_id=t3_held1'])
-    expect(site.comments.held1).toEqual(['Thanks Bob! Glad the hinge holds up.'])
-    expect((await server.txn.approvals.get(staged.approval_item_id as string))?.state).toBe(
-      'applied',
-    )
+    // 决策 1324：批了只进插件「等你发」（人在插件里打开、自己点发送）——官方号浏览器登着也不经它直发
+    expect(site.posts).toEqual([])
     const brand = await server.brands.forWorkspace(server.bootstrap.workspace.id)
-    expect(brand.social.thread(id)?.status).toBe('answered')
-    // 再扫一轮：不会再发一遍
+    const writes = brand.redditWrites.writes()
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).toMatchObject({
+      approval_item_id: staged.approval_item_id,
+      state: 'awaiting',
+      kind: 'comment',
+    })
+    expect(brand.social.thread(id)?.status).not.toBe('answered')
+    // 再扫一轮：不会再交一遍、也不会走直发
     t += 121_000
     await tick()
-    expect(site.posts).toHaveLength(1)
-    const events = server.kernel.eventLog
-      .readSync({ workspace_id: server.bootstrap.workspace.id })
-      .filter((e) => e.type === 'social.reply_sent')
-    expect(events).toHaveLength(1)
-    expect(JSON.stringify(events)).not.toContain('Glad the hinge')
+    expect(site.posts).toEqual([])
+    expect(brand.redditWrites.writes()).toHaveLength(1)
   })
 })
 

@@ -5,6 +5,9 @@
  * 侧边栏三块：**进度**（读了什么、几点读的、下次几点、现在在做什么）、**要你处理**（「发出去」类卡：看 / 改 /
  * 不发 / 填进页面）、**记录**（发出记录、记录去处写入结果）。
  *
+ * WP445（决策 1322）：AI 起草的 Reddit 回帖 / 发帖不在工坊出卡，**审与发都在这里一步完成**：「等你发」里
+ * 每一条（还没批的卡 + 主管在工坊批过的）都是同一个样子——看、改、打开这一条、不发 + 理由、稍后。
+ *
  * - 身份（决策 c）：插件里批 = 工坊里批——同一张审批卡、同一份记录；批的人是**配对时绑定的那个人**，
  *   账本记 `via: 'extension'`。别人的卡看不到、批不了（只列这个人收得到、有权批的）。
  * - 还是**插件主动找本机**：侧边栏开着时隔几秒问一次快照；本机服务永远不能伸手进浏览器。
@@ -278,8 +281,6 @@ export interface PanelSnapshot {
    * 不是桌面版（没有固定文件夹）就没有 `folder`。
    */
   versions?: { workshop?: string; folder?: string }
-  /** WP432：插件在新版（默认）还是旧版 Reddit 上帮你填（侧边栏设置里改）。 */
-  site?: import('./reddit/write.js').RedditSite
   /** WP432：「等你发」要不要弹系统通知（工坊设置 → 通知「等你发」那一类的「系统」开关）。 */
   notify_system?: boolean
 }
@@ -324,6 +325,18 @@ export interface PanelSkipInput {
   reason?: string
   version?: number
 }
+
+/**
+ * WP445：「不发」的回执。写了理由、AI 按理由判出同类的几张也一并不发了时带 `followed`（侧边栏顶上一行「另外 N 条
+ * 同类的也不发了 · 撤回」；撤回走 `POST /v1/extension/panel/cards/:leader/follow/undo`）。
+ */
+export interface PanelSkipResult {
+  ok: true
+  followed?: { leader_id: string; ids: string[]; titles: string[] }
+}
+
+/** WP445：「不发」时的快捷理由（理由可选；写了理由才跟随同类、才进学习回路）。 */
+export const PANEL_SKIP_REASONS: readonly string[] = ['不相关', '时机不对', '不想回']
 
 /** 草稿最长多少字（Reddit 评论上限 10000）。 */
 export const PANEL_DRAFT_MAX = 10_000

@@ -8,6 +8,9 @@
  *
  * WP432：选择器里可以有 ` >>> `：前一段找到的组件，**进它的 shadow root** 里再找后一段（新版 Reddit 的
  * 标题框长在 `faceplate-textarea-input` 的 shadow root 里）。没有 shadow root 就在它自己里面找。
+ *
+ * WP445（决策 1323）：选择器里可以有 ` || `：先按前一个找，**一个都没找到**再按后一个找（一律新版 Reddit，
+ * 旧版 old.reddit 的选择器只作页面兜底——品牌号设了旧版界面、www 被跳到 old 时照样认得出框）。
  */
 
 import type { PageLook } from './walls.js'
@@ -33,8 +36,18 @@ function queryIn(roots: readonly ParentNode[], css: string): Element[] {
   return out
 }
 
-/** 选择器 → 全部匹配的元素（按文档顺序）。 */
+const ALT_SPLIT = /\s+\|\|\s+/u
+
+/** 选择器 → 全部匹配的元素（按文档顺序）。` || ` 分开的几个按顺序试，第一个找得到的为准。 */
 export function resolveAll(doc: Document, selector: string): Element[] {
+  const alts = selector.split(ALT_SPLIT)
+  if (alts.length > 1) {
+    for (const alt of alts) {
+      const found = resolveAll(doc, alt)
+      if (found.length > 0) return found
+    }
+    return []
+  }
   const [css, text] = selector.split(TEXT_SPLIT, 2)
   const hops = (css ?? '').split(SHADOW_SPLIT)
   let found: Element[] = queryIn([doc], hops[0] ?? '')
@@ -299,7 +312,8 @@ export function domFindPosted(
   if (want === '' && (who === undefined || who === '')) return []
   let items: Element[]
   try {
-    items = Array.from(doc.querySelectorAll(selector))
+    // WP445：` || `（新版 / 旧版兜底）在这里两边都算（页面上只会有一种）
+    items = Array.from(doc.querySelectorAll(selector.split(ALT_SPLIT).join(', ')))
   } catch {
     return []
   }
@@ -307,7 +321,7 @@ export function domFindPosted(
   for (const item of items) {
     let part: Element | null = null
     try {
-      part = item.querySelector(body)
+      part = item.querySelector(body.split(ALT_SPLIT).join(', '))
     } catch {
       part = null
     }

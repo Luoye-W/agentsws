@@ -19,16 +19,21 @@ export interface WaitingItem {
   label: string
 }
 
-/** 快照里等你发的那几条：批了等你打开的 Reddit 写 + 交给你发的社媒帖子。 */
+/**
+ * 快照里等你发的那几条：WP445 起 AI 起草的 Reddit 回帖 / 发帖直接进插件（还没批的卡，`c:`）+ 主管批过、
+ * 等你打开的（`w:`）+ 交给你发的社媒帖子（`p:`）。同一张卡只算一条。
+ */
 export function waitingOf(snap: PanelSnapshot): WaitingItem[] {
+  const cards = snap.cards.map((c) => ({ id: `c:${c.id}`, label: c.title }))
+  const cardIds = new Set(snap.cards.map((c) => c.id))
   const writes = snap.writes
-    .filter((w) => w.state === 'awaiting')
+    .filter((w) => w.state === 'awaiting' && !cardIds.has(w.approval_item_id))
     .map((w) => ({ id: `w:${w.job_id}`, label: w.label ?? `r/${w.subreddit}` }))
   const posts = (snap.posts ?? []).map((p) => ({
     id: `p:${p.id}`,
     label: `${p.channel_label}：${p.body.slice(0, 40)}`,
   }))
-  return [...writes, ...posts]
+  return [...cards, ...writes, ...posts]
 }
 
 export interface WaitingDeps {

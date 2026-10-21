@@ -4,11 +4,9 @@
  * 一条路：起草（{@link RedditWriteService.draft}：FAQ + 品牌话术 + 帖子上下文 + 版规原文）
  * → 出一张「发出去」卡（{@link RedditWriteService.stage}：`outbound_draft` + `form: 'reddit_write'`，**永远 L1**）
  * → 人批（卡上能改字；个人模式审批人就是本人：669）
- * → 过了取消窗口执行器施行（{@link RedditWriteService.deliver}）：
- *    - 插件连着 Reddit：排进插件动作通道（WP313）→ 插件在用户已登录的 Reddit 页面里把草稿填进框 →
- *      **人自己点发送** → 插件认出新出现的那一条、读回编号与链接（{@link RedditWriteService.onActionEvent}）；
- *    - 插件从没连过、但有 OAuth 应用 / 官方号浏览器登着：走那条直发（`direct`，WP249 留作备用）；
- *    - 都没有：照样排进插件通道等 24 小时（用户批完再去 Chrome 里连 Reddit 也来得及），卡上照实说。
+ * → 执行器施行（{@link RedditWriteService.deliver}）：排进插件动作通道（WP313）→ 插件在用户已登录的 Reddit 页面里
+ *    把草稿填进框 → **人自己点发送** → 插件认出新出现的那一条、读回编号与链接（{@link RedditWriteService.onActionEvent}）。
+ *    插件不在线就等着（「等你发」7 天没打开才作废），卡上照实说。
  * → 读回确认才算发出去：本地发出记录多一行（WP323，带编号与链接，之后对方的回复按编号挂回这一行）；
  *    没确认到（没点 / 被拦 / 没登录 / 停了 / 作废）就照实说原因，**不自动重试**。
  *
@@ -17,6 +15,12 @@
  * 插件在当前窗口新开标签页填好、人自己点发送。「不发了」（{@link RedditWriteService.drop}）也在侧边栏里。
  * 默认在新版 www.reddit.com 上填，设置里选了旧版才走 old.reddit。读回的真发出去的字与批的那一版不一样（人改过）
  * 就记进发出记录（`draft_content` / `content`），差进学习回路（`onEdited`）。
+ *
+ * WP445（决策 1322–1324，Luoye 10-21）：**审与发都在插件里一步完成**——AI 起草的这一条不在工坊出卡，
+ * 卡直接落进插件侧边栏「等你发」（`payload.desk = 'plugin'`）：人在侧边栏里看、改、点「打开这一条」（= 批 + 打开）
+ * 或「不发 + 理由」。公司模式里职责设了「要主管先批」的例外（{@link RedditWriteServiceOptions.reviewer}）：
+ * 主管在工坊批，批完进发起人的插件「等你发」。一律新版 www.reddit.com（旧版选择器只作页面兜底）；
+ * 决策 761 留下的「程序直发」那条路删了：**Reddit 的写只有插件 + 人点这一条路**。
  *
  * 交给插件那一刻，卡的施行结果记 `ok`（`outcome_ref.type = 'reddit_fill'`，与「人自己发」的 `manual_send`
  * 同一个意思：系统这一侧做完了，剩下那一下是人点）；真发没发出去看 {@link RedditWriteService.writes}。
@@ -29,10 +33,9 @@ import {
   type ActionJob,
   buildRedditJob,
   postedKey,
+  REDDIT_WRITE_ORIGIN_NEW,
   RedditPlanError,
-  type RedditSite,
   type RedditWrite,
-  redditWriteOrigin,
   redditWritePlan,
   SOFT_MISS_LABEL,
 } from '@agentsws/browser-action'
@@ -43,6 +46,7 @@ import type {
   ObjectRef,
   OutboundRecord,
   OutboundRecordInput,
+  Recipient,
   RedditDraftCheck,
   RedditDraftConflict,
   RedditDraftFact,
@@ -86,20 +90,9 @@ export interface RedditWriteResult {
   error?: { message: string; retryable: boolean }
 }
 
-/** 直发（OAuth 应用 / 官方号浏览器）那一跳要的。 */
-export interface RedditDirectWrite {
-  write: RedditWrite
-  text: string
-  title?: string
-  approval_id: string
-}
-
-export type RedditDirectResult =
-  | { ok: true; external_id: string; url?: string }
-  | { ok: false; message: string }
-
 /** 一条批过的写（本地进度）。 */
 export interface RedditWriteEntry extends RedditWriteView {
+  /** 老进度里可能还有 `direct`（WP445 删了那条路，只读不新写）。 */
   via: 'extension' | 'direct'
   source?: RedditWriteSource
   /** 发出去那一条的编号（`t1_…` / `t3_…`）。 */
@@ -146,8 +139,16 @@ export interface RedditWriteServiceOptions {
   /** 插件动作通道（每品牌一份；托管实例没有）。WP432：`open` / `stop` 是侧边栏「打开这一条 / 不发了」。 */
   actions?: Pick<AdsActionsService, 'enqueue' | 'lastSeen' | 'jobs'> &
     Partial<Pick<AdsActionsService, 'open' | 'stop'>>
-  /** 插件用不了时的直发；这条路不通回 `undefined`。 */
-  direct?(input: RedditDirectWrite): Promise<RedditDirectResult | undefined>
+  /**
+   * WP445（决策 1322）：这一条要不要先给主管批——公司模式里这条职责的这个动作设了「主管定 / 老板定」、
+   * 落到的不是发起人自己时回那个人（卡在工坊里给他批）；不用（个人 / 同事互联 / 落回本人）回 `undefined`：
+   * 卡直接进发起人的插件「等你发」，工坊不出卡。不给 = 一律进插件。
+   */
+  reviewer?(actor: SocialActor, kind: RedditWrite['kind']): Promise<Recipient | undefined>
+  /** WP445：这本账上还没定、在插件里等你发的卡（看板上「插件里 N 条等你发」）。 */
+  deskCards?(): readonly ApprovalItem[]
+  /** WP445：主管批过、等你在插件里打开的那一条，人在插件里点了「不发 + 理由」（进学习回路）。 */
+  onDropped?(input: { approval_item_id: string; reason?: string; at: string }): void
   /** 发出去了：记进发出记录（WP323）。 */
   record(input: OutboundRecordInput): OutboundRecord | undefined
   /** 审批人 id → 人名（发出记录「谁批的」那一格）。 */
@@ -164,7 +165,7 @@ export interface RedditWriteServiceOptions {
   approvedItems?(): readonly ApprovalItem[]
   /** `<品牌目录>/reddit-writes`；不给 = 纯内存。 */
   dir?: string
-  /** 测试指向本地假 old.reddit。 */
+  /** 测试指向本地假页面（不给 = 新版 www.reddit.com）。 */
   origin?: string
   /**
    * WP432：批了之后人又改了字（侧边栏里改、或在 Reddit 页面上改了再发）——批的那一版与真发出去的那一版，
@@ -231,11 +232,10 @@ export interface RedditWriteService {
     reason?: string,
   ): { ok: true; view: RedditWriteView } | { ok: false; message: string }
   writes(): RedditWriteView[]
+  /** WP445：插件里等你发的几条（还没打开的卡 + 批过、等你打开的；同一张卡算一条）。 */
+  inPlugin(): number
   /** 插件最近一周来过、连着 Reddit。 */
   extensionReady(): boolean
-  /** 决策 761：直发开关（默认关）。 */
-  settings(): RedditWriteSettings
-  setSettings(patch: Partial<RedditWriteSettings>): RedditWriteSettings
   /** 卡被决定了（批了 → 过了取消窗口施行）。不是 Reddit 写卡什么都不做。 */
   onDecided(item: ApprovalItem): Promise<void>
   /** 补扫：批了、过了取消窗口、还没施行的那几张。回施行了几张。 */
@@ -304,22 +304,14 @@ export const redditLink = (path: string | undefined): string | undefined =>
       ? path
       : `https://www.reddit.com${path.startsWith('/') ? '' : '/'}${path}`
 
+/**
+ * 落盘那一份。WP445 起不再写 `direct_fallback`（决策 1324 删了程序直发）与 `site`（决策 1323 一律新版）；
+ * 老文件里有也只是忽略。
+ */
 interface StateFile {
   version: 1
   entries: RedditWriteEntry[]
   seq: number
-  /** 决策 761：插件不在线时要不要走程序直发（OAuth 应用 / 官方号浏览器）。默认关。 */
-  direct_fallback?: boolean
-  /** WP432：在旧版 old.reddit 上填（默认新版，只有选了旧版才记）。 */
-  site?: RedditSite
-}
-
-/** Reddit 写的设置（决策 761）。 */
-export interface RedditWriteSettings {
-  /** 插件不在线时走程序直发（不是人点）。默认关：等插件、等你打开 Chrome。 */
-  direct_fallback: boolean
-  /** WP432：插件在新版（www.reddit.com，默认）还是旧版（old.reddit.com）上帮你填。 */
-  site: RedditSite
 }
 
 /** WP432：两段字去掉 Markdown 记号与空白后一样吗（页面上读回来的是渲染后的字）。 */
@@ -356,8 +348,6 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
   })()
   const entries: RedditWriteEntry[] = [...(loaded?.entries ?? [])]
   let seq = loaded?.seq ?? 0
-  let directFallback = loaded?.direct_fallback === true
-  let site: RedditSite = loaded?.site === 'old' ? 'old' : 'new'
   /** 起草时查到的知识卡（出卡时按 id 带上那句话；只在内存里留最近的）。 */
   const factCache = new Map<string, RedditDraftFact>()
 
@@ -372,13 +362,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     const tmp = `${stateFile}.tmp`
     writeFileSync(
       tmp,
-      JSON.stringify({
-        version: 1,
-        entries,
-        seq,
-        ...(directFallback ? { direct_fallback: true } : {}),
-        ...(site === 'old' ? { site: 'old' as const } : {}),
-      } satisfies StateFile),
+      JSON.stringify({ version: 1, entries, seq } satisfies StateFile),
     )
     renameSync(tmp, stateFile)
   }
@@ -500,7 +484,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       approval_level: 'L1',
       ...(input.label === undefined ? {} : { title: input.label }),
       created_at: now(),
-      origin: options.origin ?? redditWriteOrigin(site),
+      origin: options.origin ?? REDDIT_WRITE_ORIGIN_NEW,
       ...(account === undefined ? {} : { author: account }),
     })
     // WP432：等你在插件里点开（插件的定时领活领不到它）
@@ -537,35 +521,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       ...(input.source === undefined ? {} : { source: input.source }),
       record: input.record,
     }
-    // 插件最近没来过、有直发的路：先走直发（OAuth 应用 / 官方号浏览器；WP249 留作备用）
-    // 决策 761：直发是开关、默认关——关着就一律等插件（人点发送）
-    if (directFallback && !extensionReady() && options.direct !== undefined) {
-      const direct = await options.direct({
-        write: input.write,
-        text: input.text,
-        ...(input.title === undefined ? {} : { title: input.title }),
-        approval_id: input.approval_item_id,
-      })
-      if (direct !== undefined) {
-        const entry: RedditWriteEntry = {
-          ...base,
-          job_id: nextId('rdd'),
-          state: 'queued',
-          via: 'direct',
-        }
-        entries.push(entry)
-        if (!direct.ok) {
-          markFailed(entry, direct.message, 'failed')
-          return failed(direct.message)
-        }
-        markSent(entry, direct.external_id, direct.url)
-        return {
-          status: 'ok',
-          execution_id: `reddit_direct_${entry.job_id}`,
-          outcome_ref: { type: 'reddit_write', id: entry.job_id },
-        }
-      }
-    }
+    // 决策 1324：Reddit 的写只有插件 + 人点发送这一条路（程序直发删了）
     const queued = await toPlugin(input)
     if (!queued.ok) return failed(queued.why)
     const job = queued.job
@@ -624,13 +580,6 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
   const service: RedditWriteService = {
     extensionReady,
     send,
-    settings: () => ({ direct_fallback: directFallback, site }),
-    setSettings(patch) {
-      if (patch.direct_fallback !== undefined) directFallback = patch.direct_fallback
-      if (patch.site === 'new' || patch.site === 'old') site = patch.site
-      save()
-      return { direct_fallback: directFallback, site }
-    },
 
     async onDecided(item) {
       if (item.workspace_id !== ws || !APPROVED.has(item.state) || !isRedditWriteCard(item)) return
@@ -796,6 +745,11 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
           ? {}
           : { prior_replies: input.prior_replies }),
       }
+      // WP445（决策 1322）：要不要主管先批（公司模式里职责设了「主管定」）；不用就直接进插件「等你发」
+      const asked = await options.reviewer?.(actor, shape.kind).catch(() => undefined)
+      const reviewer = asked !== undefined && asked.person !== actor.person_id ? asked : undefined
+      const supervised = reviewer !== undefined
+      payload.desk = supervised ? 'workshop' : 'plugin'
       const item = await options.approvals.create({
         workspace_id: ws,
         schema_version: 1,
@@ -820,10 +774,17 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
           mandate_check: { within: true, caps_hit: [] },
           sampling: { selected: false },
         },
-        // 决策 669：审批人只有本人（个人模式下就是点起草的这个人）
+        // 决策 669：审批人只有本人（个人模式下就是点起草的这个人）——在插件里审；
+        // WP445：公司模式里职责设了「主管先批」的，落到主管（在工坊里批）
         routing: {
-          recipients: [{ person: actor.person_id, via: 'role_holder' }],
-          rule: 'role_holder',
+          recipients:
+            reviewer === undefined ? [{ person: actor.person_id, via: 'role_holder' }] : [reviewer],
+          rule:
+            reviewer === undefined
+              ? 'role_holder'
+              : reviewer.via === 'owner'
+                ? 'owner'
+                : 'scope_manager',
           escalation: { after_hours: 24, business_hours: true, chain: [], escalated_at: [] },
           separation_of_duties: false,
         },
@@ -851,8 +812,18 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       options.emit('reddit.write_staged', actor.person_id, {
         approval_item_id: item.id,
         kind: target.kind,
+        desk: payload.desk,
         ...(target.source === undefined ? {} : { source: target.source.type }),
       })
+      // WP445：进了插件「等你发」——插件图标数字、系统通知、铃铛「等你发」都从这一条来（工坊不出卡）
+      if (!supervised)
+        options.emit('reddit.write_awaiting', 'system', {
+          approval_item_id: item.id,
+          kind: target.kind,
+          subreddit: subOf(target.subreddit),
+          label: item.title,
+          desk: 'plugin',
+        })
       if (target.source !== undefined) options.onStaged?.(target.source, item.id)
       options.limits?.note(limitKey)
       return { staged: true, approval_item_id: item.id }
@@ -1138,6 +1109,18 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       options.actions?.stop?.(entry.job_id)
       entry.dismissed = true
       markFailed(entry, reason?.trim() || '你在插件里点了不发。', 'dropped')
+      // WP445：写了理由才进学习回路（同 WP414 的口径；没写只记这一次不发）
+      const why = reason?.trim()
+      if (why !== undefined && why !== '')
+        try {
+          options.onDropped?.({
+            approval_item_id: entry.approval_item_id,
+            reason: why,
+            at: entry.finished_at ?? now(),
+          })
+        } catch {
+          // 学不到不挡「不发」
+        }
       options.emit('reddit.write_dropped', 'system', {
         approval_item_id: entry.approval_item_id,
         job_id: entry.job_id,
@@ -1155,6 +1138,13 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         save()
       }
       return service.writes().find((w) => w.job_id === job_id)
+    },
+
+    inPlugin() {
+      const ids = new Set<string>()
+      for (const item of options.deskCards?.() ?? []) ids.add(item.id)
+      for (const e of entries) if (e.state === 'awaiting') ids.add(e.approval_item_id)
+      return ids.size
     },
 
     writes() {

@@ -19,7 +19,6 @@ import type {
   PanelSinkView,
   PanelStage,
   PanelWrite,
-  RedditSite,
 } from '@agentsws/browser-action'
 import type {
   ApprovalItem,
@@ -82,9 +81,8 @@ export interface PanelWrites {
     job_id: string,
     reason?: string,
   ): { ok: true; view: RedditWriteView } | { ok: false; message: string }
-  /** WP432：在新版还是旧版 Reddit 上填。 */
-  settings?(): { site: RedditSite }
-  setSettings?(patch: { site?: RedditSite }): { site: RedditSite }
+  /** WP445：插件里等你发的几条（看板与侧边栏顶上那一行同一个数）。 */
+  inPlugin?(): number
 }
 
 /** 发出记录那一份里侧边栏用得到的（`OutboundLog` 的子集）。 */
@@ -463,7 +461,9 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
     }
     // WP432：今天发了几条、等你发几条（侧边栏顶上那一行）
     const allWrites = writes?.writes() ?? []
-    const awaitingN = allWrites.filter((w) => w.state === 'awaiting').length
+    // WP445：等你发 = 还没在插件里打开的卡 + 批过、等你打开的（同一张卡算一条）
+    const awaitingN =
+      writes?.inPlugin?.() ?? allWrites.filter((w) => w.state === 'awaiting').length
     const reddit = options.outbound.list(ws, { channel: 'reddit', limit: 200 })
     progress = {
       ...progress,
@@ -483,7 +483,6 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
       ...(posts.length === 0 ? {} : { posts }),
       progress,
       writes: recentWrites(allWrites, now),
-      ...(writes?.settings === undefined ? {} : { site: writes.settings().site }),
       ...(options.versions === undefined ? {} : { versions: options.versions() }),
       records: options.outbound
         .list(ws, { channel: 'reddit', limit: PANEL_RECORDS_MAX })
@@ -529,11 +528,6 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
       if (writes?.drop === undefined) return { ok: false, message: '这个品牌没有装 Reddit 写。' }
       const out = writes.drop(job_id, reason)
       return out.ok ? { ok: true } : out
-    },
-    async setSite(session, site) {
-      const writes = await options.writes(session.workspace_id)
-      if (writes?.setSettings === undefined) return { site: 'new' as const }
-      return writes.setSettings({ site })
     },
     async notifySystem(session) {
       return (await options.notifySystem?.(session.workspace_id, session.person_id)) ?? true

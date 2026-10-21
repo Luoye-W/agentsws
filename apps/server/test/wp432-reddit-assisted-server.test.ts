@@ -172,7 +172,7 @@ describe('WP432 Reddit 写：批了不自动开页面，在插件侧边栏里人
     })
     expect(snap.progress.awaiting).toBe(1)
     expect(snap.progress.sent_today).toBe(0)
-    expect(snap.site).toBe('new')
+    expect('site' in snap).toBe(false)
     expect(snap.notify_system).toBe(true)
 
     // ③ 侧边栏里改了字、点「打开这一条」→ 插件这才拿到（按改过的字；默认新版 Reddit）
@@ -264,19 +264,16 @@ describe('WP432 Reddit 写：批了不自动开页面，在插件侧边栏里人
     expect((await (await brand()).adsActions?.next(['reddit'], 0))?.job).toBeUndefined()
   })
 
-  it('侧边栏设置里选旧版：之后打开的那一件在 old.reddit 上填', async () => {
+  it('WP445（决策 1323）：新版 / 旧版开关去掉了——设置接口没了；一律新版，旧版选择器只作页面兜底', async () => {
     const token = await pairPlugin()
-    const set = await data<{ site: string }>(
-      await call('/v1/extension/panel/settings', {
-        method: 'PUT',
-        plugin: token,
-        body: JSON.stringify({ site: 'old' }),
-      }),
-    )
-    expect(set.site).toBe('old')
+    const set = await call('/v1/extension/panel/settings', {
+      method: 'PUT',
+      plugin: token,
+      body: JSON.stringify({ site: 'old' }),
+    })
+    expect(set.status).toBe(404)
     await stageAndSend()
     const snap = await snapshot(token)
-    expect(snap.site).toBe('old')
     const opened = await data<{ job?: ActionJob }>(
       await call(`/v1/extension/panel/writes/${snap.writes[0]?.job_id}/open`, {
         method: 'POST',
@@ -286,8 +283,14 @@ describe('WP432 Reddit 写：批了不自动开页面，在插件侧边栏里人
     )
     expect(opened.job?.plan.steps[0]).toEqual({
       op: 'goto',
-      url: 'https://old.reddit.com/r/ivraxr/comments/abc/slug/c1/',
+      url: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/c1/',
     })
+    // 每一步先按新版找、找不到再按旧版（www 被跳到 old.reddit 时也填得进去）
+    const fill = opened.job?.plan.steps.find((x) => x.op === 'fill')
+    expect(fill?.op === 'fill' ? fill.selector : '').toMatch(/shreddit-comment.* \|\| #thing_t1_c1/u)
+    expect(opened.job?.plan.allow.hosts).toEqual(
+      expect.arrayContaining(['www.reddit.com', 'old.reddit.com']),
+    )
   })
 
   it('没配对的插件也问得到文件夹里是哪一版（不要令牌）；工坊看得到它报的版本', async () => {

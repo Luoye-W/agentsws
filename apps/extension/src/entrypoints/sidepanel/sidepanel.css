@@ -692,29 +692,16 @@ body {
   justify-content: flex-end;
 }
 
-/* 底下一行：版本 / 新版旧版 */
-.ws-foot {
+/* WP445：「不发」下面那一排理由（可不选） */
+.ws-reasons {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: auto;
-  padding-top: 6px;
+  padding: 8px;
+  border: 1px dashed var(--ws-line);
+  border-radius: 10px;
 }
 
-.ws-foot-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-}
-
-.ws-select {
-  border: 1px solid var(--ws-line);
-  border-radius: 8px;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-family: inherit;
-  color: var(--ws-ink);
-  background: var(--ws-card);
+.ws-wrap {
+  flex-wrap: wrap;
 }

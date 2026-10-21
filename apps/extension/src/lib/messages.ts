@@ -62,8 +62,10 @@ export type ExtensionMessage =
       /** WP432：批完就在这个窗口打开（侧边栏所在的窗口）。 */
       windowId?: number
     }
-  /** 「不发」。 */
-  | { type: 'panel-skip'; id: string; version?: number }
+  /** 「不发」。WP445：理由可选（写了理由才跟随同类、进学习回路）。 */
+  | { type: 'panel-skip'; id: string; version?: number; reason?: string }
+  /** WP445：撤回「同类的也一并不发了」那几张。 */
+  | { type: 'panel-follow-undo'; leader: string; ids: string[] }
   /** 没发出去的那一条「再填一次」。 */
   | { type: 'panel-refill'; job: string }
   /** 打开设置页（侧边栏里「设置」那一下）。 */
@@ -83,8 +85,6 @@ export type ExtensionMessage =
   | { type: 'panel-open'; job: string; text?: string; title?: string; windowId?: number }
   /** 「不发了」。 */
   | { type: 'panel-drop'; job: string; reason?: string }
-  /** 在新版 / 旧版 Reddit 上填。 */
-  | { type: 'panel-site'; site: 'new' | 'old' }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {

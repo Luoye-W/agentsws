@@ -13,17 +13,16 @@ import type {
   PanelOpenInput,
   PanelSnapshot,
   PanelWrite,
-  RedditSite,
 } from '@agentsws/browser-action'
 import type { PermissionsLike } from '../ads/permissions'
 import { actionsHeld } from '../idle-gate'
 import {
   panelDrop,
   panelFill,
+  panelFollowUndo,
   panelOpen,
   panelPostAnswer,
   panelRefill,
-  panelSite,
   panelSkip,
   panelSnapshot,
 } from '../local-client'
@@ -48,6 +47,8 @@ export interface PanelActOutcome {
   ok: boolean
   message?: string
   write?: PanelWrite
+  /** WP445：「不发 + 理由」时同类的也一并不发了的那几张（能撤回）。 */
+  followed?: { leader_id: string; ids: string[]; titles: string[] }
 }
 
 export interface PanelBrokerDeps {
@@ -149,25 +150,33 @@ export async function panelDropWrite(
   return got.ok ? { ok: true } : { ok: false, message: got.message }
 }
 
-/** WP432：在新版 / 旧版 Reddit 上填。 */
-export async function panelSetSite(
-  deps: PanelBrokerDeps,
-  site: RedditSite,
-): Promise<PanelActOutcome> {
-  const c = await client(deps)
-  if (c === undefined) return { ok: false, message: NOT_PAIRED }
-  const got = await panelSite(c, site)
-  return got.ok ? { ok: true } : { ok: false, message: got.message }
-}
-
+/** 「不发」：理由可选；WP445：写了理由，同类的可能一并不发了（回执里带回来，能撤回）。 */
 export async function panelSkipCard(
   deps: PanelBrokerDeps,
   id: string,
   version: number | undefined,
+  reason?: string,
 ): Promise<PanelActOutcome> {
   const c = await client(deps)
   if (c === undefined) return { ok: false, message: NOT_PAIRED }
-  const got = await panelSkip(c, id, version === undefined ? {} : { version })
+  const r = reason?.trim()
+  const got = await panelSkip(c, id, {
+    ...(version === undefined ? {} : { version }),
+    ...(r === undefined || r === '' ? {} : { reason: r }),
+  })
+  if (!got.ok) return { ok: false, message: got.message }
+  return { ok: true, ...(got.data.followed === undefined ? {} : { followed: got.data.followed }) }
+}
+
+/** WP445：撤回「同类的也一并不发了」那几张。 */
+export async function panelUndoFollow(
+  deps: PanelBrokerDeps,
+  leader: string,
+  ids: readonly string[],
+): Promise<PanelActOutcome> {
+  const c = await client(deps)
+  if (c === undefined) return { ok: false, message: NOT_PAIRED }
+  const got = await panelFollowUndo(c, leader, ids)
   return got.ok ? { ok: true } : { ok: false, message: got.message }
 }
 

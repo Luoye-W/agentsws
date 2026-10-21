@@ -1,36 +1,117 @@
 /**
  * WP432（Luoye 10-20 反馈 9，最急）：**侧边栏是发帖台**。
+ * WP445（决策 1322，Luoye 10-21）：**审与发都在这里一步完成**——AI 起草的 Reddit 回帖 / 发帖不在工坊出卡，
+ * 直接进「等你发」。每一条（还没批的卡 + 公司模式里主管在工坊批过的）都是同一个样子：
  *
- * - 顶上一行实时状况：巡查到第几块了、今天发了几条、等你发几条、卡在哪（照实说）；
- * - 「等你发」：工坊里批过的每一条——帖子标题、版块、被回的那句、为什么回、草稿全文（还能改）；
- *   点「打开这一条」才在这个窗口新开标签页，插件把草稿填进回复框并描一圈，**发送由你自己点**；
- *   认不出框（页面改版）就停在「等你粘贴」——「复制草稿」随时可用；「稍后」「不发了」也在这里；
- * - 底下一行：插件自己的版本与工坊的版本，对不上就说怎么重新加载；在新版还是旧版 Reddit 上填。
+ * - 帖子标题、版块、被回的那句、为什么回、草稿全文（能改）；
+ * - **打开这一条**：在这个窗口新开一页、插件把草稿填进回复框并描一圈，**发送由你自己点**（还没批的卡 = 批 + 打开）；
+ * - **不发**：点了下面出一排快捷理由（不相关 / 时机不对 / 不想回 / 其他…）和「不写理由」——点哪个都是一下就不发了；
+ *   **写了理由才跟随同类**（AI 按理由判同类的也一并不发，顶上一行能撤回）、才进学习回路；
+ * - **稍后**：收到底下一行，两小时后自己回来。
  *
  * 插件**从不**自己开页面、从不点发送（`background.ts` / `queue.ts` / `write.ts` 三处钉住）。
+ * WP445（决策 1323）：底部那一栏去掉了；插件与工坊版本对不上时顶上临时出一条（{@link VersionBanner}），平时不显示。
  */
-import type { PanelProgress, PanelWrite, RedditSite } from '@agentsws/browser-action'
-import { PANEL_DRAFT_MAX, PANEL_TITLE_MAX } from '@agentsws/browser-action'
+import type { PanelCard, PanelProgress, PanelWrite } from '@agentsws/browser-action'
+import { PANEL_DRAFT_MAX, PANEL_SKIP_REASONS, PANEL_TITLE_MAX } from '@agentsws/browser-action'
 import { useState } from 'react'
+import { CHECK_LABEL } from '@/lib/panel/format'
 import { IconAlert, IconClock, IconExternal } from './panel-icons'
 
+/** 「等你发」里的一条：还没批的卡（插件里审），或批过、等你打开的那一条写。 */
+export type DeskEntry =
+  | { from: 'card'; key: string; card: PanelCard }
+  | { from: 'write'; key: string; write: PanelWrite }
+
+/** 一条摊平成侧边栏上画的那几格（卡与写同一个样子）。 */
+export interface DeskView {
+  kind: 'reply' | 'comment' | 'submit'
+  subreddit: string
+  label?: string
+  post_title?: string
+  parent_author?: string
+  parent_text?: string
+  thread_link?: string
+  reason?: string
+  text: string
+  title?: string
+  facts?: { id: string; text: string }[]
+  rules?: string[]
+  warning?: string
+  checks?: { kind: string; message: string; fixed?: boolean }[]
+  prior_replies?: { text: string; created_at?: string }[]
+}
+
+export function deskView(e: DeskEntry): DeskView {
+  if (e.from === 'card') {
+    const c = e.card
+    const quote = c.parent_text ?? c.post_text
+    return {
+      kind: c.kind,
+      subreddit: c.subreddit,
+      label: c.title,
+      text: c.draft.text,
+      ...(c.draft.title === undefined ? {} : { title: c.draft.title }),
+      ...(c.post_title === undefined ? {} : { post_title: c.post_title }),
+      ...(c.parent_author === undefined ? {} : { parent_author: c.parent_author }),
+      ...(quote === undefined ? {} : { parent_text: quote }),
+      ...(c.link === undefined ? {} : { thread_link: c.link }),
+      ...(c.reason === undefined ? {} : { reason: c.reason }),
+      ...(c.facts === undefined ? {} : { facts: c.facts }),
+      ...(c.rules === undefined ? {} : { rules: c.rules }),
+      ...(c.warning === undefined ? {} : { warning: c.warning }),
+      ...(c.checks === undefined ? {} : { checks: c.checks }),
+      ...(c.prior_replies === undefined ? {} : { prior_replies: c.prior_replies }),
+    }
+  }
+  const w = e.write
+  return {
+    kind: w.kind ?? 'reply',
+    subreddit: w.subreddit,
+    text: w.text ?? '',
+    ...(w.label === undefined ? {} : { label: w.label }),
+    ...(w.title === undefined ? {} : { title: w.title }),
+    ...(w.post_title === undefined ? {} : { post_title: w.post_title }),
+    ...(w.parent_author === undefined ? {} : { parent_author: w.parent_author }),
+    ...(w.parent_text === undefined ? {} : { parent_text: w.parent_text }),
+    ...(w.thread_link === undefined ? {} : { thread_link: w.thread_link }),
+    ...(w.reason === undefined ? {} : { reason: w.reason }),
+  }
+}
+
+/** 「等你发」：插件里等你审的卡在前（新的在前），主管批过、等你打开的接在后面。 */
+export function deskEntries(
+  cards: readonly PanelCard[],
+  writes: readonly PanelWrite[],
+): DeskEntry[] {
+  const cardIds = new Set(cards.map((c) => c.id))
+  return [
+    ...[...cards]
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+      .map((card): DeskEntry => ({ from: 'card', key: `c:${card.id}`, card })),
+    ...writes
+      .filter((w) => w.state === 'awaiting' && !cardIds.has(w.approval_item_id))
+      .map((write): DeskEntry => ({ from: 'write', key: `w:${write.job_id}`, write })),
+  ]
+}
+
 export interface DeskActions {
-  open(write: PanelWrite, edit: { text?: string; title?: string }): Promise<string | undefined>
-  drop(write: PanelWrite): Promise<string | undefined>
-  later(write: PanelWrite): void
+  open(entry: DeskEntry, edit: { text?: string; title?: string }): Promise<string | undefined>
+  /** 不发（理由可选）。 */
+  skip(entry: DeskEntry, reason?: string): Promise<string | undefined>
+  later(entry: DeskEntry): void
   copy(text: string): Promise<boolean>
 }
 
-const VERB: Record<NonNullable<PanelWrite['kind']>, string> = {
+const VERB: Record<DeskView['kind'], string> = {
   reply: '回复',
   comment: '回帖',
   submit: '发帖',
 }
 
-export function deskHead(w: PanelWrite): string {
-  const verb = w.kind === undefined ? '回复' : VERB[w.kind]
-  const who = w.kind === 'submit' || w.parent_author === undefined ? '' : ` u/${w.parent_author}`
-  return `${verb}${who} · r/${w.subreddit}`
+export function deskHead(v: Pick<DeskView, 'kind' | 'parent_author' | 'subreddit'>): string {
+  const who = v.kind === 'submit' || v.parent_author === undefined ? '' : ` u/${v.parent_author}`
+  return `${VERB[v.kind]}${who} · r/${v.subreddit}`
 }
 
 /** 顶上那一行：巡查到第几块了 / 今天发了几条 / 等你发几条 / 卡在哪。 */
@@ -64,65 +145,204 @@ export function PanelStatusStrip(props: { progress: PanelProgress }): React.Reac
   )
 }
 
+/** 「不发」下面那一排：快捷理由 + 其他…（写一句）+ 不写理由。点哪个都是一下就不发了。 */
+function SkipReasons(props: {
+  onPick(reason: string | undefined): void
+  onCancel(): void
+  busy: boolean
+}): React.ReactNode {
+  const [other, setOther] = useState<string | undefined>(undefined)
+  return (
+    <div className="ws-reasons" data-testid="ws-desk-reasons">
+      <span
+        className="ws-muted"
+        title="写了理由，AI 会按理由把同类的也一并不发，并记下来以后少起草这类；不写只不发这一条"
+      >
+        不发，因为…（可不选）
+      </span>
+      <div className="ws-row ws-wrap">
+        {PANEL_SKIP_REASONS.map((r) => (
+          <button
+            key={r}
+            type="button"
+            className="ws-btn ws-btn--ghost ws-btn--sm"
+            data-testid="ws-desk-reason"
+            disabled={props.busy}
+            onClick={() => props.onPick(r)}
+          >
+            {r}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="ws-btn ws-btn--ghost ws-btn--sm"
+          data-testid="ws-desk-reason-other"
+          disabled={props.busy}
+          onClick={() => setOther(other === undefined ? '' : undefined)}
+        >
+          其他…
+        </button>
+      </div>
+      {other === undefined ? null : (
+        <div className="ws-row">
+          <input
+            className="ws-input"
+            data-testid="ws-desk-reason-text"
+            value={other}
+            maxLength={300}
+            aria-label="理由"
+            onChange={(e) => setOther(e.target.value)}
+          />
+          <button
+            type="button"
+            className="ws-btn ws-btn--sm"
+            data-testid="ws-desk-reason-save"
+            disabled={props.busy || other.trim() === ''}
+            onClick={() => props.onPick(other.trim())}
+          >
+            不发
+          </button>
+        </div>
+      )}
+      <div className="ws-row ws-wrap">
+        <button
+          type="button"
+          className="ws-btn ws-btn--ghost ws-btn--sm"
+          data-testid="ws-desk-skip-now"
+          disabled={props.busy}
+          onClick={() => props.onPick(undefined)}
+        >
+          不写理由，就不发这一条
+        </button>
+        <button
+          type="button"
+          className="ws-btn ws-btn--ghost ws-btn--sm"
+          data-testid="ws-desk-skip-cancel"
+          disabled={props.busy}
+          onClick={props.onCancel}
+        >
+          算了，还要发
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /** 等你发的一条（发帖台上的一张）。 */
 export function DeskItem(props: {
-  write: PanelWrite
+  entry: DeskEntry
   actions: DeskActions
   canAct: boolean
   open: boolean
   onToggle(): void
 }): React.ReactNode {
-  const w = props.write
-  const [text, setText] = useState(w.text ?? '')
-  const [title, setTitle] = useState(w.title ?? '')
-  const [busy, setBusy] = useState<'open' | 'drop' | undefined>(undefined)
+  const v = deskView(props.entry)
+  const [text, setText] = useState(v.text)
+  const [title, setTitle] = useState(v.title ?? '')
+  const [busy, setBusy] = useState<'open' | 'skip' | undefined>(undefined)
   const [msg, setMsg] = useState<{ bad: boolean; text: string } | undefined>(undefined)
-  const edited = text !== (w.text ?? '') || (w.kind === 'submit' && title !== (w.title ?? ''))
-  const run = (what: 'open' | 'drop') => {
-    setBusy(what)
+  /** 点了「不发」：下面出一排理由（选哪个都是一下就不发了）。 */
+  const [skipping, setSkipping] = useState(false)
+  const edited = text !== v.text || (v.kind === 'submit' && title !== (v.title ?? ''))
+  const open = () => {
+    setBusy('open')
     setMsg(undefined)
-    const p =
-      what === 'open'
-        ? props.actions.open(w, {
-            ...(text !== (w.text ?? '') ? { text } : {}),
-            ...(w.kind === 'submit' && title !== (w.title ?? '') ? { title } : {}),
-          })
-        : props.actions.drop(w)
-    void p.then((m) => {
+    void props.actions
+      .open(props.entry, {
+        ...(text !== v.text ? { text } : {}),
+        ...(v.kind === 'submit' && title !== (v.title ?? '') ? { title } : {}),
+      })
+      .then((m) => {
+        setBusy(undefined)
+        if (m !== undefined) setMsg({ bad: true, text: m })
+      })
+  }
+  const skip = (reason: string | undefined) => {
+    setBusy('skip')
+    setMsg(undefined)
+    void props.actions.skip(props.entry, reason).then((m) => {
       setBusy(undefined)
       if (m !== undefined) setMsg({ bad: true, text: m })
     })
   }
+  const facts = v.facts ?? []
+  const rules = v.rules ?? []
+  const checks = v.checks ?? []
+  const prior = v.prior_replies ?? []
   return (
-    <li className="ws-card-item ws-desk" data-testid="ws-desk" data-open={props.open ? '1' : '0'}>
+    <li
+      className="ws-card-item ws-desk"
+      data-testid="ws-desk"
+      data-from={props.entry.from}
+      data-open={props.open ? '1' : '0'}
+    >
       <button type="button" className="ws-card-head" onClick={props.onToggle}>
-        <b>{deskHead(w)}</b>
+        <b>{deskHead(v)}</b>
         {edited ? <span className="ws-pill">改过</span> : null}
       </button>
       {props.open ? null : (
-        <p className="ws-clamp-1 ws-muted">{w.parent_text ?? w.post_title ?? w.label}</p>
+        <p className="ws-clamp-1 ws-muted">{v.parent_text ?? v.post_title ?? v.label}</p>
       )}
       {props.open ? (
         <div className="ws-card-body">
-          {w.post_title === undefined ? null : <p className="ws-post-title">{w.post_title}</p>}
-          {w.parent_text === undefined ? null : (
+          {v.post_title === undefined ? null : <p className="ws-post-title">{v.post_title}</p>}
+          {v.parent_text === undefined ? null : (
             <blockquote className="ws-quote ws-clamp-4" data-testid="ws-desk-quote">
-              {w.parent_text}
+              {v.parent_text}
             </blockquote>
           )}
           <div className="ws-meta">
-            {w.thread_link === undefined ? null : (
-              <a href={w.thread_link} target="_blank" rel="noreferrer" className="ws-link">
+            {v.thread_link === undefined ? null : (
+              <a href={v.thread_link} target="_blank" rel="noreferrer" className="ws-link">
                 原帖 <IconExternal className="ws-ico ws-ico--sm" />
               </a>
             )}
-            {w.reason === undefined ? null : (
-              <span className="ws-muted ws-clamp-1" title={w.reason} data-testid="ws-desk-reason">
-                为什么回：{w.reason}
+            {v.reason === undefined ? null : (
+              <span className="ws-muted ws-clamp-1" title={v.reason} data-testid="ws-desk-reason">
+                为什么回：{v.reason}
+              </span>
+            )}
+            {facts.length === 0 ? null : (
+              <span className="ws-pill" title={facts.map((f) => f.text).join('\n')}>
+                依据 {facts.length}
+              </span>
+            )}
+            {rules.length === 0 ? null : (
+              <span className="ws-pill" title={rules.join('\n')}>
+                版规 {rules.length}
               </span>
             )}
           </div>
-          {w.kind === 'submit' ? (
+          {v.warning === undefined ? null : <p className="ws-note ws-note--warn">{v.warning}</p>}
+          {checks.length === 0 && prior.length === 0 ? null : (
+            <div className="ws-meta" data-testid="ws-checks">
+              {prior.length === 0 ? null : (
+                <span
+                  className="ws-pill"
+                  title={prior
+                    .map(
+                      (r) =>
+                        `${r.created_at === undefined ? '' : `${r.created_at.slice(5, 10)} `}${r.text}`,
+                    )
+                    .join('\n')}
+                  data-testid="ws-prior"
+                >
+                  品牌号在这串里说过 {prior.length} 次
+                </span>
+              )}
+              {checks.map((k) => (
+                <span
+                  key={`${k.kind}:${k.message}`}
+                  className={k.fixed === true ? 'ws-pill' : 'ws-pill ws-pill--warn'}
+                  title={k.message}
+                  data-testid="ws-check"
+                >
+                  {CHECK_LABEL[k.kind] ?? k.kind}
+                </span>
+              ))}
+            </div>
+          )}
+          {v.kind === 'submit' ? (
             <input
               className="ws-input"
               value={title}
@@ -140,50 +360,60 @@ export function DeskItem(props: {
             rows={6}
             onChange={(e) => setText(e.target.value)}
           />
-          <div className="ws-actions">
-            <button
-              type="button"
-              className="ws-btn ws-btn--primary"
-              data-testid="ws-desk-open"
-              disabled={!props.canAct || busy !== undefined || text.trim() === ''}
-              title="在这个窗口新开一页、把草稿填进回复框；发送由你自己点"
-              onClick={() => run('open')}
-            >
-              {busy === 'open' ? '正在打开…' : '打开这一条'}
-            </button>
-            <button
-              type="button"
-              className="ws-btn ws-btn--ghost"
-              data-testid="ws-desk-copy"
-              onClick={() => {
-                void props.actions.copy(text).then((ok) => {
-                  setMsg({ bad: !ok, text: ok ? '草稿已复制' : '没复制上，选中文字自己复制' })
-                })
-              }}
-            >
-              复制草稿
-            </button>
-          </div>
-          <div className="ws-actions ws-actions--minor">
-            <button
-              type="button"
-              className="ws-btn ws-btn--ghost ws-btn--sm"
-              data-testid="ws-desk-later"
-              disabled={busy !== undefined}
-              onClick={() => props.actions.later(w)}
-            >
-              稍后
-            </button>
-            <button
-              type="button"
-              className="ws-btn ws-btn--ghost ws-btn--sm"
-              data-testid="ws-desk-drop"
-              disabled={!props.canAct || busy !== undefined}
-              onClick={() => run('drop')}
-            >
-              不发了
-            </button>
-          </div>
+          {skipping ? (
+            <SkipReasons
+              busy={busy !== undefined}
+              onPick={skip}
+              onCancel={() => setSkipping(false)}
+            />
+          ) : (
+            <>
+              <div className="ws-actions">
+                <button
+                  type="button"
+                  className="ws-btn ws-btn--primary"
+                  data-testid="ws-desk-open"
+                  disabled={!props.canAct || busy !== undefined || text.trim() === ''}
+                  title="在这个窗口新开一页、把草稿填进回复框；发送由你自己点"
+                  onClick={open}
+                >
+                  {busy === 'open' ? '正在打开…' : '打开这一条'}
+                </button>
+                <button
+                  type="button"
+                  className="ws-btn ws-btn--ghost"
+                  data-testid="ws-desk-copy"
+                  onClick={() => {
+                    void props.actions.copy(text).then((ok) => {
+                      setMsg({ bad: !ok, text: ok ? '草稿已复制' : '没复制上，选中文字自己复制' })
+                    })
+                  }}
+                >
+                  复制草稿
+                </button>
+              </div>
+              <div className="ws-actions ws-actions--minor">
+                <button
+                  type="button"
+                  className="ws-btn ws-btn--ghost ws-btn--sm"
+                  data-testid="ws-desk-later"
+                  disabled={busy !== undefined}
+                  onClick={() => props.actions.later(props.entry)}
+                >
+                  稍后
+                </button>
+                <button
+                  type="button"
+                  className="ws-btn ws-btn--ghost ws-btn--sm"
+                  data-testid="ws-desk-skip"
+                  disabled={!props.canAct || busy !== undefined}
+                  onClick={() => setSkipping(true)}
+                >
+                  不发
+                </button>
+              </div>
+            </>
+          )}
           {msg === undefined ? null : (
             <p className={msg.bad ? 'ws-note ws-note--bad' : 'ws-note'}>{msg.text}</p>
           )}
@@ -193,37 +423,62 @@ export function DeskItem(props: {
   )
 }
 
-/** 「等你发」那一块（新的在前；点了「稍后」的收在最下面一行）。 */
+/** 「按你的理由，另外 N 条同类的也不发了 · 撤回」那一行。 */
+export function FollowStrip(props: {
+  followed: { leader_id: string; ids: string[]; titles: string[] }
+  undo(): void
+  close(): void
+}): React.ReactNode {
+  const n = props.followed.ids.length
+  return (
+    <div className="ws-note ws-banner" data-testid="ws-follow">
+      <span title={props.followed.titles.join('\n')}>按你的理由，另外 {n} 条同类的也不发了</span>
+      <button
+        type="button"
+        className="ws-btn ws-btn--ghost ws-btn--sm"
+        data-testid="ws-follow-undo"
+        onClick={props.undo}
+      >
+        撤回
+      </button>
+      <button type="button" className="ws-btn ws-btn--ghost ws-btn--sm" onClick={props.close}>
+        知道了
+      </button>
+    </div>
+  )
+}
+
+/** 「等你发」那一块（插件里审的卡在前；点了「稍后」的收在最下面一行）。 */
 export function PanelDesk(props: {
-  writes: PanelWrite[]
+  entries: DeskEntry[]
   actions: DeskActions
   canAct: boolean
-  /** 点了「稍后」的那几条 job id。 */
+  /** 点了「稍后」的那几条 key。 */
   later: ReadonlySet<string>
   showLater(): void
 }): React.ReactNode {
-  const now = props.writes.filter((w) => !props.later.has(w.job_id))
-  const parked = props.writes.length - now.length
+  const now = props.entries.filter((e) => !props.later.has(e.key))
+  const parked = props.entries.length - now.length
   const [openId, setOpenId] = useState<string | undefined>(undefined)
-  const open = openId ?? now[0]?.job_id
-  if (props.writes.length === 0) return null
+  const open = openId ?? now[0]?.key
+  if (props.entries.length === 0) return null
   return (
     <section className="ws-desk-sec" data-testid="ws-desk-list">
       <div className="ws-sec-head">
         <b>等你发</b>
         <span className="ws-muted" title="插件不会自己打开页面、也不会点发送">
-          点开 · 你来发
+          看一眼 · 打开 · 你来发
         </span>
       </div>
       <ul className="ws-cards">
-        {now.map((w) => (
+        {now.map((e) => (
           <DeskItem
-            key={w.job_id}
-            write={w}
+            key={e.from === 'card' ? `${e.key}:${e.card.version}` : e.key}
+            entry={e}
             actions={props.actions}
             canAct={props.canAct}
-            open={w.job_id === open}
-            onToggle={() => setOpenId(w.job_id === open ? '' : w.job_id)}
+            open={e.key === open}
+            onToggle={() => setOpenId(e.key === open ? '' : e.key)}
           />
         ))}
       </ul>
@@ -251,50 +506,23 @@ export function versionNote(
   return `插件是 ${running}，工坊带的是 ${want}：打开 chrome://extensions，找到「Agents 工坊助手」点 ↻ 重新加载`
 }
 
-export function PanelFoot(props: {
+/**
+ * WP445（决策 1323）：插件与工坊版本对不上、要重新加载时，顶上临时出一条；对得上一个字都不画（底部那一栏去掉了）。
+ */
+export function VersionBanner(props: {
   running: string
   versions?: { workshop?: string; folder?: string }
-  site?: RedditSite
-  canAct: boolean
-  setSite(site: RedditSite): void
   checkUpdate(): void
 }): React.ReactNode {
   const note = versionNote(props.running, props.versions)
+  if (note === undefined) return null
   return (
-    <footer className="ws-foot" data-testid="ws-foot">
-      {note === undefined ? null : (
-        <p className="ws-note ws-note--warn ws-banner" data-testid="ws-version-warn">
-          <IconAlert className="ws-ico ws-ico--sm" />
-          <span>{note}</span>
-          <button
-            type="button"
-            className="ws-btn ws-btn--ghost ws-btn--sm"
-            onClick={props.checkUpdate}
-          >
-            现在更新
-          </button>
-        </p>
-      )}
-      <div className="ws-foot-row">
-        <span className="ws-muted" data-testid="ws-versions">
-          插件 {props.running}
-          {props.versions?.workshop === undefined ? '' : ` · 工坊 ${props.versions.workshop}`}
-        </span>
-        {props.site === undefined ? null : (
-          <label className="ws-muted ws-site" title="插件在哪一版 Reddit 上帮你填（默认新版）">
-            <select
-              className="ws-select"
-              data-testid="ws-site"
-              value={props.site}
-              disabled={!props.canAct}
-              onChange={(e) => props.setSite(e.target.value === 'old' ? 'old' : 'new')}
-            >
-              <option value="new">新版 Reddit</option>
-              <option value="old">旧版 old.reddit</option>
-            </select>
-          </label>
-        )}
-      </div>
-    </footer>
+    <p className="ws-note ws-note--warn ws-banner" data-testid="ws-version-warn">
+      <IconAlert className="ws-ico ws-ico--sm" />
+      <span>{note}</span>
+      <button type="button" className="ws-btn ws-btn--ghost ws-btn--sm" onClick={props.checkUpdate}>
+        现在更新
+      </button>
+    </p>
   )
 }

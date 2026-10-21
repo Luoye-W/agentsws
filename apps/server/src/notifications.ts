@@ -24,6 +24,7 @@ import {
   CONTENT_DIGEST_CARD_KIND,
   type EventEnvelope,
   type InboxNotification,
+  isPluginDeskCard,
   NOTIFICATION_CATEGORIES,
   NOTIFICATION_MAX_PER_PERSON,
   NOTIFICATION_RETENTION_DAYS,
@@ -278,6 +279,8 @@ export async function notificationsOfEvent(
     const item = await ctx.approval(id)
     if (item === undefined) return []
     const form = (item.payload as { form?: unknown } | undefined)?.form
+    // WP445：插件里审的卡不在工坊出、也不在铃铛里说「等你批」（插件「等你发」那一路已经说了）
+    if (isPluginDeskCard(item)) return []
     const base = {
       workspace_id: ws,
       person_id: to as PersonId,
@@ -320,9 +323,16 @@ export async function notificationsOfEvent(
     const id = str(p.approval_item_id)
     if (id === undefined) return []
     const item = await ctx.approval?.(id)
-    // 谁批的告诉谁（批的人就是要去点发送的人）；翻不出来告诉所有者
+    // WP445：告诉发起人（要去插件里点发送的人；主管在工坊里批了的也是发起人去发）；不是人发起的告诉批的人，
+    // 都翻不出来告诉所有者
+    const proposer = item?.proposer.kind === 'person' ? item.proposer.id : undefined
     const by = item?.decision?.by
-    const people = by !== undefined && by !== 'mandate' ? [by as PersonId] : await ctx.owners()
+    const people =
+      proposer !== undefined
+        ? [proposer as PersonId]
+        : by !== undefined && by !== 'mandate'
+          ? [by as PersonId]
+          : await ctx.owners()
     const what = short(str(p.label) ?? item?.title ?? `r/${str(p.subreddit) ?? ''}`, 60)
     return people.map((person_id) => ({
       workspace_id: ws,
@@ -530,6 +540,15 @@ export function createNotifications(options: NotificationsOptions): Notification
   ): Promise<void> => {
     if (CARD_SETTLED.has(e.type) && e.subject?.id !== undefined) {
       settle(e.workspace_id, `card:${e.subject.id}`)
+      // WP445：插件里审的那张卡不发了 / 撤了 / 过期了 → 「等你发」那条也收成已读（批了的接着等你打开、发出去才收）
+      const state = str((e.payload as Record<string, unknown> | undefined)?.state)
+      const gone =
+        e.type === 'approval.decided'
+          ? state !== 'approved' && state !== 'approved_edited'
+          : e.type === 'approval.withdrawn' ||
+            e.type === 'approval.expired' ||
+            e.type === 'approval.superseded'
+      if (gone) settle(e.workspace_id, `outbound:${e.subject.id}`)
       return
     }
     // WP432：等你发的那一条有了结局 → 那条通知收成已读
@@ -545,7 +564,8 @@ export function createNotifications(options: NotificationsOptions): Notification
        * int/1023：「要重新登录」是一个状态、不是一件件的事——同一来源还没读时又来一条（DeepSeek 账号过期时
        * 网关那一跳和摘账号那一路各发一条 `model_source.relogin_needed`）不加计数，铃铛里只有一条、没有 ×2。
        */
-      if (e.type === RELOGIN_NEEDED_EVENT && n.key !== undefined) {
+      // WP445：同一条「等你发」（插件里批了又进「等你打开」）还没读时不再加一条
+      if ((e.type === RELOGIN_NEEDED_EVENT || e.type === REDDIT_AWAITING_EVENT) && n.key !== undefined) {
         const prev = backend.byKey(n.workspace_id, n.person_id, n.key)
         if (prev !== undefined && prev.read_at === undefined) continue
       }

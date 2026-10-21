@@ -14,9 +14,9 @@ import {
   panelDropWrite,
   panelFillCard,
   panelOpenWrite,
-  panelSetSite,
   panelSkipCard,
   panelState,
+  panelUndoFollow,
 } from '../src/lib/panel/broker'
 import { clock, nextLine, partLine, progressHead, writeLine } from '../src/lib/panel/format'
 import { memoryStore, SETTINGS_KEY } from '../src/lib/storage'
@@ -187,7 +187,7 @@ describe('侧边栏后台', () => {
     expect(l.calls.at(-1)?.body).toEqual({ version: 3 })
   })
 
-  it('WP432 打开这一条：上一条还开着就不去本机拿（不让那一件卡在「开着」）；不发了 / 新版旧版照实回', async () => {
+  it('WP432 打开这一条：上一条还开着就不去本机拿（不让那一件卡在「开着」）；不发了照实回（WP445 新版旧版开关去掉了）', async () => {
     const l = local({
       'POST /v1/extension/panel/writes/aj_1/open': {
         status: 200,
@@ -196,10 +196,6 @@ describe('侧边栏后台', () => {
       'POST /v1/extension/panel/writes/aj_1/drop': {
         status: 200,
         body: { ok: true, data: { ok: true } },
-      },
-      'PUT /v1/extension/panel/settings': {
-        status: 200,
-        body: { ok: true, data: { site: 'old' } },
       },
     })
     const runJob = vi.fn(async () => ({ ok: true }))
@@ -218,9 +214,33 @@ describe('侧边栏后台', () => {
     expect(await panelOpenWrite(d, 'aj_1', { text: 'edited' }, 3)).toEqual({ ok: true })
     expect(l.calls[0]?.body).toEqual({ text: 'edited' })
     expect(runJob).toHaveBeenCalledWith({ id: 'aj_1' }, 3)
-    expect(await panelDropWrite(d, 'aj_1')).toEqual({ ok: true })
-    expect(await panelSetSite(d, 'old')).toEqual({ ok: true })
-    expect(l.calls.at(-1)?.body).toEqual({ site: 'old' })
+    expect(await panelDropWrite(d, 'aj_1', '时机不对')).toEqual({ ok: true })
+    expect(l.calls.at(-1)?.body).toEqual({ reason: '时机不对' })
+    expect(l.calls.some((c) => c.path.includes('/settings'))).toBe(false)
+  })
+
+  it('WP445 不发 + 理由：带上理由；同类的一并不发了照实带回；撤回那几张', async () => {
+    const l = local({
+      'POST /v1/extension/panel/cards/ap_1/skip': {
+        status: 200,
+        body: {
+          ok: true,
+          data: { ok: true, followed: { leader_id: 'ap_1', ids: ['ap_2'], titles: ['回复 bob'] } },
+        },
+      },
+      'POST /v1/extension/panel/cards/ap_1/follow/undo': {
+        status: 200,
+        body: { ok: true, data: { restored: 1 } },
+      },
+    })
+    const d = { store: paired(), perms: perms(true), fetch: l.fetch, pollNow: () => {} }
+    expect(await panelSkipCard(d, 'ap_1', 2, ' 不相关 ')).toEqual({
+      ok: true,
+      followed: { leader_id: 'ap_1', ids: ['ap_2'], titles: ['回复 bob'] },
+    })
+    expect(l.calls.at(-1)?.body).toEqual({ version: 2, reason: '不相关' })
+    expect(await panelUndoFollow(d, 'ap_1', ['ap_2'])).toEqual({ ok: true })
+    expect(l.calls.at(-1)?.body).toEqual({ ids: ['ap_2'] })
   })
 })
 

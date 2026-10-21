@@ -2,9 +2,10 @@
  * WP329：把 Reddit 写接到三条已有的路上（`server.ts` 只调这里，自己不写判断）：
  *
  * 1. 社媒回帖卡（WP254 `social_reply`）：Reddit 那一条改走插件（{@link socialRedditFill}）；
- * 2. 公关的外部发帖卡（`community_post`，WP78）：**以前批了也发不出去**（`submitApprovedPost` 没人调），
- *    现在批了交给插件填发帖页（{@link applyExternalPost}）；有 OAuth 应用、插件没连时走 `submitApprovedPost`；
- * 3. 插件用不了时的直发（{@link redditDirectWriter}）：OAuth 应用 → 官方号浏览器（WP249 留作备用）。
+ * 2. 公关的外部发帖卡（`community_post`，WP78）：批了交给插件填发帖页（{@link applyExternalPost}）；
+ *
+ * WP445（决策 1324）：以前的第 3 条「插件用不了时的直发（OAuth 应用 → 官方号浏览器）」删了——
+ * Reddit 的写只有插件 + 人点发送这一条路。
  *
  * 写有了结局之后按来源回写（{@link settleRedditWrite}）：社媒线程标已回、公关帖标已发 / 留着草稿。
  */
@@ -16,11 +17,8 @@ import type {
   OutboundRecordInput,
   StagedChange,
 } from '@agentsws/contracts'
-import { type PrRedditAdapter, submitApprovedPost } from '@agentsws/pr-core'
-import { redditFullname, type SocialChannelAdapter } from '@agentsws/social-core'
+import { redditFullname } from '@agentsws/social-core'
 import type {
-  RedditDirectResult,
-  RedditDirectWrite,
   RedditWriteEntry,
   RedditWriteResult,
   RedditWriteService,
@@ -80,62 +78,6 @@ export function socialRedditFill(writes: () => RedditWriteService | undefined) {
       source: { type: 'community_thread', id: input.thread.id },
       label: input.item.title,
     })
-  }
-}
-
-/** 插件用不了时的直发：OAuth 应用 → 官方号浏览器；两条都不通回 `undefined`。 */
-export function redditDirectWriter(input: {
-  /** 社媒那一条 Reddit 出口（WP249 的混合出口：接口优先、官方号浏览器兜底）。 */
-  adapter: () => SocialChannelAdapter | undefined
-  /** 公关那一份（`submitApprovedPost` 要它；只有 OAuth 应用连着才有）。 */
-  prAdapter: () => PrRedditAdapter | undefined
-  apiConnected: () => boolean
-  officialReady: () => boolean
-}) {
-  return async (w: RedditDirectWrite): Promise<RedditDirectResult | undefined> => {
-    const api = input.apiConnected()
-    if (!api && !input.officialReady()) return undefined
-    const adapter = input.adapter()
-    if (w.write.kind === 'submit') {
-      // 在别人的版里发帖：有 OAuth 应用就走 `submitApprovedPost`（带一张批过的卡才发）
-      const pr = api ? input.prAdapter() : undefined
-      if (pr !== undefined) {
-        const r = await submitApprovedPost(
-          pr,
-          { subreddit: w.write.subreddit, title: w.write.title, body: w.text },
-          { approval_id: w.approval_id },
-        )
-        return r.ok
-          ? {
-              ok: true,
-              external_id: r.data.external_id,
-              ...(r.data.url === undefined ? {} : { url: r.data.url }),
-            }
-          : { ok: false, message: r.message }
-      }
-      if (adapter?.publish === undefined) return undefined
-      const r = await adapter.publish({
-        account_external_id: w.write.subreddit,
-        body: `${w.write.title}\n${w.text}`,
-      } as Parameters<NonNullable<SocialChannelAdapter['publish']>>[0])
-      return r.ok
-        ? {
-            ok: true,
-            external_id: r.data.external_id,
-            ...(r.data.url === undefined ? {} : { url: r.data.url }),
-          }
-        : { ok: false, message: r.message }
-    }
-    if (adapter?.reply === undefined) return undefined
-    const parent = w.write.kind === 'reply' ? w.write.parent : w.write.post
-    const sub =
-      w.write.kind === 'reply' ? (w.write.permalink.match(/^\/r\/([^/]+)\//u)?.[1] ?? '') : ''
-    const r = await adapter.reply({
-      parent_external_id: parent,
-      text: w.text,
-      account_external_id: sub,
-    })
-    return r.ok ? { ok: true, external_id: r.data.external_id } : { ok: false, message: r.message }
   }
 }
 

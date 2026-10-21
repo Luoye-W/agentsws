@@ -141,6 +141,7 @@ import {
   contentChannelOf,
   DEFAULT_HANDOFF_RETURN_DAYS,
   fitTaskTitle,
+  isPluginDeskCard,
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
@@ -199,7 +200,7 @@ import {
   stubImageProvider,
   stubProvider,
 } from '@agentsws/model-gateway'
-import { type AlertsTransport, createPrRedditAdapter } from '@agentsws/pr-core'
+import type { AlertsTransport } from '@agentsws/pr-core'
 import {
   changeKindOf,
   createRoleStore,
@@ -765,7 +766,6 @@ import {
 } from './reddit-write/service.js'
 import {
   applyExternalPost,
-  redditDirectWriter,
   settleRedditWrite,
   socialRedditFill,
 } from './reddit-write/wire.js'
@@ -915,7 +915,7 @@ import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
 import { createStoreDigest, type StoreDigest, storeDigestCron } from './store-digest.js'
 import { createSubscription, type SubscriptionOptions } from './subscription.js'
-import { createScopeManagerRouter } from './supervisor.js'
+import { createScopeManagerRouter, recipientOf } from './supervisor.js'
 import { createSupportInbox, type SupportInboxPort } from './support-inbox.js'
 import {
   createSupportJudgment,
@@ -5408,7 +5408,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
           return redditWrites.stage(actor, input)
         },
-        redditWrites: () => ({ rows: redditWrites?.writes() ?? [] }),
+        // WP445：看板上「插件里 N 条等你发」（还没在插件里审的卡 + 批过、等你打开的）
+        redditWrites: () => ({
+          rows: redditWrites?.writes() ?? [],
+          in_plugin: redditWrites?.inPlugin() ?? 0,
+        }),
         // WP332（决策 762）：没发出去 → 岗位页「再填一次」（同一份已批草稿再交给插件，不用重批）
         redditRefill: async (_actor, job_id) => {
           if (redditWrites === undefined)
@@ -6097,7 +6101,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 插件没连、有 OAuth 应用 / 官方号浏览器登着时走那条直发（WP249 留作备用）。目录 `<品牌目录>/reddit-writes/`。
      */
     let redditDrafts = 0
-    const prRedditAdapter = createPrRedditAdapter(socialChannels.transport)
     redditWrites = createRedditWriteService({
       // WP338（决策 783）：社媒 Reddit 回复 / 发帖的上限（用户设，默认不限）
       limits: redditLimits,
@@ -6173,12 +6176,54 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return r.ok ? r.data : undefined
       },
       ...(adsActions === undefined ? {} : { actions: adsActions }),
-      direct: redditDirectWriter({
-        adapter: () => socialChannels.adapters.reddit,
-        prAdapter: () => prRedditAdapter,
-        apiConnected: () => socialChannels.transport.connected('reddit'),
-        officialReady: () => redditOfficial?.port.ready() === true,
-      }),
+      /*
+       * WP445（决策 1322）：要不要主管先批——看这条职责里这个动作设的是谁定（回帖子 / 评论 = `reply_thread`；
+       * 发新帖：社媒 = `stage_broadcast`、公关 = `stage_external_post`）。「主管定 / 老板定」才去问岗位上级
+       * （① 个人 / ② 同事互联一律落回本人 = 不用主管批，直接进插件「等你发」）。
+       */
+      reviewer: async (actor, kind) => {
+        const action =
+          kind !== 'submit'
+            ? 'reply_thread'
+            : actor.role_id.startsWith('pr.')
+              ? 'stage_external_post'
+              : 'stage_broadcast'
+        let route: string | undefined
+        try {
+          route = roles
+            .effectiveConfig(actor.assignment_id as Assignment['id'])
+            .actions.find((a) => a.id === action)?.route_to as string | undefined
+        } catch {
+          return undefined
+        }
+        if (route !== 'scope_manager' && route !== 'owner') return undefined
+        if (!hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company')) return undefined
+        if (route === 'owner') {
+          const owner = (await identity.getWorkspace(ws))?.owner_id
+          return owner === undefined ? undefined : { person: owner, via: 'owner' as const }
+        }
+        const r = await routeScopeManager({
+          workspace_id: ws,
+          role_id: actor.role_id,
+          proposer: actor.person_id,
+        })
+        return recipientOf(r)
+      },
+      // WP445：插件里等你发的卡（工坊不出卡的那一种，还没定）
+      deskCards: () =>
+        txn.runtime.store
+          .listApprovals({
+            workspace_id: ws,
+            kind: 'outbound_draft',
+            state: ['pending', 'in_review'],
+          })
+          .filter(isPluginDeskCard),
+      // WP445：主管批过、你在插件里「不发 + 理由」→ 进学习回路（同 WP414：写了理由才学）
+      onDropped: ({ approval_item_id, reason, at }) => {
+        const item = txn.runtime.store.getApproval(approval_item_id)
+        if (item !== undefined && reason !== undefined)
+          learning.observeReject(item, { reason, at: at as never })
+      },
       // WP413：发出记录那一行补上「在哪儿批的」（在插件侧边栏里批的记 extension）
       record: (input) =>
         outboundLog.record(

@@ -372,6 +372,11 @@ export interface LearningAssembly {
    * 和「改了再批」一样当一次人的修改进池（批的那一版 → 真发出去的那一版）。
    */
   observeEdit(item: ApprovalItem, edit: { before: string; after: string; at: Iso8601 }): void
+  /**
+   * WP445：卡批过之后，人在插件里点了「不发 + 理由」（Reddit：主管批了、发起人在插件「等你发」里不发）——
+   * 和卡上「不要 + 理由」一样当一次人的驳回进池。没写理由不进（同 WP414 的口径）。
+   */
+  observeReject(item: ApprovalItem, reject: { reason: string; at: Iso8601 }): void
   /** 已有的提案卡（工作台技能页的"待审提案数"）。 */
   pendingProposals(skill?: string): Promise<ApprovalItem[]>
   /** 24 §5 `GET /lessons`：池里那些，投影成契约的 `LessonRecord`。 */
@@ -619,6 +624,44 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       assignment_id,
       run_id: item.evidence.run_id ?? `card_${item.id}`,
       at: edit.at,
+      applies_to: { skill: skillOf(item) },
+      decisions: [decision],
+    })) {
+      const pooled = learning.pool.pool(lesson)
+      emit(
+        'lesson.pooled',
+        {
+          lesson_id: pooled.id,
+          skill: pooled.applies_to.skill,
+          signal: pooled.signal,
+          hits: pooled.hits,
+          confidence: pooled.confidence,
+          after_send: true,
+        },
+        undefined,
+        ws,
+      )
+    }
+  }
+
+  /** WP445：批过之后在插件里「不发 + 理由」：当一次「不要 + 理由」进池。 */
+  const observeReject = (item: ApprovalItem, reject: { reason: string; at: Iso8601 }): void => {
+    const reason = reject.reason.trim()
+    if (CARD_KINDS.has(item.kind) || reason === '') return
+    const ws = item.workspace_id
+    const assignment_id = item.proposer.assignment_id ?? targetOf(ws)?.ownerAssignment.id
+    if (assignment_id === undefined) return
+    const decision: HumanDecision = {
+      approval_item_id: item.id,
+      action: 'reject',
+      at: reject.at,
+      reason,
+    }
+    for (const lesson of extractLessons({
+      workspace_id: ws,
+      assignment_id,
+      run_id: item.evidence.run_id ?? `card_${item.id}`,
+      at: reject.at,
       applies_to: { skill: skillOf(item) },
       decisions: [decision],
     })) {
@@ -1691,6 +1734,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       for (const l of lessons) learning.pool.pool(l)
     },
     observeEdit,
+    observeReject,
     wrap(bus) {
       // 用 Proxy 而不是展开：总线是个类实例，方法在原型上，`{...bus}` 会把它们全丢掉。
       return new Proxy(bus, {

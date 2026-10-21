@@ -446,6 +446,8 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     summary: string
     seen: ObjectRef[]
     rule: 'role_holder' | 'scope_manager' | 'owner'
+    /** 已经算好的收件人（不给按 `rule` 现算）。 */
+    recipient?: Recipient
   }): Promise<SocialStagedView> => {
     const run_id = `run_social_${nextId('s')}`
     const { mandate, level } = actionOf(input.actor.assignment_id, input.action)
@@ -467,7 +469,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       approval: {
         title: input.title,
         summary: input.summary,
-        recipients: [await recipientFor(input.actor, input.rule)],
+        recipients: [input.recipient ?? (await recipientFor(input.actor, input.rule))],
         proposer: {
           kind: 'person',
           id: input.actor.person_id,
@@ -506,13 +508,27 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       rules: scheduleRulesFor(store.account(candidate.account_id)?.channel ?? ''),
     })
 
-  /** 提一张发布卡（`social_post` 在 `HARD_L1` 里，**永远人审**）。 */
+  /**
+   * WP445（决策 1322）：这一条会不会「交给你发」（内容账号组、这条渠道没有官方发布接口 → 到点交给插件，人点发布）。
+   */
+  const handsOff = (channel: SocialChannel): boolean =>
+    socialChannelSpec(channel)?.group === 'content' &&
+    options.channels?.adapters[channel]?.publish === undefined
+
+  /**
+   * 提一张发布卡（`social_post` 在 `HARD_L1` 里，**永远人审**）。
+   * WP445（决策 1322）：会交给你在插件里发、又不用主管先批的（① 个人 / ② 同事互联，或落回本人）——卡标
+   * `after.desk = 'plugin'`：**工坊不出卡**，到点直接进插件「等你发」，人在插件里点「发好了」= 批 + 发、「不发」= 不要。
+   * 回 `desk: true` 告诉调用方（没排时间的这一条当「现在就到点」）。
+   */
   const stagePost = async (
     actor: SocialActor,
     post: SocialPost,
     hits: readonly ScheduleConflict[],
-  ): Promise<SocialStagedView> => {
+  ): Promise<SocialStagedView & { desk?: boolean }> => {
     const account = accountOr404(post.account_id)
+    const recipient = await recipientFor(actor, 'scope_manager')
+    const desk = handsOff(post.channel) && recipient.person === actor.person_id
     const when =
       post.scheduled_at === undefined
         ? '没排时间：批了就发。'
@@ -531,6 +547,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         body: post.body,
         ...(post.scheduled_at === undefined ? {} : { scheduled_at: post.scheduled_at }),
         status: post.scheduled_at === undefined ? 'draft' : 'scheduled',
+        ...(desk ? { desk: 'plugin' } : {}),
       },
       notes: [when, ...conflictLines(hits)],
       title: `发布：${account.display_name}`,
@@ -542,7 +559,8 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
             (hits.length === 0 ? '' : ` ⚠ ${conflictLines(hits).join(' ')}`),
       seen: [{ type: 'social_account', id: account.id }],
       rule: 'scope_manager',
-    })
+      recipient,
+    }).then((v) => (desk && v.staged ? { ...v, desk: true } : v))
   }
 
   const postView = (
@@ -778,7 +796,10 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
               body: input.body,
             })
       store.savePost(post)
-      const staged = await stagePost(actor, post, hits)
+      const { desk, ...staged } = await stagePost(actor, post, hits)
+      // WP445：插件里审的、没排时间的——当「现在就到点」，下一拍交给插件「等你发」
+      if (desk === true && post.scheduled_at === undefined)
+        store.savePost({ ...post, status: 'scheduled', scheduled_at: clock.now() })
       emit('social.post_staged', actor.person_id, {
         post_id: post.id,
         channel: post.channel,
@@ -803,7 +824,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       const moved: SocialPost = { ...post, scheduled_at: input.scheduled_at, status: 'scheduled' }
       store.savePost(moved)
       // 换个时间发也是一次发布：**重新出一张卡**（`social_post` 永远 L1）
-      const staged = await stagePost(actor, moved, hits)
+      const { desk: _desk, ...staged } = await stagePost(actor, moved, hits)
       emit('social.post_rescheduled', actor.person_id, {
         post_id: post.id,
         channel: post.channel,
@@ -1396,6 +1417,20 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     if (due.length === 0) return out
 
     const changes = await ledger.list({ workspace_id, kind: 'social_post' })
+    /*
+     * WP445（决策 1322）：插件里审的那几条（卡标 `desk: 'plugin'`、还没定 / 卡过期了）——到点了直接交给插件「等你发」，
+     * 人在插件里点「发好了」才算批 + 发（发布永远人点，门挪到了插件里那一下）。
+     */
+    const deskPosts = new Set(
+      changes
+        .filter(
+          (ch) =>
+            (ch.status === 'staged' || ch.status === 'expired') &&
+            (ch.after as { desk?: string } | null)?.desk === 'plugin',
+        )
+        .map((ch) => (ch.after as { post_id?: string } | null)?.post_id)
+        .filter((x): x is string => typeof x === 'string'),
+    )
     const approvedPosts = new Set(
       changes
         .filter(
@@ -1407,7 +1442,8 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     )
 
     for (const post of due) {
-      if (!approvedPosts.has(post.id)) {
+      const desk = !approvedPosts.has(post.id) && deskPosts.has(post.id)
+      if (!approvedPosts.has(post.id) && !desk) {
         // 没批的到点了也不发（发布永远人审；门在"排"那一下，不是"到点"那一下）
         out.skipped.push({ post_id: post.id, reason: '这条排期还没人点头，到点了也不发。' })
         continue
@@ -1452,6 +1488,12 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
           ...(task === undefined ? {} : { todo_id: task.todo_id }),
         })
         return true
+      }
+      // WP445：插件里审的那一条：只交给人（绝不经接口发）
+      if (desk) {
+        if (!toManual('在插件里由你看一眼、自己点发布'))
+          out.skipped.push({ post_id: post.id, reason: '这一条要在插件里由你发，但交不过去。' })
+        continue
       }
       if (adapter?.publish === undefined) {
         if (toManual('这条渠道现在没接上')) continue

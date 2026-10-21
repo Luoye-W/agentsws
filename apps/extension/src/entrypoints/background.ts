@@ -38,9 +38,9 @@ import {
   panelFillCard,
   panelOpenWrite,
   panelRefillWrite,
-  panelSetSite,
   panelSkipCard,
   panelState,
+  panelUndoFollow,
 } from '@/lib/panel/broker'
 import { composeUrlAllowed, workshopCardUrl } from '@/lib/panel/format'
 import { backgroundFetch, chromeRedditTabs, sessionFetch } from '@/lib/reddit/fetcher'
@@ -339,14 +339,19 @@ export default defineBackground(() => {
             })
             void badge()
             return
-          case 'panel-site':
-            reply({ type: 'panel-act', ...(await panelSetSite(panelDeps, message.site)) })
-            return
           case 'panel-skip':
             reply({
               type: 'panel-act',
-              ...(await panelSkipCard(panelDeps, message.id, message.version)),
+              ...(await panelSkipCard(panelDeps, message.id, message.version, message.reason)),
             })
+            void badge()
+            return
+          case 'panel-follow-undo':
+            reply({
+              type: 'panel-act',
+              ...(await panelUndoFollow(panelDeps, message.leader, message.ids)),
+            })
+            void badge()
             return
           case 'panel-refill':
             reply({ type: 'panel-act', ...(await panelRefillWrite(panelDeps, message.job)) })

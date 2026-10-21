@@ -115,7 +115,6 @@ const snap = (patch: Partial<PanelSnapshot> = {}): PanelSnapshot => ({
   records: [],
   sinks: [],
   versions: { workshop: '0.2.1-beta.5', folder: '0.2.1-beta.5' },
-  site: 'new',
   notify_system: true,
   ...patch,
 })
@@ -252,7 +251,7 @@ describe('WP432 侧边栏发帖台', () => {
     expect(q('ws-tab-todo')?.textContent).toContain('1')
   })
 
-  it('改了字点「打开这一条」：带改过的字和侧边栏所在的窗口；复制草稿；不发了', async () => {
+  it('改了字点「打开这一条」：带改过的字和侧边栏所在的窗口；复制草稿；不发（WP445：理由可选）', async () => {
     const h = await harness(snap())
     await setValue(q('ws-desk-draft'), 'Edited here')
     await click(q('ws-desk-copy'))
@@ -265,7 +264,8 @@ describe('WP432 侧边栏发帖台', () => {
       text: 'Edited here',
       windowId: 42,
     })
-    await click(q('ws-desk-drop'))
+    await click(q('ws-desk-skip'))
+    await click(q('ws-desk-skip-now'))
     await tick()
     expect(h.sent).toContainEqual({ type: 'panel-drop', job: 'rdw_1' })
   })
@@ -278,21 +278,26 @@ describe('WP432 侧边栏发帖台', () => {
     expect(q('ws-desk')).not.toBeNull()
   })
 
-  it('底下写两边版本；对不上就说怎么重新加载、能点「现在更新」；新版旧版能换', async () => {
+  it('WP445：版本对不上时顶上临时一条（说怎么重新加载、能点「现在更新」）；底部那一栏与新版旧版开关都没了', async () => {
     const h = await harness(
       snap({ versions: { workshop: '0.2.1-beta.6', folder: '0.2.1-beta.6' } }),
     )
-    expect(q('ws-versions')?.textContent).toContain('插件 0.2.1-beta.5')
-    expect(q('ws-version-warn')?.textContent).toContain('chrome://extensions')
-    await click(q('ws-version-warn')?.querySelector('button') ?? null)
+    const warn = q('ws-version-warn')
+    expect(warn?.textContent).toContain('chrome://extensions')
+    // 在顶上（侧边栏第一块内容之前），不在底下
+    expect(host.querySelector('.ws-side > *:nth-child(2)')?.getAttribute('data-testid')).toBe(
+      'ws-version-warn',
+    )
+    await click(warn?.querySelector('button') ?? null)
     expect(h.sent).toContainEqual({ type: 'update-check' })
-    await setValue(q('ws-site'), 'old')
-    await tick()
-    expect(h.sent).toContainEqual({ type: 'panel-site', site: 'old' })
+    expect(q('ws-foot')).toBeNull()
+    expect(q('ws-versions')).toBeNull()
+    expect(q('ws-site')).toBeNull()
   })
 
-  it('版本一样：不出提示', async () => {
+  it('版本一样：一个字都不画', async () => {
     await harness(snap())
     expect(q('ws-version-warn')).toBeNull()
+    expect(q('ws-foot')).toBeNull()
   })
 })

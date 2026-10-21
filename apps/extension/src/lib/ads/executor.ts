@@ -49,11 +49,14 @@ export const CONFIRM_TIMEOUT_MS = 30 * 60 * 1000
 const CONFIRM_POLL_MS = 2_000
 
 export async function executeJob(job: ActionJob, deps: ExecutorDeps): Promise<ActionResult> {
+  // WP445：Reddit 这条路插件只填草稿、发送由人点——横条用中性的那一种
+  const assist = job.plan.platform === 'reddit' ? { assist: true } : {}
   let banner: BannerState | null = {
     title: job.title,
     step: 0,
     of: job.plan.steps.length,
     label: '准备',
+    ...assist,
   }
   const page = new TabPage({
     driver: deps.driver,
@@ -73,7 +76,7 @@ export async function executeJob(job: ActionJob, deps: ExecutorDeps): Promise<Ac
       return { name: got.data.name, mime: got.data.mime, bytes: base64ToBytes(got.data.base64) }
     },
     progress: async (p) => {
-      await setBanner({ title: job.title, step: p.step, of: p.of, label: p.label })
+      await setBanner({ title: job.title, step: p.step, of: p.of, label: p.label, ...assist })
       const said = await actionProgress(deps.client, job.id, {
         step: p.step,
         of: p.of,

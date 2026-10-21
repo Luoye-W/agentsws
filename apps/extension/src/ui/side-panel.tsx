@@ -4,8 +4,11 @@
  *
  * 开着时隔几秒问一次（有正在填的那条时更勤一点），所以工坊里先处理了的卡这里会自己收起；
  * 这里处理了，工坊那边同一张卡也收起（同一个审批总线）。
+ *
+ * WP445（决策 1322 / 1323）：AI 起草的 Reddit 回帖 / 发帖直接在「等你发」里审、改、打开、不发（工坊不出卡）；
+ * 底部那一栏去掉了，插件与工坊版本对不上时顶上临时出一条。
  */
-import type { PanelCard, PanelSnapshot } from '@agentsws/browser-action'
+import type { PanelSnapshot } from '@agentsws/browser-action'
 import { PANEL_REFRESH_MS } from '@agentsws/browser-action'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { chromePermissions } from '@/lib/ads/permissions'
@@ -15,7 +18,14 @@ import type { PanelState } from '@/lib/panel/broker'
 import { requestReddit } from '@/lib/reddit/permissions'
 import { BrandMark } from './brand-mark'
 import { type CardActions, PanelCards } from './panel-cards'
-import { type DeskActions, PanelDesk, PanelFoot, PanelStatusStrip } from './panel-desk'
+import {
+  type DeskActions,
+  deskEntries,
+  FollowStrip,
+  PanelDesk,
+  PanelStatusStrip,
+  VersionBanner,
+} from './panel-desk'
 import { IconGear } from './panel-icons'
 import type { PostActions } from './panel-posts'
 import { PanelProgressView } from './panel-progress'
@@ -86,6 +96,10 @@ export function SidePanel(props: {
   const [state, setState] = useState<PanelState | undefined>(undefined)
   const [tab, setTab] = useState<Tab | undefined>(undefined)
   const [later, setLater] = useState<Record<string, number>>(() => readLater(Date.now()))
+  /** WP445：「不发 + 理由」时同类的也一并不发了（顶上一行，能撤回）。 */
+  const [followed, setFollowed] = useState<
+    { leader_id: string; ids: string[]; titles: string[] } | undefined
+  >(undefined)
   const alive = useRef(true)
 
   const refresh = useCallback(async () => {
@@ -125,41 +139,34 @@ export function SidePanel(props: {
       const r = await send(m)
       await refresh()
       if (r?.type !== 'panel-act') return '插件后台没回话，稍等一下再试。'
+      if (r.ok && r.followed !== undefined) setFollowed(r.followed)
       return r.ok ? undefined : (r.message ?? '没做成。')
     },
     [send, refresh],
   )
   const winOf = props.windowId ?? currentWindowId
   const actions: CardActions = {
-    fill: async (c: PanelCard, d) => {
-      const windowId = await winOf()
-      return act({
-        type: 'panel-fill',
-        id: c.id,
-        version: c.version,
-        ...(d.text === c.draft.text ? {} : { text: d.text }),
-        ...(d.title === undefined || d.title === c.draft.title ? {} : { title: d.title }),
-        ...(windowId === undefined ? {} : { windowId }),
-      })
-    },
-    skip: (c) => act({ type: 'panel-skip', id: c.id, version: c.version }),
     refill: (job) => act({ type: 'panel-refill', job }),
   }
 
-  // WP432：发帖台——等你发的那几条
+  // WP432 / WP445：发帖台——等你发的那几条（插件里审的卡 + 主管批过的）
   const desk: DeskActions = {
-    open: async (w, edit) => {
+    open: async (e, edit) => {
       const windowId = await winOf()
-      return act({
-        type: 'panel-open',
-        job: w.job_id,
-        ...edit,
-        ...(windowId === undefined ? {} : { windowId }),
-      })
+      const win = windowId === undefined ? {} : { windowId }
+      // 还没批的卡：批（改过就按改过的）+ 打开，是你这一下点的
+      if (e.from === 'card')
+        return act({ type: 'panel-fill', id: e.card.id, version: e.card.version, ...edit, ...win })
+      return act({ type: 'panel-open', job: e.write.job_id, ...edit, ...win })
     },
-    drop: (w) => act({ type: 'panel-drop', job: w.job_id }),
-    later: (w) => {
-      const next = { ...readLater(Date.now()), [w.job_id]: Date.now() + LATER_MS }
+    skip: (e, reason) => {
+      const why = reason === undefined ? {} : { reason }
+      if (e.from === 'card')
+        return act({ type: 'panel-skip', id: e.card.id, version: e.card.version, ...why })
+      return act({ type: 'panel-drop', job: e.write.job_id, ...why })
+    },
+    later: (e) => {
+      const next = { ...readLater(Date.now()), [e.key]: Date.now() + LATER_MS }
       writeLater(next)
       setLater(next)
     },
@@ -174,14 +181,13 @@ export function SidePanel(props: {
         }
       }),
   }
-  const awaiting = snap?.writes.filter((w) => w.state === 'awaiting') ?? []
+  const entries = snap === undefined ? [] : deskEntries(snap.cards, snap.writes)
   const others = snap?.writes.filter((w) => w.state !== 'awaiting') ?? []
   // WP419：等你定口吻那一张（在工坊里）也算一件要你处理的
   const todoCount =
     snap === undefined
       ? 0
-      : awaiting.length +
-        snap.cards.length +
+      : entries.length +
         (snap.posts?.length ?? 0) +
         (snap.progress.stage?.card_id === undefined ? 0 : 1)
   // WP419（决策 1231）：交给你发的社媒帖子
@@ -234,6 +240,11 @@ export function SidePanel(props: {
       ) : null}
       {state?.kind === 'ok' && snap !== undefined ? (
         <>
+          <VersionBanner
+            running={props.version ?? runningVersion()}
+            {...(snap.versions === undefined ? {} : { versions: snap.versions })}
+            checkUpdate={() => void send({ type: 'update-check' })}
+          />
           {state.reddit_here ? null : (
             <ConnectReddit
               send={send}
@@ -266,9 +277,20 @@ export function SidePanel(props: {
               </button>
             ))}
           </div>
+          {current === 'todo' && followed !== undefined ? (
+            <FollowStrip
+              followed={followed}
+              close={() => setFollowed(undefined)}
+              undo={() => {
+                const f = followed
+                setFollowed(undefined)
+                void act({ type: 'panel-follow-undo', leader: f.leader_id, ids: f.ids })
+              }}
+            />
+          ) : null}
           {current === 'todo' ? (
             <PanelDesk
-              writes={awaiting}
+              entries={entries}
               actions={desk}
               canAct={snap.can_act}
               later={new Set(Object.keys(later))}
@@ -280,9 +302,8 @@ export function SidePanel(props: {
           ) : null}
           {current === 'todo' ? (
             <PanelCards
-              cards={snap.cards}
               writes={others}
-              hideEmpty={awaiting.length > 0}
+              hideEmpty={entries.length > 0}
               copy={desk.copy}
               actions={actions}
               canAct={snap.can_act}
@@ -299,14 +320,6 @@ export function SidePanel(props: {
           {current === 'records' ? (
             <PanelRecords records={snap.records} sinks={snap.sinks} />
           ) : null}
-          <PanelFoot
-            running={props.version ?? runningVersion()}
-            {...(snap.versions === undefined ? {} : { versions: snap.versions })}
-            {...(snap.site === undefined ? {} : { site: snap.site })}
-            canAct={snap.can_act}
-            setSite={(site) => void act({ type: 'panel-site', site })}
-            checkUpdate={() => void send({ type: 'update-check' })}
-          />
         </>
       ) : null}
     </div>

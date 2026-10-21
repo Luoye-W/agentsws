@@ -31,10 +31,10 @@ import type {
   PanelOpenInput,
   PanelOpenResult,
   PanelSkipInput,
+  PanelSkipResult,
   PanelSnapshot,
   RedditReadNextResponse,
   RedditReadResultInput,
-  RedditSite,
 } from '@agentsws/browser-action'
 import { formatAdsAccountHints } from '@agentsws/browser-action'
 import type {
@@ -309,13 +309,26 @@ export function panelFill(
   return call<PanelFillResult>(options, panelCardPath(id, 'fill'), { method: 'POST', body: input })
 }
 
-/** 不发（驳回这张卡）。 */
+/** 不发（驳回这张卡）。WP445：写了理由，同类的可能一并不发了（回执里带 `followed`）。 */
 export function panelSkip(
   options: LocalClientOptions,
   id: string,
   input: PanelSkipInput,
-): Promise<LocalCallResult<{ ok: true }>> {
-  return call<{ ok: true }>(options, panelCardPath(id, 'skip'), { method: 'POST', body: input })
+): Promise<LocalCallResult<PanelSkipResult>> {
+  return call<PanelSkipResult>(options, panelCardPath(id, 'skip'), { method: 'POST', body: input })
+}
+
+/** WP445：撤回「同类的也一并不发了」那几张（放回「等你发」）。 */
+export function panelFollowUndo(
+  options: LocalClientOptions,
+  leader: string,
+  ids: readonly string[],
+): Promise<LocalCallResult<{ restored: number }>> {
+  return call<{ restored: number }>(
+    options,
+    `/v1/extension/panel/cards/${encodeURIComponent(leader)}/follow/undo`,
+    { method: 'POST', body: { ids: [...ids] } },
+  )
 }
 
 /** WP419：交给你发的社媒帖子，回「发好了」（可带那一条的链接）/「不发了」。 */
@@ -374,13 +387,3 @@ export function panelDrop(
   })
 }
 
-/** WP432：在新版 / 旧版 Reddit 上填。 */
-export function panelSite(
-  options: LocalClientOptions,
-  site: RedditSite,
-): Promise<LocalCallResult<{ site: RedditSite }>> {
-  return call<{ site: RedditSite }>(options, '/v1/extension/panel/settings', {
-    method: 'PUT',
-    body: { site },
-  })
-}

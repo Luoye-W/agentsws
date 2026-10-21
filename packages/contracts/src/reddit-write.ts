@@ -195,6 +195,43 @@ export interface RedditWritePayload {
   checks?: RedditDraftCheck[]
   /** WP411：品牌号在这串里已经说过的（卡上「你 10-12 已回：……」）。 */
   prior_replies?: RedditThreadComment[]
+  /**
+   * WP445（决策 1322）：在哪儿审。`plugin` = 直接进浏览器插件侧边栏「等你发」，工坊**不出卡**（审与发在插件里一步完成）；
+   * `workshop` = 公司模式里这条职责设了「要主管先批」，主管在工坊里批，批完再进发起人的插件「等你发」。
+   * 老卡没有这一格：按收件规则认（落在本人身上的就是插件里那一种）。
+   */
+  desk?: 'plugin' | 'workshop'
+}
+
+/**
+ * WP445（决策 1322）：这张卡是不是「插件里审」的那一种（工坊不出卡、插件侧边栏「等你发」里有它）。
+ *
+ * - Reddit「发出去」卡：`desk: 'workshop'` 或按主管 / 老板收件的不是（主管在工坊批）；老卡按收件规则认；
+ * - WP419 社媒「交给你发」的发布卡（`staged_change` + `social_post`）：出卡时就标了 `after.desk = 'plugin'` 的才是。
+ */
+export function isPluginDeskCard(item: {
+  kind: string
+  payload: unknown
+  routing?: { rule?: string }
+}): boolean {
+  const p = item.payload
+  if (typeof p !== 'object' || p === null || Array.isArray(p)) return false
+  const r = p as Record<string, unknown>
+  if (item.kind === 'staged_change') {
+    const after = r.after
+    return (
+      r.kind === 'social_post' &&
+      typeof after === 'object' &&
+      after !== null &&
+      (after as Record<string, unknown>).desk === 'plugin'
+    )
+  }
+  if (item.kind !== 'outbound_draft') return false
+  if (r.form !== REDDIT_WRITE_FORM) return false
+  if (r.desk === 'plugin') return true
+  if (r.desk === 'workshop') return false
+  const rule = item.routing?.rule
+  return rule !== 'scope_manager' && rule !== 'owner'
 }
 
 /** 插件那边这一条做到哪了（工作台看）。 */
@@ -246,6 +283,13 @@ export interface RedditWriteView {
   edited?: boolean
   /** WP432：在页面上没认出框（新版改版了），是人自己粘贴发的。 */
   pasted?: boolean
+}
+
+/** `GET /v1/social/reddit/writes` 的回包。 */
+export interface RedditWritesList {
+  rows: RedditWriteView[]
+  /** WP445：插件里等你发的几条（还没在插件里打开的卡 + 主管批过、等你打开的），看板上那一行用。 */
+  in_plugin?: number
 }
 
 /** WP332：没发出去的提醒在岗位页留多久（天）；更早的进度里还在，不再占一行。 */

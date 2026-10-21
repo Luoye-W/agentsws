@@ -56,6 +56,11 @@ export interface BannerState {
   confirm?: string
   /** 截图那一下先把横条藏起来（截的是后台本身）。 */
   hidden?: boolean
+  /**
+   * WP445：Reddit / 社媒发帖这条路——插件只是把草稿填好、发送由人点，横条用中性色、说「草稿已填好，请检查后自己点发送」，
+   * 不说「AI 正在操作」（广告那边真在操作的保持原样）。
+   */
+  assist?: boolean
 }
 
 export type AdsBannerRequest = { type: 'ads-banner'; state: BannerState | null }

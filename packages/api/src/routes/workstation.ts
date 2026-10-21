@@ -9,6 +9,7 @@
  */
 
 import type { RoleId } from '@agentsws/contracts'
+import { isPluginDeskCard } from '@agentsws/contracts'
 import {
   assembleHome,
   assembleView,
@@ -313,8 +314,9 @@ async function cardsOf(
   // 到期了（定时清理还没来得及记成过期）的卡也不进牌堆——它已经点不成了
   const live = (i: { expires_at?: string }): boolean =>
     i.expires_at === undefined || Date.parse(i.expires_at) > Date.parse(now)
+  // WP445（决策 1322）：AI 起草的 Reddit 回帖 / 发帖在浏览器插件里审、发——工坊不出卡（看板上只一行「插件里 N 条等你发」）
   const items = [...own, ...extra.filter((i) => !own.some((x) => x.id === i.id))].filter(
-    (i) => can(i) && live(i),
+    (i) => can(i) && live(i) && !isPluginDeskCard(i),
   )
   return sortCards(
     items.map((i) =>
