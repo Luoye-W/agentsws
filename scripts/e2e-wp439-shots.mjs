@@ -123,7 +123,10 @@ async function main() {
       await rows.nth(1).getByTestId('message-rule-delete').click()
       const echo = page.getByTestId('message-rules-echo')
       await echo.waitFor({ timeout: 10_000 })
-      check((await echo.innerText()).includes('已删，下一封会重新判'), '删了回声「已删，下一封会重新判」')
+      check(
+        (await echo.innerText()).includes('已删，下一封会重新判'),
+        '删了回声「已删，下一封会重新判」',
+      )
       await page.waitForFunction(
         () => document.querySelectorAll('[data-testid="message-rule-row"]').length === 2,
         undefined,
@@ -151,10 +154,10 @@ async function main() {
 
       // 回复建议：英文来信 → 英文；中文来信 → 中文
       const suggestions = async (thread) => {
-        await page.goto(
-          `${BASE}/messages?view=all&thread=${encodeURIComponent(thread)}`,
-          { waitUntil: 'load', timeout: 60_000 },
-        )
+        await page.goto(`${BASE}/messages?view=all&thread=${encodeURIComponent(thread)}`, {
+          waitUntil: 'load',
+          timeout: 60_000,
+        })
         const ai = page.getByTestId('mail-ai')
         await ai.waitFor({ timeout: 30_000 })
         if ((await ai.getAttribute('data-open')) !== 'true')
@@ -164,7 +167,9 @@ async function main() {
         return page.getByTestId('rail-mail-suggestion').allInnerTexts()
       }
       const en = await suggestions('<demo-m113@mail.example>')
-      console.log(`  英文来信建议：${en.map((s) => s.replace(/\s+/g, ' ').slice(0, 50)).join(' | ')}`)
+      console.log(
+        `  英文来信建议：${en.map((s) => s.replace(/\s+/g, ' ').slice(0, 50)).join(' | ')}`,
+      )
       check(
         en.length === 3 && en.every((s) => /[A-Za-z]{4,}/.test(s.split('\n').slice(1).join(' '))),
         '英文来信：三条建议是英文',
