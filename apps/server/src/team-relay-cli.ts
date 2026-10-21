@@ -20,7 +20,7 @@ function arg(name: string): string | undefined {
 const port = Number(arg('--port') ?? '4593')
 const relay = await startTeamRelayStandIn({ port })
 process.stdout.write(
-  `团队通道替身起来了：${relay.base}（同事打开的是 http://<通道 id>.localhost:${relay.port}/）\n`,
+  `团队通道替身起来了：${relay.base}（同事打开的是 http://<通道 id>-team.localhost:${relay.port}/）\n`,
 )
 const stop = (): void => {
   void relay.close().then(() => process.exit(0))

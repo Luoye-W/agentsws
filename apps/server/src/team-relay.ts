@@ -8,8 +8,8 @@
  * - 开发期在一台电脑上手动走一遍（`node apps/server/dist/team-relay-cli.js --port 4593`）；
  * - 私有云那边照着它写（帧怎么转、头怎么去、多大回 413、不在线回什么）。
  *
- * 地址按 Host 分流：`http://<通道 id>.localhost:<端口>/…` 整条转给那条通道（浏览器与 Node 都把
- * `*.localhost` 解析到本机）。控制面那几条（申请通道、长连接、登记 / 查邀请码）走不带子域的 Host。
+ * 地址按 Host 分流：`http://<通道 id>-team.localhost:<端口>/…` 整条转给那条通道（浏览器与 Node 都把
+ * `*.localhost` 解析到本机；与真云的 `<通道 id>-team.agentsws.com` 同一个形状，WP435）。控制面那几条（申请通道、长连接、登记 / 查邀请码）走不带子域的 Host。
  * 令牌一律认（替身不验账号；真云按工作区令牌认组织）。
  */
 import { randomBytes } from 'node:crypto'
@@ -95,7 +95,7 @@ export async function startTeamRelayStandIn(
   let port = options.port ?? 0
   let seq = 0
 
-  const urlOf = (id: string): string => `http://${id}.localhost:${String(port)}`
+  const urlOf = (id: string): string => `http://${id}-team.localhost:${String(port)}`
 
   const bearer = (req: IncomingMessage): string | undefined => {
     const raw = req.headers.authorization
@@ -251,8 +251,8 @@ export async function startTeamRelayStandIn(
 
   const tunnelOfHost = (host: string | undefined): Tunnel | undefined | 'control' => {
     const name = (host ?? '').split(':')[0]?.toLowerCase() ?? ''
-    if (!name.endsWith('.localhost')) return 'control'
-    return tunnels.get(name.slice(0, -'.localhost'.length))
+    if (!name.endsWith('-team.localhost')) return 'control'
+    return tunnels.get(name.slice(0, -'-team.localhost'.length))
   }
 
   const handler = (req: IncomingMessage, res: ServerResponse): void => {

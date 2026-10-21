@@ -215,7 +215,7 @@ describe('WP427 不在同一个网络：经工坊云（替身）', () => {
       )
       return got.data.cloud.state === 'online' ? got.data : undefined
     })
-    expect(link.cloud.url).toMatch(/^http:\/\/t[0-9a-f]+\.localhost:4593$/)
+    expect(link.cloud.url).toMatch(/^http:\/\/t[0-9a-f]+-team\.localhost:4593$/)
     expect(link.invite_base).toBe(link.cloud.url)
 
     // 发一个码：登记到云上
@@ -446,7 +446,12 @@ describe('WP427 不在同一个网络：经工坊云（替身）', () => {
     expect(['approved', 'applied', 'applying']).toContain(final.data.state)
 
     // 发起人电脑掉线：同事那边说人话（503），不是挂着
-    relay.drop(link.cloud.url?.slice('http://'.length).split('.')[0] ?? '')
+    relay.drop(
+      link.cloud.url
+        ?.slice('http://'.length)
+        .split('.')[0]
+        ?.replace(/-team$/, '') ?? '',
+    )
     const offline = await fetch(`${base}/v1/me`, {
       headers: { authorization: `Bearer ${session}` },
     })

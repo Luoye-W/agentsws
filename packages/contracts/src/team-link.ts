@@ -12,7 +12,7 @@
  * - 邀请码登记与查找（贴码的同事在别的网络里，靠云查到是哪条通道）：{@link TeamCodeRegister} /
  *   {@link TeamCodeResolveRequest} / {@link TeamCodeResolved}。
  *
- * 同事那一侧打开的是通道地址（`https://<tunnel_id>.team.agentsws.com/`，按 Host 分流），
+ * 同事那一侧打开的是通道地址（`https://<tunnel_id>-team.agentsws.com/`（WP435：一层子域、后缀式），按 Host 分流），
  * 云把整条 HTTP 请求打成 `request` 帧下发，响应按 `response_head` / `response_chunk` / `response_end`
  * 流回去（流式回复照常是流式的）。WebSocket 不经通道转（工作台连不上实时推送会自己退回轮询）。
  */

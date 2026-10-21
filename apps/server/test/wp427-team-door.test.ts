@@ -179,6 +179,13 @@ describe('WP427 云通道客户端', () => {
     expect(tunnelConnectUrl('http://127.0.0.1:4593')).toBe(
       'ws://127.0.0.1:4593/v1/team/tunnel/connect',
     )
+    // WP435：带上通道号，云直接接到那条通道上；形状不对的不带
+    expect(tunnelConnectUrl('https://cloud.agentsws.com', 'k3f9x2ab01cd')).toBe(
+      'wss://cloud.agentsws.com/v1/team/tunnel/connect?tunnel_id=k3f9x2ab01cd',
+    )
+    expect(tunnelConnectUrl('https://cloud.agentsws.com', 'a b&c')).toBe(
+      'wss://cloud.agentsws.com/v1/team/tunnel/connect',
+    )
   })
 
   it('没令牌停在 needs_account、不连；有了令牌申请 → 握手 → 在线；请求按块流回；断开就掐掉', async () => {

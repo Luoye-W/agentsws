@@ -90,15 +90,22 @@ export interface TeamTunnel {
 
 const MAX_BACKOFF_MS = 60_000
 
-/** `https://host` → `wss://host/v1/team/tunnel/connect`。 */
-export function tunnelConnectUrl(cloudBase: string): string {
+/**
+ * `https://host` → `wss://host/v1/team/tunnel/connect`。
+ *
+ * WP435：给了通道号就带在地址上（`?tunnel_id=<id>`）——云那边直接把这条连接接到这条通道的对象上，
+ * 入口不用先读 hello 再转一手。不带也连得上（云认第一帧 hello 里的通道号），只是多一跳。
+ */
+export function tunnelConnectUrl(cloudBase: string, tunnel_id?: string): string {
   const base = cloudBase.replace(/\/+$/, '')
   const ws = base.startsWith('https://')
     ? `wss://${base.slice('https://'.length)}`
     : base.startsWith('http://')
       ? `ws://${base.slice('http://'.length)}`
       : base
-  return `${ws}/v1/team/tunnel/connect`
+  const hint =
+    tunnel_id !== undefined && /^[a-z0-9]{1,64}$/.test(tunnel_id) ? `?tunnel_id=${tunnel_id}` : ''
+  return `${ws}/v1/team/tunnel/connect${hint}`
 }
 
 /** 邀请码 → 登记用的哈希（大写、去空白后 sha256）。 */
@@ -337,7 +344,7 @@ export function createTeamTunnel(options: TeamTunnelOptions): TeamTunnel {
     setState('connecting')
     let s: TunnelSocket
     try {
-      s = factory(tunnelConnectUrl(options.cloudBase()))
+      s = factory(tunnelConnectUrl(options.cloudBase(), issued.tunnel_id))
     } catch {
       lastReason = '连不上工坊云。'
       scheduleRetry()

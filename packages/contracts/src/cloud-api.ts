@@ -2437,7 +2437,7 @@ interface TeamOwnerErrors {
 }
 
 /**
- * 同事打开的地址是 `https://{tunnel_id}.team.agentsws.com/*`（按 Host 分流，整条转给发起人电脑上的
+ * 同事打开的地址是 `https://{tunnel_id}-team.agentsws.com/*`（WP435：一层子域、后缀式）（按 Host 分流，整条转给发起人电脑上的
  * 「团队门」）。它是**整站反代**、不是 API，所以不在下面的表里；云上要做的只有三件：按 Host 找到那条
  * 长连接、把请求打成 `request` 帧、把 `response_*` 帧原样流回去（去掉逐跳头；请求体超过 8 MiB 回 413；
  * 那台电脑不在线回 503 人话页）。
