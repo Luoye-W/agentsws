@@ -251,3 +251,17 @@ describe('WP413 侧边栏', () => {
     expect(sent.map((m) => m.type)).toEqual(expect.arrayContaining(['reddit-poll', 'ads-poll']))
   })
 })
+
+describe('WP457 侧边栏头部', () => {
+  it('只有品牌名就只写品牌名；品牌名和人名都没有就整行不画（不写内部 id）', async () => {
+    const { workspace_name: _w, person_name: _p, ...rest } = base()
+    state = { kind: 'ok', snapshot: { ...rest, workspace_name: 'IVRA' }, reddit_here: true }
+    await mount()
+    expect(q('ws-who')?.textContent).toBe('IVRA')
+    act(() => root.unmount())
+    root = createRoot(host)
+    state = { kind: 'ok', snapshot: rest, reddit_here: true }
+    await mount()
+    expect(q('ws-who')).toBeNull()
+  })
+})

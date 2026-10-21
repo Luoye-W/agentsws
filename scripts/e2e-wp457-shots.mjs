@@ -65,7 +65,8 @@ const check = (ok, what) => {
 }
 
 /** 一段文字里有没有内部词（与 `apps/workstation/test/wp457-internal-words.test.ts` 同一份口径）。 */
-const INTERNAL = /\bstub\b|运行时(?!长)|\bdirect-llm\b|\(\s*[a-z]+_[a-z0-9_]+\s*\)|（\s*[a-z]+_[a-z0-9_]+\s*）/
+const INTERNAL =
+  /\bstub\b|运行时(?!长)|\bdirect-llm\b|\(\s*[a-z]+_[a-z0-9_]+\s*\)|（\s*[a-z]+_[a-z0-9_]+\s*）/
 
 async function main() {
   mkdirSync(SHOTS, { recursive: true })
@@ -77,8 +78,9 @@ async function main() {
     root: ROOT,
     port: PORT,
     quiet: true,
-    // 周三下午两点（北京时间）：和 WP456 改前那张同一周
-    now: Date.parse('2026-10-21T06:00:00Z'),
+    // 演示世界的钟停在 10-18（和 WP456 改前那张一样）：13 张卡的到期日都落在 10-25 那一天，
+    // 浏览器用真钟，周视图停在「今天」那一周——两边合起来就是改前那一屏（全天区堆满一天）
+    now: Date.parse('2026-10-18T09:00:00Z'),
   })
   await demo.server.listen()
   const browser = await chromium.launch({ headless: true })
@@ -144,6 +146,12 @@ async function main() {
         )
         const more = document.querySelectorAll('[data-event-id^="cal_more_"]').length
         const cardDue = document.querySelector('[data-event-id^="cal_card_"]')
+        // 「出错」那个红在这一屏算出来是什么颜色（深浅色不一样）
+        const probe = document.createElement('span')
+        probe.style.color = 'var(--ws-bad)'
+        document.querySelector('.sx-host')?.appendChild(probe)
+        const bad = getComputedStyle(probe).color
+        probe.remove()
         return {
           dateGridHeight: dateGrid?.getBoundingClientRect().height ?? -1,
           hourHeight: hour?.getBoundingClientRect().height ?? -1,
@@ -151,6 +159,7 @@ async function main() {
           brand: getComputedStyle(document.documentElement).getPropertyValue('--ws-brand').trim(),
           more,
           cardDueBorder: cardDue === null ? '' : getComputedStyle(cardDue).borderLeftColor,
+          bad,
         }
       })
       console.log(`  [${theme}] 日历：${JSON.stringify(grid)}`)
@@ -158,7 +167,7 @@ async function main() {
       check(grid.hourHeight >= 48, `[${theme}] 小时格没被挤（每格 ≥ 48px）`)
       check(grid.more > 0, `[${theme}] 多出来的全天事项折成「还有 N 项」`)
       check(
-        !/rgb\(2(0[0-9]|[1-5][0-9]), (5[0-9]|[0-9]{1,2}), /.test(grid.cardDueBorder),
+        grid.cardDueBorder !== '' && grid.cardDueBorder !== grid.bad,
         `[${theme}] 「卡片到期」不是红色`,
       )
       check(
@@ -166,6 +175,24 @@ async function main() {
         `[${theme}] 「今天」那颗圆不是 Schedule-X 自带的紫`,
       )
       await shot(page, `${theme}-calendar`)
+      // 点「还有 N 项」：列出那一天折起来的几条
+      const more = page.locator('[data-event-id^="cal_more_"]').first()
+      if ((await more.count()) > 0) {
+        await more.click()
+        const card = page.getByTestId('calendar-more-card')
+        const opened = await card
+          .waitFor({ timeout: 10_000 })
+          .then(() => true)
+          .catch(() => false)
+        check(
+          opened && (await card.getByTestId('calendar-more-item').count()) > 0,
+          `[${theme}] 点「还有 N 项」列出折起来的那几条`,
+        )
+        if (opened) {
+          await card.scrollIntoViewIfNeeded()
+          await shot(page, `${theme}-calendar-more`)
+        }
+      }
 
       // ── 事项页 ──
       if (matterUrl !== '') {

@@ -26,7 +26,11 @@ import type {
 } from '@agentsws/browser-action'
 import { PANEL_DRAFT_MAX, PANEL_TITLE_MAX } from '@agentsws/browser-action'
 import type { ApprovalItem, MaybePromise } from '@agentsws/contracts'
-import { REDDIT_WRITE_FORM } from '@agentsws/contracts'
+import {
+  isPlaceholderOwnerName,
+  isPlaceholderWorkspaceName,
+  REDDIT_WRITE_FORM,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import type { ExtensionSession } from '../extension-store.js'
@@ -320,10 +324,22 @@ async function snapshotOf(deps: GatewayDeps, session: ExtensionSession): Promise
     .filter((p) => p.owner === undefined || p.owner === session.person_id)
     .map(({ owner: _o, ...p }) => p)
   const person = await deps.identity.getPerson(session.person_id).catch(() => undefined)
+  // WP457：头部只写品牌名和人名；占位的 `default` / `owner`、工作区 id、人的 id 一律不写（没有就空着）
+  const workspace_name = facts.workspace_name?.trim()
+  const person_name = person?.name?.trim()
+  const showWorkspace =
+    workspace_name !== undefined &&
+    workspace_name !== '' &&
+    !isPlaceholderWorkspaceName(workspace_name, session.workspace_id)
+  const showPerson =
+    person_name !== undefined &&
+    person_name !== '' &&
+    person_name !== session.person_id &&
+    !isPlaceholderOwnerName(person_name)
   return {
     at: deps.clock.now(),
-    ...(facts.workspace_name === undefined ? {} : { workspace_name: facts.workspace_name }),
-    ...(person?.name === undefined || person.name === '' ? {} : { person_name: person.name }),
+    ...(showWorkspace ? { workspace_name } : {}),
+    ...(showPerson ? { person_name } : {}),
     can_act: session.scopes.includes('reddit.write'),
     progress: facts.progress,
     cards,
