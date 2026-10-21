@@ -2328,6 +2328,9 @@ const zh: Table = {
   'calendar.month.prev': '上个月',
   'calendar.month.next': '下个月',
   'calendar.event.close': '关掉',
+  // WP457：周 / 日视图的全天区每天最多两条，多的折起来
+  'calendar.more': '还有 {n} 项',
+  'calendar.more.title': '{month} 月 {day} 日还有 {n} 项',
   'calendar.open_in_matter': '在事项里打开',
   'calendar.open_position': '去这个岗位',
   'calendar.event.source': '来源',
@@ -6710,6 +6713,8 @@ const en: Table = {
   'calendar.month.prev': 'Previous month',
   'calendar.month.next': 'Next month',
   'calendar.event.close': 'Close',
+  'calendar.more': '{n} more',
+  'calendar.more.title': '{n} more on {month}/{day}',
   'calendar.open_in_matter': 'Open in the matter',
   'calendar.open_position': 'Go to this position',
   'calendar.event.source': 'Source',

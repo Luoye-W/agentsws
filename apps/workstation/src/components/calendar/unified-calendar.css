@@ -28,7 +28,13 @@
   overflow: hidden;
 }
 
-.sx-host {
+/*
+ * WP457：变量也要落在 `.is-dark` 那一层上。Schedule-X 深色时在日历外壳上挂 `.is-dark`，
+ * 自己在那一层重新定义整套 `--sx-color-*`（主色是紫 #d0bcff）——只写在 `.sx-host` 上的话，
+ * 深色下离得近的那一层赢，「今天」那颗圆就成了紫的（WP456 改前那张深色图）。
+ */
+.sx-host,
+.sx-host .is-dark {
   --sx-color-primary: var(--ws-brand);
   --sx-color-on-primary: var(--ws-brand-fg);
   --sx-color-primary-container: var(--ws-tint);
@@ -128,10 +134,15 @@
   color: var(--ws-brand-ink);
 }
 
-/* 今天那一列里的星期名、日期跟着今天的颜色走（不被上面那条正文次级色盖掉） */
-.sx-host .sx__week-grid__date--is-today .sx__week-grid__day-name,
-.sx-host .sx__week-grid__date--is-today .sx__week-grid__date-number {
+/* 今天那一列里的星期名跟着今天的颜色走（不被上面那条正文次级色盖掉） */
+.sx-host .sx__week-grid__date--is-today .sx__week-grid__day-name {
   color: inherit;
+}
+
+/* 今天那颗圆：品牌色底、品牌色上的字（深浅色都是，WP457） */
+.sx-host .sx__week-grid__date--is-today .sx__week-grid__date-number {
+  background-color: var(--ws-brand);
+  color: var(--ws-brand-fg);
 }
 
 /* 现在线：品牌色，左端一个圆点 */
@@ -154,4 +165,27 @@
 .sx-host .sx__week-grid__hour {
   color: var(--ws-muted-fg);
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * WP457（WP456 §3.6）：钟点写「9:00」、11 号灰字。库给钟点用的是 `--sx-color-neutral`，
+ * 我们把它接到了 `--ws-surface`（几乎是白的）——改前那张图里「9时」灰到看不清就是这个。
+ */
+.sx-host .sx__week-grid__hour-text {
+  color: var(--ws-muted-fg);
+  font-size: 11px;
+}
+
+/*
+ * WP457：全天区是一条横带——每天最多两条（`lib/calendar-allday.ts` 在交给库之前就折好了），
+ * 多的那一行是「还有 N 项」：不是事件，没有色条、没有底色，一行灰字，点开再列。
+ */
+.sx-host .sx__event[data-event-id^="cal_more_"] {
+  border-left: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--ws-muted-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
