@@ -27,6 +27,7 @@ import { type CompetitorWatchLoop, installCompetitorWatch } from './competitor.j
 import { buildRunRequest } from './context.js'
 import { type DesignLoop, installDesign } from './design.js'
 import type { ModelTrace } from './diagnostics.js'
+import { type EmailAutoLoop, installEmailAuto } from './email-auto.js'
 import { SimulationError } from './errors.js'
 import type { BlockedRecord, Evidence, RunRecord } from './evidence.js'
 import { checkExpectations } from './expectations.js'
@@ -880,6 +881,13 @@ async function execute(
    * 原有场景的事件序列与指标一个字节不变（同 `secretary` / `learning` 的做法）。
    */
   let chat: ChatLoop | undefined
+  // WP440：邮件客服「有把握就直接回」（惰性：只有走到问模型那一步的信才有动静）
+  let emailAuto: EmailAutoLoop | undefined
+  const emailAutoLoop = (): EmailAutoLoop => {
+    emailAuto ??= installEmailAuto(world)
+    return emailAuto
+  }
+
   const chatLoop = (): ChatLoop => {
     chat ??= installChat(world)
     return chat
@@ -1086,6 +1094,8 @@ async function execute(
           })
           return
         }
+        // WP440（docs/108 M9）：有把握就直接回——直接回了（或拦下已退回成卡）就不再起 Run
+        if (await emailAutoLoop().attempt({ inbound, thread, text: body, subject })) return
         await runInbound(inbound, thread)
         return
       }

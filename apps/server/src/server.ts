@@ -248,6 +248,7 @@ import type { ToolExecutor } from '@agentsws/stand-ins'
 import {
   chatAnswerStubScript,
   detectAnsweredBoundaries,
+  emailAnswerStubScript,
   SUPPORT_BOUNDARIES,
 } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
@@ -486,6 +487,7 @@ import {
   workspaceRootOf,
 } from './dsh-scenes.js'
 import { createEconomicsService } from './economics.js'
+import { createEmailAutoReply, type EmailAutoReply } from './email-auto-reply.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExecutionFallback, resolveExecutionMode } from './execution/fallback.js'
 import {
@@ -2516,7 +2518,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const makeGateway = (halt: Halt = kernel.halt): ModelGatewayApi =>
     createModelGateway({
-      providers: [stubProvider({ seed: 7, scripts: [chatAnswerStubScript] })],
+      providers: [
+        stubProvider({ seed: 7, scripts: [chatAnswerStubScript, emailAnswerStubScript] }),
+      ],
       /*
        * WP76（22 图片槽 / 58 §1）：**只有 demo 才挂 stub 出图**。
        *
@@ -6328,6 +6332,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 运行时比判断层先装配好，而运行时的 `judgeDraft` 要调它——靠这个变量打断环。
      */
     let supportJudgmentRef: SupportJudgment | undefined
+    /**
+     * WP440（docs/108 M9）：邮件客服「有把握就直接回」（晚绑定：它要聊天车道的学习记录与消息那一侧的
+     * 邮箱开关，那两样比渠道、运行时都晚建）。渠道问它「这一封能不能直接回」，运行时问它「那张卡为什么没直接回」。
+     */
+    let emailAutoReplyRef: EmailAutoReply | undefined
     /** WP417（自查 A8 / C23）：客服查询类工具的数据（消息库与聊天车道比记录源晚建，建好再填）。 */
     let supportInboxRef: SupportInboxPort | undefined
     /** WP417（自查 C2 / D9）：运行起草的回复回哪个渠道（聊天车道比运行时晚建，建好再填）。 */
@@ -7272,13 +7281,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 body: input.body,
               })
               if (amazon !== undefined) return amazon
-              return supportJudgmentRef?.judgeDraft({
+              const thread_id = input.thread_external_id ?? input.matter.id
+              const judged = supportJudgmentRef?.judgeDraft({
                 channel: input.channel,
-                thread_id: input.thread_external_id ?? input.matter.id,
+                thread_id,
                 inbound_text: input.inbound_text,
                 reply_text: input.body,
                 generated_by: 'ai',
               })
+              // WP440：这条客服线程试过「有把握就直接回」没过——卡标题后面写为什么（别的岗位永远没有这一句）
+              const note = emailAutoReplyRef?.heldNote(thread_id)
+              return judged === undefined || note === undefined
+                ? judged
+                : { ...judged, title_note: note }
             },
             /*
              * WP120（69 §3）：**角色定位的那几段**（品牌 → 岗位 → 职责）。
@@ -8104,6 +8119,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       judgeInbound: async (input) => supportJudgmentRef?.judgeInbound(input),
       // WP417（自查 A33）：回信真发出去 → 首响 SLA 停表
       noteOutbound: (thread_id) => supportJudgmentRef?.noteOutbound(thread_id),
+      // WP440（docs/108 M9）：判断层说完、起 Run 之前——有把握就直接回（经总线自动批 + 出站门）
+      autoReply: async (input) => emailAutoReplyRef?.attempt(input),
       /**
        * WP55 / 48 §4 L3 #4：出站对账退避耗尽 → 一张人工卡。
        *
@@ -8685,6 +8702,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }
         })
       },
+      // WP440：「全部」时间线里 AI 直接回的那几封，与「这封不该直接回」
+      autoReplies: (matter_ids) => emailAutoReplyRef?.forMatters(matter_ids) ?? [],
+      flagAutoReply: (approval_item_id, by) =>
+        emailAutoReplyRef?.flag({ approval_item_id, by: by as PersonId }),
       // 没勾「以后都这样」的改判进学习回路（24 §3 的 lesson 池；技能 `message-triage` 还没有可改的段落，
       // 所以只攒不提——「你教过它」里看得见）
       onCorrection: (c) => {
@@ -8705,6 +8726,77 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
     lateMessages.current = messages
+    /*
+     * WP440（docs/108 M9，Luoye 10-21）：**邮件客服也按把握直接回**——照在线客服 WP428 那一套。
+     * 判断层的三道自主门放行（`auto_reply`）**且**置信度过线才直接发；走审批总线的自动批路径
+     * （`confident_reply`，总线自己再核一遍），施行时出站门照旧拦，拦下就退回成卡。
+     * 学到的「不该直接回」与聊天「不该直接答」同一份（聊天车道那一份）。
+     */
+    emailAutoReplyRef = createEmailAutoReply({
+      workspace_id: ws,
+      clock,
+      appendEvent,
+      approvals,
+      applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
+      models: gatewayProxy,
+      position: () => positionFor(ws, SUPPORT_DUTIES),
+      searchKnowledge: async (text, limit) => {
+        const position = positionFor(ws, SUPPORT_DUTIES)
+        if (position === undefined) return []
+        const config = roles.effectiveConfig(position.assignment_id)
+        const { hits } = await knowledge.retrieval.search({
+          text,
+          k: limit,
+          actor: {
+            person_id: position.person_id,
+            workspace_id: ws,
+            assignment_id: position.assignment_id,
+            role_id: position.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        })
+        return hits.map((h) => ({
+          fact_card_id: h.fact_card_id,
+          statement: h.statement_redacted,
+          layer: h.layer,
+          ...(h.verification === 'stale' ? { stale: true } : {}),
+        }))
+      },
+      lookupOrder: async (order_ref) => {
+        const res = await records.executeTool?.({
+          name: 'get_order',
+          input: { order_id: order_ref },
+          request: { tools: { allow: ['get_order'] } } as unknown as RunRequest,
+        })
+        return res?.status === 'ok' ? res.data : undefined
+      },
+      // 「消息渠道 → 每只邮箱」那一处：开关（缺省开）+ 档位（缺省适中）；影子模式开着不直发
+      setting: (account) => {
+        if (account === undefined) return { on: true }
+        const sw = messages.switches.get(account)
+        return {
+          on: sw.auto_reply,
+          strictness: sw.auto_reply_strictness,
+          shadow_mode: sw.shadow_mode,
+        }
+      },
+      learnedHolds: () => chat.learnedHolds(),
+      learn: (hold) => {
+        chat.learnHold(hold)
+      },
+      judgeDraft: (input) =>
+        supportJudgmentRef?.judgeDraft({
+          channel: 'email',
+          thread_id: input.thread_id,
+          inbound_text: input.inbound_text,
+          reply_text: input.reply_text,
+          generated_by: 'ai',
+        }),
+      noteOutbound: (thread_id) => supportJudgmentRef?.noteOutbound(thread_id),
+      work,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
     routeDraftRef = async ({ matter, body, actor }) => {
       const pins = matter.context.pinned
       // 社群线程：出回帖卡（批了经这条渠道的出口发回群 / 私信；承诺话术在那里打回）

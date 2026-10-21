@@ -17,7 +17,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { appendEscalationStep, boundRecipients, escalationTierHeldBy } from './escalation.js'
-import { isKnownKind, runPrecheck } from './precheck.js'
+import { isKnownKind, isManualSendDraft, runPrecheck } from './precheck.js'
 import type { TxnRuntime } from './runtime.js'
 import type {
   ApplyOutcome,
@@ -160,7 +160,7 @@ export class ApprovalBusImpl implements ApprovalBus {
       })
     }
 
-    const auto = this.autoApprovable(input, ctx)
+    const auto = this.autoApprovable(input, ctx, pre)
     if (auto) {
       item.state = 'auto_approved'
       item.automation.auto_approved = true
@@ -274,7 +274,26 @@ export class ApprovalBusImpl implements ApprovalBus {
   }
 
   /** 31 §3.4：只有 risk_class=low 的已建模变更可自动；medium / high 永远人审。 */
-  private autoApprovable<P>(input: NormalizedCreateInput<P>, ctx: ApprovalContext): boolean {
+  private autoApprovable<P>(
+    input: NormalizedCreateInput<P>,
+    ctx: ApprovalContext,
+    pre: ReturnType<typeof runPrecheck>,
+  ): boolean {
+    /*
+     * WP440（docs/108 M9）：邮件客服「有把握就直接回」。判断层把置信度结论放进 `confident_reply`，
+     * 总线自己再核一遍它管得着的那几样：不是 L1、额度内、三道自主门全放行（前置从 `gates` 算出的
+     * `autonomous`）、收件人门禁过了（走到这里说明没被 blocked）、不是收件人待定。差一样都照常等人批。
+     */
+    if (input.kind === 'outbound_draft') {
+      return (
+        ctx.confident_reply !== undefined &&
+        input.automation.level_at_creation !== 'L1' &&
+        input.automation.mandate_check.within &&
+        pre.autonomous === true &&
+        (ctx.gates?.length ?? 0) > 0 &&
+        !isManualSendDraft(input.payload)
+      )
+    }
     if (input.kind !== 'staged_change') return false
     if (input.automation.level_at_creation === 'L1') return false
     if (!input.automation.mandate_check.within) return false

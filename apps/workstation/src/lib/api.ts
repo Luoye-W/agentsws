@@ -1894,9 +1894,13 @@ export interface MailboxSwitchesView {
   b2b?: boolean
   /** WP172：B2B 岗位开着（只读；没开时卡上不画「收 B2B 信」）。 */
   b2b_position?: boolean
+  /** WP440（docs/108 M9）：客服信「有把握就直接回」（缺省开；老服务端没有这一格 = 当开着）。 */
+  auto_reply?: boolean
+  /** WP440：把握要多大（严格 / 适中 / 宽松，缺省适中）。 */
+  auto_reply_strictness?: ChatAutoAnswerStrictnessView
 }
 
-export type MailboxSwitchName = 'shadow_mode' | 'move' | 'mark_read' | 'b2b'
+export type MailboxSwitchName = 'shadow_mode' | 'move' | 'mark_read' | 'b2b' | 'auto_reply'
 
 export const getMailboxSwitches = (id: string, assignment?: string): Promise<MailboxSwitchesView> =>
   api<MailboxSwitchesView>(
@@ -1907,7 +1911,9 @@ export const getMailboxSwitches = (id: string, assignment?: string): Promise<Mai
 /** WP167：改一个开关——立刻生效，服务端写一条事件。 */
 export const setMailboxSwitches = (
   id: string,
-  input: Partial<Record<MailboxSwitchName, boolean>>,
+  input: Partial<Record<MailboxSwitchName, boolean>> & {
+    auto_reply_strictness?: ChatAutoAnswerStrictnessView
+  },
   assignment?: string,
 ): Promise<MailboxSwitchesView> =>
   api<MailboxSwitchesView>(`/v1/connections/${encodeURIComponent(id)}/mailbox-switches`, {
@@ -4551,7 +4557,7 @@ export const setAutopilot = (
     ...withAssignment(assignment),
   })
 
-/** WP428：直接答的门槛「严一点 / 适中 / 松一点」。 */
+/** WP428：直接答的门槛「严格 / 适中 / 宽松」。 */
 export type ChatAutoAnswerStrictnessView = 'strict' | 'balanced' | 'loose'
 
 /** WP428：「这句不该直接答」——记进学习回路，同类以后先转人。 */
@@ -6480,10 +6486,33 @@ export interface MessageAccountView {
 }
 
 /** 打开一条会话时一次拿全（正文 + 状态带）。 */
+/** WP440（docs/108 M9）：AI 按把握直接回的一封（「AI 直接回 · 出处」那一行）。 */
+export interface MessageAutoReplyMark {
+  approval_item_id: string
+  at: string
+  score: number
+  sources: { kind: string; label: string }[]
+  excerpt: string
+  flagged: boolean
+}
+
+/** WP440：「这封不该直接回」——记进学习回路，同类以后先给你批。 */
+export const flagMessageAutoReply = (
+  approval_item_id: string,
+  assignment?: string,
+): Promise<{ learned: boolean }> =>
+  api(`/v1/messages/auto-replies/${encodeURIComponent(approval_item_id)}/not-direct`, {
+    method: 'POST',
+    body: {},
+    ...withAssignment(assignment),
+  })
+
 export interface MessageThreadView {
   thread_id: string
   subject: string
   messages: MessageRecord[]
+  /** WP440：这条会话上 AI 按把握直接回的那几封。 */
+  auto_replies?: MessageAutoReplyMark[]
   /**
    * 63 §9：`KefuAgents` / `KOLAgents` 里的信顶上那条状态带。
    * 不为空 = 这一页**不给"直接回复"**（避免人与 Agent 撞车）。

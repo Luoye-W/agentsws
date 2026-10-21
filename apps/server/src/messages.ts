@@ -26,6 +26,7 @@ import type {
   MailAssistantView,
   MessageAccountView,
   MessageActor,
+  MessageAutoReplyMark,
   MessagesPort,
   MessageThreadView,
 } from '@agentsws/api'
@@ -276,6 +277,13 @@ export interface MessagesOptions {
   openCards?(): Promise<readonly { thread_id?: string; matter_id?: string }[]>
   /** WP212：一次纠正（没勾「以后都这样」的改判 / 改岗位）进学习回路（24 §3 的 lesson 池）。 */
   onCorrection?(correction: MessageCorrection): void
+  /**
+   * WP440（docs/108 M9）：这几件事上 AI 按把握直接回的那几封（「全部」时间线那一行「AI 直接回 · 出处」）。
+   * 不给 = 不画那一行。
+   */
+  autoReplies?(matter_ids: readonly string[]): MessageAutoReplyMark[]
+  /** WP440：「这封不该直接回」。不是直接回的那封回 `undefined`。 */
+  flagAutoReply?(approval_item_id: string, by: string): { learned: boolean } | undefined
 }
 
 /** WP212：不进「交给 X ▾」的岗位（负责人：自己处理用「我自己回」）。 */
@@ -1145,7 +1153,28 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     return writeFlags(row, { read: true })
   }
 
+  /** WP440：这条会话上 AI 直接回的那几封（没有就不出这一格）。 */
+  const autoRepliesOf = (
+    messages: readonly MessageRecord[],
+  ): { auto_replies?: MessageAutoReplyMark[] } => {
+    if (options.autoReplies === undefined) return {}
+    const matters = [
+      ...new Set(
+        messages.flatMap((m) => [
+          ...(m.linked?.type === 'matter' ? [m.linked.id] : []),
+          ...(m.handled?.matter_id === undefined ? [] : [m.handled.matter_id]),
+        ]),
+      ),
+    ]
+    if (matters.length === 0) return {}
+    const marks = options.autoReplies(matters)
+    return marks.length === 0 ? {} : { auto_replies: marks }
+  }
+
   const port: MessagesPort = {
+    flagAutoReply(actor, approval_item_id) {
+      return options.flagAutoReply?.(approval_item_id, actor.person_id)
+    },
     async accounts(): Promise<{ accounts: MessageAccountView[] }> {
       const known = options.accounts().map((a) => a.address)
       const seen = await store.accounts()
@@ -1201,6 +1230,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         ...(summary?.card_link === undefined ? {} : { card_link: summary.card_link }),
         ...(summary?.suggest === undefined ? {} : { suggest: summary.suggest }),
         ...(summary?.kind === undefined ? {} : { kind: summary.kind }),
+        // WP440：AI 按把握直接回的那几封（按这条会话落成的事项找）
+        ...autoRepliesOf(messages),
         ...(agentRoute === undefined
           ? {}
           : {

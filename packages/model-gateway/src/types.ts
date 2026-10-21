@@ -70,6 +70,7 @@ export type ModelEventType =
   | 'model.budget_frozen'
   | 'model.source_switched'
   | 'model_source.relogin_needed'
+  | 'model_source.key_rejected'
   | 'budget.exhausted'
 
 export interface ModelUsagePayload {

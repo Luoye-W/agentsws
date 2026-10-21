@@ -121,7 +121,7 @@ import {
   unavailableImageProvider,
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
-import { chatAnswerStubScript } from '@agentsws/support-core'
+import { chatAnswerStubScript, emailAnswerStubScript } from '@agentsws/support-core'
 import { deepseekThinkingOf } from './deepseek-thinking.js'
 import { cloudRates, type ModelPrice, vendorOfModel } from './model-rates.js'
 import { thinkingOptionsFromLevels, thinkingOptionsOf } from './model-thinking.js'
@@ -2283,20 +2283,28 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     )
   }
 
+  /** 登录类来源（订阅 / 账号）：失效时要人重新登录；其余自己配的都是自带 API key。 */
+  const isLoginSource = (c: ModelProviderConfig): boolean =>
+    c.kind === 'openai-codex' || c.kind === 'deepseek_account' || c.kind === 'anthropic'
+
   const sourceFallbackOf = (): ModelGatewayPolicy['source_fallback'] => {
     const cloud = cloudFallbackConfig()
     const mine = ownSourcesOrdered()
     const own = mine
       .filter(ownReady)
       .map((c) => ({ provider: c.id, model: c.model, region: c.region }))
-    // 没有能接的、又没有工坊积分：没得切（老样子）。只有一条能接的也给——原选可能是没测过的那条
-    if (cloud === undefined && own.length === 0) return undefined
+    const relogin = mine.filter(isLoginSource).map((c) => c.id)
+    // WP436（决策 1316）：自带 API key 的那几条——key 被拒时站内通知提醒去换一把
+    const keys = mine.filter((c) => !isLoginSource(c)).map((c) => c.id)
+    /*
+     * 没有能接的、又没有工坊积分：没得切（老样子）。只有一条能接的也给——原选可能是没测过的那条。
+     * WP436：只有一条来源也给这一格（网关照原选直调），好让登录失效 / key 被拒照样发提醒。
+     */
+    if (cloud === undefined && own.length === 0 && relogin.length === 0 && keys.length === 0)
+      return undefined
     // DeepSeek 账号登录失效后那一条会被摘掉；正在跑的事下一跳说「你的 DeepSeek 账号…」还要认得它
     const labels: Record<string, string> = { [DEEPSEEK_ACCOUNT_RUN_PROVIDER]: 'DeepSeek 账号' }
     for (const c of mine) labels[c.id] = sourceLabelFor(c)
-    const relogin = mine
-      .filter((c) => c.kind === 'openai-codex' || c.kind === 'deepseek_account')
-      .map((c) => c.id)
     return {
       ...(cloud === undefined
         ? {}
@@ -2305,6 +2313,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       labels,
       own,
       ...(relogin.length === 0 ? {} : { relogin }),
+      ...(keys.length === 0 ? {} : { keys }),
     }
   }
 
@@ -2362,7 +2371,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (provider !== undefined) providers.push(provider)
     }
     if (providers.length === 0)
-      providers.push(stubProvider({ seed: 7, scripts: [chatAnswerStubScript] }))
+      providers.push(
+        stubProvider({ seed: 7, scripts: [chatAnswerStubScript, emailAnswerStubScript] }),
+      )
     // WP127 / WP274：生图单独一档，每次出图前按 `imageRoute()` 现解析（单独指定 > 文字模型同厂商 > 云）
     gateway.reconfigure({
       providers,

@@ -848,6 +848,12 @@ export interface DraftVerdict {
   note?: string
   /** 进 `ApprovalItem.context.gates`：只有门名、结论、规则集哈希，**没有被扫的文本**。 */
   gate_context: GateDecision[]
+  /**
+   * WP440（docs/108 M9）：客服邮件这一封**为什么没直接回**（「把握不够」「知识库里没有」…），
+   * 卡标题后面括号里那一句。只有客服判断层试过直接回、没过的那条线程才有；别的岗位、别的渠道永远没有，
+   * 标题一个字节不变。
+   */
+  title_note?: string
 }
 
 /**
@@ -1186,10 +1192,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         conversation_id: s.matter.id,
       },
       dedupe_key: `${workspace_id}:outbound_draft:${s.matter.id}:${s.run_id}`,
-      title:
+      title: `${
         who === undefined
           ? `回复草稿（收件人待定）：${payload.subject}`
-          : `回复 ${who}：${payload.subject}`,
+          : `回复 ${who}：${payload.subject}`
+      }${verdict?.title_note === undefined ? '' : `（${verdict.title_note}）`}`,
       summary: to === undefined ? MANUAL_SEND_SUMMARY : payload.subject,
       payload: {
         channel: payload.channel,

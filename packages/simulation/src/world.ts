@@ -303,6 +303,7 @@ import {
   classifyText,
   describeAmazonDetection,
   detectAmazonChannel,
+  emailAnswerStubScript,
   evaluateAmazonOutbound,
   evaluateAutonomyGates,
   hasRewritableAmazonViolation,
@@ -2342,7 +2343,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     out: Awaited<ReturnType<ModelProvider['complete']>>,
   ): Awaited<ReturnType<ModelProvider['complete']>> => {
     if (opts.model !== undefined) return out
-    const text = chatAnswerStubScript(req.messages)
+    // WP440：邮件直接回那一次起草也走 stub 剧本（三个运行时同一份）
+    const text = chatAnswerStubScript(req.messages) ?? emailAnswerStubScript(req.messages)
     return text === undefined ? out : { ...out, text }
   }
   const gatedProvider: ModelProvider = {
@@ -2403,7 +2405,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           status: secondMode.code,
         })
       }
-      return base.complete(req)
+      // WP440：「同一个确定性替身」——聊天 / 邮件直接回那一次起草的 stub 剧本这里也套上（以前漏了，
+      // 切到第二条之后那一次起草就成了没剧本的替身话，三个运行时对不齐）
+      return scripted(req, await base.complete(req))
     },
   }
   let currentBudget: ModelGatewayPolicy['budget']

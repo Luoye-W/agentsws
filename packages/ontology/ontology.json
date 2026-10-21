@@ -154,7 +154,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a47a88aee0090b50f5cfc601a55e48ba",
+  "source_digest": "41bd44a2e4174cac4d013bdb88a8ee1f",
   "objects": [
     {
       "id": "ad",
@@ -792,6 +792,7 @@
         }
       ],
       "read_via": [
+        "approvals.email_auto_replies_today",
         "approvals.pending_replies",
         "approvals.refund_requests",
         "approvals.reply_rate_24h",
@@ -5926,7 +5927,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "ad_account",
@@ -6350,7 +6351,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "article",
@@ -6382,7 +6383,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.proposer.assignment_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "assignment",
@@ -6422,7 +6423,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "b2b_account",
@@ -6470,7 +6471,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "b2b_list",
@@ -6518,7 +6519,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "b2b_quote",
@@ -6558,7 +6559,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "b2b_sample",
@@ -6622,7 +6623,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "campaign",
@@ -6662,7 +6663,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "collaboration",
@@ -6726,7 +6727,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "collection",
@@ -6758,7 +6759,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "community_member",
@@ -6790,7 +6791,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "community_thread",
@@ -6878,7 +6879,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "creator_contact",
@@ -6918,7 +6919,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "customer",
@@ -6950,7 +6951,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "deliverable",
@@ -6990,7 +6991,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "design_asset",
@@ -7030,7 +7031,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "design_brief",
@@ -7070,7 +7071,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "design_request",
@@ -7126,7 +7127,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "discount",
@@ -7158,7 +7159,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "email_template",
@@ -7190,7 +7191,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "export_shipment",
@@ -7230,7 +7231,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "external_post",
@@ -7326,7 +7327,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "inventory_item",
@@ -7358,7 +7359,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.matter_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "matter",
@@ -7414,7 +7415,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "media_contact",
@@ -7526,7 +7527,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "mention",
@@ -7566,7 +7567,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "order",
@@ -7606,7 +7607,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "page",
@@ -7662,7 +7663,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "policy",
@@ -7734,7 +7735,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "press_release",
@@ -7774,7 +7775,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "product",
@@ -7822,7 +7823,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "review",
@@ -7830,7 +7831,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "approval_item_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "review",
@@ -7894,7 +7895,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "shop_app",
@@ -7934,7 +7935,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "social_account",
@@ -8006,7 +8007,7 @@
       "direction": "out",
       "cardinality": "one",
       "via": "approval.item_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "staged_change",
@@ -8622,7 +8623,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "store_config",
@@ -8654,7 +8655,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "theme",
@@ -8686,7 +8687,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.todo_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "todo",
@@ -8758,7 +8759,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "tracked_link",
@@ -8798,7 +8799,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "trade_show",
@@ -8846,7 +8847,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "trade_show_lead",
@@ -8886,7 +8887,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.object",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "variant",
@@ -8918,7 +8919,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.subject.work_item_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "work_item",
@@ -9270,7 +9271,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "approval_item.workspace_id",
-      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+      "lookup": ["approvals.email_auto_replies_today", "approvals.pending_replies"]
     },
     {
       "from": "workspace",

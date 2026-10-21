@@ -253,3 +253,24 @@ describe('WP430 AI 来源顺序（装配）', () => {
     expect(one.models.canSwitchFrom('ds')).toBe(false)
   })
 })
+
+describe('WP436（决策 1316）：自带 API key 被拒 → 站内通知那条事件（装配）', () => {
+  it('有得切：照样切到下一条，并发一次 key_rejected（来源名，不带 key）', async () => {
+    const { gateway, status, events } = setup({ linked: false })
+    status.kimi = 401
+    const out = await gateway.complete(ask('run_a'))
+    expect(out.model.provider).toBe('ds')
+    const rejected = events.filter((e) => e.type === 'model_source.key_rejected')
+    expect(rejected).toEqual([
+      { type: 'model_source.key_rejected', payload: { provider: 'kimi', label: 'Kimi' } },
+    ])
+    expect(JSON.stringify(rejected)).not.toContain('sk-')
+  })
+
+  it('只有这一条能用（没得切）：照实报错，也发 key_rejected', async () => {
+    const { gateway, status, events } = setup({ linked: false, tested: [] })
+    status.kimi = 403
+    await expect(gateway.complete(ask('run_a'))).rejects.toBeDefined()
+    expect(events.filter((e) => e.type === 'model_source.key_rejected')).toHaveLength(1)
+  })
+})

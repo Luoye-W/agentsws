@@ -51,7 +51,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.002111,
+            "cost_base": 0.002502,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -63,7 +63,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 1048,
+            "tokens_per_item": 1230,
             "tool_calls": 4
           }
         },
@@ -408,7 +408,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.001089,
+            "cost_base": 0.001498,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -420,7 +420,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 1073,
+            "tokens_per_item": 1464,
             "tool_calls": 0
           }
         },
@@ -1857,7 +1857,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.003426,
+            "cost_base": 0.003828,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1869,7 +1869,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 1056,
+            "tokens_per_item": 1153,
             "tool_calls": 7
           }
         },
@@ -1892,6 +1892,69 @@
             "staged_changes": 0,
             "tokens_per_item": 0,
             "tool_calls": 0
+          }
+        },
+        "chat/visitor-email-still-answers": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000357,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "email/confident-autoreply": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.00038,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 0.8,
+            "knowledge_gaps": 0,
+            "outbound_sent": 1,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "email/autoreply-holds-when-unsure": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.002414,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 1187,
+            "tool_calls": 2
           }
         }
       }
@@ -1945,7 +2008,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.017349,
+            "cost_base": 0.017716,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -1957,7 +2020,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 8653,
+            "tokens_per_item": 8829,
             "tool_calls": 7
           }
         },
@@ -2302,7 +2365,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.006005,
+            "cost_base": 0.006406,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -2314,7 +2377,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 5984,
+            "tokens_per_item": 6371,
             "tool_calls": 2
           }
         },
@@ -3751,7 +3814,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.030981,
+            "cost_base": 0.031375,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -3763,7 +3826,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 7724,
+            "tokens_per_item": 7820,
             "tool_calls": 12
           }
         },
@@ -3786,6 +3849,69 @@
             "staged_changes": 0,
             "tokens_per_item": 0,
             "tool_calls": 0
+          }
+        },
+        "chat/visitor-email-still-answers": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000325,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "email/confident-autoreply": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000356,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 0.8,
+            "knowledge_gaps": 0,
+            "outbound_sent": 1,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "email/autoreply-holds-when-unsure": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.013664,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 6804,
+            "tool_calls": 5
           }
         }
       }
@@ -3860,7 +3986,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.021097,
+            "cost_base": 0.021464,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -3872,7 +3998,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 10528,
+            "tokens_per_item": 10704,
             "tool_calls": 7
           }
         },
@@ -4217,7 +4343,7 @@
             "adoption_rate": 1,
             "applied_changes": 0,
             "blocked_proposals": 0,
-            "cost_base": 0.007256,
+            "cost_base": 0.007657,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 0,
@@ -4229,7 +4355,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
-            "tokens_per_item": 7237,
+            "tokens_per_item": 7624,
             "tool_calls": 2
           }
         },
@@ -5645,7 +5771,7 @@
             "adoption_rate": 1,
             "applied_changes": 1,
             "blocked_proposals": 0,
-            "cost_base": 0.037672,
+            "cost_base": 0.038066,
             "escalations": 0,
             "expired_approvals": 0,
             "guardrail_hits": 2,
@@ -5657,7 +5783,7 @@
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 1,
-            "tokens_per_item": 9395,
+            "tokens_per_item": 9491,
             "tool_calls": 12
           }
         },
@@ -5680,6 +5806,69 @@
             "staged_changes": 0,
             "tokens_per_item": 0,
             "tool_calls": 0
+          }
+        },
+        "chat/visitor-email-still-answers": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000325,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "email/confident-autoreply": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000356,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 0.8,
+            "knowledge_gaps": 0,
+            "outbound_sent": 1,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 1,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "email/autoreply-holds-when-unsure": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.016587,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 8267,
+            "tool_calls": 5
           }
         }
       }

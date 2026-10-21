@@ -11,6 +11,8 @@ export * from './chat/index.js'
 export * from './classify.js'
 export * from './detect.js'
 export * from './draft.js'
+// WP440（docs/108 M9）：邮件客服也按把握直接回（同一套判定 + 邮件特有的剥引用 / 签名、称呼落款）
+export * from './email/auto-reply.js'
 export * from './entities.js'
 export * from './escalation.js'
 export * from './gates/index.js'

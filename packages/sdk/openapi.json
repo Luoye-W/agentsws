@@ -6604,7 +6604,7 @@
     "/v1/connections/{id}/mailbox-switches": {
       "get": {
         "operationId": "getMailboxSwitches",
-        "summary": "这只邮箱的开关：影子模式 / 挪进 KefuAgents / 标已读，外加只读的「接管」",
+        "summary": "这只邮箱的开关：影子模式 / 挪进 KefuAgents / 标已读 / 有把握就直接回（与档位），外加只读的「接管」",
         "tags": ["connections"],
         "parameters": [
           {
@@ -6858,6 +6858,13 @@
                   },
                   "b2b": {
                     "type": "boolean"
+                  },
+                  "auto_reply": {
+                    "type": "boolean"
+                  },
+                  "auto_reply_strictness": {
+                    "type": "string",
+                    "enum": ["strict", "balanced", "loose"]
                   }
                 },
                 "additionalProperties": false
@@ -89768,6 +89775,146 @@
           "sensitivity": "internal"
         },
         "x-returns": "附件字节（Content-Disposition 带文件名；没有 / 过了保留期 → 404）"
+      }
+    },
+    "/v1/messages/auto-replies/{id}/not-direct": {
+      "post": {
+        "operationId": "flagMessageAutoReply",
+        "summary": "「这封不该直接回」：AI 按把握直接回的那封记进学习回路，同类以后先给人批",
+        "tags": ["messages"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ learned }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "{ learned }"
       }
     },
     "/v1/messages/{id}/todo": {

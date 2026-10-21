@@ -30,6 +30,7 @@ import { MessageCircle, Users } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ChatWidgetSettings } from '@/components/chat-window/widget-settings'
+import { MailboxAutoReply } from '@/components/connections/mailbox-auto-reply'
 import { StatusIcons } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { BindRow, TeamBotCard } from '@/components/im/team-bot-card'
@@ -39,7 +40,7 @@ import { useHoldsSiteChat } from '@/components/messages/site-chat'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getImStatus } from '@/lib/api'
+import { getImStatus, listConnections } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 /** WP351：「网站聊天窗」这个渠道（挂件设置）。 */
@@ -58,6 +59,41 @@ function SiteChatChannel({ bare = false }: { bare?: boolean }): ReactNode {
         <Hint text={t('im.site_chat.hint')} testId="im-site-chat-what" />
       </h2>
       <ChatWidgetSettings />
+    </section>
+  )
+}
+
+/**
+ * WP440（docs/108 M9）：「消息渠道 → 每只邮箱」——客服信「有把握就直接回」+ 档位，一只邮箱一行。
+ * 没连邮箱就一个字都不出（连邮箱在「账号连接」）。
+ */
+function MailboxChannels(): ReactNode {
+  const { t } = useApp()
+  const list = useQuery({ queryKey: ['connections'], queryFn: () => listConnections() })
+  const boxes = (list.data?.connections ?? []).filter((c) => c.service === 'imap_smtp')
+  if (boxes.length === 0) return null
+  return (
+    <section className="flex flex-col gap-3" data-testid="im-mailboxes">
+      <h2 className="flex items-center gap-1.5 text-base font-semibold">
+        {t('im.mailboxes.title')}
+        <Hint text={t('im.mailboxes.hint')} testId="im-mailboxes-what" />
+      </h2>
+      <Card>
+        <CardContent className="flex flex-col divide-y py-1">
+          {boxes.map((c) => (
+            <div
+              key={c.id}
+              className="flex flex-wrap items-center justify-between gap-2 py-2"
+              data-testid="im-mailbox-row"
+            >
+              <span className="min-w-0 truncate text-[13px] font-medium">
+                {c.identity?.account_id ?? c.alias}
+              </span>
+              <MailboxAutoReply connectionId={c.id} />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </section>
   )
 }
@@ -257,6 +293,8 @@ export function ImChannelsPage({ part }: { part?: ImChannelsPart } = {}): ReactN
 
       {/* ── WP351：网站聊天窗（挂件设置；对话在「消息 → 网站聊天」）──────── */}
       {holdsSiteChat && show('site') ? <SiteChatChannel bare={part !== undefined} /> : null}
+      {/* WP440：每只邮箱的「有把握就直接回」（品牌 → 消息渠道里同一块） */}
+      {show('site') ? <MailboxChannels /> : null}
     </div>
   )
 }

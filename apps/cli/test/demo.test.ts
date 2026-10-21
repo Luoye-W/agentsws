@@ -173,13 +173,13 @@ describe('agentsws demo（合成世界当后端）', () => {
   })
 
   it('岗位面板按数据源分块；未连接的数据源不给完整报告链接', async () => {
-    // 售后客服：只有店铺后台（它的职责里没有 analytics 域，19 §3 过滤下推）
+    // 售后客服：只有店铺后台（它的职责里没有 analytics 域，19 §3 过滤下推）+ 自己的回信账（WP440「今天 AI 直接回」）
     const care = await data<{ sections: { source: string; connected: boolean }[] }>(
       await call(`/v1/positions/${demo.world.assignment.id}/view`, {
         assignment: demo.world.assignment.id,
       }),
     )
-    expect(care.sections.map((s) => s.source)).toEqual(['shop'])
+    expect(care.sections.map((s) => s.source)).toEqual(['shop', 'approvals'])
     expect(care.sections[0]?.connected).toBe(true)
 
     // 独立站运营：店铺后台 / GA4 / Search Console 三块，后两块未连接

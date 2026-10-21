@@ -292,6 +292,11 @@ export interface DeckCard {
    * 别的卡没有它。
    */
   manual_send?: true
+  /**
+   * WP440（docs/108 M9）：邮件客服**按把握直接回了**的那一封（自动批 + 施行，没退回成卡）——
+   * 对话里那张已发的卡下面画「AI 直接回 · 出处」与「这封不该直接回」。别的卡没有它。
+   */
+  auto_reply?: { score: number; sources: { kind: string; label: string }[] }
   status: ApprovalState
   /** 由 risk_class + expires_at + 14 §8 排序算出 */
   priority_band: PriorityBand

@@ -818,7 +818,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** 这只邮箱的开关：影子模式 / 挪进 KefuAgents / 标已读，外加只读的「接管」 */
+    /** 这只邮箱的开关：影子模式 / 挪进 KefuAgents / 标已读 / 有把握就直接回（与档位），外加只读的「接管」 */
     get: operations['getMailboxSwitches']
     /** 改这只邮箱的开关（owner）：立刻生效，改一次写一条事件 */
     put: operations['setMailboxSwitches']
@@ -9442,6 +9442,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/messages/auto-replies/{id}/not-direct': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 「这封不该直接回」：AI 按把握直接回的那封记进学习回路，同类以后先给人批 */
+    post: operations['flagMessageAutoReply']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/messages/{id}/todo': {
     parameters: {
       query?: never
@@ -16958,6 +16975,9 @@ export interface operations {
           move?: boolean
           mark_read?: boolean
           b2b?: boolean
+          auto_reply?: boolean
+          /** @enum {string} */
+          auto_reply_strictness?: 'strict' | 'balanced' | 'loose'
         }
       }
     }
@@ -72207,6 +72227,106 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  flagMessageAutoReply: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description { learned } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
         headers: {
           [name: string]: unknown
         }

@@ -254,7 +254,7 @@ export function ChatWidgetSettings(): React.ReactNode {
               ))}
             </select>
           </div>
-          {/* WP428（决策 1246 改）：按把握直接答（缺省开）+「严一点 / 适中 / 松一点」，不让人填数字 */}
+          {/* WP428（决策 1246 改）：按把握直接答（缺省开）+「严格 / 适中 / 宽松」，不让人填数字 */}
           <div className="flex flex-wrap items-center gap-2 text-[13px]">
             <Switch
               id="chat-auto-answer"

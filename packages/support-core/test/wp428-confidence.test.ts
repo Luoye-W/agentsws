@@ -117,15 +117,29 @@ describe('scoreChatAutoAnswer', () => {
     expect(v.reasons.join(' ')).toContain('具体时间')
   })
 
-  it('个人信息（访客留了电话 / 回复带出订单上的地址）→ 转人', () => {
-    const t = '运费多少？我电话 138 1234 5678'
-    const v = scoreChatAutoAnswer({
+  it('决策 1303：访客自己留了电话 / 邮箱、回复里不带 → 照常直接答', () => {
+    for (const t of ['运费多少？我电话 138 1234 5678', '美国运费多少？我邮箱 ben@example.com']) {
+      const v = scoreChatAutoAnswer({
+        plan: plan(t),
+        turn_text: t,
+        reply: '美国订单满 $50 免邮[K1]。\n把握：90',
+        sources: [SHIPPING],
+      })
+      expect(v.hold).toBeUndefined()
+      expect(v.send).toBe(true)
+    }
+  })
+
+  it('回复里带出个人信息（访客的邮箱原样带回 / 订单上的姓名）→ 转人', () => {
+    const t = '运费多少？我邮箱 ben@example.com'
+    const echo = scoreChatAutoAnswer({
       plan: plan(t),
       turn_text: t,
-      reply: '美国订单满 $50 免邮[K1]。\n把握：90',
+      reply: '美国订单满 $50 免邮[K1]。详情发到 ben@example.com。\n把握：90',
       sources: [SHIPPING],
     })
-    expect(v.hold?.kind).toBe('personal_info')
+    expect(echo.send).toBe(false)
+    expect(echo.hold?.kind).toBe('personal_info')
     const order: ChatAnswerSource = {
       ref: 'O1',
       kind: 'order',
@@ -154,7 +168,7 @@ describe('scoreChatAutoAnswer', () => {
     expect(v.hold?.kind).toBe('learned')
   })
 
-  it('三档：同一句「松一点」能发、「严一点」不发', () => {
+  it('三档：同一句「宽松」能发、「严格」不发', () => {
     const input = {
       plan: plan(q),
       turn_text: q,
@@ -205,5 +219,21 @@ describe('护栏小件', () => {
     const miss = chatAnswerStubScript([{ role: 'user', content: user('你们有实体店吗') }])
     expect(miss).toContain('确认')
     expect(chatAnswerStubScript([{ role: 'user', content: 'hello' }])).toBeUndefined()
+  })
+
+  it('stub 剧本（决策 1303）：访客留邮箱问运费 → 照知识卡说、直接答', () => {
+    const visitor = '寄到美国运费多少？我邮箱 ben@example.com'
+    const user = `${formatChatSources([SHIPPING])}\n\n${CHAT_ANSWER_CITE_INSTRUCTION}\n\n访客说：\n${visitor}`
+    const reply = chatAnswerStubScript([{ role: 'user', content: user }])
+    expect(reply).toContain('[K1]')
+    expect(reply).not.toContain('ben@example.com')
+    const v = scoreChatAutoAnswer({
+      plan: plan(visitor),
+      turn_text: visitor,
+      reply: reply ?? '',
+      sources: [SHIPPING],
+    })
+    expect(v.hold).toBeUndefined()
+    expect(v.send).toBe(true)
   })
 })

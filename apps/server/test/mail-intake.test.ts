@@ -332,6 +332,9 @@ describe('WP167：邮箱卡上的开关', () => {
       move: true,
       mark_read: true,
       b2b: true,
+      // WP440 起多两格：有把握就直接回（缺省开）与档位（缺省适中）
+      auto_reply: true,
+      auto_reply_strictness: 'balanced',
       takeover: true,
       b2b_position: false,
     })
@@ -372,7 +375,14 @@ describe('WP167：开关落盘', () => {
       const a = new MailboxSwitchStore({ dir })
       expect(a.set('Hello@Shop.example', { mark_read: false }).changed).toEqual(['mark_read'])
       const b = new MailboxSwitchStore({ dir })
-      expect(b.get(ME)).toEqual({ shadow_mode: false, move: true, mark_read: false, b2b: true })
+      expect(b.get(ME)).toEqual({
+        shadow_mode: false,
+        move: true,
+        mark_read: false,
+        b2b: true,
+        auto_reply: true,
+        auto_reply_strictness: 'balanced',
+      })
       expect(b.get('other@shop.example').mark_read).toBe(true)
       writeFileSync(join(dir, 'mailbox-switches.json'), '{oops')
       expect(new MailboxSwitchStore({ dir }).get(ME).mark_read).toBe(true)

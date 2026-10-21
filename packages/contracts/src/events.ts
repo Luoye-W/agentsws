@@ -100,6 +100,12 @@ export type KnownEventType =
    */
   | 'model_source.relogin_needed'
   /**
+   * WP436（决策 1316）：用户自带的 API key 被拒（401 / 403、key 失效 / 被吊销），要人去换一把。
+   * 有别的来源时这一轮照样按 AI 来源顺序接着做；站内通知（WP429）接这条提醒人去「设置 → 模型」换 key。
+   * payload 只有来源 id 与来源名（`{ provider, label }`），没有 key。同一来源在重新能用之前只发一次。
+   */
+  | 'model_source.key_rejected'
+  /**
    * WP150：「用我的 DeepSeek 账号登录」那一条模型来源被摘掉了——手动登出（`reason: 'signed_out'`）
    * 或平台说登录失效（`reason: 'expired'`）。payload 只有 provider id 与原因，没有账号名、没有令牌。
    */
@@ -423,6 +429,13 @@ export type KnownEventType =
   // 正文、relay 地址、凭据永不进日志。
   /** Amazon 24h 响应线的三档（提醒 / 升级 / 闭账）。 */
   | 'support.amazon_sla'
+  /**
+   * WP440（docs/108 M9）：邮件客服按把握直接回了一封（payload：卡 id、分数、档位、出处 id）；
+   * 没直接回、照旧出卡（payload：原因类别、分数）；人说「这封不该直接回」（payload：卡 id）。正文不进日志。
+   */
+  | 'support.email_auto_replied'
+  | 'support.email_auto_reply_held'
+  | 'support.email_auto_reply_flagged'
   /** 三道门的结论（只记门名与 pass / fail / gate_error，不记被扫的文本）。 */
   | 'guardrail.gate_decided'
   /** 出站 outbox 的状态迁移（prepared → sending → accepted → confirmed / …）。 */

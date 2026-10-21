@@ -1428,6 +1428,17 @@ const zh: Table = {
   'connections.mailbox.b2b.hint':
     '询盘、老客户来信、回我们开发信的信挪进 BtoBAgents 文件夹，交给 B2B 岗位。发开发信用的那只邮箱也要开：回信会回到它那里。',
   'connections.mailbox.failed': '没改成，稍后再试一次。',
+  // WP440（docs/108 M9）：客服信有把握就直接回
+  'connections.mailbox.auto_reply': '有把握就直接回',
+  'connections.mailbox.auto_reply.hint':
+    '客服来信里问的事知识库有出处、AI 有把握的，直接回给原发件人，回完在消息里标「AI 直接回 · 出处」，不对就点「这封不该直接回」。没把握的先给你批。退款、赔偿、改单、许时间、回复里带个人信息的一律先给你批；Amazon 买家消息先不直接回。',
+  'im.mailboxes.title': '邮箱',
+  'im.mailboxes.hint':
+    '每只邮箱单独设：客服来信有把握就直接回，档位越严直接回得越少。连邮箱在「账号连接」。',
+  'messages.auto_reply.mark': 'AI 直接回',
+  'messages.auto_reply.sources': '出处：{list}',
+  'messages.auto_reply.flag': '这封不该直接回',
+  'messages.auto_reply.flagged': '记下了，同类以后先给你批',
   // ── WP83（54（将改号 55）§4）：连接目录与岗位连接清单 ──────────────
   'connections.directory.title': '添加连接',
   'connections.directory.subtitle': '按分类翻一翻，或者直接搜名字。',
@@ -3388,11 +3399,11 @@ const zh: Table = {
   'chat.window.assist_wait.option_min': '{n} 分钟',
   'chat.window.auto_answer': '有把握就直接答',
   'chat.window.auto_answer.hint':
-    '知识库里有出处、AI 有把握的那一句直接发，没把握的先给你批。退款、赔偿、改单、许时间、个人信息一律先给你批。',
+    '知识库里有出处、AI 有把握的那一句直接发，没把握的先给你批。退款、赔偿、改单、许时间、回复里带个人信息的一律先给你批。',
   'chat.window.auto_answer.strictness': '把握要多大',
-  'chat.window.auto_answer.strict': '严一点',
+  'chat.window.auto_answer.strict': '严格',
   'chat.window.auto_answer.balanced': '适中',
-  'chat.window.auto_answer.loose': '松一点',
+  'chat.window.auto_answer.loose': '宽松',
   'chat.action.auto_answer': 'AI 直接答',
   'chat.auto.sources': '出处：{list}',
   'chat.auto.flag': '这句不该直接答',
@@ -5786,6 +5797,17 @@ const en: Table = {
   'connections.mailbox.b2b.hint':
     'Inquiries, mail from existing buyers and replies to our cold emails go to the BtoBAgents folder and to the B2B position. Keep it on for the mailbox you send cold emails from: replies land there.',
   'connections.mailbox.failed': 'That did not save. Try again in a moment.',
+  // WP440 (docs/108 M9): support email answered directly when the AI is sure
+  'connections.mailbox.auto_reply': 'Reply directly when sure',
+  'connections.mailbox.auto_reply.hint':
+    'When a support email asks something your knowledge base covers and the AI is confident, it replies to the original sender directly and marks it "AI replied directly · Source" in Messages; tap "Should not have replied" if it was wrong. Anything less certain waits for your OK. Refunds, compensation, order changes, delivery-date promises and replies that would reveal personal details always wait for you; Amazon buyer messages are not answered directly yet.',
+  'im.mailboxes.title': 'Mailboxes',
+  'im.mailboxes.hint':
+    'Set each mailbox on its own: support emails the AI is sure about get a direct reply; a stricter level means fewer direct replies. Connect mailboxes in Accounts.',
+  'messages.auto_reply.mark': 'AI replied directly',
+  'messages.auto_reply.sources': 'Source: {list}',
+  'messages.auto_reply.flag': 'Should not have replied',
+  'messages.auto_reply.flagged': 'Noted — similar emails will wait for you',
   // ── WP83：connection directory & per-position checklist ─────────────
   'connections.directory.title': 'Add a connection',
   'connections.directory.subtitle': 'Browse by category or search by name.',
@@ -7803,11 +7825,11 @@ const en: Table = {
   'chat.window.assist_wait.option_min': '{n} min',
   'chat.window.auto_answer': 'Answer directly when sure',
   'chat.window.auto_answer.hint':
-    'Replies backed by your knowledge base that the AI is confident about go out directly; the rest wait for your OK. Refunds, compensation, order changes, delivery-date promises and personal details always wait for you.',
+    'Replies backed by your knowledge base that the AI is confident about go out directly; the rest wait for your OK. Refunds, compensation, order changes, delivery-date promises and replies that would reveal personal details always wait for you.',
   'chat.window.auto_answer.strictness': 'How sure',
-  'chat.window.auto_answer.strict': 'Stricter',
+  'chat.window.auto_answer.strict': 'Strict',
   'chat.window.auto_answer.balanced': 'Balanced',
-  'chat.window.auto_answer.loose': 'Looser',
+  'chat.window.auto_answer.loose': 'Lenient',
   'chat.action.auto_answer': 'AI answered directly',
   'chat.auto.sources': 'Source: {list}',
   'chat.auto.flag': 'Should not have answered directly',
