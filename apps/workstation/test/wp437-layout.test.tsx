@@ -6,7 +6,7 @@
  * - 第三栏宿主统一入口 `openRightPane({ kind, id })`（WP438 的报表视图挂进来）；
  * - 并排之后核心区保不住最小宽度时，第三栏改成盖在中栏上。
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
@@ -77,9 +77,17 @@ vi.mock('@/lib/api', async () => {
 })
 
 const { RightRail } = await import('@/components/rail/right-rail')
-const { RailStateProvider, useRailState, rightPaneRoute, REPORT_PANE_PREFIX } = await import(
-  '@/components/rail/rail-state'
-)
+const { RailStateProvider, useRailState } = await import('@/components/rail/rail-state')
+const {
+  REPORT_PANE_PREFIX,
+  currentPane,
+  markPinned,
+  openRightPane,
+  closeRightPane,
+  paneWidth,
+  resetRightPane,
+  rightPaneRoute,
+} = await import('@/components/rail/right-pane')
 const { CORE_MIN_WIDTH, ShellSizeContext, boardWidthAt, columnsLayout } = await import(
   '@/components/rail/board-fit'
 )
@@ -87,6 +95,7 @@ const { REPORT_ADDRESS_PREFIX } = await import('@/components/reports/report-data
 
 let box = new Map<string, string>()
 beforeEach(() => {
+  resetRightPane()
   box = new Map<string, string>()
   vi.stubGlobal('localStorage', {
     getItem: (k: string) => box.get(k) ?? null,
@@ -278,6 +287,12 @@ describe('第三栏宿主：openRightPane({ kind, id })', () => {
     expect(rightPaneRoute({ kind: 'report', id: 'rep_1' })).toEqual({
       address: 'agentsws://report/rep_1',
     })
+    expect(rightPaneRoute({ kind: 'report', id: 'rep_1', position: 'web-ops' })).toEqual({
+      address: 'agentsws://report/rep_1',
+    })
+    expect(rightPaneRoute({ kind: 'report-compose', prompt: '做一份报表：' })).toEqual({
+      panel: 'report-compose',
+    })
     expect(rightPaneRoute({ kind: 'browser' })).toEqual({ panel: 'browser' })
     expect(rightPaneRoute({ kind: 'changes' })).toEqual({ panel: 'changes' })
     expect(rightPaneRoute({ kind: 'panel', id: 'memory' })).toEqual({ panel: 'memory' })
@@ -303,5 +318,76 @@ describe('第三栏宿主：openRightPane({ kind, id })', () => {
     await screen.findByTestId('rail-panel-frame')
     fireEvent.click(screen.getByTestId('close-pane'))
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+  })
+
+  it('报表那两格至少 560 宽（人拖得更宽照旧）；别的格子照拖出来的宽度', () => {
+    expect(paneWidth('report', 380)).toBe(560)
+    expect(paneWidth('report-compose', 380)).toBe(560)
+    expect(paneWidth('report', 640)).toBe(640)
+    expect(paneWidth('browser', 380)).toBe(380)
+    expect(paneWidth(undefined, 380)).toBe(380)
+  })
+
+  it('模块级 openRightPane（WP438 用的那个，同名同形）：开进外壳的第三栏、带着参数；× 收起时参数清掉', async () => {
+    // 没有宿主时开不出来
+    expect(openRightPane({ kind: 'report', id: 'rep_0' })).toBe(false)
+    renderAt({ body: 1700, viewport: 1940 })
+    await screen.findByTestId('rail-board')
+    let ok = false
+    act(() => {
+      ok = openRightPane({ kind: 'report', id: 'rep_2', position: 'web-ops', duty: 'web.seo' })
+    })
+    expect(ok).toBe(true)
+    const frame = await screen.findByTestId('rail-panel-frame')
+    expect(frame.getAttribute('data-panel')).toBe('report')
+    // 报表那一格至少 560 宽
+    expect(frame.style.width).toBe('560px')
+    expect(currentPane().pane).toEqual({
+      kind: 'report',
+      id: 'rep_2',
+      position: 'web-ops',
+      duty: 'web.seo',
+    })
+    act(() => {
+      markPinned('rep_2')
+    })
+    expect(currentPane().pinned).toBe('rep_2')
+    fireEvent.click(screen.getByTestId('rail-panel-close'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+    })
+    expect(currentPane().pane).toBeNull()
+    // 做一份报表那一格：宿主认得（身体由 WP438 挂）
+    act(() => {
+      openRightPane({ kind: 'report-compose', prompt: '做一份报表：' })
+    })
+    expect((await screen.findByTestId('rail-panel-frame')).getAttribute('data-panel')).toBe(
+      'report-compose',
+    )
+    // 换成别的格子：参数换成那一格的；人点顶栏图标直接开（不经口子）时参数清掉
+    fireEvent.click(screen.getByTestId('open-browser'))
+    expect(currentPane().pane).toEqual({ kind: 'browser' })
+    act(() => {
+      openRightPane({ kind: 'report-compose' })
+    })
+    await screen.findByTestId('rail-panel-report-compose')
+    fireEvent.click(screen.getByTestId('rail-icon-changes'))
+    await waitFor(() => {
+      expect(currentPane().pane).toBeNull()
+    })
+    act(() => {
+      closeRightPane()
+    })
+    expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+  })
+
+  it('报表按 560 宽算挤不挤：1440 宽的岗位页开报表，并排、看板让位；1300 宽盖在中栏上', () => {
+    const at = (viewport: number, third: number) =>
+      columnsLayout({ size: { body: viewport - 240, viewport }, third, narrow: false })
+    expect(at(1440, paneWidth('report', 380))).toMatchObject({ overlay: false, board: false })
+    expect(at(1399, paneWidth('report', 380)).overlay).toBe(true)
+    expect(at(1400, paneWidth('report', 380)).overlay).toBe(false)
+    expect(at(1800, paneWidth('report', 380)).board).toBe(true)
+    expect(at(1799, paneWidth('report', 380)).board).toBe(false)
   })
 })

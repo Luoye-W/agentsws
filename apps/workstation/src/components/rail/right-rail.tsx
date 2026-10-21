@@ -60,6 +60,7 @@ import {
   type RailPanelBodyProps,
   resolvePanelId,
 } from '@/components/rail/registry'
+import { paneWidth } from '@/components/rail/right-pane'
 import { TOPBAR_ICON, TOPBAR_ICON_ACTIVE, TOPBAR_ICON_IDLE } from '@/components/shell/top-bar-slots'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -136,11 +137,15 @@ function useColumns(): ColumnsLayout & { workPage: boolean } {
   const size = useShellSize()
   const narrow = useMedia(NARROW)
   const { pathname } = useLocation()
-  const thirdOpen =
-    rail.open !== null &&
-    rail.open !== RAIL_CARDS &&
-    panelType(resolvePanelId(rail.open).id) !== undefined
-  const layout = columnsLayout({ size, third: thirdOpen ? rail.width : null, narrow })
+  const openId =
+    rail.open === null || rail.open === RAIL_CARDS ? undefined : resolvePanelId(rail.open).id
+  const thirdOpen = openId !== undefined && panelType(openId) !== undefined
+  // 报表那两格至少 560 宽（right-pane.ts），按它要的宽度算挤不挤得下
+  const layout = columnsLayout({
+    size,
+    third: thirdOpen ? paneWidth(openId, rail.width) : null,
+    narrow,
+  })
   return { ...layout, workPage: railPageKind(pathname) !== undefined }
 }
 
@@ -463,7 +468,8 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
     }
   }, [setWidth, plain])
 
-  const width = plain
+  // WP437：报表那两格至少 560 宽（人拖得更宽照旧）
+  const width = paneWidth(definition?.id, plain)
   const scoped = definition?.scoped === true
   const body: RailPanelBodyProps = {
     ...(scope === undefined ? {} : { scope }),
@@ -582,7 +588,11 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
               : 'sticky top-11 z-40 h-[calc(100vh-2.75rem)]',
           )}
           // 并排时最多占窗口的一半，窗口窄了自己收，给对话留地方
-          style={overlay ? { width } : { width, maxWidth: '50vw', minWidth: 300 }}
+          style={
+            overlay
+              ? { width, maxWidth: 'calc(100vw - 3rem)' }
+              : { width, maxWidth: '50vw', minWidth: 300 }
+          }
           data-testid="rail-panel-frame"
           data-panel={definition.id}
           data-layout={overlay ? 'overlay' : 'docked'}

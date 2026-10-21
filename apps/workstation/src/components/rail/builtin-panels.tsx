@@ -310,6 +310,18 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('report', ReportBody)
+  /*
+   * WP437：「跟 AI 说想看什么 → 做一份报表」那一格（`openRightPane({ kind: 'report-compose' })`）。
+   * 这里只登记类型（第三栏宿主认得它、算宽度按报表那一档）；身体由 WP438 集成时挂上（`registerPanelBody('report-compose', …)`）。
+   */
+  registerPanelType({
+    id: 'report-compose',
+    label: 'rail.panel.report_compose',
+    icon: ScrollText,
+    priority: 'builtin',
+    group: 'layer',
+    hidden: true,
+  })
   registerPanelType({
     id: 'outputs',
     label: 'rail.panel.outputs',

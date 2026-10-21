@@ -28,10 +28,27 @@
  *
  * WP437：第三栏宿主的统一入口 {@link RailState.openRightPane}（`{ kind: 'report', id }` 等）与看板「临时一眼」的开关。
  */
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useLocation } from 'react-router-dom'
 import { railLayoutBucket, railPageKind } from '@/components/rail/rail-layout'
-import { resolvePanel } from '@/components/rail/registry'
+import { resolvePanel, resolvePanelId } from '@/components/rail/registry'
+import {
+  bindRightPaneHost,
+  closeRightPane as closePane,
+  currentPane,
+  forgetRightPane,
+  openRightPane as openPane,
+  type RightPane,
+  rightPaneRoute,
+} from '@/components/rail/right-pane'
 import { useApp } from '@/lib/app-context'
 import {
   clampRailWidth,
@@ -119,8 +136,9 @@ export interface RailState {
   /**
    * WP437：**第三栏宿主的统一入口**——浏览器、变更审阅、看一份报表、卡里「显示更多」那一格……都从这里开。
    * 同一时间只开一格；开着别的就换成这一格。回 `false` = 没有面板认得它（调用方走自己的兜底）。
+   * 与模块级的 `openRightPane`（`right-pane.ts`，WP438 用的那个）是同一个东西。
    */
-  openRightPane(target: RightPaneTarget): boolean
+  openRightPane(pane: RightPane): boolean
   /** WP437：收起第三栏（岗位 / 职责 / 事项页上看板照旧在）。 */
   closeRightPane(): void
   /**
@@ -129,40 +147,6 @@ export interface RailState {
    */
   peek: boolean
   setPeek(open: boolean): void
-}
-
-/**
- * WP437：第三栏能开的东西。
- *
- * - `report`：看一份报表（`id` = 报表 id；WP438 的报表视图挂在 `report` 这个面板上，按 `agentsws://report/<id>` 开）；
- * - `browser` / `changes`：浏览器、变更审阅（顶栏图标开的那两格）；
- * - `panel`：任何注册过的面板（`id` 可以是旧别名，如 `memory` → 「设定」的「记忆」）；
- * - `address`：按资源地址开（`agentsws://file/…`），谁认领谁来开（归卡的连接项照旧展开那张卡）。
- */
-export type RightPaneTarget =
-  | { kind: 'report'; id: string }
-  | { kind: 'browser' }
-  | { kind: 'changes' }
-  | { kind: 'panel'; id: string }
-  | { kind: 'address'; address: string }
-
-/** WP437：报表的资源地址（与 `components/reports/report-data.ts` 的 `REPORT_ADDRESS_PREFIX` 同一个前缀）。 */
-export const REPORT_PANE_PREFIX = 'agentsws://report/'
-
-/** WP437：一个第三栏目标落到哪儿——开一格（面板 id）还是按地址开。纯函数，单测直接测。 */
-export function rightPaneRoute(target: RightPaneTarget): { panel: string } | { address: string } {
-  switch (target.kind) {
-    case 'report':
-      return { address: `${REPORT_PANE_PREFIX}${target.id}` }
-    case 'browser':
-      return { panel: 'browser' }
-    case 'changes':
-      return { panel: 'changes' }
-    case 'panel':
-      return { panel: target.id }
-    case 'address':
-      return { address: target.address }
-  }
 }
 
 const Ctx = createContext<RailState | null>(null)
@@ -346,18 +330,37 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
     })
   }, [])
 
-  const openRightPane = useCallback(
-    (target: RightPaneTarget): boolean => {
-      const route = rightPaneRoute(target)
-      if ('address' in route) return openAddress(route.address)
-      show(route.panel)
-      return true
-    },
+  /*
+   * WP437：把外壳的第三栏接到模块级的 `openRightPane` / `closeRightPane` 上（`right-pane.ts`，WP438 的报表从那里开）。
+   * 第三栏换成别的格子 / 被收起时，那一次带的参数（报表 id……）跟着清掉。
+   */
+  useEffect(
+    () =>
+      bindRightPaneHost({
+        open: (route) => {
+          if ('address' in route) return openAddress(route.address)
+          show(route.panel)
+          return true
+        },
+        close: () => {
+          show(null)
+        },
+      }),
     [openAddress, show],
   )
-  const closeRightPane = useCallback(() => {
-    show(null)
-  }, [show])
+  const openPanel = layout.open_panel_id
+  useEffect(() => {
+    const { pane } = currentPane()
+    if (pane === null) return
+    const route = rightPaneRoute(pane)
+    const want = 'panel' in route ? route.panel : resolvePanel({ address: route.address })?.id
+    const now = openPanel === null || openPanel === RAIL_CARDS ? undefined : openPanel
+    if (
+      now === undefined ||
+      (want !== undefined && resolvePanelId(now).id !== resolvePanelId(want).id)
+    )
+      forgetRightPane()
+  }, [openPanel])
 
   const value = useMemo<RailState>(
     () => ({
@@ -380,8 +383,8 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       clearIntent,
       wide,
       setWide,
-      openRightPane,
-      closeRightPane,
+      openRightPane: openPane,
+      closeRightPane: closePane,
       peek,
       setPeek,
     }),
@@ -405,8 +408,6 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       clearIntent,
       wide,
       setWide,
-      openRightPane,
-      closeRightPane,
       peek,
     ],
   )
@@ -451,17 +452,4 @@ export function useRailState(): RailState {
       setPeek: noop,
     }
   )
-}
-
-/** WP437：只要第三栏那几样的地方用这个（WP438 的报表行、首页关键数字：`openRightPane({ kind: 'report', id })`）。 */
-export function useRightPane(): Pick<RailState, 'openRightPane' | 'closeRightPane'> & {
-  /** 第三栏现在开着哪一格（面板 id；收着 = `null`）。 */
-  open: string | null
-} {
-  const rail = useRailState()
-  return {
-    openRightPane: rail.openRightPane,
-    closeRightPane: rail.closeRightPane,
-    open: rail.open === RAIL_CARDS ? null : rail.open,
-  }
 }
