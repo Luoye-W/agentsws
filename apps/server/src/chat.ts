@@ -156,7 +156,7 @@ const HELD_SHORT: Record<string, string> = {
   money: '涉及钱或改单',
   commitment: '有承诺',
   time_promise: '许了时间',
-  personal_info: '涉及个人信息',
+  personal_info: '回复里带个人信息',
   learned: '同类你说过先给你看',
   no_source: '知识库里没有',
   low_confidence: '把握不够',
@@ -228,7 +228,7 @@ export interface ChatLaneOptions {
   position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /**
    * WP428（决策 1246 改）：**按置信度直接答**（缺省开、适中档）。答案有知识 / 订单出处、置信度过线的那一句
-   * 直接发；否则出卡转人。退款、赔偿、改单、许时间、个人信息一律转人（`scoreChatAutoAnswer`）。
+   * 直接发；否则出卡转人。退款、赔偿、改单、许时间、回复里带个人信息一律转人（`scoreChatAutoAnswer`）。
    * 每一轮现读（商家在聊天窗设置里改了下一句就跟着变）。
    */
   autoAnswer?(): { on: boolean; strictness?: ChatAutoAnswerStrictness }
@@ -968,7 +968,7 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     /*
      * WP428（决策 1246 改）：**按置信度直接答**。这一句有知识 / 订单出处、逐句对得上、把握过线 → 直接发，
      * 对话记录里标「AI 直接答 · 出处」；否则出卡转人（卡上就是这句回复和没直接答的理由），访客那边说
-     * 「稍等，马上帮你问」、起求助钟。退款 / 赔偿 / 改单 / 许时间 / 个人信息一律转人（`scoreChatAutoAnswer`）。
+     * 「稍等，马上帮你问」、起求助钟。退款 / 赔偿 / 改单 / 许时间 / 回复里带个人信息一律转人（`scoreChatAutoAnswer`）。
      */
     const setting = options.autoAnswer?.() ?? { on: true }
     const strictness = setting.strictness ?? DEFAULT_CHAT_AUTO_ANSWER_STRICTNESS

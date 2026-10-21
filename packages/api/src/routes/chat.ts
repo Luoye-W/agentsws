@@ -256,7 +256,7 @@ const WidgetBody = z.object({
   greeting: z.string().max(200).optional(),
   // WP417：等待时长以前界面上能改、接口却不收（改了不生效）
   assist_wait_seconds: z.number().int().min(10).max(600).optional(),
-  // WP428（决策 1246 改）：按置信度直接答（缺省开）+「严一点 / 适中 / 松一点」
+  // WP428（决策 1246 改）：按置信度直接答（缺省开）+「严格 / 适中 / 宽松」
   auto_answer: z.boolean().optional(),
   auto_answer_strictness: z.enum(['strict', 'balanced', 'loose']).optional(),
 })

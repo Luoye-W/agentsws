@@ -4551,7 +4551,7 @@ export const setAutopilot = (
     ...withAssignment(assignment),
   })
 
-/** WP428：直接答的门槛「严一点 / 适中 / 松一点」。 */
+/** WP428：直接答的门槛「严格 / 适中 / 宽松」。 */
 export type ChatAutoAnswerStrictnessView = 'strict' | 'balanced' | 'loose'
 
 /** WP428：「这句不该直接答」——记进学习回路，同类以后先转人。 */

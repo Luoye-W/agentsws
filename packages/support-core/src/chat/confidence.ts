@@ -14,7 +14,7 @@
  * | `money` | 计划不是 `answer`（涉钱 / 退款 / 改单 / 改地址 / 补发 / 要人工），或三道自主门里的 L3 黑名单不放行 |
  * | `commitment` | 回复里有第一人称承诺或没有出处的让步（`scanOutboundCommitment`，与邮件同一套词表） |
  * | `time_promise` | 回复里许了具体到哪天的时间（「明天发」「保证 3 天内到」「we'll ship today」） |
- * | `personal_info` | 访客这句里有个人信息（邮箱 / 电话 / 地址 / 卡号），或回复里带出了个人信息（含订单上的姓名地址） |
+ * | `personal_info` | **要发出的回复里**带出了个人信息（邮箱 / 电话 / 地址 / 卡号，或订单上的姓名地址）。访客自己在消息里留的邮箱 / 电话不算（决策 1303） |
  * | `learned` | 同类问题人说过「这句不该直接答」 |
  * | `no_source` | 一条出处都没有（知识卡、政策、订单现查结果都没对上） |
  *
@@ -32,20 +32,20 @@
  * - **模型自评**：模型在末尾给的「把握：0–100」。**只能往下拉，不能往上抬**——自评低于这一档的下限直接不发；
  *   没给按 0.5 算。权重只有两成，不靠它定。
  *
- * 三档门槛（设置里只有「严一点 / 适中 / 松一点」，不让人填数字）：
+ * 三档门槛（设置里只有「严格 / 适中 / 宽松」，不让人填数字；决策 1302 定名）：
  *
  * | 档 | 分数 | 逐句有出处 | 检索命中 | 自评下限 |
  * |---|---|---|---|---|
- * | 严一点 `strict` | ≥ 0.80 | 每一句 | ≥ 0.60 | 70 |
+ * | 严格 `strict` | ≥ 0.80 | 每一句 | ≥ 0.60 | 70 |
  * | 适中 `balanced`（缺省） | ≥ 0.70 | 每一句 | ≥ 0.40 | 50 |
- * | 松一点 `loose` | ≥ 0.60 | ≥ 2/3 | ≥ 0.30 | 30 |
+ * | 宽松 `loose` | ≥ 0.60 | ≥ 2/3 | ≥ 0.30 | 30 |
  */
 import { maskSensitive } from '@agentsws/core'
 import { evaluateAutonomyGates } from '../gates/gates.js'
 import { scanOutboundCommitment } from '../gates/l3-denylist.js'
 import type { ChatResponsePlan } from './types.js'
 
-/** 「严一点 / 适中 / 松一点」。 */
+/** 「严格 / 适中 / 宽松」（英文 Strict / Balanced / Lenient）。 */
 export type ChatAutoAnswerStrictness = 'strict' | 'balanced' | 'loose'
 
 export const CHAT_AUTO_ANSWER_STRICTNESS: readonly ChatAutoAnswerStrictness[] = [
@@ -448,9 +448,9 @@ export function matchLearnedHold(
 const round2 = (n: number): number => Math.round(n * 100) / 100
 
 const STRICTNESS_NAME: Record<ChatAutoAnswerStrictness, string> = {
-  strict: '严一点',
+  strict: '严格',
   balanced: '适中',
-  loose: '松一点',
+  loose: '宽松',
 }
 
 export function scoreChatAutoAnswer(input: ChatAutoAnswerInput): ChatAutoAnswerVerdict {
@@ -494,8 +494,9 @@ export function scoreChatAutoAnswer(input: ChatAutoAnswerInput): ChatAutoAnswerV
   const leaksPrivate = privateValues.some(
     (v) => v.trim().length >= 3 && parsed.text.toLowerCase().includes(v.trim().toLowerCase()),
   )
-  if (hasPersonalInfo(input.turn_text) || hasPersonalInfo(parsed.text) || leaksPrivate) {
-    hold('personal_info', '涉及个人信息（邮箱、电话、地址、姓名），一律转人')
+  // 决策 1303：只看要发出去的这一句——访客自己留的邮箱 / 电话不算（回复里原样带回去了才算）
+  if (hasPersonalInfo(parsed.text) || leaksPrivate) {
+    hold('personal_info', '回复里带出了个人信息（邮箱、电话、地址、姓名），一律转人')
   }
 
   // ── 逐句有出处 ─────────────────────────────────────────────
