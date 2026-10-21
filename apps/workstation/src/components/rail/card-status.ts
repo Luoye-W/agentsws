@@ -15,7 +15,8 @@ import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import type { RailScope } from '@/components/rail/rail-scope'
 import type { CardStatus, RailPanelBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
-import { scopeAssignments, shortDate, useScopeReports } from '@/components/reports/report-data'
+import { scopeAssignments, shortDate } from '@/components/reports/report-data'
+import { useReportList } from '@/components/reports/use-report-list'
 import {
   type ExtensionNeedsView,
   getExtensionNeeds,
@@ -63,11 +64,11 @@ export function useReportsStatus(
   { scope }: RailPanelBodyProps,
   detail = true,
 ): CardStatus | undefined {
-  const { reports } = useScopeReports(scope, detail)
-  const latest = reports[0]
-  if (latest === undefined) return undefined
-  const date = shortDate(latest.at)
-  return { summary: date === '' ? latest.title : `${latest.title} · ${date}` }
+  const { t } = useApp()
+  // WP438：报表卡收着时右边写「几份」（固定的报表；AI 写的报告文档归「产出」）
+  const { list } = useReportList(scope, detail)
+  const n = list?.reports.length ?? 0
+  return n === 0 ? undefined : { summary: t('reports.card.summary', { n }) }
 }
 
 /** 产出：本周几份（记录）；发出记录写不进去的亮红点。 */

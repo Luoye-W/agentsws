@@ -59,6 +59,7 @@ import { NotificationBell } from '@/components/notifications/notification-bell'
 import { type ComposeTarget, type Handoff, PaletteProvider } from '@/components/palette-context'
 import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
 import { RailHost, RailTopBar } from '@/components/rail/right-rail'
+import { RightPaneHost } from '@/components/reports/right-pane'
 import { PositionIcon } from '@/components/role-icons/role-icon'
 import {
   TOPBAR_ICON,
@@ -905,6 +906,8 @@ export function AppShell({
                   </main>
                   {/* WP372：右侧面板（六张卡 / 一格）；宽屏挤在主区右边，< 1200 盖在主区上 */}
                   <RailHost {...(instances === undefined ? {} : { instances })} />
+                  {/* WP438：第三栏临时挂载点（报表整页 / 做一份报表）；WP437 的统一宿主合进来后换成那一个 */}
+                  <RightPaneHost />
                 </div>
               </div>
 

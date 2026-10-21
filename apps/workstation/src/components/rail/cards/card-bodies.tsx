@@ -6,12 +6,11 @@
  * 这一个文件整体 `lazy()`：没有任何一张卡展开之前一个字节都不下载。
  */
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { CheckCircle2, ChevronRight } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react'
 import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
-import { MentionsTable } from '@/components/pr/mentions-table'
 import { PrWatchSources } from '@/components/pr/pr-watch-sources'
 import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
@@ -20,17 +19,19 @@ import { useRailState } from '@/components/rail/rail-state'
 import type { RailCardBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import {
-  CompetitorChangesTable,
   CompetitorWatchConnectionRow,
   CompetitorWatchPlanRow,
   competitorAssignmentOf,
 } from '@/components/reports/competitor-watch'
+import { ReportRow } from '@/components/reports/kit/report-row'
 import {
   reportAddress,
   scopeAssignments,
   shortDate,
   useScopeReports,
 } from '@/components/reports/report-data'
+import { openRightPane, useRightPane } from '@/components/reports/right-pane'
+import { useReportList } from '@/components/reports/use-report-list'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX, useOpenConnect } from '@/components/setup/use-open-connect'
 import { Hint } from '@/components/ui/hint'
@@ -57,48 +58,63 @@ function Meta({ children }: { children: ReactNode }): ReactNode {
 
 /* ── 报表 ───────────────────────────────────────────────────────────── */
 
-export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
+/**
+ * WP438（WP434 设计 §3.2，决策 1334）：一行一份报表——名字（AI 做的挂「AI」标）+ 头条数 + 涨跌 + 小走势；
+ * 点一行在第三栏拉出整页（决策 1335 改）。最多固定 5 份，超过的进「全部报表」（卡底「显示更多」）。
+ * 卡底一行「跟 AI 说想看什么，做一份新的」，和卡头「+」是同一个入口。
+ *
+ * 不是报表的东西各回各处：AI 写的日报 / 周报正文归「产出」；竞品变化表、提及表进「全部报表」那一页。
+ */
+export function ReportsCard({ scope }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
-  const rail = useRailState()
-  const { reports, ready } = useScopeReports(scope)
-  // WP392：担竞品监控的这一层，卡里再放竞品变化表（按竞品 / 种类筛；价格带走势）
-  const competitor =
-    competitorAssignmentOf(scope) === undefined ? null : (
-      <CompetitorChangesTable scope={scope} limit={limit} />
-    )
-  // WP419（自查 P5）：担信息监控的这一层，卡里放拉回来的提及表（按组 / 情绪 / 来源筛）
-  const mentions = <MentionsTable scope={scope} {...(limit === undefined ? {} : { limit })} />
-  const monitored = useScopeMonitor(scope) !== undefined
-  if (reports.length === 0)
-    return (
-      <div className="flex flex-col gap-2">
-        {ready && !monitored ? <Empty text={t('reports.empty')} /> : null}
-        {competitor}
-        {mentions}
-      </div>
-    )
+  const { list, ready, where } = useReportList(scope)
+  const pane = useRightPane()
+  const rows = (list?.reports ?? []).slice(0, list?.limit ?? 5)
+  const openId = pane.pane?.kind === 'report' ? pane.pane.id : undefined
   return (
-    <div className="flex flex-col gap-2">
-      <ul className="flex flex-col gap-px" data-testid="reports-card">
-        {reports.slice(0, limit).map((r) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              className={ROW}
-              data-testid="report-row"
-              data-id={r.id}
-              onClick={() => {
-                rail.openAddress(reportAddress(r.id))
+    <div className="flex flex-col" data-testid="reports-card">
+      {rows.length === 0 ? (
+        ready ? (
+          <Empty text={t('reports.empty')} />
+        ) : null
+      ) : (
+        <ul className="-mx-0.5 flex flex-col">
+          {rows.map((r) => (
+            <ReportRow
+              key={r.id}
+              report={r}
+              open={openId === r.id}
+              fresh={pane.pinned === r.id}
+              onOpen={() => {
+                if (where === undefined) return
+                openRightPane({
+                  kind: 'report',
+                  id: r.id,
+                  position: where.position,
+                  ...(where.duty === undefined ? {} : { duty: where.duty }),
+                })
               }}
-            >
-              <span className="min-w-0 truncate">{r.title}</span>
-              <Meta>{shortDate(r.at)}</Meta>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {competitor}
-      {mentions}
+            />
+          ))}
+        </ul>
+      )}
+      {where === undefined ? null : (
+        <button
+          type="button"
+          data-testid="reports-compose"
+          className="mt-0.5 flex items-center gap-1.5 rounded-[8px] px-2 pt-2 pb-0.5 text-left text-[12.5px] text-ws-muted-fg hover:text-ws-brand-ink"
+          onClick={() => {
+            openRightPane({
+              kind: 'report-compose',
+              position: where.position,
+              ...(where.duty === undefined ? {} : { duty: where.duty }),
+            })
+          }}
+        >
+          <Sparkles aria-hidden className="size-3.5" />
+          {t('reports.compose')}
+        </button>
+      )}
     </div>
   )
 }
@@ -108,6 +124,8 @@ export function ReportsCard({ scope, limit }: RailCardBodyProps): ReactNode {
 export function OutputsCard({ scope, limit }: RailCardBodyProps): ReactNode {
   const { t } = useApp()
   const rail = useRailState()
+  // WP438（WP434 §3.1）：AI 写的日报 / 周报 / 经营一页纸是文档，归「产出」（不算报表）
+  const docs = useScopeReports(scope)
   const records = useQueries({
     queries: scopeAssignments(scope).map((a) => ({
       queryKey: ['records', a],
@@ -124,11 +142,30 @@ export function OutputsCard({ scope, limit }: RailCardBodyProps): ReactNode {
       return true
     })
     .sort((a, b) => b.at.localeCompare(a.at))
-  if (rows.length === 0)
-    return records.some((r) => r.isPending) ? null : <Empty text={t('outputs.empty')} />
+  if (rows.length === 0 && docs.reports.length === 0)
+    return records.some((r) => r.isPending) || !docs.ready ? null : (
+      <Empty text={t('outputs.empty')} />
+    )
+  const docRows = docs.reports.slice(0, limit)
   return (
     <ul className="flex flex-col gap-px" data-testid="outputs-card">
-      {rows.slice(0, limit).map((row) => (
+      {docRows.map((r) => (
+        <li key={r.id}>
+          <button
+            type="button"
+            className={ROW}
+            data-testid="output-doc-row"
+            data-id={r.id}
+            onClick={() => {
+              rail.openAddress(reportAddress(r.id))
+            }}
+          >
+            <span className="min-w-0 truncate">{r.title}</span>
+            <Meta>{shortDate(r.at)}</Meta>
+          </button>
+        </li>
+      ))}
+      {rows.slice(0, Math.max(0, limit - docRows.length)).map((row) => (
         <li key={row.id}>
           <button
             type="button"

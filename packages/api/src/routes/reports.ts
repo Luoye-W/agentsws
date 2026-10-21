@@ -319,13 +319,38 @@ export function reportRoutes(): Route[] {
           const got = await contextFor(deps, actor, positions, first)
           if (got === undefined) continue
           const summary = summarizeReport(got.spec, got.ctx)
+          // 岗位卡的代表数：头条数没数时挑同一份里第一个有数的（近 30 天），不出空卡
+          let card = {
+            label: summary.headline_label,
+            headline: summary.headline,
+            spark: summary.spark,
+          }
+          if (summary.headline.status !== 'ok') {
+            const month = computeReport(
+              { ...got.spec, blocks: got.spec.blocks.filter((b) => b.kind === 'kpis') },
+              got.ctx,
+              '30d',
+            )
+            const items =
+              (month.blocks[0]?.payload as { items: ReportSummary['headline'][] } | undefined)
+                ?.items ?? []
+            const alt = items.find((m) => m.status === 'ok' && m.value !== undefined)
+            if (alt !== undefined) {
+              const { spark: daily, ...rest } = alt
+              card = {
+                label: daily === undefined ? alt.label : `近 30 天${alt.label}`,
+                headline: rest,
+                spark: daily,
+              }
+            }
+          }
           cards.push({
             position: pos,
             report_id: first.id,
             title: first.title,
-            headline_label: summary.headline_label,
-            headline: summary.headline,
-            ...(summary.spark === undefined ? {} : { spark: summary.spark }),
+            headline_label: card.label,
+            headline: card.headline,
+            ...(card.spark === undefined ? {} : { spark: card.spark }),
           })
           // 关键数字：这一档时间窗下算一次 KPI 条；头条数没数就挑同一份里第一个有数的（每岗位最多 1 个）
           const data = computeReport(

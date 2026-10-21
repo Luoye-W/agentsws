@@ -1,109 +1,124 @@
 /**
- * 36 §5.2 / §5.5 的两条硬断言：
- * - 首页**无图表无表格**（数字块的迷你走势是一条内联 SVG 折线，不是图表组件）
- * - 全应用**没有全局聊天输入框**
+ * WP438（WP434 设计 §2，决策 1332 / 1333）：首页四块——问候 + 一行概况 / 要你定（最多 3 条）/
+ * 关键数字（一句话 + 4 个数，点了在第三栏开报表）/ 岗位卡。去掉复盘四格、去连接卡堆、按职责重复的数字、
+ * 空的时间轴 / 到期、目标网格。输入框不在首页（WP437 的简易对话框悬浮在底部）。
  *
- * WP98（09-18 收口）再钉一条：**第一屏的顺序**——问候 → 岗位卡一排 → 目标那一行，
- * 「还没接模型」的黄条与整块目标网格都不在首页了。
+ * 三种模式（决策 222）：「正在进行」「待认领」在同事互联 / 公司集体时照旧接在最下面。
  */
 
-import type { GoalProgress } from '@agentsws/contracts'
-import { screen, waitFor, within } from '@testing-library/react'
+import type { ReportMetricValue } from '@agentsws/deck'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
-import { homeData } from './fixtures'
+import type { ReportsOverview } from '@/lib/reports-api'
+import { draftCard, homeData } from './fixtures'
 import { renderWithProviders } from './helpers'
 import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
 
-const home = homeData()
-
-/** 两个岗位——只有一个的人首页直接跳岗位页（54 §4），那就看不到这一屏了。 */
 const instance = (
   id: string,
   name: string,
+  role_id: string,
   assignment: string,
-  holders: string[] = [],
+  counts: { open_matters?: number; pending_cards?: number } = {},
 ): PositionInstanceData => ({
   position_id: id,
   workspace_id: 'ws_1',
   name: { zh: name, en: name },
   template_version: '1.0.0',
-  holders,
+  holders: [],
   roles: [
     {
-      role_id: `${id}.role`,
+      role_id,
       role_name: name,
       default: true,
       assignment_ids: [assignment],
       my_assignment_id: assignment,
     },
   ],
-  open_matters: 1,
-  pending_cards: 2,
+  open_matters: counts.open_matters ?? 0,
+  pending_cards: counts.pending_cards ?? 0,
   memory_summary: '',
 })
 
-const GOALS: GoalProgress[] = [
-  {
-    goal_id: 'g_1',
-    title: '九月销售额',
-    level: 'company',
-    format: 'money',
-    target: 100,
-    value: 40,
-    progress_pct: 40,
-    days_left: 12,
-    elapsed_pct: 60,
-    status: 'behind',
-  },
-  {
-    goal_id: 'g_2',
-    title: '回复率',
-    level: 'position',
-    format: 'percent',
-    target: 90,
-    value: 88,
-    progress_pct: 97,
-    days_left: 12,
-    elapsed_pct: 60,
-    status: 'ok',
-  },
-]
+const metric = (over: Partial<ReportMetricValue>): ReportMetricValue => ({
+  key: 'sales',
+  label: '销售额',
+  format: 'currency',
+  currency: 'USD',
+  source: 'shop',
+  status: 'ok',
+  value: 1684,
+  previous: 1500,
+  delta: 12.3,
+  delta_unit: 'pct',
+  ...over,
+})
 
-const getHome = vi.fn(async () => home)
-const decide = vi.fn(async () => ({}))
+const overview = (range: string): ReportsOverview => ({
+  range: range as ReportsOverview['range'],
+  key: [
+    {
+      position: 'web-ops',
+      report_id: 'web-ops.business',
+      metric: metric({}),
+      spark: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    },
+    {
+      position: 'customer-care',
+      report_id: 'customer-care.service',
+      metric: {
+        key: 'pending_replies',
+        label: '待回复',
+        format: 'count',
+        source: 'approvals',
+        status: 'ok',
+        value: 4,
+      },
+    },
+  ],
+  sentence: {
+    text: '昨天销售额 **$1,684**，比前一天 **+12.3%**；单子最多来自自然搜索。',
+    report_id: 'web-ops.business',
+    title: '网站经营数据报表',
+  },
+  missing: { label: '广告后台', source: 'ads', unlocks: '广告回报 ROAS' },
+  positions: [
+    {
+      position: 'web-ops',
+      report_id: 'web-ops.business',
+      title: '网站经营数据报表',
+      headline_label: '近 30 天销售额',
+      headline: metric({ value: 48210 }),
+      spark: [1, 2, 3],
+    },
+  ],
+})
+
+const getHome = vi.fn(async () =>
+  homeData({
+    queue: [
+      draftCard({ id: 'a', title: '第一件' }),
+      draftCard({ id: 'b', title: '第二件', priority_band: 'P0' }),
+      draftCard({ id: 'c', title: '第三件' }),
+      draftCard({ id: 'd', title: '第四件' }),
+    ],
+  }),
+)
+const getReportsOverview = vi.fn(async (range: string) => overview(range))
+const openRightPane = vi.fn()
+
 const getPositions = vi.fn(async () => ({
-  // 成员清单要 policy:read：界面拿**所有者那条分配**去问（与"还没接模型"同一个做法）
   positions: [{ position_id: 'asg_owner', role_id: 'common.owner' }],
   instances: [
-    // `p_hidden` 在成员清单里查不到名字：那个位置就该什么都没有（19 §3 / WP15）
-    instance('customer-care', '客服', 'asg_1', ['p_li', 'p_hidden']),
-    instance('web-ops', '网站运营', 'asg_2'),
+    instance('web-ops', '网站运营', 'dtc.store', 'asg_2', { pending_cards: 3 }),
+    instance('customer-care', '客服', 'dtc.support', 'asg_1', { open_matters: 1 }),
+    instance('design', '设计', 'design.dtc', 'asg_3'),
   ],
   tile_library: [],
   max_tiles: 4,
 }))
 
-const listMembers = vi.fn(async () => [
-  { person_id: 'p_li', name: '王岚', email: '', role: 'owner', joined_at: '', positions: [] },
-])
-
-/** WP112：「正在进行」那块——标题旁边的呼吸只在真有东西在跑的时候出。 */
-const inProgress: {
-  kind: 'todo'
-  id: string
-  title: string
-  owner: string
-  owner_label: string
-  collaborators: string[]
-  status: string
-  started_at: string
-  last_activity: string
-  cards: number
-}[] = []
-const listInProgress = vi.fn(async () => ({ items: [...inProgress], scope: 'position' }))
-
-/** WP271：组织（不给 = 读不到，按 ③ 兜底）与待认领池。 */
 const modeState: { orgs: (typeof SOLO_ORG)[]; pool: unknown[] } = { orgs: [], pool: [] }
 
 vi.mock('@/lib/api', async () => {
@@ -112,237 +127,140 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     getHome: (...args: unknown[]) => getHome(...(args as [])),
     getPositions: (...args: unknown[]) => getPositions(...(args as [])),
-    listMembers: (...args: unknown[]) => listMembers(...(args as [])),
-    decide: (...args: unknown[]) => decide(...(args as [])),
-    listInProgress: (...args: unknown[]) => listInProgress(...(args as [])),
+    ensureSession: async () => ({ person: { id: 'p_1', name: '林夏', email: '' } }),
+    listInProgress: async () => ({ items: [], scope: 'position' }),
     listOrganizations: async () => modeState.orgs,
     listClaimPool: async () => ({ pool: modeState.pool }),
   }
 })
 
-/** WP276：交给同事的结果（首页一行通知）。 */
-const peersState: { from_me: unknown[] } = { from_me: [] }
-vi.mock('@/lib/api-peers', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api-peers')>('@/lib/api-peers')
-  return {
-    ...actual,
-    listHandoffs: async () => ({ to_me: [], from_me: peersState.from_me }),
-  }
+vi.mock('@/lib/reports-api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/reports-api')>('@/lib/reports-api')
+  return { ...actual, getReportsOverview: (r: string) => getReportsOverview(r) }
 })
 
-// 动态 import 必须在 mock 之后
+vi.mock('@/components/reports/right-pane', async () => {
+  const actual = await vi.importActual<typeof import('@/components/reports/right-pane')>(
+    '@/components/reports/right-pane',
+  )
+  return { ...actual, openRightPane: (p: unknown) => openRightPane(p) }
+})
+
 const { HomePage } = await import('@/pages/home')
 
-describe('首页（36 §3 三区）', () => {
+describe('WP438 首页四块（决策 1332）', () => {
   beforeEach(() => {
-    getHome.mockClear()
+    getReportsOverview.mockClear()
+    openRightPane.mockClear()
+    modeState.orgs = [SOLO_ORG]
+    modeState.pool = []
   })
 
-  it('一副牌（一次一张）、数据条与「预计 X 分钟」都在', async () => {
+  it('从上到下：问候 → 要你定 → 关键数字 → 岗位', async () => {
     renderWithProviders(<HomePage />)
-    expect(await screen.findByTestId('queue')).toBeDefined()
-    // 37 §1 第 1 行：首页不再平铺卡片列表，只有一张
-    expect(await screen.findByTestId('deck-card')).toBeDefined()
-    expect(screen.getAllByTestId('deck-card')).toHaveLength(1)
-    expect(screen.getByTestId('tile-bar')).toBeDefined()
-    expect(screen.getByText('今天队列预计 6 分钟')).toBeDefined()
+    await screen.findAllByTestId('home-key-card')
+    await screen.findByTestId('position-cards')
+    const order = ['home-header', 'home-decide', 'home-key', 'position-cards'].map((id) =>
+      screen.getByTestId(id),
+    )
+    for (let i = 1; i < order.length; i += 1)
+      expect(
+        (order[i - 1] as HTMLElement).compareDocumentPosition(order[i] as HTMLElement) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByTestId('home-header').textContent).toContain('林夏')
+    })
+    // 一行概况：AI 今天处理了几件（自主 12 + 自动发 3）、几件等你定
+    expect(screen.getByTestId('home-line').textContent).toContain('处理了 15 件')
+    expect(screen.getByTestId('home-line').textContent).toContain('4 件等你定')
   })
 
-  it('数字块只出值、环比、迷你走势；没接的出「去连接」', async () => {
+  it('去掉的那些都不在：复盘四格、按职责的数据条、时间轴 / 到期、目标网格、一页纸', async () => {
     renderWithProviders(<HomePage />)
-    await screen.findByTestId('tile-bar')
-    const tiles = screen.getAllByTestId('stat-tile')
-    expect(tiles).toHaveLength(2)
-    expect(tiles[0]?.getAttribute('data-status')).toBe('ok')
-    // WP98：岗位卡上也有"2 张待审"，所以这个 2 要在数字块里找，不能在整页里找
-    expect(within(tiles[0] as HTMLElement).getByText('2')).toBeDefined()
-    expect(tiles[1]?.getAttribute('data-status')).toBe('not_connected')
-    expect(screen.getByText('去连接')).toBeDefined()
+    await screen.findAllByTestId('home-key-card')
+    for (const id of [
+      'battle-report',
+      'tile-bar',
+      'today',
+      'today-timeline',
+      'goals-line',
+      'digest',
+      'review',
+      'queue',
+    ])
+      expect(screen.queryByTestId(id), id).toBeNull()
   })
 
-  it('首页里没有图表，也没有表格（36 §5.2）', async () => {
-    const { container } = renderWithProviders(<HomePage />)
-    await screen.findByTestId('queue')
-    expect(container.querySelectorAll('table')).toHaveLength(0)
-    expect(container.querySelectorAll('[data-testid="block-chart"]')).toHaveLength(0)
-    expect(container.querySelectorAll('[data-block-component="chart_line"]')).toHaveLength(0)
-    expect(container.querySelectorAll('.recharts-wrapper')).toHaveLength(0)
-    // 迷你走势线是允许的（36 §3 数字块的三样之一）
-    expect(container.querySelectorAll('[data-testid="sparkline"]').length).toBeGreaterThan(0)
+  it('要你定：最多 3 条，每条一行带「看看」；右上「全部」去待办', async () => {
+    renderWithProviders(<HomePage />)
+    const box = await screen.findByTestId('home-decide')
+    expect(within(box).getAllByTestId('home-decide-row')).toHaveLength(3)
+    expect(within(box).getAllByTestId('home-decide-look')).toHaveLength(3)
+    expect(screen.getByTestId('home-decide-all').getAttribute('href')).toBe('/todos')
+    // 挂在哪个岗位：按职责找回岗位名
+    await waitFor(() => {
+      expect(within(box).getAllByTestId('home-decide-row')[0]?.textContent).toContain('客服')
+    })
   })
 
-  it('首页没有全局聊天输入框（36 §3 A4；对话入口只有指导 / 问 AI / ⌘K）', async () => {
+  it('关键数字：一句话（粗体照写）+ 每岗位最多 1 个；点一个在第三栏开那份报表', async () => {
+    renderWithProviders(<HomePage />)
+    const cards = await screen.findAllByTestId('home-key-card')
+    expect(cards).toHaveLength(2)
+    expect(cards[0]?.textContent).toContain('$1,684')
+    expect(cards[0]?.textContent).toContain('↑12.3%')
+    const sentence = screen.getByTestId('home-key-sentence')
+    expect(sentence.querySelector('b')?.textContent).toBe('$1,684')
+    fireEvent.click(cards[1] as HTMLElement)
+    expect(openRightPane).toHaveBeenCalledWith({
+      kind: 'report',
+      id: 'customer-care.service',
+      position: 'customer-care',
+    })
+    fireEvent.click(screen.getByTestId('home-key-go'))
+    expect(openRightPane).toHaveBeenLastCalledWith({ kind: 'report', id: 'web-ops.business' })
+  })
+
+  it('缺连接只写一行；时间段切到近 7 天重新取数（数在服务端算）', async () => {
+    renderWithProviders(<HomePage />)
+    const line = await screen.findByTestId('home-key-missing')
+    expect(line.textContent).toContain('广告后台还没连')
+    expect(line.textContent).toContain('广告回报 ROAS')
+    expect(getReportsOverview).toHaveBeenCalledWith('1d')
+    fireEvent.click(screen.getByRole('button', { name: '近 7 天' }))
+    await waitFor(() => {
+      expect(getReportsOverview).toHaveBeenCalledWith('7d')
+    })
+  })
+
+  it('岗位卡：代表数取第一份固定报表的头条数；没数没事的照实说「还没开工」', async () => {
+    renderWithProviders(<HomePage />)
+    await screen.findAllByTestId('home-key-card')
+    const web = await waitFor(() => {
+      const el = document.querySelector('[data-testid="position-card"][data-position="web-ops"]')
+      expect(el?.textContent).toContain('$48.2k')
+      return el as HTMLElement
+    })
+    expect(web.textContent).toContain('等你 3 件')
+    const design = document.querySelector(
+      '[data-testid="position-card"][data-position="design"]',
+    ) as HTMLElement
+    expect(design.getAttribute('data-state')).toBe('idle')
+    expect(design.textContent).toContain('还没开工')
+  })
+
+  it('首页没有输入框（WP437 的简易对话框悬浮在底部，不在这一页里）', async () => {
     const { container } = renderWithProviders(<HomePage />)
-    await screen.findByTestId('queue')
-    // 收起状态下，页面上一个可用的自由文本输入都没有
+    await screen.findAllByTestId('home-key-card')
     const inputs = [
       ...container.querySelectorAll('input[type="text"], input:not([type]), textarea'),
     ].filter((el) => !(el as HTMLInputElement).disabled)
     expect(inputs).toHaveLength(0)
-    expect(screen.queryByPlaceholderText(/(问点什么|说点什么|Ask anything|Message)/)).toBeNull()
-  })
-
-  it('时间范围切到近 7 天会重新取数（数在服务端算）', async () => {
-    const userEvent = (await import('@testing-library/user-event')).default
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('tile-bar')
-    expect(getHome).toHaveBeenCalledWith('yesterday')
-    await userEvent.click(screen.getByRole('button', { name: '近 7 天' }))
-    expect(getHome).toHaveBeenCalledWith('last_7d')
-    // 数据条与 deck 各取各的：deck 带筛选参数（37 §1 末段）
-    expect(getHome).toHaveBeenCalledWith('yesterday', {})
-  })
-})
-
-describe('WP98 收口：第一屏的顺序', () => {
-  beforeEach(() => {
-    getHome.mockClear()
-  })
-
-  it('问候 → 岗位卡一排 → 目标那一行，三段按这个次序出现在 DOM 里', async () => {
-    getHome.mockImplementation(async () => homeData({ goals: GOALS }))
-    const { container } = renderWithProviders(<HomePage />)
-    await screen.findByTestId('position-cards')
-    const order = [...container.querySelectorAll('[data-testid]')]
-      .map((el) => el.getAttribute('data-testid'))
-      .filter((id): id is string =>
-        ['home-header', 'position-cards', 'goals-line', 'queue'].includes(id ?? ''),
-      )
-    expect(order).toEqual(['home-header', 'position-cards', 'goals-line', 'queue'])
-  })
-
-  it('目标折成一行"目标 2 项 · 1 项落后"，不再是一块带进度条的网格', async () => {
-    getHome.mockImplementation(async () => homeData({ goals: GOALS }))
-    renderWithProviders(<HomePage />)
-    const line = await screen.findByTestId('goals-line')
-    expect(line.textContent).toContain('目标 2 项 · 1 项落后')
-    expect(line.getAttribute('href')).toBe('/goals')
-    // 整块网格连同每张卡上的进度条都没了
-    expect(screen.queryByTestId('goal-row')).toBeNull()
-  })
-
-  it('没有目标时那一行整个不出（不留一个"目标 0 项"占位）', async () => {
-    getHome.mockImplementation(async () => home)
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('queue')
-    expect(screen.queryByTestId('goals-line')).toBeNull()
-  })
-
-  it('「还没接模型」不在首页了——它搬去了顶栏（app-shell 那个胶囊）', async () => {
-    getHome.mockImplementation(async () => home)
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('queue')
-    expect(screen.queryByTestId('no-model-banner')).toBeNull()
-  })
-})
-
-describe('WP98 收口：岗位卡补齐持有人与一句真状态', () => {
-  beforeEach(() => {
-    getHome.mockClear()
-    getHome.mockImplementation(async () => home)
-  })
-
-  it('中间那句改成岗位面板已经算好的数，不再重复卡上那个大数字', async () => {
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('position-cards')
-    const care = screen
-      .getByTestId('position-cards')
-      .querySelector('[data-position="customer-care"]')
-    // 首页那份 tiles 按**分配 id** 分组（asg_1），岗位实体的 id 是模板 id
-    expect(care?.textContent).toContain('待回复 2')
-    // "N 张待审 · M 件在办"那句话不再出现在卡上
-    expect(care?.textContent).not.toContain('件在办')
-  })
-
-  it('没连上数据源的块不进那句话；一个数都没有的岗位照实说"还没开工"', async () => {
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('position-cards')
-    const cards = screen.getByTestId('position-cards')
-    // csat 那一块是 not_connected，一个字都不该进去
-    expect(cards.querySelector('[data-position="customer-care"]')?.textContent).not.toContain(
-      '满意度',
-    )
-    expect(cards.querySelector('[data-position="web-ops"]')?.textContent).toContain('还没开工')
-  })
-
-  it('拿所有者那条分配去问成员清单（客服那条上没有 policy:read）', async () => {
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('position-cards')
-    await waitFor(() => {
-      expect(listMembers).toHaveBeenCalledWith('ws_1', 'asg_owner')
-    })
-  })
-
-  it('WP112：有活在跑的岗位卡上多一个呼吸的状态点，几件在办只在 title 里说', async () => {
-    renderWithProviders(<HomePage />)
-    const cards = await screen.findByTestId('position-cards')
-    // 两张卡的 `open_matters` 都是 1（fixture），所以两张都该有
-    const dots = within(cards).getAllByTestId('ws-position-running')
-    expect(dots).toHaveLength(2)
-    expect(dots[0]?.getAttribute('title')).toBe('运行中 · 1 件在办')
-    expect(dots[0]?.querySelector('svg')?.getAttribute('data-motion')).toBe('breathe')
-  })
-
-  it('WP112：「正在进行」的标题旁边——有东西在跑才呼吸，一条都没有就整个不出', async () => {
-    getHome.mockImplementation(async () => ({
-      ...home,
-      today: { timeline: [], due: { todos: [], cards_waiting: 0 } },
-    }))
-    // ① 一条都没有
-    inProgress.length = 0
-    const quiet = renderWithProviders(<HomePage />)
-    await screen.findByTestId('home-inprogress')
-    await waitFor(() => {
-      expect(listInProgress).toHaveBeenCalled()
-    })
-    expect(
-      screen.getByTestId('home-inprogress-title').querySelector('svg[data-testid="brand-mark"]'),
-    ).toBeNull()
-    quiet.unmount()
-
-    // ② 有一条在跑
-    inProgress.push({
-      kind: 'todo',
-      id: 't1',
-      title: '退款 #1024',
-      owner: 'p_li',
-      owner_label: '王岚',
-      collaborators: [],
-      status: 'doing',
-      started_at: '2026-09-18T01:00:00.000Z',
-      last_activity: '2026-09-18T01:10:00.000Z',
-      cards: 1,
-    })
-    renderWithProviders(<HomePage />)
-    await screen.findByTestId('home-inprogress')
-    await waitFor(() => {
-      expect(
-        screen
-          .getByTestId('home-inprogress-title')
-          .querySelector('svg[data-testid="brand-mark"]')
-          ?.getAttribute('data-motion'),
-      ).toBe('breathe')
-    })
-    inProgress.length = 0
-  })
-
-  it('持有人头像按展示名画；查不到名字的那个人不画（不在卡上印半个 id）', async () => {
-    renderWithProviders(<HomePage />)
-    const cards = await screen.findByTestId('position-cards')
-    await waitFor(() => {
-      // 卡片上那个提案人头像走的是同一个共用件，所以这里只在岗位卡这一段里数
-      expect(within(cards).getAllByTestId('ws-avatar')).toHaveLength(1)
-    })
-    const avatar = within(cards).getByTestId('ws-avatar')
-    expect(avatar.getAttribute('title')).toBe('王岚')
-    // WP100：圆里只放一个字（名字的末字），全名在 title 上
-    expect(avatar.textContent).toBe('岚')
-    expect(cards.textContent).not.toContain('p_hidden')
   })
 })
 
 describe('WP271 三种模式：首页', () => {
-  const TODAY = { timeline: [], due: { todos: [], cards_waiting: 0 } }
   const POOL_ITEM = {
     todo_id: 'td_1',
     title: '会议里冒出来的：给供应商回电话',
@@ -354,13 +272,12 @@ describe('WP271 三种模式：首页', () => {
   beforeEach(() => {
     modeState.orgs = []
     modeState.pool = []
-    getHome.mockImplementation(async () => ({ ...home, today: TODAY }))
   })
 
   it('① 个人：「正在进行」收起，「待认领」空着就收起；一个公司概念词都不出', async () => {
     modeState.orgs = [SOLO_ORG]
     renderWithProviders(<HomePage />)
-    await screen.findByTestId('today')
+    await screen.findAllByTestId('home-key-card')
     await waitFor(() => {
       expect(screen.queryByTestId('home-inprogress')).toBeNull()
     })
@@ -368,53 +285,12 @@ describe('WP271 三种模式：首页', () => {
     expect(companyWordsIn(document.body)).toEqual([])
   })
 
-  it('① 个人：待认领里真有活就照样出（不能让会议里冒出来的活悄悄看不见）', async () => {
+  it('① 个人：待认领里真有活就照样出', async () => {
     modeState.orgs = [SOLO_ORG]
     modeState.pool = [POOL_ITEM]
     renderWithProviders(<HomePage />)
     expect(await screen.findByTestId('home-claim-pool')).toBeTruthy()
     expect(screen.queryByTestId('home-inprogress')).toBeNull()
-  })
-
-  it('WP276 ② 同事互联：整页不像公司（决策 256）；WP429 交给同事的结果进铃铛、首页不再单出一行', async () => {
-    modeState.orgs = [{ ...SOLO_ORG, members: 2, solo: false, mode: 'peers' }]
-    peersState.from_me = [
-      {
-        kind: 'matter',
-        id: 'mat_1',
-        title: 'Acme 的报价',
-        from_label: '王岚',
-        to_label: '李默',
-        status: 'open',
-        handoff: {
-          state: 'accepted',
-          from: 'per_wang',
-          to: 'per_li',
-          at: '2026-10-08T09:00:00.000Z',
-          expires_at: '2026-10-11T09:00:00.000Z',
-        },
-      },
-    ]
-    try {
-      renderWithProviders(<HomePage />)
-      expect(await screen.findByTestId('home-inprogress')).toBeTruthy()
-      expect(screen.queryByTestId('handoff-notices')).toBeNull()
-      const text = document.body.textContent ?? ''
-      for (const word of [
-        '主管',
-        '老板',
-        '上级',
-        '审批',
-        '部门',
-        '范围',
-        '并进来',
-        '加入一家公司',
-        '成员额度',
-      ])
-        expect(text, word).not.toContain(word)
-    } finally {
-      peersState.from_me = []
-    }
   })
 
   it('③ 公司集体：「正在进行」「待认领」照旧', async () => {

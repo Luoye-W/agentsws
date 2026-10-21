@@ -36,6 +36,7 @@ import {
   MessagesSquare,
   Package,
   Plug,
+  Plus,
   ScrollText,
   SlidersHorizontal,
   Tags,
@@ -62,6 +63,8 @@ import {
 } from '@/components/rail/registry'
 import { useSchedulesBadge } from '@/components/rail/schedule-count'
 import { REPORT_ADDRESS_PREFIX } from '@/components/reports/report-data'
+import { openRightPane } from '@/components/reports/right-pane'
+import { reportScopeOf } from '@/components/reports/use-report-list'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
 import { useWorkshopServicesStatus } from '@/components/workshop-services/status'
@@ -227,6 +230,19 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     order: at('reports'),
     panel: 'reports',
     useStatus: useReportsStatus,
+    // WP438：卡头「+」= 跟 AI 说想看什么，做一份新的（第三栏开「做一份报表」）
+    action: {
+      icon: Plus,
+      label: 'reports.compose.short',
+      onClick: ({ scope }) => {
+        const where = reportScopeOf(scope)
+        openRightPane({
+          kind: 'report-compose',
+          ...(where === undefined ? {} : { position: where.position }),
+          ...(where?.duty === undefined ? {} : { duty: where.duty }),
+        })
+      },
+    },
   })
   registerRailCardBody('reports', ReportsCardBody)
   registerRailCard({

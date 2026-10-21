@@ -46,6 +46,7 @@ import { PR_WATCH_EN, PR_WATCH_ZH } from './i18n-pr-watch'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
+import { REPORTS_EN, REPORTS_ZH } from './i18n-reports'
 import { SERVICES_EN, SERVICES_ZH } from './i18n-services'
 import { SETTINGS_EN, SETTINGS_ZH } from './i18n-settings'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
@@ -8975,6 +8976,7 @@ const TABLES: Record<Lang, Table> = {
     ...NOTIFY_ZH,
     // WP431：顶栏标题下拉、左上角、搜索弹窗
     ...TOPBAR_ZH,
+    ...REPORTS_ZH,
   },
   en: {
     ...en,
@@ -9027,6 +9029,7 @@ const TABLES: Record<Lang, Table> = {
     ...CONTENT_DIGEST_EN,
     ...NOTIFY_EN,
     ...TOPBAR_EN,
+    ...REPORTS_EN,
   },
 }
 

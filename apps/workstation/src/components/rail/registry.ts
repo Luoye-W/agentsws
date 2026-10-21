@@ -149,6 +149,16 @@ export interface RailCardDefinition {
    * 右上角图标上的点也读它——卡上亮什么，图标上就亮什么。图标调用时 `detail` 为假：只要点，摘要要的重请求别发。
    */
   useStatus?(props: RailPanelBodyProps, detail: boolean): CardStatus | undefined
+  /**
+   * WP438：卡头右边的一个动作钮（报表卡的「+」：跟 AI 说想看什么，做一份新的）。
+   * 不给 = 没有。点它不展开 / 收起卡片。
+   */
+  action?: {
+    icon: LucideIcon
+    /** i18n 键（悬停与读屏的那一句）。 */
+    label: string
+    onClick(props: RailPanelBodyProps): void
+  }
 }
 
 /** 卡标题行的状态点：红 = 坏了要修（连接过期），黄 = 等你看。 */

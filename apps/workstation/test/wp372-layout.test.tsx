@@ -154,6 +154,51 @@ const REPORT_CARD = {
   },
 }
 
+/** WP438：看板「报表」卡的一行（AI 做的那份，固定在这条职责上）。 */
+const REDDIT_REPORT = {
+  id: 'rpt_1',
+  title: 'Reddit 运营报表',
+  position: 'reddit-ops',
+  origin: 'ai',
+  refresh: 'weekly',
+  headline_label: '近 30 天品牌被提到',
+  headline: {
+    key: 'mentions',
+    label: '品牌被提到',
+    format: 'count',
+    source: 'pr',
+    status: 'ok',
+    value: 138,
+    previous: 105,
+    delta: 31.4,
+    delta_unit: 'pct',
+  },
+  spark: [1, 3, 2, 5],
+}
+
+vi.mock('@/lib/reports-api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/reports-api')>('@/lib/reports-api')
+  return {
+    ...actual,
+    listReports: async (input: { position: string; duty?: string }) => ({
+      reports: input.duty === 'social.reddit' ? [REDDIT_REPORT] : [],
+      limit: 5,
+      examples: [],
+    }),
+    getReport: async () => ({
+      id: 'rpt_1',
+      title: 'Reddit 运营报表',
+      position: 'reddit-ops',
+      origin: 'ai',
+      refresh: 'weekly',
+      range: '30d',
+      period: { from: '2026-09-21', to: '2026-10-20', compare_from: '', compare_to: '' },
+      computed_at: '2026-10-21T01:00:00.000Z',
+      blocks: [],
+    }),
+  }
+})
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
@@ -323,7 +368,7 @@ describe('右上角一排、「⋮」与面板开关（决策 1001 / 1020 → 10
 })
 
 describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
-  it('职责页默认开成卡片堆：默认展开对话与计划、其余收起带摘要；报表摘要是名字与日期，点一份在面板里看', async () => {
+  it('职责页默认开成卡片堆：默认展开对话与计划、其余收起带摘要；报表一行一份（WP438），AI 写的周报在「产出」里', async () => {
     renderShell()
     const stack = await screen.findByTestId('rail-cards')
     expect(stack.getAttribute('data-order')).toBe(
@@ -340,15 +385,23 @@ describe('右侧面板六张卡（决策 1004 / 1019 / 1035）', () => {
     expect((await screen.findByTestId('rail-card-summary-connections')).textContent).toBe(
       '1 个要处理',
     )
-    expect((await screen.findByTestId('rail-card-summary-reports')).textContent).toBe(
-      '周报 · 10-12',
-    )
-    // 报表：展开、点一份在面板里看
+    // WP438：报表卡收着时写「几份」；卡头有「+」
+    expect((await screen.findByTestId('rail-card-summary-reports')).textContent).toBe('1 份')
+    expect(screen.getByTestId('rail-card-action-reports')).toBeTruthy()
+    // 展开：一行 = 名字 + AI 标 + 头条数 + 涨跌；点了在第三栏拉出整页
     fireEvent.click(screen.getByTestId('rail-card-toggle-reports'))
     const row = await screen.findByTestId('report-row', {}, { timeout: 5000 })
-    expect(row.textContent).toContain('周报')
-    expect(row.textContent).toContain('10-12')
-    fireEvent.click(row)
+    expect(row.textContent).toContain('Reddit 运营报表')
+    expect(row.textContent).toContain('138')
+    expect(row.textContent).toContain('↑31.4%')
+    expect(within(row).getByTestId('report-ai-tag')).toBeTruthy()
+    fireEvent.click(within(row).getAllByRole('button')[0] as HTMLElement)
+    expect(await screen.findByTestId('report-page', {}, { timeout: 5000 })).toBeTruthy()
+    // AI 写的周报正文不算报表，归「产出」
+    fireEvent.click(screen.getByTestId('rail-card-toggle-outputs'))
+    const doc = await screen.findByTestId('output-doc-row', {}, { timeout: 5000 })
+    expect(doc.textContent).toContain('周报')
+    fireEvent.click(doc)
     const view = await screen.findByTestId('report-view')
     expect(view.textContent).toContain('新帖 12 条')
   })
