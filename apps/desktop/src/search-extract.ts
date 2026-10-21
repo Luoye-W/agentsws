@@ -24,6 +24,33 @@ export interface PageSignals {
   /** 页面上有没有人机验证挂件（reCAPTCHA / hCaptcha / Turnstile / Google 的验证表单）。 */
   captcha: boolean
   passwordInputs: number
+  /**
+   * WP454：是不是 Google 的「过渡页」（没 cookie 的新浏览器第一次搜会先拿到它：页面脚本跑完再带 `sei=`
+   * 请求一次才是真结果页）。HTML 里有 `enablejs` 那个重试地址就算。只有 {@link extractSerp} 填。
+   */
+  interstitial?: boolean
+}
+
+/**
+ * WP454：搜索结果页现在是什么状态（`dom-ready` 之后轮询它，等到真结果页再读）。
+ * - `results`：结果容器里有结果；`no_results`：页面加载完了、明说 / 实际没结果；
+ * - `blocked`：`/sorry`、验证码；`consent`：Google 的 cookie 同意页；
+ * - `interstitial`：Google 过渡页（还会自己跳）；`pending`：还没出来。
+ */
+export type SerpState =
+  | 'results'
+  | 'no_results'
+  | 'blocked'
+  | 'consent'
+  | 'interstitial'
+  | 'pending'
+
+export interface SerpProbe {
+  state: SerpState
+  /** 核实用（WP454 §6）：视图不挂到窗口上时页面自己看到的可见性与视口大小。 */
+  visibility: string
+  width: number
+  height: number
 }
 
 export interface SerpExtract {
@@ -134,9 +161,74 @@ export function extractSerp(args: { engine: 'google' | 'bing'; limit: number }):
           '#captcha-form, .g-recaptcha, .h-captcha, .cf-turnstile, iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"]',
         ) !== null,
       passwordInputs: document.querySelectorAll('input[type="password"]').length,
+      interstitial:
+        (document.documentElement?.innerHTML ?? '').includes('enablejs') &&
+        items.length === 0 &&
+        document.querySelector('#search, #rso') === null,
     },
     items,
   }
+}
+
+/**
+ * WP454：搜索结果页轮询用的探针（只读，同 {@link extractSerp} 送进页面执行，里面不引用模块里的东西）。
+ * 顺序：同意页 → 被拦 → 结果 → 过渡页 → 无结果 → 还没出来。
+ */
+export function serpState(args: { engine: 'google' | 'bing' }): SerpProbe {
+  const done = (state: SerpState): SerpProbe => ({
+    state,
+    visibility: String(document.visibilityState ?? ''),
+    width: Number(globalThis.innerWidth ?? 0),
+    height: Number(globalThis.innerHeight ?? 0),
+  })
+  const host = location.hostname.toLowerCase()
+  const path = location.pathname
+  const text = (
+    (document.body as HTMLElement | null)?.innerText ??
+    document.body?.textContent ??
+    ''
+  )
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+  if (
+    args.engine === 'google' &&
+    (/^consent\.google\./.test(host) ||
+      document.querySelector('form[action*="consent.google."]') !== null)
+  )
+    return done('consent')
+  if (
+    path.startsWith('/sorry') ||
+    document.querySelector(
+      '#captcha-form, .g-recaptcha, .h-captcha, .cf-turnstile, iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"]',
+    ) !== null ||
+    text.includes('unusual traffic')
+  )
+    return done('blocked')
+  if (args.engine === 'google') {
+    if (document.querySelector('#search a h3, #rso a h3') !== null) return done('results')
+    const html = document.documentElement?.innerHTML ?? ''
+    if (
+      html.includes('enablejs') ||
+      text.includes('not redirected within a few seconds') ||
+      text.includes('having trouble accessing google search')
+    )
+      return done('interstitial')
+    if (
+      document.querySelector('#topstuff .card-section, #botstuff') !== null ||
+      ((document.querySelector('#search, #rso, #res') !== null ||
+        text.includes('did not match any documents')) &&
+        document.readyState === 'complete')
+    )
+      return done('no_results')
+    return done('pending')
+  }
+  if (document.querySelector('#b_results li.b_algo') !== null) return done('results')
+  if (
+    document.querySelector('#b_results .b_no') !== null ||
+    (document.querySelector('#b_results') !== null && document.readyState === 'complete')
+  )
+    return done('no_results')
+  return done('pending')
 }
 
 export function extractReadable(args: { maxChars: number }): ReadableExtract {

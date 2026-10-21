@@ -17,6 +17,7 @@ import {
   type AmazonDeliveryResult,
   cleanUserAgent,
   dataUserAgent,
+  isGoogleCookieDomain,
   type OpenRequest,
   type OpenResult,
   type SearchBrowserDriver,
@@ -30,12 +31,18 @@ import {
   extractReadable,
   extractSerp,
   pageScript,
+  type SerpProbe,
+  serpState,
 } from './search-extract.js'
+import { type LoadableContents, loadPage } from './search-load.js'
 
-/** 交给人的那一页（第三栏亮出来的）。 */
+/** WP454：搜索结果页 `dom-ready` 之后最多再等多久（等过渡页自己跳到真结果页）。 */
+export const SERP_READY_WAIT_MS = 8_000
+
+/** 交给人的那一页（第三栏亮出来的）。WP454：`consent` = Google 的 cookie 同意页。 */
 export interface SearchHandover {
   workspace_id: string
-  reason: 'captcha' | 'login'
+  reason: 'captcha' | 'login' | 'consent'
   message: string
   url: string
 }
@@ -124,72 +131,60 @@ export function createElectronSearchBrowser(deps: {
     return slot
   }
 
-  /** 打开一页：等 `dom-ready`（超时 = 打不开）、主文档状态码从 `did-navigate` 来。 */
-  async function load(
+  /** WP454：核实一次就够（视图不挂窗口时页面看到的可见性 / 视口），记进日志。 */
+  let probeLogged = false
+
+  /** 打开一页（WP454 起拎到 `search-load.ts`；搜索结果页会等到真结果页再交回）。 */
+  const load = (
     wc: Electron.WebContents,
     url: string,
     timeoutMs: number,
     userAgent?: string,
-  ): Promise<
-    { ok: true; status: number } | { ok: false; reason: 'timeout' | 'failed'; message: string }
-  > {
-    let status = 0
-    const onNavigate = (_e: unknown, _url: string, code: number): void => {
-      status = code
-    }
-    wc.on('did-navigate', onNavigate)
-    try {
-      return await new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          cleanup()
-          wc.stop()
-          resolve({
-            ok: false,
-            reason: 'timeout',
-            message: `${Math.round(timeoutMs / 1000)} 秒内没打开`,
-          })
-        }, timeoutMs)
-        const onReady = (): void => {
-          cleanup()
-          resolve({ ok: true, status })
-        }
-        const onFail = (
-          _e: unknown,
-          code: number,
-          desc: string,
-          _url: string,
-          isMainFrame: boolean,
-        ): void => {
-          // -3 = 被新的导航顶掉（跳转），不算失败
-          if (!isMainFrame || code === -3) return
-          cleanup()
-          resolve({ ok: false, reason: 'failed', message: `${desc}（${code}）` })
-        }
-        const cleanup = (): void => {
-          clearTimeout(timer)
-          wc.removeListener('dom-ready', onReady)
-          wc.removeListener('did-fail-load', onFail)
-        }
-        wc.once('dom-ready', onReady)
-        wc.on('did-fail-load', onFail)
-        wc.loadURL(url, userAgent === undefined ? undefined : { userAgent }).catch(() => undefined)
-      })
-    } finally {
-      wc.removeListener('did-navigate', onNavigate)
-    }
-  }
+  ): ReturnType<typeof loadPage> =>
+    loadPage(wc as unknown as LoadableContents, url, timeoutMs, {
+      ...(userAgent === undefined ? {} : { userAgent }),
+    })
 
   async function openOnce(req: OpenRequest): Promise<OpenResult> {
     const wc = slotOf(req.workspace_id).view.webContents
     // WP402（不伪装 UA）：读数据地址原文那一次导航自报 Agent 身份
-    const got = await load(
-      wc,
-      req.url,
-      req.timeout_ms,
-      req.kind === 'data' ? dataUserAgent(wc.session.getUserAgent()) : undefined,
-    )
+    const serp = req.kind === 'google' || req.kind === 'bing' ? req.kind : undefined
+    const got =
+      serp === undefined
+        ? await load(
+            wc,
+            req.url,
+            req.timeout_ms,
+            req.kind === 'data' ? dataUserAgent(wc.session.getUserAgent()) : undefined,
+          )
+        : // WP454：搜索结果页等到真结果页（过渡页的二次导航接着等），等到了就读、不再另等
+          await loadPage(wc as unknown as LoadableContents, req.url, req.timeout_ms, {
+            ready: {
+              max_wait_ms: SERP_READY_WAIT_MS,
+              interval_ms: 250,
+              probe: () =>
+                wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [
+                  { code: pageScript(serpState, { engine: serp }) },
+                ]) as Promise<SerpProbe>,
+            },
+          })
     if (!got.ok) return got
-    if (req.settle_ms > 0) await new Promise((r) => setTimeout(r, req.settle_ms))
+    if (serp !== undefined) {
+      if (!probeLogged && got.probe !== undefined) {
+        probeLogged = true
+        deps.log('搜索浏览器：页面看到的可见性与视口（WP454 核实）', {
+          visibility: got.probe.visibility,
+          width: got.probe.width,
+          height: got.probe.height,
+        })
+      }
+      deps.log('搜索浏览器：结果页状态', {
+        engine: serp,
+        state: got.state,
+        waited_ms: got.waited_ms,
+        renavigations: got.renavigations,
+      })
+    } else if (req.settle_ms > 0) await new Promise((r) => setTimeout(r, req.settle_ms))
     const script =
       req.kind === 'page'
         ? pageScript(extractReadable, { maxChars: req.max_chars })
@@ -245,7 +240,9 @@ export function createElectronSearchBrowser(deps: {
         return
       }
       const onSorry = u.pathname.startsWith('/sorry') || u.pathname.includes('captcha')
-      if (!onSorry && u.pathname === '/search') {
+      // WP454：cookie 同意页在 consent.google.*；人选完会跳回原来的 /search
+      const onConsent = u.hostname.startsWith('consent.')
+      if (!onSorry && !onConsent && u.pathname === '/search') {
         deps.log('搜索验证：人已经过了验证页', { workspace_id })
         closeHandover(true)
       }
@@ -310,6 +307,14 @@ export function createElectronSearchBrowser(deps: {
         url: req.url,
       })
       return { shown: true }
+    },
+    async googleCookies(workspace_id) {
+      try {
+        const all = await sessionOf(workspace_id).cookies.get({})
+        return all.some((c) => isGoogleCookieDomain(c.domain ?? ''))
+      } catch {
+        return false
+      }
     },
     status(workspace_id): SearchBrowserStatus {
       const at = verified.get(workspace_id)

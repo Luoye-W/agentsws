@@ -73,7 +73,7 @@ describe('规则', () => {
 
   it('reveal 请求只认这几种形状', () => {
     expect(validateReveal({ workspace_id: 'ws_1', url: 'https://a.com', reason: 'x' })).toBe(
-      'reason 只认 captcha / login',
+      'reason 只认 captcha / login / consent',
     )
     expect(validateReveal({ workspace_id: 'ws_1', url: 'ftp://a', reason: 'captcha' })).toBe(
       '只开 http / https 网址',
