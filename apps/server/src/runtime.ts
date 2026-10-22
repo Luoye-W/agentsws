@@ -160,6 +160,7 @@ import {
   WATCH_TOOL_NAMES,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
+  WORKSHOP_HELP_TOOL_NAMES,
   WORKSHOP_SERVICE_TOOL_NAMES,
 } from '@agentsws/stand-ins'
 import { cardRefOf, type Work } from '@agentsws/work'
@@ -251,6 +252,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...PR_MONITOR_TOOL_NAMES,
     // WP390：工坊服务——查目录只读本机缓存；出卡不下单（下单永远人点）
     ...WORKSHOP_SERVICE_TOOL_NAMES,
+    // 教程上官网（私有 docs/113）：查工坊帮助——只读本机帮助库（问题不发出去）
+    ...WORKSHOP_HELP_TOOL_NAMES,
     // WP394：亚马逊店铺运营「竞品动向」现在读一次——只读 Amazon 前台公开页面
     ...AMAZON_COMPETITOR_TOOL_NAMES,
     // WP419：社媒发帖 / Reddit 起草——查只读本机；起草只出卡（发不发永远人点）
@@ -613,6 +616,11 @@ export interface RuntimeOptions {
    * **推荐卡**：这一轮收尾时问 `offer` 挂不挂、挂哪一项（分寸在服务里判：后台不推、同一对话一项只推一次、
    * 说过「不用」30 天不推）。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
+  /**
+   * 教程上官网（私有 docs/113 §5）：「查工坊帮助」（`search_workshop_help`，所有职责都有）——
+   * 只在本机帮助库里搜教程、工坊笔记、更新日志。不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   */
+  workshopHelp?: ToolExecutor
   workshopServices?: {
     execute: ToolExecutor
     offer?(input: {
@@ -1472,6 +1480,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const competitorStore = options.competitorStoreTools
     const prMonitor = options.prMonitorTools
     const workshopTools = options.workshopServices?.execute
+    const workshopHelp = options.workshopHelp
     const amazonCompetitor = options.amazonCompetitorTools
     const deskTools = options.deskTools
     /*
@@ -1611,6 +1620,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (workshopTools !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bareOf(call.name))) {
         return workshopTools(call)
       }
+      // 教程上官网（私有 docs/113）：查工坊帮助（名字与别处不重名）
+      if (workshopHelp !== undefined && WORKSHOP_HELP_TOOL_NAMES.includes(bareOf(call.name))) {
+        return workshopHelp(call)
+      }
       // WP393：店铺管理「竞品动向」（名字与别处不重名；职责在执行器里再判一次）
       if (
         competitorStore !== undefined &&
@@ -1686,6 +1699,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       return true
     if (options.workshopServices !== undefined && WORKSHOP_SERVICE_TOOL_NAMES.includes(bare))
       return true
+    if (options.workshopHelp !== undefined && WORKSHOP_HELP_TOOL_NAMES.includes(bare)) return true
     if (options.competitorStoreTools !== undefined && COMPETITOR_STORE_TOOL_NAMES.includes(bare))
       return true
     if (options.amazonCompetitorTools !== undefined && AMAZON_COMPETITOR_TOOL_NAMES.includes(bare))
@@ -2235,6 +2249,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           : []),
         // WP390：工坊服务（所有职责）
         ...(options.workshopServices === undefined ? [] : WORKSHOP_SERVICE_TOOL_NAMES),
+        // 教程上官网（私有 docs/113）：查工坊帮助（所有职责）
+        ...(options.workshopHelp === undefined ? [] : WORKSHOP_HELP_TOOL_NAMES),
         // WP393：店铺管理「竞品动向」（探平台 / 现在读一次；只给店铺管理）
         ...(options.competitorStoreTools !== undefined &&
         COMPETITOR_STORE_ROLES.includes(config.role_id)

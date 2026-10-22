@@ -55,6 +55,9 @@ import {
   MESSAGE_RULE_TOOL_DEFS,
   MESSAGE_RULE_TOOL_NAMES,
   PROPOSE_MESSAGE_RULE_TOOL,
+  SEARCH_WORKSHOP_HELP_TOOL,
+  WORKSHOP_HELP_TOOL_DEFS,
+  type WorkshopHelpResult,
 } from '@agentsws/stand-ins'
 import {
   createFanout,
@@ -103,6 +106,12 @@ export interface AssistantDeps {
   messageRules?: {
     propose(actor: FreeChatActor, input: MessageRuleProposeInput): Promise<MessageRuleProposal>
     list(actor: FreeChatActor): Promise<MessageRuleList>
+  }
+  /**
+   * 教程上官网（私有 docs/113 §5）：「查工坊帮助」。给了才挂这个工具；只在本机帮助库里搜，问题不发出去。
+   */
+  help?: {
+    search(query: string, kind?: 'guide' | 'note' | 'changelog'): WorkshopHelpResult
   }
 }
 
@@ -455,13 +464,15 @@ export function createAssistant(deps: AssistantDeps): Assistant {
   }
 
   return {
-    tools: () =>
-      deps.messageRules === undefined
-        ? ASSISTANT_TOOL_DEFS
-        : [...ASSISTANT_TOOL_DEFS, ...MESSAGE_RULE_TOOL_DEFS],
+    tools: () => [
+      ...ASSISTANT_TOOL_DEFS,
+      ...(deps.messageRules === undefined ? [] : MESSAGE_RULE_TOOL_DEFS),
+      ...(deps.help === undefined ? [] : WORKSHOP_HELP_TOOL_DEFS),
+    ],
     handles: (name) =>
       isAssistantTool(name) ||
-      (deps.messageRules !== undefined && MESSAGE_RULE_TOOL_NAMES.includes(name)),
+      (deps.messageRules !== undefined && MESSAGE_RULE_TOOL_NAMES.includes(name)) ||
+      (deps.help !== undefined && name === SEARCH_WORKSHOP_HELP_TOOL),
     fanout,
 
     async promptLines(actor) {
@@ -499,6 +510,18 @@ export function createAssistant(deps: AssistantDeps): Assistant {
         case PROPOSE_MESSAGE_RULE_TOOL:
         case LIST_MESSAGE_RULES_TOOL:
           return messageRuleCall(actor, call.name, input, ctx.user_text)
+        case SEARCH_WORKSHOP_HELP_TOOL: {
+          if (deps.help === undefined) return { content: '这个工具不存在。' }
+          const query = String(input.query ?? '')
+            .trim()
+            .slice(0, 200)
+          if (query === '') return { content: json({ ok: false, message: 'query 不能为空' }) }
+          const kind =
+            input.kind === 'guide' || input.kind === 'note' || input.kind === 'changelog'
+              ? input.kind
+              : undefined
+          return { content: json(deps.help.search(query, kind)) }
+        }
         default:
           return { content: '这个工具不存在。' }
       }

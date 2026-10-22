@@ -198,6 +198,7 @@ import {
   WebUsageCounter,
   webResearchPlan,
 } from './web.js'
+import { WORKSHOP_HELP_TOOL_DEF_BY_NAME } from './workshop-help.js'
 import {
   DRAFT_SERVICE_ORDER_TOOL,
   FIND_SERVICE_TOOL,
@@ -446,6 +447,8 @@ function toolDefs(req: RunRequest): ToolDef[] {
       PR_MONITOR_TOOL_DEF_BY_NAME.get(name) ??
       // WP390：工坊服务的两个工具（服务端接了才有）
       WORKSHOP_SERVICE_TOOL_DEF_BY_NAME.get(name) ??
+      // 教程上官网（私有 docs/113）：查工坊帮助（所有职责；服务端接了才有）
+      WORKSHOP_HELP_TOOL_DEF_BY_NAME.get(name) ??
       // WP417：客服查询类工具（等着回的来信 / 聊天会话 / 社群帖子）
       SUPPORT_TOOL_DEF_BY_NAME.get(name) ??
       // WP419：社媒发帖 / Reddit 起草出卡（服务端接了才有）

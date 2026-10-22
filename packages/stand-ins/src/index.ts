@@ -100,6 +100,7 @@ export * from './runtime/theme.js'
 export * from './runtime/tool-call-text.js'
 export * from './runtime/tool-words.js'
 export * from './runtime/web.js'
+export * from './runtime/workshop-help.js'
 export * from './runtime/workshop-service.js'
 export * from './runtime/wrap-up.js'
 

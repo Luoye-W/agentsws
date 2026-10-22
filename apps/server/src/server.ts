@@ -990,6 +990,7 @@ import {
   createWorkArchive,
   type WorkArchiveAssembly,
 } from './work-archive.js'
+import { createWorkshopHelpTool, searchWorkshopHelp } from './workshop-help-tool.js'
 import {
   createWorkshopServiceTools,
   isBackgroundRun,
@@ -7052,6 +7053,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 只在人在场的那一轮（这一轮之前最后一句是人说的；定时 / 巡查 / 接着做都不推）、同一对话一项只推一次、
              * 说过「不用」30 天不推。人回「不用」→ 上一轮挂过的那一项记下（30 天不推，进记忆）。
              */
+            // 教程上官网（私有 docs/113 §5）：查工坊帮助（所有职责；只在本机帮助库里搜）
+            workshopHelp: createWorkshopHelpTool(() => helpLibrary),
             workshopServices: {
               execute: createWorkshopServiceTools({
                 services: () => workshopServicesOf(ws),
@@ -14115,6 +14118,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })) as ApprovalItem[]
     const assistant = createAssistant({
       clock,
+      // 教程上官网（私有 docs/113 §5）：查工坊帮助（只在本机帮助库里搜）
+      help: { search: (query, kind) => searchWorkshopHelp(helpLibrary, query, kind) },
       positions: async (actor) => (await positionPortFor(ws)).mine(positionActor(actor)),
       work: async (actor, position_id) => {
         const port = await positionPortFor(ws)
