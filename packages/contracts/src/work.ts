@@ -558,7 +558,17 @@ export interface Todo {
   /** 委托给 Agent 后回来的卡（`ApprovalItem.id`） */
   cards: string[]
   runs: RunId[]
-  origin?: { meeting_id?: string; card_id?: string; review_id?: string; alert_id?: string }
+  origin?: {
+    meeting_id?: string
+    card_id?: string
+    review_id?: string
+    alert_id?: string
+    /**
+     * WP469（决策 1521）：从收件箱「记成待办」来的——那一行的 id（`card:<审批项>` / `mail:<会话>`）。
+     * 收件箱按它把那一行收成「已记成待办」；清单上写「来自收件箱」，有 `due` 时读作「周五前」。
+     */
+    inbox_item?: string
+  }
   created_at: Iso8601
   updated_at: Iso8601
   closed_at?: Iso8601
@@ -645,11 +655,48 @@ export interface CalendarRange {
   /** 关掉「卡片到期」叠层 */
   include_card_due?: boolean
   /**
+   * WP469（决策 1524）：做完的待办也上日历（划掉、变淡）。不传 = 不要（老调用方行为不变）。
+   * 做完的那一条 `status: 'done'`、`drag: 'readonly'`。
+   */
+  include_done?: boolean
+  /**
    * 只要这几个图层（WP74）。**不传 = 全部**——老调用方一个字不用改。
    *
    * 传空数组与不传不是一回事：空数组 = 一个图层都不开 = 一条都不回。
    */
   sources?: readonly CalendarSource[]
+}
+
+// ── 帮我排进空档（WP469，决策 1522）────────────────────────────────────
+
+/**
+ * 「帮我排进空档」：选几件没日子的待办，按估的时长在这一段的空档里各提一个位置。
+ *
+ * **只是候选**：这一步什么都不写；人点「采用」才写 `Todo.scheduled`（走改待办那条路）。
+ * 空档按日历上已有的事（会议、排了钟点的待办……）和工作时间算，不碰别人的日历。
+ */
+export interface TodoSlotRequest {
+  todo_ids: TodoId[]
+  /** 在哪一段里找（[from, to)；通常是这一周，从现在起） */
+  from: Iso8601
+  to: Iso8601
+  /** 看的人那台电脑的时区偏移（分钟，东八区 = 480）：工作时间按它切 */
+  tz_offset_minutes?: number
+}
+
+export interface TodoSlotProposal {
+  todo_id: TodoId
+  title: string
+  /** 估的时长（分钟） */
+  minutes: number
+  /** 头一个候选 + 「换一个」时依次换到的几个（互不重叠，也不和别的待办的头一个候选重叠） */
+  options: { start: Iso8601; end: Iso8601 }[]
+}
+
+export interface TodoSlotResult {
+  proposals: TodoSlotProposal[]
+  /** 这一段里实在找不到空档的那几件 */
+  unplaced: TodoId[]
 }
 
 // ── 每日计划（37 §2.4 早上）────────────────────────────────────────────
