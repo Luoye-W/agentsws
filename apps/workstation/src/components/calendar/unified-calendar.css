@@ -64,8 +64,12 @@
   --sx-color-error-container: var(--ws-bad-bg);
   --sx-color-on-error-container: var(--ws-ink);
 
-  --sx-color-neutral: var(--ws-surface);
-  --sx-color-neutral-variant: var(--ws-surface);
+  /*
+   * WP456-T5：库只拿 neutral 当**字色**用（钟点、星期名、月格的星期、「+N」……）。原来接到 `--ws-surface`
+   * （几乎是白的），月格表头的「周一」浅色下看不见就是它。
+   */
+  --sx-color-neutral: var(--ws-muted-fg);
+  --sx-color-neutral-variant: var(--ws-faint);
 
   --sx-internal-color-text: var(--ws-ink);
   font-family: inherit;
@@ -86,106 +90,282 @@
 }
 
 /*
- * 只读的那几层画成虚线框：看得出来"这一条不是你能挪的"。
+ * ── WP456-T5 · 视觉规范 v1（WP456 §2 / §3.6，示意稿 `5-calendar`） ─────────────────
  *
- * Schedule-X 的 DOM 上只有 `data-event-id`，没有图层名，所以认的是 id 前缀
- * （`@agentsws/work` 那一份生成规则：`cal_<来源>_<id>`）。
+ * 只把库的长相接到规范上：时间轴 52 宽、小时格 52 高、图层色细条、今天一整列淡品牌色、
+ * 当前时间一条红线、全天区左边写「全天」。颜色全走 token，深色只改两个量。
  */
-.sx-host .sx__event[data-event-id^="cal_deliverable_"],
-.sx-host .sx__event[data-event-id^="cal_standby_"],
-.sx-host .sx__event[data-event-id^="cal_card_"],
-.sx-host .sx__event[data-event-id^="cal_task_"] {
-  border-style: dashed;
-  opacity: 0.85;
+.sx-host {
+  /* 今天那一列的底（组件里按日期点名那一列） */
+  --ws-cal-today-col: color-mix(in srgb, var(--ws-tint) 35%, transparent);
+  --sx-calendar-week-grid-padding-left: 52px;
 }
 
-/*
- * ── WP96 · 画布《日历 · 新风格》 ──────────────────────────────────────
- */
-
-/* 事件：圆角 10、左边一条色条（图层色），底色是同色的淡版 */
-.sx-host .sx__event {
-  border-radius: 10px;
-  border-left: 3px solid currentColor;
-  box-shadow: 0 1px 2px rgba(20, 40, 30, 0.05);
+/* ── 表头：星期 12 灰字，日期 Outfit 20；今天是品牌色圈，星期名品牌深色 ── */
+.sx-host .sx__week-grid__date {
+  padding: 10px 0 8px;
+  gap: 2px;
 }
-
-.sx-host .sx__time-grid-event,
-.sx-host .sx__date-grid-event {
+.sx-host .sx__week-grid__day-name {
   font-size: 12px;
-  line-height: 15px;
+  font-weight: 400;
+  color: var(--ws-muted-fg);
 }
-
-/*
- * WP419（自查 U5）：非今天的表头（星期名、日期）用正文次级色——原来落在库的中性色上，
- * 浅色下几乎看不见（只有今天是正常颜色）。和左侧小月历同一级。
- */
-.sx-host .sx__week-grid__date,
-.sx-host .sx__week-grid__day-name,
 .sx-host .sx__week-grid__date-number {
-  color: var(--ws-body);
+  font-family: var(--ws-display);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  height: 28px;
+  width: auto;
+  min-width: 30px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  color: var(--ws-ink);
 }
-
-/* 今天那一列：淡绿头 + 下面一条品牌色实线（画布上一眼看出"今天在这儿"） */
-.sx-host .sx__week-grid__date--is-today,
-.sx-host .sx__month-grid-day--today .sx__month-grid-day__header-day-name {
-  background: var(--ws-tint);
-  border-bottom: 2px solid var(--ws-brand);
-  color: var(--ws-brand-ink);
-}
-
-/* 今天那一列里的星期名跟着今天的颜色走（不被上面那条正文次级色盖掉） */
 .sx-host .sx__week-grid__date--is-today .sx__week-grid__day-name {
-  color: inherit;
+  color: var(--ws-brand-ink);
+  font-weight: 600;
 }
-
-/* 今天那颗圆：品牌色底、品牌色上的字（深浅色都是，WP457） */
 .sx-host .sx__week-grid__date--is-today .sx__week-grid__date-number {
   background-color: var(--ws-brand);
   color: var(--ws-brand-fg);
 }
 
-/* 现在线：品牌色，左端一个圆点 */
+/* ── 全天区：一条横带，底下一条细线；左边那格写「全天」 ── */
+.sx-host .sx__date-grid {
+  position: relative;
+  background: transparent;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.sx-host .sx__date-grid::before {
+  content: var(--ws-allday-label, "");
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: var(--sx-calendar-week-grid-padding-left);
+  padding-right: 8px;
+  text-align: right;
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--ws-faint);
+}
+/* 那一屏一条全天项都没有：不留「全天」两个字，也不留空白 */
+.sx-host .sx__date-grid:not(:has(.sx__event)) {
+  padding: 0;
+}
+.sx-host .sx__date-grid:not(:has(.sx__event))::before {
+  content: none;
+}
+.sx-host .sx__date-grid-cell {
+  height: 22px;
+  margin-bottom: 3px;
+}
+.sx-host .sx__week-header-border {
+  border-left: 0;
+  border-bottom: 1px solid var(--ws-line);
+}
+
+/* ── 时间格：钟点 11 号灰字（只有数字）、右对齐贴着格线；每格一条细线 ── */
+.sx-host .sx__week-grid__hour {
+  border-color: var(--ws-line);
+}
+.sx-host .sx__week-grid__hour-text {
+  left: auto;
+  right: calc(100% + 8px);
+  color: var(--ws-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.sx-host .sx__time-grid-day {
+  border-left-color: var(--ws-line);
+}
+
+/* 当前时间：一条红线，左端一个圆点（只在今天那一列） */
 .sx-host .sx__current-time-indicator,
 .sx-host .sx__current-time-indicator-full-week {
-  background-color: var(--ws-brand);
+  background-color: var(--ws-bad);
+  z-index: 2;
 }
-
 .sx-host .sx__current-time-indicator::before {
-  background-color: var(--ws-brand);
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--ws-bad);
 }
 
-/* 全天行（到期项落在这儿）：比正文浅一档的底，和时间格分得开 */
-.sx-host .sx__date-grid {
-  background: var(--ws-surface);
+/* ── 事件：同色淡底 + 左边一条图层色细条（`.ws-ev-bar`，颜色只在这条上） ── */
+.sx-host .sx__event {
+  /* biome-ignore lint/complexity/noImportantStyles: 库把 4px 色条写在行内样式上，只有 !important 盖得住 */
+  border-inline-start: 0 !important;
+  box-shadow: none;
+  color: var(--ws-ink);
 }
-
-/* 钟点与星期名：灰一档、等宽数字，别抢事件的注意力 */
-.sx-host .sx__time-grid-day,
-.sx-host .sx__week-grid__hour {
+.sx-host .ws-ev-bar {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+}
+.sx-host .ws-ev-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 全天区、月格：一行 22 高，圆角 6 */
+.sx-host .sx__date-grid-event,
+.sx-host .sx__month-grid-event {
+  position: relative;
+  height: 22px;
+  padding: 0 6px 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 22px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sx-host .sx__date-grid-event > div,
+.sx-host .sx__month-grid-event > div {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+}
+.sx-host .ws-ev-clock {
+  flex: none;
   color: var(--ws-muted-fg);
   font-variant-numeric: tabular-nums;
 }
-
-/*
- * WP457（WP456 §3.6）：钟点写「9:00」、11 号灰字。库给钟点用的是 `--sx-color-neutral`，
- * 我们把它接到了 `--ws-surface`（几乎是白的）——改前那张图里「9时」灰到看不清就是这个。
- */
-.sx-host .sx__week-grid__hour-text {
+/* 议程：一条一张浅底小块，和时间格同一种两行 */
+.sx-host .sx__month-agenda-event {
+  position: relative;
+  border-radius: 8px;
+  padding: 6px 8px 6px 10px;
+  font-size: 12px;
+  line-height: 17px;
+}
+.sx-host .sx__month-agenda-event .ws-ev-bar {
+  top: 6px;
+  bottom: 6px;
+}
+.sx-host .sx__month-agenda-event .ws-ev-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sx-host .sx__month-agenda-event .ws-ev-meta {
   color: var(--ws-muted-fg);
-  font-size: 11px;
+}
+
+/* 时间格：圆角 8，标题 600，第二行「9:00 · 会议」灰字 */
+.sx-host .sx__time-grid-event {
+  border-radius: 8px;
+  padding: 6px 8px 6px 10px;
+  font-size: 12px;
+  line-height: 17px;
+}
+/* 细条要贴着块的左边、和块一样高：内层不再当定位参照（库的拖长把手跟着落到块底，位置不变） */
+.sx-host .sx__time-grid-event-inner {
+  position: static;
+}
+.sx-host .sx__time-grid-event .ws-ev-bar {
+  top: 6px;
+  bottom: 6px;
+}
+.sx-host .sx__time-grid-event .ws-ev-title {
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+}
+.sx-host .sx__time-grid-event .ws-ev-meta {
+  color: var(--ws-muted-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 一小时的块标题只放一行；更矮的（半小时）只放得下标题，第二行收起来 */
+.sx-host .sx__time-grid-event {
+  container-type: size;
+}
+@container (max-height: 60px) {
+  .sx-host .sx__time-grid-event .ws-ev-title {
+    -webkit-line-clamp: 1;
+  }
+}
+@container (max-height: 30px) {
+  .sx-host .sx__time-grid-event .ws-ev-meta {
+    display: none;
+  }
 }
 
 /*
- * WP457：全天区是一条横带——每天最多两条（`lib/calendar-allday.ts` 在交给库之前就折好了），
- * 多的那一行是「还有 N 项」：不是事件，没有色条、没有底色，一行灰字，点开再列。
+ * 只读的那几层（定时任务、值守续期、红人交付物、卡片到期）原来画成虚线框（WP74）。
+ * 新的事件没有边框，虚线没处画——改成那条细条淡一档：看得出「这一条不是你能挪的」，
+ * 又不像虚线那样碎成「⋮」。
+ * DOM 上只有 `data-event-id`，认的是 id 前缀（`cal_<来源>_<id>`）。
  */
+.sx-host .sx__event[data-event-id^="cal_deliverable_"] .ws-ev-bar,
+.sx-host .sx__event[data-event-id^="cal_standby_"] .ws-ev-bar,
+.sx-host .sx__event[data-event-id^="cal_card_"] .ws-ev-bar,
+.sx-host .sx__event[data-event-id^="cal_task_"] .ws-ev-bar {
+  opacity: 0.55;
+}
+
+/* 「还有 N 项」：不是事件，没有色条、没有底色，一行灰字加淡下划线，点开再列 */
 .sx-host .sx__event[data-event-id^="cal_more_"] {
-  border-left: 0;
-  box-shadow: none;
   background: transparent;
   color: var(--ws-muted-fg);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--ws-muted-fg) 45%, transparent);
+  text-underline-offset: 3px;
   cursor: pointer;
+}
+.sx-host .sx__event[data-event-id^="cal_more_"]:hover {
+  color: var(--ws-ink);
+}
+
+/* ── 月格：星期 12 灰字，日期 12；今天是品牌色圈 ── */
+.sx-host .sx__month-grid-day__header-day-name {
+  font-size: 12px;
+  text-transform: none;
+  color: var(--ws-muted-fg);
+}
+.sx-host .sx__month-grid-day__header-date {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ws-body);
+}
+.sx-host .sx__month-grid-day__header-date.sx__is-today {
+  background-color: var(--ws-brand);
+  color: var(--ws-brand-fg);
+  font-weight: 600;
+}
+.sx-host .sx__month-grid-day__events {
+  grid-gap: 3px;
+  padding: 0 4px;
+}
+.sx-host .sx__month-grid-week,
+.sx-host .sx__month-grid-day:not(:last-child) {
+  border-color: var(--ws-line);
+}
+
+/* 左栏图层列与「还有 N 项」小卡里的颜色方块：10px、圆角 3（示意稿 `.sw`） */
+.ws-cal-swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 3px;
+}
+
+/* 议程：选中的那天是淡品牌底（库原来是 3px 品牌色粗框，深色下像一个报错框） */
+.sx-host .sx__month-agenda-day--active {
+  box-shadow: none;
+  background: var(--ws-tint);
+  color: var(--ws-brand-ink);
+  border-radius: 8px;
 }

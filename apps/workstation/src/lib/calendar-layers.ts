@@ -47,22 +47,23 @@ export const LAYER_ICON: Record<CalendarSource, LucideIcon> = {
 }
 
 /**
- * 每个图层一个颜色变量（shadcn 的 token，深浅色自己跟着换）。
+ * 每个图层一个颜色变量（token，深浅色自己跟着换）。
  *
- * 用 `--chart-N` 与 `--ws-*` 这几个既有 token，不新造一套颜色：
- * 新造一套的话，日历上的绿与面板上的绿会是两个绿。
+ * WP456-T5（§2.4 / §3.6）：图层色就是图表 / 分类四色（`--ws-chart-1…4`，WP434 校验过、深浅各一套）
+ * 加中性灰——日历、标签分类、图表用同一组，不再各挑各的。
  *
- * WP457（WP456 §3.6）：红只给出错。「卡片到期」原来是红（`--destructive`），一周到期的卡一多
- * 日历一片红，看着像出了事——改成「要留意」的黄；原来占着黄的「定时任务」让成中性灰。
+ * - 待办 = 1（绿）、会议 = 2（蓝）、红人交付物 = 3（橙）、社媒排期 = 4（紫），和示意稿一致；
+ * - 「卡片到期」是「要留意」的黄（WP457：红只给出错）；
+ * - 定时任务、值守续期是后台在跑的事，用中性灰（`--ws-faint`），不抢颜色。
  */
 export const LAYER_COLOR: Record<CalendarSource, string> = {
-  todo: 'var(--chart-2)',
-  meeting: 'var(--chart-1)',
-  social_post: 'var(--chart-3)',
-  kol_deliverable: 'var(--chart-5)',
-  scheduled_task: 'var(--muted-foreground)',
+  todo: 'var(--ws-chart-1)',
+  meeting: 'var(--ws-chart-2)',
+  social_post: 'var(--ws-chart-4)',
+  kol_deliverable: 'var(--ws-chart-3)',
+  scheduled_task: 'var(--ws-faint)',
   card_due: 'var(--ws-warn)',
-  standby: 'var(--muted-foreground)',
+  standby: 'var(--ws-faint)',
 }
 
 /**

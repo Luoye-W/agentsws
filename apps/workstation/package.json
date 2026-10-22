@@ -22,6 +22,7 @@
     "@preact/signals": "2.11.2",
     "@schedule-x/calendar": "3.7.3",
     "@schedule-x/calendar-controls": "3.7.3",
+    "@schedule-x/current-time": "3.7.3",
     "@schedule-x/drag-and-drop": "3.7.3",
     "@schedule-x/react": "3.7.0",
     "@schedule-x/resize": "3.7.3",
