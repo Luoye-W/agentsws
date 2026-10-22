@@ -99,7 +99,8 @@ export function summarizeRunBrowser(
         handoff = { at: e.at, ...(note === undefined ? {} : { note }) }
       }
       if (p.step === 'ego_run') {
-        const runs = (view.ego_runs ??= [])
+        view.ego_runs ??= []
+        const runs = view.ego_runs
         runs.push({ at: e.at, note: typeof p.note === 'string' ? p.note : '' })
         if (runs.length > RUN_BROWSER_EGO_RUNS) runs.shift()
       }
