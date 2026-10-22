@@ -249,10 +249,18 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
           ] as const
         ).map(({ id, icon: Icon, label }) => ({
           value: id,
-          label,
+          // 「正在用」是中文：不用计数那一档（11 只给数字），12 号灰字跟在后面
+          label:
+            active === id ? (
+              <>
+                {label}
+                <span className="text-xs text-ws-faint">{t('storage.in_use')}</span>
+              </>
+            ) : (
+              label
+            ),
           icon: <Icon className="size-3.5" aria-hidden />,
           testId: `storage-tier-${id}`,
-          ...(active === id ? { count: t('storage.in_use') } : {}),
         }))}
         onChange={(id) => {
           setChoice(id)
