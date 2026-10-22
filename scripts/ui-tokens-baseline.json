@@ -14,10 +14,6 @@
     "apps/workstation/src/components/amazon/listing-checkup.tsx": {
       "radius": 2
     },
-    "apps/workstation/src/components/answer/genui/host-nodes.tsx": {
-      "font-size": 1,
-      "radius": 1
-    },
     "apps/workstation/src/components/app-shell.tsx": {
       "font-size": 1,
       "radius": 1
@@ -445,12 +441,6 @@
       "radius": 4
     },
     "apps/workstation/src/pages/im-channels.tsx": {
-      "font-size": 1
-    },
-    "apps/workstation/src/pages/in-progress.tsx": {
-      "font-size": 1
-    },
-    "apps/workstation/src/pages/influencer.tsx": {
       "font-size": 1
     },
     "apps/workstation/src/pages/login.tsx": {

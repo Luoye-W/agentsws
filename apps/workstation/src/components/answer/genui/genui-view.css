@@ -32,3 +32,30 @@
   --dsw-static-deepseek-300: var(--chart-2);
   color: var(--ws-ink);
 }
+
+/*
+ * WP456-T2（决策 847：genui 和工作台用同一套组件）：插件自己画的卡、按钮、标签、字号接到工作台的同一组档位上——
+ * 卡 = 决定卡 / 列表组那种（圆角 16、无边框、卡阴影、深色一圈细边），按钮 / 输入框圆角 8、标签圆角 6，
+ * 字号落到 16 / 14 / 13 / 12（插件默认的 14.5 / 13.5 / 12.5 半档不在规范里）。
+ * 插件的令牌声明在它根节点 `[data-genui]` 自己身上，所以这里要比它的 `.block` 更具体才盖得住。
+ */
+.ws-genui.ws-genui [data-genui] {
+  --dsl-g-radius-surface: var(--ws-radius-card);
+  --dsl-g-radius-control: 8px;
+  --dsl-g-radius-sm: 6px;
+  --dsl-g-font-hero: 28px;
+  --dsl-g-font-display: 28px;
+  --dsl-g-font-h1: 22px;
+  --dsl-g-font-h2: 16px;
+  --dsl-g-font-h3: 16px;
+  --dsl-g-font-body: 14px;
+  --dsl-g-font-title: 13px;
+  --dsl-g-font-meta: 12px;
+  --dsl-g-font-data: 12px;
+  --dsl-g-surface: var(--ws-card);
+  --dsl-g-border-surface: transparent;
+  --dsl-g-shadow-card: var(--ws-card-edge), var(--ws-shadow);
+  --dsl-g-hover: var(--ws-hover);
+  --dsl-g-border: var(--ws-line);
+  --dsl-g-border-strong: var(--ws-line-strong);
+}

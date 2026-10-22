@@ -15,7 +15,7 @@ import {
   SquareCheck,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { InfoTip } from '@/components/design'
+import { InfoTip, StatusPill } from '@/components/design'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { useApp } from '@/lib/app-context'
 
@@ -174,12 +174,9 @@ export function OverdueBadge({ item }: { item: PositionWorkItem }): ReactNode {
   const { t } = useApp()
   if (item.overdue !== true) return null
   return (
-    <span
-      data-testid="work-overdue"
-      className="inline-flex h-5 shrink-0 items-center rounded-full bg-ws-bad-bg px-2 text-xs font-medium whitespace-nowrap text-ws-bad"
-    >
+    <StatusPill tone="bad" data-testid="work-overdue">
       {t('pos2.overdue')}
-    </span>
+    </StatusPill>
   )
 }
 
