@@ -154,10 +154,13 @@ beforeEach(() => {
 })
 
 describe('WP188 随便聊：空态与模型下拉', () => {
-  it('空态：标题「有什么要我做的？」+ 一行说明 + 输入框；下拉默认是设置里的默认模型', async () => {
+  it('空态：标题「有什么要我做的？」+ 输入框（那一整句并进占位字，WP456-T8）；下拉默认是设置里的默认模型', async () => {
     renderPage()
     expect((await screen.findByTestId('free-chat-empty')).textContent).toContain('有什么要我做的？')
-    expect(screen.getByTestId('assistant-intro').textContent).toContain('直接交代事情')
+    expect(screen.queryByTestId('assistant-intro')).toBeNull()
+    expect(screen.getByTestId('free-chat-input').getAttribute('placeholder')).toContain(
+      '直接交代一件事',
+    )
     // WP195：空态的标记是待机
     expect(
       screen.getByTestId('free-chat-empty').querySelector('svg')?.getAttribute('data-motion'),
@@ -210,11 +213,17 @@ describe('WP188 随便聊：一轮对话', () => {
     expect(cost.textContent).toContain('约 0.01 积分')
   })
 
-  it('联网开关默认关；打开之后才带上，来源画出来', async () => {
+  it('联网开关默认关（在「+」里，WP456-T8）；打开之后框里一颗小标、才带上，来源画出来', async () => {
     renderPage()
-    const toggle = await screen.findByTestId('free-chat-web-toggle')
-    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    await screen.findByTestId('free-chat-input')
+    expect(screen.queryByTestId('assistant-toggle-chip')).toBeNull()
+    await userEvent.click(screen.getByTestId('matter-attach'))
+    const toggle = await screen.findByTestId('composer-plus-web')
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
     await userEvent.click(toggle)
+    const chip = await screen.findByTestId('assistant-toggle-chip')
+    expect(chip.dataset.kind).toBe('web')
+    expect(chip.textContent).toContain('联网搜索')
     await userEvent.type(screen.getByTestId('free-chat-input'), '今天汇率{Enter}')
     await waitFor(() => {
       expect(state.calls[0]?.input.web_search).toBe(true)
@@ -232,11 +241,11 @@ describe('WP188 随便聊：一轮对话', () => {
     })
     renderPage()
     await userEvent.type(await screen.findByTestId('free-chat-input'), '讲个长故事{Enter}')
-    const stop = await screen.findByTestId('free-chat-stop')
+    const stop = await screen.findByTestId('matter-stop')
     await userEvent.click(stop)
     expect(state.stops).toEqual(['fchat_1'])
     release()
-    await screen.findByTestId('free-chat-send')
+    await screen.findByTestId('matter-send')
   })
 
   it('WP343：「交给岗位去做」按钮没有了；交出去的事回复下面一行「已交给 X · Y」，点了进那件事', async () => {
@@ -288,13 +297,16 @@ describe('WP188 随便聊：一轮对话', () => {
     expect(opened).toEqual([])
   })
 
-  it('选了看不了图的模型：贴图按钮是灰的', async () => {
+  it('选了看不了图的模型：「+」里的加图是灰的', async () => {
     // 默认就是看不了图的那一条（下拉怎么选见上面那条用例）
     state.models = { ...MODELS, default: 'agentsws/deepseek-flash' }
     renderPage()
     await waitFor(() => {
-      expect((screen.getByTestId('free-chat-attach') as HTMLButtonElement).disabled).toBe(true)
+      expect(screen.getByTestId('free-chat-model').dataset.model).toBe('agentsws/deepseek-flash')
     })
+    await userEvent.click(screen.getByTestId('matter-attach'))
+    const item = await screen.findByTestId('composer-plus-image')
+    expect(item.getAttribute('aria-disabled')).toBe('true')
   })
 })
 

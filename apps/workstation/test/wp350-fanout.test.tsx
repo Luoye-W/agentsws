@@ -367,14 +367,14 @@ describe('WP350 输入框附资料', () => {
     fireEvent.change(input, {
       target: { files: [new File(['# 周会\n- 客服：回信'], '周会.md', { type: 'text/markdown' })] },
     })
-    await waitFor(() => expect(screen.getAllByTestId('free-chat-doc').length).toBe(1))
+    await waitFor(() => expect(screen.getAllByTestId('matter-doc').length).toBe(1))
     const area = screen.getByTestId('free-chat-input')
     fireEvent.paste(area, {
       clipboardData: { files: [], getData: () => '会议记录'.repeat(500) },
     })
-    await waitFor(() => expect(screen.getAllByTestId('free-chat-doc').length).toBe(2))
-    expect(screen.getAllByTestId('free-chat-doc')[1]?.textContent).toContain('粘贴的文字 2.txt')
-    await userEvent.click(screen.getByTestId('free-chat-send'))
+    await waitFor(() => expect(screen.getAllByTestId('matter-doc').length).toBe(2))
+    expect(screen.getAllByTestId('matter-doc')[1]?.textContent).toContain('粘贴的文字 2.txt')
+    await userEvent.click(screen.getByTestId('matter-send'))
     await waitFor(() => expect(state.calls.length).toBe(1))
     const files = state.calls[0]?.files as { name: string; data: string }[]
     expect(files.map((f) => f.name)).toEqual(['周会.md', '粘贴的文字 2.txt'])

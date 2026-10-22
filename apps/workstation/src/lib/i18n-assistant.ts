@@ -6,9 +6,10 @@
  */
 export const ASSISTANT_ZH: Record<string, string> = {
   'assistant.empty.title': '有什么要我做的？',
-  'assistant.empty.sub':
-    '随便聊、问什么都行；也可以直接交代事情，我交给对应的岗位去做，做完回来告诉你。',
-  'assistant.placeholder': '问点什么，或交代一件事…（@ 选岗位直接交）',
+  // WP456-T8（§3.7）：首屏那一整句并进占位字
+  'assistant.placeholder': '随便问，或直接交代一件事，我交给对应的岗位去做（@ 选岗位）',
+  'assistant.plus': '附资料、加图、联网、公司资料',
+  'assistant.toggle.off': '关掉{name}',
   'assistant.dispatched': '已交给 {who}',
   'assistant.report.open': '去看',
   'assistant.report.decide': '去拍板',
@@ -84,9 +85,10 @@ export const ASSISTANT_ZH: Record<string, string> = {
 
 export const ASSISTANT_EN: Record<string, string> = {
   'assistant.empty.title': 'What can I do for you?',
-  'assistant.empty.sub':
-    "Chat about anything, or hand me a task — I'll pass it to the right position and report back.",
-  'assistant.placeholder': 'Ask anything, or hand me a task… (@ to pick a position)',
+  'assistant.placeholder':
+    "Ask anything, or hand me a task — I'll pass it to the right position (@ to pick one)",
+  'assistant.plus': 'Attach, add images, web search, company knowledge',
+  'assistant.toggle.off': 'Turn off {name}',
   'assistant.dispatched': 'Handed to {who}',
   'assistant.report.open': 'Open',
   'assistant.report.decide': 'Decide',
