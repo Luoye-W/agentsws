@@ -162,7 +162,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "feb8785e3fd12e6e725147c0640bdfc5",
+  "source_digest": "e8b3fe8390e425d3b1e36a57a2f191cb",
   "objects": [
     {
       "id": "ad",
@@ -5207,6 +5207,18 @@
           "type": "TodoHorizon",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "horizon_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "carried_over",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
         },
         {
           "name": "due",
