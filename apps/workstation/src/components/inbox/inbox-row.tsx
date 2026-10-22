@@ -55,7 +55,7 @@ export function rowPill(
           tone: h <= 6 ? 'bad' : 'warn',
           text: t('inbox.pill.due_hours', { n: Math.max(1, Math.round(h)) }),
         }
-      if (h <= 24 * 7)
+      if (h <= 24 * 3)
         return { tone: 'warn', text: t('inbox.pill.due_days', { n: Math.ceil(h / 24) }) }
     }
     if (card.priority_band === 'P0') {

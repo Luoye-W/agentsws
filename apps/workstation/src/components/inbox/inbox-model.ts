@@ -3,6 +3,7 @@
  * 第三栏、左栏徽标、首页那一行共用；批 / 改 / 不要走岗位卡片流同一条决定（`decide`），批完把
  * 收件箱、岗位牌堆、首页、左栏的数一起刷新（「批了两边一起消失」）。
  */
+import { isFollowUpNudgePayload } from '@agentsws/contracts'
 import type { DeckCard, InboxItem, InboxPosition, InboxView } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSyncExternalStore } from 'react'
@@ -106,6 +107,8 @@ export function editedPayload(card: DeckCard, text: string): unknown {
 
 /** 原信（回信卡上客户写的那一封）：投影层给的原文，退回载荷里的引用。 */
 export function originalOf(card: DeckCard): string | undefined {
+  // 催一下：「原信」是我们上一封（对方没回的那封），不是草稿本身
+  if (isFollowUpNudgePayload(card.detail.payload)) return card.detail.payload.quote
   const o = card.content_variants.original
   if (o !== undefined && o.trim() !== '') return o
   const p = card.detail.payload as Record<string, unknown> | undefined

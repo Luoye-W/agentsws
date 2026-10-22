@@ -187,7 +187,8 @@ export function InboxFocus({
             <div className="flex flex-wrap items-center gap-1.5">
               <ItemGlyph item={item} positions={view.positions} />
               {posName === undefined ? null : <CategoryTag>{posName}</CategoryTag>}
-              <CategoryTag>{rowTag(item, t)}</CategoryTag>
+              {/* 信的类型标签在下面那块里（同第三栏），这里不再写一遍 */}
+              {item.type === 'mail' ? null : <CategoryTag>{rowTag(item, t)}</CategoryTag>}
               {pill === undefined ? null : <StatusPill tone={pill.tone}>{pill.text}</StatusPill>}
               {asg === undefined || posName === undefined ? null : (
                 <Link to={`/positions/${asg}`} className="ws-link ml-auto text-xs">

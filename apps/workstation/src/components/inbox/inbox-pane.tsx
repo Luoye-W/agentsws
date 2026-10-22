@@ -288,7 +288,9 @@ export function DraftPane({
       <div className={cn('grid gap-3', compact && 'md:grid-cols-2')}>
         {original === undefined ? null : (
           <section className="flex min-w-0 flex-col gap-1.5">
-            <h3 className="text-xs font-semibold text-ws-muted-fg">{t('inbox.pane.original')}</h3>
+            <h3 className="text-xs font-semibold text-ws-muted-fg">
+              {t(item.tag === 'nudge' ? 'inbox.pane.last_sent' : 'inbox.pane.original')}
+            </h3>
             <p className={block} data-testid="inbox-draft-original">
               {original}
             </p>
@@ -305,6 +307,7 @@ export function DraftPane({
             <textarea
               aria-label={t('inbox.pane.draft')}
               data-testid="inbox-draft-text"
+              rows={Math.max(5, text.split('\n').length + 1)}
               className="min-h-32 w-full rounded-[12px] border border-ws-brand bg-ws-card p-3 text-[13px] leading-6 text-ws-body outline-none"
               value={text}
               onChange={(e) => {

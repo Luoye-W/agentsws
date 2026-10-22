@@ -461,6 +461,7 @@ export function HomePage(): ReactNode {
   const { solo } = useMode()
   const [range, setRange] = useState<KeyRange>('1d')
   const home = useQuery({ queryKey: ['home', 'yesterday'], queryFn: () => getHome('yesterday') })
+  const inbox = useInbox()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession, retry: false })
   const overview = useQuery({
@@ -510,7 +511,8 @@ export function HomePage(): ReactNode {
           {t('home2.line', {
             date: dateLine(now, lang),
             done,
-            waiting: data.counts.total,
+            // WP459：「几件等你定」和收件箱、左栏徽标同一个数
+            waiting: inbox.data?.counts.all ?? data.counts.total,
           })
             .split(/(\d+)/)
             .map((part, i) =>

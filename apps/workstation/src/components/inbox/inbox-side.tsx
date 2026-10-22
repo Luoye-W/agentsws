@@ -92,7 +92,7 @@ export function InboxBrief({ view, folded }: { view: InboxView; folded: boolean 
             rail.openAddress(MESSAGE_DIGEST_ADDRESS)
           }}
         >
-          {t('rail.panel.message-digest')}
+          {t('inbox.brief.digest')}
         </button>
         {folded ? null : (
           <button
@@ -518,6 +518,7 @@ export function InboxEmpty({ filtered }: { filtered: boolean }): ReactNode {
   return (
     <div className="ws-card py-14" data-testid="inbox-empty">
       <EmptyState
+        className="flex-col justify-center text-center"
         icon={CheckCheck}
         text={filtered ? t('inbox.empty.filtered') : t('inbox.empty')}
         {...(filtered

@@ -186,7 +186,10 @@ describe('WP438 首页四块（决策 1332）', () => {
     })
     // 一行概况：AI 今天处理了几件（自主 12 + 自动发 3）、几件等你定
     expect(screen.getByTestId('home-line').textContent).toContain('处理了 15 件')
-    expect(screen.getByTestId('home-line').textContent).toContain('4 件等你定')
+    // WP459：和收件箱同一个数
+    await waitFor(() => {
+      expect(screen.getByTestId('home-line').textContent).toContain('6 件等你定')
+    })
   })
 
   it('去掉的那些都不在：复盘四格、按职责的数据条、时间轴 / 到期、目标网格、一页纸', async () => {

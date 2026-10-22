@@ -2259,20 +2259,28 @@ async function seedMessages(server: Server, world: World): Promise<void> {
         reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
       }),
     }),
-    // WP167：分拣拿不准的一封——没开事项、没挪，在「消息」页的「待确认」一栏等人点一下
+    /*
+     * WP459（决策 1498）：AI 猜得出岗位就直接交过去——这一封把握 72%，交给了客服、标「AI 猜的」
+     * （收件箱简报「猜着交给岗位」里看得见，能改判）。猜着交的邮箱里不挪，所以还在 INBOX。
+     */
     base({
       id: 'm109',
       from: { email: 'jordan@shopper.example', name: 'Jordan Wells' },
       subject: 'Quick question about the gift box',
       text: 'Hi, does the gift box come with a card? I might order two next week.',
       minutes: 95,
+      route: 'support',
       triage: verdict({
-        suggested_route: 'support',
+        route: 'support',
         needs_reply: true,
         summary: '问礼盒带不带卡片，可能下周下单',
-        confidence: 0.45,
+        confidence: 0.72,
         by: 'model',
-        reasons: ['模型判成客服，但把握不够'],
+        reasons: ['AI 猜的：交给 customer-care（把握 72%）'],
+        kind: 'customer_question',
+        kind_by: 'model',
+        kind_confidence: 0.72,
+        ai_hand: { position_id: 'customer-care', confidence: 0.72, guessed: true },
       }),
     }),
     /*
@@ -2303,13 +2311,17 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       subject: 'Samples for our store?',
       text: 'Hi, we run three electronics stores. Could you send samples of the GaN chargers? We may need a few hundred.',
       minutes: 75,
+      // WP459：把握不到 0.4（猜不出归谁）——不交，留在收件箱「归谁拿不准」
       triage: verdict({
         suggested_route: 'b2b',
         needs_reply: true,
         summary: '三家门店的店主问能不能寄 GaN 充电器样品',
-        confidence: 0.5,
+        confidence: 0.38,
         by: 'model',
         reasons: ['模型判成 B2B，但把握不够'],
+        kind: 'inquiry',
+        kind_by: 'model',
+        kind_confidence: 0.38,
       }),
     }),
     /*
@@ -2322,36 +2334,51 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       subject: 'Still no parcel',
       text: 'Ordered 3 weeks ago, still nothing. I want my money back.',
       minutes: 300,
+      // WP459：把握 52%，AI 猜着交给了客服（「AI 猜的 · 改」）
+      route: 'support',
       triage: verdict({
-        suggested_route: 'support',
+        route: 'support',
         needs_reply: true,
         priority: 'high',
         summary: '说订单一直没到，想退款；没写订单号',
         confidence: 0.52,
         by: 'model',
-        reasons: ['模型判成客服，但把握不够'],
+        reasons: ['AI 猜的：交给 customer-care（把握 52%）'],
         kind: 'after_sales',
         kind_by: 'model',
         kind_confidence: 0.52,
+        ai_hand: { position_id: 'customer-care', confidence: 0.52, guessed: true },
       }),
     }),
-    base({
-      id: 'm113',
-      from: { email: 'clara@outdoor-review.example', name: 'Clara Hoffmann' },
-      subject: 'Interview for our Thursday piece?',
-      text: 'Could we talk for 20 minutes on Thursday about portable power trends?',
-      minutes: 180,
-      triage: verdict({
-        needs_reply: true,
-        summary: '想周四采访你 20 分钟，谈便携储能趋势',
-        confidence: 0.88,
-        by: 'model',
-        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
-        kind: 'media',
-        kind_by: 'model',
-        kind_confidence: 0.88,
+    // WP459（决策 1498）：AI 有把握（88%）的媒体来信直接交给了公共关系，不再进收件箱等你点
+    {
+      ...base({
+        id: 'm113',
+        from: { email: 'clara@outdoor-review.example', name: 'Clara Hoffmann' },
+        subject: 'Interview for our Thursday piece?',
+        text: 'Could we talk for 20 minutes on Thursday about portable power trends?',
+        minutes: 180,
+        triage: verdict({
+          needs_reply: true,
+          summary: '想周四采访你 20 分钟，谈便携储能趋势',
+          confidence: 0.88,
+          by: 'model',
+          reasons: ['AI 交给 pr'],
+          kind: 'media',
+          kind_by: 'model',
+          kind_confidence: 0.88,
+          suggested_position: 'pr',
+          ai_hand: { position_id: 'pr', confidence: 0.88, guessed: false },
+        }),
       }),
-    }),
+      handled: {
+        as: 'position',
+        position_id: 'pr',
+        by: world.roleHolder,
+        at: at(178),
+        by_ai: true,
+      },
+    },
     base({
       id: 'm114',
       from: { email: 'payouts@shop-billing.example', name: 'Shopify 结算' },
