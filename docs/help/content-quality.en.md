@@ -1,3 +1,6 @@
+---
+description: Content & Blog checks every post before publishing — sources, market versions and how well AI can cite it. Failures stay drafts with the exact sentence flagged; publishing always needs your click.
+---
 # Pre-publish check: sources, market versions, AI citations
 
 Before Content & Blog publishes a post, the workshop checks it. Anything that fails stays a draft, and the card points to the exact sentence and what is wrong; fix it and publish again. Drafts are free to write — **publishing always needs your click**.
