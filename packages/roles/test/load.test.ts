@@ -277,7 +277,10 @@ describe('loadPosition (05 §2)', () => {
       ['brand-voice', 'always'],
       ['content-localize', 'on_demand'],
     ])
-    expect(role.thresholds).toEqual({ citation_check_max_links: 10, ai_citability_advice_below: 70 })
+    expect(role.thresholds).toEqual({
+      citation_check_max_links: 10,
+      ai_citability_advice_below: 70,
+    })
     expect(role.connectors.map((c) => c.kind)).toEqual(['shop'])
   })
 
