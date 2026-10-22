@@ -10,7 +10,7 @@
 import { TELEMETRY_BUTTONS, type TelemetryButton } from '@agentsws/contracts'
 
 export const BUTTON_TESTIDS: Readonly<Record<string, TelemetryButton>> = {
-  'free-chat-send': 'assistant.send',
+  // 助理的发送键是岗位页那一个完整对话框（WP456-T8），它在框上写 `data-track="assistant.send"`
   'matter-send': 'matter.send',
   'composer-send': 'messages.send',
   'compose-send': 'report.send',

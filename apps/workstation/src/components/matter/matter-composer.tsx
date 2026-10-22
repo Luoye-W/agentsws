@@ -68,6 +68,7 @@ export function MatterComposer({
   docProblem = false,
   plusMenu,
   chips,
+  sendTrack,
   overlay,
   onKeyDownFirst,
   onPasteText,
@@ -113,6 +114,8 @@ export function MatterComposer({
   plusMenu?: ReactNode
   /** WP456-T8：框里输入区上面那一排小标（`@` 选的岗位、开着的联网 / 公司资料）。 */
   chips?: ReactNode
+  /** WP476：发送键的 `data-track`（匿名使用数据的按钮编号；不给 = 按 `matter-send` 记）。 */
+  sendTrack?: string | undefined
   /** WP456-T8：贴在框上方的浮层（`@` 菜单）。 */
   overlay?: ReactNode
   /** WP456-T8：按键先给调用方（`@` 菜单的上下 / 回车 / Esc）；回 `true` = 它处理了。 */
@@ -442,6 +445,7 @@ export function MatterComposer({
             <button
               type="submit"
               data-testid="matter-send"
+              data-track={sendTrack}
               aria-label={t('matter.cmp.send')}
               title={t('matter.cmp.send')}
               disabled={!has || sending || disabled}

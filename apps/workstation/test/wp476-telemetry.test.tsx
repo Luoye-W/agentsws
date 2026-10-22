@@ -177,15 +177,17 @@ describe('WP476 关键按钮', () => {
       expect(TELEMETRY_BUTTONS).toContain(id)
       expect(all, testid).toContain(`data-testid="${testid}"`)
     }
+    // 助理用岗位页那一个对话框（WP456-T8）：发送键靠 data-track 记成 assistant.send，不混进 matter.send
+    expect(all).toContain('sendTrack="assistant.send"')
   })
 
   it('点在按钮里的图标上也认得；不在表里的按钮、按钮上的字一概不认', () => {
     document.body.innerHTML = `
-      <button data-testid="free-chat-send"><span id="icon">发送给 Anna</span></button>
+      <button data-testid="matter-send" data-track="assistant.send"><span id="icon">发送给 Anna</span></button>
       <button data-testid="card-approve-apv_123">通过</button>
       <button data-track="nav.settings">设置</button>
       <button data-track="Acme Trading">x</button>
-      <div data-testid="free-chat-send"><span id="not-button">x</span></div>`
+      <div data-testid="matter-send"><span id="not-button">x</span></div>`
     expect(buttonIdOf(document.getElementById('icon'))).toBe('assistant.send')
     expect(
       buttonIdOf(document.querySelector('[data-testid="card-approve-apv_123"]')),

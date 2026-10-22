@@ -342,6 +342,7 @@ export function Composer({
         }}
         notice={problem}
         plusMenu={plusMenu}
+        sendTrack="assistant.send"
         chips={chips.length === 0 ? undefined : chips}
         overlay={
           menuOpen ? <MentionMenu options={options} active={active} onPick={pick} /> : undefined
