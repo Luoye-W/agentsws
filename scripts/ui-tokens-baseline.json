@@ -64,7 +64,7 @@
     },
     "apps/workstation/src/components/deck/deck-card-body.tsx": {
       "font-size": 2,
-      "radius": 11
+      "radius": 8
     },
     "apps/workstation/src/components/deck/faq-import-body.tsx": {
       "radius": 2
@@ -145,11 +145,11 @@
       "radius": 3
     },
     "apps/workstation/src/components/matter/matter-header.tsx": {
-      "font-size": 3
+      "font-size": 2
     },
     "apps/workstation/src/components/matter/matter-timeline.tsx": {
       "font-size": 10,
-      "radius": 9,
+      "radius": 7,
       "color": 5
     },
     "apps/workstation/src/components/messages/composer.tsx": {
@@ -220,7 +220,6 @@
       "radius": 1
     },
     "apps/workstation/src/components/rail/cards/card-bodies.tsx": {
-      "font-size": 1,
       "radius": 1
     },
     "apps/workstation/src/components/rail/panels/caps-panel.tsx": {
@@ -390,7 +389,7 @@
       "font-size": 1
     },
     "apps/workstation/src/pages/duty.tsx": {
-      "font-size": 2
+      "font-size": 1
     },
     "apps/workstation/src/pages/free-chat.tsx": {
       "font-size": 1
@@ -419,9 +418,6 @@
     },
     "apps/workstation/src/pages/onboarding.tsx": {
       "font-size": 1
-    },
-    "apps/workstation/src/pages/position.tsx": {
-      "font-size": 2
     },
     "apps/workstation/src/pages/todos.tsx": {
       "radius": 4
