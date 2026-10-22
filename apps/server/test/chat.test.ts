@@ -249,24 +249,50 @@ describe('实时车道：五种动作各走一遍', () => {
     expect(r.models.calls[0]?.system).toContain('不承诺钱')
   })
 
-  it('WP289：answer 的材料里带客服职责规矩（人定过的那几句，排在知识前面）', async () => {
+  it('WP289：answer 带客服职责规矩（人定过的那几句，排在知识前面——WP471 起在系统提示里）', async () => {
     const r = rig({ rules: '这条职责的规矩：\n- 退款超过 50 美元先问我' })
     const s = await open(r)
     await say(r, s.id, 'how much is shipping to the US?')
-    const user = r.models.calls[0]?.user ?? ''
-    expect(user).toContain('退款超过 50 美元先问我')
-    expect(user.indexOf('退款超过')).toBeLessThan(user.indexOf('美国订单满'))
+    const system = r.models.calls[0]?.system ?? ''
+    expect(system).toContain('退款超过 50 美元先问我')
+    expect(r.models.calls[0]?.user ?? '').not.toContain('退款超过')
+    expect(r.models.calls[0]?.user ?? '').toContain('美国订单满')
   })
 
   it('WP333：answer 的材料里带品牌话术（品牌自己写过才有）；没写过一个字不多', async () => {
     const r = rig({ voice: '【品牌话术｜brand-voice】\n像老朋友聊天，不用感叹号。' })
     const s = await open(r)
     await say(r, s.id, 'how much is shipping to the US?')
-    expect(r.models.calls[0]?.user ?? '').toContain('像老朋友聊天，不用感叹号。')
+    expect(r.models.calls[0]?.system ?? '').toContain('像老朋友聊天，不用感叹号。')
     const bare = rig()
     const s2 = await open(bare)
     await say(bare, s2.id, 'how much is shipping to the US?')
+    expect(bare.models.calls[0]?.system ?? '').not.toContain('品牌话术')
     expect(bare.models.calls[0]?.user ?? '').not.toContain('品牌话术')
+  })
+
+  it('WP471（决策 1549）：同一品牌同一会话两轮——系统提示逐字相同，原话在用户消息最后', async () => {
+    const r = rig({
+      answer: 'Shipping to the US is free over $50[K1].\n把握：85',
+      rules: '这条职责的规矩：\n- 退款超过 50 美元先问我',
+      voice: '【品牌话术｜brand-voice】\n像老朋友聊天，不用感叹号。',
+    })
+    const s = await open(r)
+    await say(r, s.id, 'how much is shipping to the US?')
+    await say(r, s.id, 'is shipping to Canada free?')
+    expect(r.models.calls).toHaveLength(2)
+    const [a, b] = r.models.calls
+    expect(a?.system).toBeDefined()
+    expect(b?.system).toBe(a?.system)
+    // 固定的那几块都在系统提示里，用户消息里只剩这一次的
+    expect(a?.system).toContain('退款超过 50 美元先问我')
+    expect(a?.system).toContain('像老朋友聊天')
+    expect(a?.system).toContain('【出处标注】')
+    expect(a?.user).not.toContain('【出处标注】')
+    const user = b?.user ?? ''
+    expect(user.indexOf('材料：')).toBeLessThan(user.indexOf('意图：'))
+    expect(user.indexOf('意图：')).toBeLessThan(user.indexOf('访客说：'))
+    expect(user.trimEnd().endsWith('</external_data>')).toBe(true)
   })
 
   it('collect_info：查订单没给单号 → 追问，且不花模型', async () => {
@@ -297,7 +323,7 @@ describe('实时车道：五种动作各走一遍', () => {
     expect(out.reply).not.toContain('退款')
     // WP417（自查 C11）：卡上是模型起草的建议回复（不是系统说明）；起草时提示里写明不替商家定钱
     expect(r.models.calls).toHaveLength(1)
-    expect(r.models.calls[0]?.user).toContain('不替商家决定退不退')
+    expect(r.models.calls[0]?.system).toContain('不替商家决定退不退')
     expect((card.payload as { body: { text: string } }).body.text).toBe(
       'Shipping to the US is free over $50.',
     )

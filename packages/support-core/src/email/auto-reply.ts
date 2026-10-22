@@ -360,7 +360,9 @@ export function emailAnswerStubScript(
     .filter((m) => m.role === 'user')
     .map((m) => (typeof m.content === 'string' ? m.content : ''))
     .join('\n')
-  if (!user.includes(EMAIL_ANSWER_CITE_INSTRUCTION)) return undefined
+  // WP471（决策 1549）：出处要求挪进了系统提示（固定在前、命中缓存）；老写法在用户消息里也认
+  const all = messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n')
+  if (!all.includes(EMAIL_ANSWER_CITE_INSTRUCTION)) return undefined
   const at = user.lastIndexOf(EMAIL_QUESTION_MARK)
   const letter = (at < 0 ? '' : user.slice(at + EMAIL_QUESTION_MARK.length)).replace(
     /<\/?external_data>/g,

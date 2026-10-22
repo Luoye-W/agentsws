@@ -221,6 +221,17 @@ describe('护栏小件', () => {
     expect(chatAnswerStubScript([{ role: 'user', content: 'hello' }])).toBeUndefined()
   })
 
+  it('stub 剧本（WP471）：出处要求在系统提示里也认得出', () => {
+    const hit = chatAnswerStubScript([
+      { role: 'system', content: `客服。\n\n${CHAT_ANSWER_CITE_INSTRUCTION}` },
+      {
+        role: 'user',
+        content: `材料：\n${formatChatSources([{ ...SHIPPING, text: '充电类产品的保修期是 24 个月。' }])}\n\n访客说：\n充电器保修多久？`,
+      },
+    ])
+    expect(hit).toContain('[K1]')
+  })
+
   it('stub 剧本（决策 1303）：访客留邮箱问运费 → 照知识卡说、直接答', () => {
     const visitor = '寄到美国运费多少？我邮箱 ben@example.com'
     const user = `${formatChatSources([SHIPPING])}\n\n${CHAT_ANSWER_CITE_INSTRUCTION}\n\n访客说：\n${visitor}`
