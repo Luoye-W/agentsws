@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url'
 export const PUBLIC_DOCS = [
   /^docs\/README\.md$/u, // 公开文档索引
   /^docs\/ARCHITECTURE\.md$/u, // 给外部贡献者的英文架构说明
+  /^docs\/telemetry-events\.md$/u, // WP476：匿名使用数据的事件清单（给贡献者与想核对的用户；测试核它与代码对得上）
   /^docs\/help\/[^/]+\.md$/u, // 用户帮助：工作台右栏与官网 /docs 在构建 / 运行时读
   /^docs\/assets\/brand\/[^/]+$/u, // 品牌标记：README 门面用，packages/brand 的测试逐字节核
   /^docs\/assets\/架构图-0[1-3]-[^/]+\.png$/u, // README 与 ARCHITECTURE 引用的三张架构图

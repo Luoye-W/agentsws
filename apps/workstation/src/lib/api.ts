@@ -907,6 +907,16 @@ export const getAutoMemory = (): Promise<{ enabled: boolean }> =>
 export const setAutoMemory = (enabled: boolean): Promise<{ enabled: boolean }> =>
   api<{ enabled: boolean }>('/v1/settings/auto-memory', { method: 'PUT', body: { enabled } })
 
+/** WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」（一台机器一份）。 */
+export type TelemetrySettings = import('@agentsws/contracts').TelemetryView
+export const getTelemetrySettings = (): Promise<TelemetrySettings> =>
+  api<TelemetrySettings>('/v1/settings/telemetry')
+export const putTelemetrySettings = (patch: {
+  enabled?: boolean
+  notice_seen?: boolean
+}): Promise<TelemetrySettings> =>
+  api<TelemetrySettings>('/v1/settings/telemetry', { method: 'PUT', body: patch })
+
 export interface LayerMemoryData {
   tier: string
   scope_id?: string

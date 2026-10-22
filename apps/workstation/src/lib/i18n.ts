@@ -63,6 +63,7 @@ import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
 import { TABLE_FILTER_EN, TABLE_FILTER_ZH } from './i18n-table-filter'
+import { TELEMETRY_EN, TELEMETRY_ZH } from './i18n-telemetry'
 import { THEMES_EN, THEMES_ZH } from './i18n-themes'
 import { TOPBAR_EN, TOPBAR_ZH } from './i18n-topbar'
 
@@ -9088,6 +9089,8 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_ZH,
     // WP356：设置弹窗（五组、每节、每项一句白话）
     ...SETTINGS_ZH,
+    // WP476：「帮助改进工坊（匿名使用数据）」开关与第一次提示
+    ...TELEMETRY_ZH,
     // WP426：设置 → 模型 整页重做（三块、状态标签、积分快用完）
     ...MODELS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
@@ -9158,6 +9161,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
+    ...TELEMETRY_EN,
     ...MODELS_EN,
     ...PANEL_EN,
     ...AMAZON_OPS_EN,

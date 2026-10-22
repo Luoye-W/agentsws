@@ -67,6 +67,7 @@ import { ImageHostsSetting } from '@/components/settings/image-hosts-setting'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
 import { PeopleUsage } from '@/components/settings/people-usage'
 import { RunLimitsSetting } from '@/components/settings/run-limits-setting'
+import { TelemetrySetting } from '@/components/settings/telemetry-setting'
 import { WeeklyReportsCard } from '@/components/settings/weekly-reports-card'
 import { WeeklyReviewCard } from '@/components/settings/weekly-review-card'
 import { WorkHoursSetting } from '@/components/settings/work-hours-setting'
@@ -344,6 +345,14 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
         keywords: '数据来源 权限',
         show: (c) => c.position !== null,
         render: (c) => (c.position === null ? null : <DataMapPanel position={c.position} />),
+      },
+      {
+        // WP476（决策 1590）：匿名使用数据（一台机器一份；测试阶段默认开）
+        id: 'telemetry',
+        title: 'telemetry.title',
+        desc: 'telemetry.desc',
+        keywords: '匿名 使用数据 统计 改进 隐私 analytics telemetry usage data privacy',
+        render: () => <TelemetrySetting />,
       },
     ],
   },

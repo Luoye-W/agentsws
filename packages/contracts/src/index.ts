@@ -161,4 +161,6 @@ export * from './subscription.js'
 export * from './task-text.js'
 // WP427：团队通道（发起人电脑 ↔ 工坊云的长连接、邀请码登记与查找、申请人换登录）
 export * from './team-link.js'
+// WP476（决策 1590）：产品使用数据的事件清单与属性白名单（工作台与服务进程共用）
+export * from './telemetry.js'
 export * from './work.js'
