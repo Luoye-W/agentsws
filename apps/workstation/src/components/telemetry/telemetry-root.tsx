@@ -84,7 +84,7 @@ export function TelemetryNotice({ view }: { view: TelemetrySettings }): ReactNod
     <div
       role="status"
       data-testid="telemetry-notice"
-      className="fixed right-4 bottom-4 z-50 flex max-w-sm items-center gap-3 rounded-lg bg-ws-card px-3 py-2 text-sm text-ws-ink shadow-[inset_0_0_0_1px_var(--ws-line)]"
+      className="fixed right-4 bottom-24 z-50 flex max-w-sm items-center gap-3 rounded-lg bg-ws-card px-3 py-2 text-sm text-ws-ink shadow-[inset_0_0_0_1px_var(--ws-line)]"
     >
       <span className="min-w-0 flex-1">{t('telemetry.notice')}</span>
       <button
