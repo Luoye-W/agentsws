@@ -72,6 +72,34 @@ describe('找的顺序', () => {
     expect(found.path).not.toContain('Program Files')
   })
 
+  it('Windows：管理员身份穿不过联接（远程实测）→ 现读联接指向的版本目录，从那里跑', () => {
+    const link = 'C:\\Users\\admin\\.local\\share\\ego\\active_version_dir'
+    const target = 'C:\\Program Files\\Citro Labs\\ego lite\\Application\\0.6.0.16'
+    const fs = fakeFs([`${target}\\ego-browser.exe`])
+    const reads: string[] = []
+    const found = detectEgoBrowser({
+      platform: 'win32',
+      env: { USERPROFILE: 'C:\\Users\\admin', Path: '' },
+      readlink: (p) => {
+        reads.push(p)
+        return p === link ? target : undefined
+      },
+      ...fs,
+    })
+    expect(found).toMatchObject({ ok: true, path: `${target}\\ego-browser.exe` })
+    // 每次探测都现读联接（升级后指向会变），不缓存版本目录
+    detectEgoBrowser({
+      platform: 'win32',
+      env: { USERPROFILE: 'C:\\Users\\admin', Path: '' },
+      readlink: (p) => {
+        reads.push(p)
+        return p === link ? target.replace('0.6.0.16', '0.6.0.17') : undefined
+      },
+      ...fakeFs([`${target.replace('0.6.0.16', '0.6.0.17')}\\ego-browser.exe`]),
+    })
+    expect(reads).toEqual([link, link])
+  })
+
   it('存过的路径排第一；跑不通就接着往下找', () => {
     const fs = fakeFs(['/custom/ego-browser', '/Users/a/.local/bin/ego-browser'], {
       '/custom/ego-browser': { exit_code: 1, stdout: '', stderr: 'boom' },

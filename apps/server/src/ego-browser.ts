@@ -15,15 +15,18 @@
  * 两条硬规矩：
  * - **不能只靠 PATH**：ego 的首次引导只把目录加进**用户级 PATH**，早就在跑的进程（我们的服务
  *   进程正是）看不到——Windows 远程实测 `Get-Command ego-browser` 找不到，按上面的路径直接跑正常。
- * - **每次按联接取，不缓存版本目录**：升级后联接指向会变；这里只记经联接的那条路径，
- *   从不 `realpath` 成版本目录。
+ * - **每次按联接取，不缓存版本目录**：升级后联接指向会变；每次探测都现读一次联接。
+ * - **联接走不通时读它指向哪**（WP463 Windows 远程实测）：以管理员身份跑的进程（远程 ssh 会话就是）
+ *   穿不过这个联接——系统报「路径里有不受信任的装入点」，`existsSync` 是 false、spawn 是 ENOENT；
+ *   但 `readlink` 读得出它指向的版本目录，从那里跑 `ego-browser.exe skill` 正常。所以 Windows 上
+ *   经联接那条之后再试「现读联接 → 版本目录」那一条。读是每次探测现读的，不缓存。
  *
  * **「能用」**= 跑 `ego-browser skill` 退出码 0、首行形如
  * `[ego-browser:skill] ego-browser usage guide v<版本>`（判法与运行时同一份：`egoSkillVerdict`）。
  * 这里只跑 `skill` 这一条只读命令：不调 `upgrade`、不读 ego 的 Profile / cookie、不改它的设置。
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readlinkSync, statSync } from 'node:fs'
 import { homedir as osHomedir } from 'node:os'
 import { posix, win32 } from 'node:path'
 import { EGO_SKILL_TIMEOUT_MS, egoSkillVerdict } from '@agentsws/dsh-adapter'
@@ -58,6 +61,8 @@ export interface EgoDetectOptions {
   exists?(path: string): boolean
   /** 跑一次 `skill`（测试注入；缺省同步 spawn，不经 shell）。 */
   runSkill?(path: string): EgoSkillRun
+  /** 读联接指向哪（测试注入；缺省 `readlinkSync`，读不出 = `undefined`）。 */
+  readlink?(path: string): string | undefined
 }
 
 /** 缺省的 `skill` 跑法：同步、不经 shell、有超时（实测 0.4 秒）。 */
@@ -76,6 +81,14 @@ export function runEgoSkillSync(path: string): EgoSkillRun {
     stderr: res.stderr ?? '',
     ...(code === 'ETIMEDOUT' ? { timed_out: true } : {}),
     ...(res.error !== undefined && code !== 'ETIMEDOUT' ? { spawn_error: res.error.message } : {}),
+  }
+}
+
+function readLink(path: string): string | undefined {
+  try {
+    return readlinkSync(path)
+  } catch {
+    return undefined
   }
 }
 
@@ -107,7 +120,11 @@ export function egoCandidates(options: EgoDetectOptions = {}): string[] {
     if (dir.trim() !== '') add(p.join(dir.trim(), exe))
   }
   if (win) {
-    add(p.join(home, '.local', 'share', 'ego', 'active_version_dir', exe))
+    const link = p.join(home, '.local', 'share', 'ego', 'active_version_dir')
+    add(p.join(link, exe))
+    // 联接走不通（管理员身份的进程）时：现读它指向的版本目录，从那里跑
+    const target = (options.readlink ?? readLink)(link)
+    if (target !== undefined) add(p.join(p.resolve(link, '..', target), exe))
   } else {
     add(p.join(home, '.local', 'bin', exe))
     add(p.join(home, '.local', 'share', 'ego', 'active_version_dir', 'Helpers', exe))
