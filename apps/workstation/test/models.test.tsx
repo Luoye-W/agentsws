@@ -415,7 +415,7 @@ describe('WP25 §C 「还没接模型」黄条', () => {
    * 向导第 ① 步问的就是"用哪个 AI"，同一屏上再顶一条黄条等于同一句话说两遍。
    * 走完向导（包括走了演示旁路那条路）之后它照常出现——那时它才是一条新消息。
    */
-  it('WP121b：向导那一页顶栏不出这个胶囊；别的页照出', async () => {
+  it('WP121b → WP456-T3（决策 1447）：顶栏一律不出这个胶囊——「还没接 AI」只在输入框那一颗说', async () => {
     renderWithProviders(
       <AppShell positions={[]} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
         <div>向导</div>
@@ -423,9 +423,7 @@ describe('WP25 §C 「还没接模型」黄条', () => {
       '/onboarding',
     )
     await screen.findByTestId('top-bar')
-    await waitFor(() => {
-      expect(screen.queryByTestId('no-model-chip')).toBeNull()
-    })
+    expect(screen.queryByTestId('no-model-chip')).toBeNull()
 
     renderWithProviders(
       <AppShell positions={[]} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
@@ -433,7 +431,10 @@ describe('WP25 §C 「还没接模型」黄条', () => {
       </AppShell>,
       '/',
     )
-    expect(await screen.findByTestId('no-model-chip')).toBeTruthy()
+    await screen.findAllByTestId('top-bar')
+    // 等模型清单回来（别的页原来就是这时出胶囊的），顶栏仍然没有
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId('no-model-chip')).toBeNull()
   })
 })
 

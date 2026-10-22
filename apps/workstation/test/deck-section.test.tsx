@@ -67,21 +67,23 @@ afterEach(() => {
 })
 
 describe('37 §1 第 1 行：一次一张', () => {
-  it('三张卡只渲染一张，背后两张歪斜的景深假卡，780px 居中', async () => {
+  it('三张卡只渲染一张，780px 居中；WP456-T3 起背后不再叠假卡边（「1 / N」已经说了有几张）', async () => {
     home = homeData({ queue: [draftCard(), questionCard(), draftCard({ id: 'ap_3' })] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
     expect(screen.getAllByTestId('deck-card')).toHaveLength(1)
-    expect(screen.getAllByTestId('deck-ghost')).toHaveLength(2)
+    expect(screen.queryByTestId('deck-ghost')).toBeNull()
     for (const cls of DECK_MAX_WIDTH_CLASS.split(' '))
       expect(screen.getByTestId('deck-section').className).toContain(cls)
   })
 
-  it('「第 N / M 张」跟着游标走；最后一张背后没有假卡', async () => {
+  it('「第 N / M 张」跟着游标走；快捷键提示在卡底最右边（WP456-T3）', async () => {
     home = homeData({ queue: [draftCard(), questionCard()] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     expect((await screen.findByTestId('deck-progress')).getAttribute('title')).toBe('第 1 / 2 张')
-    expect(screen.getAllByTestId('deck-ghost')).toHaveLength(1)
+    expect(screen.queryByTestId('deck-ghost')).toBeNull()
+    const keys = screen.getByTestId('deck-keyboard')
+    expect(keys.closest('[data-testid="deck-card"]')).not.toBeNull()
   })
 
   it('键盘：→ 批准 / ← 拒绝 / ↑ 稍后 / ↓ 指导', async () => {

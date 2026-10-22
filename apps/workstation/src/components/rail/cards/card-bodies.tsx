@@ -7,7 +7,7 @@
  * 这一个文件整体 `lazy()`：没有任何一张卡展开之前一个字节都不下载。
  */
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Clock, Sparkles } from 'lucide-react'
 import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
@@ -17,7 +17,11 @@ import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
 import { ExtensionRows, useScopeExtension } from '@/components/rail/cards/extension-rows'
 import { useRailState } from '@/components/rail/rail-state'
-import { type RailCardBodyProps, useCardTotal } from '@/components/rail/registry'
+import {
+  type RailCardBodyProps,
+  type RailPanelBodyProps,
+  useCardTotal,
+} from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import {
   CompetitorWatchConnectionRow,
@@ -48,19 +52,32 @@ import { getFreeChatModels } from '@/lib/free-chat'
 import type { PrWatchView } from '@/lib/pr-watch-api'
 import { cn } from '@/lib/utils'
 
+/** WP456-T3（规范 §2.6 第 14 条）：看板卡里每行 32 高，「点或图标 + 名字 + 右边灰字」。 */
 const ROW =
-  'flex w-full min-w-0 items-center gap-2 rounded-[8px] px-1.5 py-1 text-left text-[13px] text-ws-body hover:bg-sidebar-accent/60'
+  'flex h-8 w-full min-w-0 items-center gap-2 rounded-[8px] px-2 text-left text-[13px] text-ws-body hover:bg-ws-hover'
+
+/** 行首那个灰色小图标（和点同宽，名字对得齐）。 */
+const ROW_ICON = 'size-3.5 shrink-0 text-ws-faint'
+
+/** 行首的点（黄 = 等你看 / 卡住了；灰 = 没事）。 */
+function RowDot({ tone }: { tone: 'warn' | 'idle' }): ReactNode {
+  return (
+    <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
+      <i className={cn('size-1.5 rounded-full', tone === 'warn' ? 'bg-ws-warn' : 'bg-ws-faint')} />
+    </span>
+  )
+}
 
 function Empty({ text }: { text: string }): ReactNode {
   return (
-    <p className="px-1.5 text-[12px] text-ws-muted-fg" data-testid="card-empty">
+    <p className="px-2 text-[12px] text-ws-muted-fg" data-testid="card-empty">
       {text}
     </p>
   )
 }
 
 function Meta({ children }: { children: ReactNode }): ReactNode {
-  return <span className="ml-auto shrink-0 text-xs text-ws-muted-fg ws-num">{children}</span>
+  return <span className="ml-auto shrink-0 text-xs text-ws-faint ws-num">{children}</span>
 }
 
 /* ── 报表 ───────────────────────────────────────────────────────────── */
@@ -117,7 +134,7 @@ export function ReportsCard({ scope, limit, onTotal }: RailCardBodyProps): React
         <button
           type="button"
           data-testid="reports-compose"
-          className="mt-0.5 flex items-center gap-1.5 rounded-[8px] px-2 pt-2 pb-0.5 text-left text-[12.5px] text-ws-muted-fg hover:text-ws-brand-ink"
+          className={cn(ROW, 'text-ws-muted-fg hover:text-ws-brand-ink')}
           onClick={() => {
             openRightPane({
               kind: 'report-compose',
@@ -126,7 +143,7 @@ export function ReportsCard({ scope, limit, onTotal }: RailCardBodyProps): React
             })
           }}
         >
-          <Sparkles aria-hidden className="size-3.5" />
+          <Sparkles aria-hidden className={ROW_ICON} />
           {t('reports.compose')}
         </button>
       )}
@@ -202,6 +219,36 @@ export function OutputsCard({ scope, limit, onTotal }: RailCardBodyProps): React
   )
 }
 
+/**
+ * WP456-T3（决策 1448）：「产出」合进清单卡以后，AI 写的日报 / 周报 / 一页纸在第三栏「产出 → 记录」那一格的最上面
+ * （原来在卡上，卡不展开了就挪到这里），点一份在第三栏看全文。
+ */
+export function OutputDocs({ scope }: RailPanelBodyProps): ReactNode {
+  const rail = useRailState()
+  const docs = useScopeReports(scope)
+  if (docs.reports.length === 0) return null
+  return (
+    <ul className="-mx-2 mb-3 flex flex-col gap-px" data-testid="outputs-docs">
+      {docs.reports.map((r) => (
+        <li key={r.id}>
+          <button
+            type="button"
+            className={ROW}
+            data-testid="output-doc-row"
+            data-id={r.id}
+            onClick={() => {
+              rail.openAddress(reportAddress(r.id))
+            }}
+          >
+            <span className="min-w-0 truncate">{r.title}</span>
+            <Meta>{shortDate(r.at)}</Meta>
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /* ── 计划 ───────────────────────────────────────────────────────────── */
 
 /** 等你点头的排最上，其余按下一次的时间。 */
@@ -268,7 +315,7 @@ function ProgressRow({ scope }: { scope: NonNullable<RailCardBodyProps['scope']>
           rail.show('schedules')
         }}
       >
-        {stuck > 0 ? <i aria-hidden className="size-1.5 shrink-0 rounded-full bg-ws-warn" /> : null}
+        <RowDot tone={stuck > 0 ? 'warn' : 'idle'} />
         <span className="min-w-0 truncate">{t('plans.progress')}</span>
         <Meta>{meta}</Meta>
       </button>
@@ -307,6 +354,7 @@ export function PlansCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNo
       {monitorNext === undefined ? null : (
         <li>
           <div className={ROW} data-testid="plan-row-monitor">
+            <Clock aria-hidden className={ROW_ICON} />
             <span className="min-w-0 truncate">{t('prwatch.plan.row')}</span>
             <Meta>{whenLabel(monitorNext, t)}</Meta>
           </div>
@@ -325,9 +373,7 @@ export function PlansCard({ scope, limit, onTotal }: RailCardBodyProps): ReactNo
                 rail.show('schedules')
               }}
             >
-              {waiting ? (
-                <i aria-hidden className="size-1.5 shrink-0 rounded-full bg-ws-warn" />
-              ) : null}
+              {waiting ? <RowDot tone="warn" /> : <Clock aria-hidden className={ROW_ICON} />}
               <span className="min-w-0 truncate">{r.title ?? t('rail.panel.schedules')}</span>
               <Meta>
                 {r.state === 'paused'
@@ -455,6 +501,27 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
   )
 }
 
+/**
+ * WP456-T3（决策 1448）：「连接」合进看板的清单卡以后，点那一行在第三栏开的完整一格——就是原来卡里那几行
+ * （不截 5 条）+ 连接卡就地连（地址带来的），最底下一行去设置里的「账号连接」看全部。
+ */
+export function ConnectionsPanel(props: RailPanelBodyProps): ReactNode {
+  const { t } = useApp()
+  const noop = (): void => undefined
+  return (
+    <div className="flex flex-col gap-3" data-testid="connections-panel">
+      <ConnectionsCard {...props} limit={Number.MAX_SAFE_INTEGER} onMore={noop} />
+      <Link
+        to={settingsHref('connections')}
+        className="ws-link-muted self-start px-1.5 text-[12px]"
+        data-testid="connections-panel-all"
+      >
+        {t('conncard.all')}
+      </Link>
+    </div>
+  )
+}
+
 /** WP386：连接卡上信息监控那一行（「Google Alerts · 17 条 · 1 条拉不到」）；点开就地看每一条、贴 RSS。 */
 function MonitorRow({
   assignment,
@@ -504,7 +571,8 @@ export function SettingsCard({ limit, tier, onTotal }: RailCardBodyProps): React
     {
       id: 'model',
       label: t('settings.row.model'),
-      value: model ?? (models.isPending ? '' : t('settings.model.none')),
+      // WP456-T3（决策 1447）：没接时这一行不写「还没接 AI」（只在输入框那一颗说）
+      value: model ?? '',
       open: () => undefined,
       href: settingsHref('models'),
     },

@@ -68,6 +68,7 @@ import {
   getMatterTimeline,
   getPosition,
   getPositionByTemplate,
+  getPositions,
   postMatterMessage,
   promoteAskMatter,
   rerouteMatter,
@@ -81,6 +82,7 @@ import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 import type { FreeChatFile, ReasoningEffort } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
+import { assignmentForPosition, myAssignments } from '@/lib/positions'
 import { cn } from '@/lib/utils'
 import {
   archiveMatter,
@@ -99,7 +101,7 @@ const names = (files: readonly { name: string }[]): string =>
   files.map((f) => `「${f.name}」`).join('')
 
 export function MatterPage(): ReactNode {
-  const { t, lang } = useApp()
+  const { t, lang, selectPosition, position: current } = useApp()
   const client = useQueryClient()
   const openConnect = useOpenConnect()
   const params = useParams()
@@ -172,6 +174,18 @@ export function MatterPage(): ReactNode {
   const view = matter.data
   const positionId = view?.matter.position_id
   const templateId = view?.matter.position_template_id
+  /*
+   * WP456-T3：直接打开一件事项（链接、搜索、刷新）时，把当前岗位切到这件事所在的岗位——看板（对话 / 计划 / 报表 /
+   * 清单卡）跟着当前岗位走，不切就是一列「先选一个岗位」。只认本人在那个岗位里有分配的；同一个岗位里已经对了就不动。
+   */
+  const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  useEffect(() => {
+    const instances = mine.data?.instances
+    if (positionId === undefined || instances === undefined) return
+    if (!instances.some((p) => myAssignments(p).includes(positionId))) return
+    const next = assignmentForPosition(instances, positionId, current)
+    if (next !== current) selectPosition(next)
+  }, [positionId, mine.data?.instances, current, selectPosition])
   // 职责的人话名与「换职责」清单（WP153：一进来就取，标签写名字不写 id）
   const position = useQuery({
     queryKey: ['position-instance', positionId ?? templateId ?? ''],

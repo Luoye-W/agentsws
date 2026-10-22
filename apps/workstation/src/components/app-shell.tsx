@@ -42,7 +42,7 @@ import {
   Search,
 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
 import { useOpenTodos } from '@/components/cal-todo/use-todos'
@@ -55,12 +55,11 @@ import { CountBadge } from '@/components/design'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { useInbox } from '@/components/inbox/inbox-model'
 import { useSiteChatUnread } from '@/components/messages/site-chat'
-import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { type ComposeTarget, type Handoff, PaletteProvider } from '@/components/palette-context'
 import { type ShellSize, ShellSizeContext } from '@/components/rail/board-fit'
-import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
+import { RailStateProvider } from '@/components/rail/rail-state'
 import { RailHost, RailTopBar } from '@/components/rail/right-rail'
 import { PositionIcon } from '@/components/role-icons/role-icon'
 import {
@@ -160,8 +159,6 @@ function PositionNav({
   person_id?: string
 }): ReactNode {
   const { lang, t } = useApp()
-  const rail = useRailState()
-  const navigate = useNavigate()
   const { pathname } = useLocation()
   const [adding, setAdding] = useState(false)
   const first = myAssignments(instance)[0]
@@ -262,15 +259,10 @@ function PositionNav({
                   >
                     <span className="truncate">{r.role_name}</span>
                   </NavLink>
-                  <RailPlus
-                    hover
-                    label={t('rail.new_matter', { name: r.role_name })}
-                    testId="rail-new-matter"
-                    onClick={() => {
-                      rail.openCard('conversations', { intent: 'compose', pathname: to })
-                      void navigate(to)
-                    }}
-                  />
+                  {/*
+                    WP456-T3（§3.2）：职责行右边不再挂「+」（和职责名挤在一起）——「+」只在岗位行上；
+                    在这条职责下开新对话走职责页看板「对话」卡头的「+」。
+                  */}
                 </div>
               </li>
             )
@@ -868,7 +860,7 @@ export function AppShell({
                 <div className="flex min-w-0 flex-1 flex-col">
                   {/*
             WP372（决策 1001 / 1002，Luoye 10-17，学 Claude 桌面版）：顶栏 = **窗口右上角那一排**。
-            左边只剩几条整个工作区的状态（演示数据 / 值守中 / 还没接 AI / 余额不足），右边是六张卡的图标
+            左边只剩几条整个工作区的状态（演示数据 / 值守中 / 余额不足；WP456-T3 起「还没接 AI」只在输入框说），右边是六张卡的图标
             与「⋮」（`RailTopBar`；WP412 起：露出的工具 →「⋮」溢出菜单 → 最右专门的面板开关）。原来中间那个「交给某个岗位一件事… ⌘K」搜索框去掉了——派活由助理做（WP343），
             ⌘K 快捷键还在（跳转岗位、搜卡片 / 教程 / 设置、找回归档），只是不再画一个框。
             WP424 起桌面壳藏了系统标题栏（`desktopChrome()`）：这一排就是标题栏——Mac 红绿灯在左栏顶部，
@@ -924,8 +916,10 @@ export function AppShell({
                     <span className="ml-1 flex shrink-0 items-center gap-2">
                       <DemoBadge />
                       <StandbyBadge />
-                      {/* WP98 / WP121b：「还没接模型」小胶囊（向导期间不出）；WP151：余额不足 */}
-                      {onboarding ? null : <NoModelBanner variant="chip" />}
+                      {/*
+                        WP456-T3（决策 1447）：「还没接 AI」只在输入框那一颗说（点了就地接），顶栏不再出「还没接模型」胶囊。
+                        WP151：余额不足照旧。
+                      */}
                       {onboarding ? null : <QuotaChip />}
                     </span>
                     <div className="ml-auto flex shrink-0 items-center">

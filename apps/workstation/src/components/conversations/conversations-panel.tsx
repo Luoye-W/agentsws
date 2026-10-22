@@ -50,11 +50,19 @@ function useComposeOpen(): [boolean, (open: boolean) => void] {
   return [open, setOpen]
 }
 
-function ComposeBar({ scope }: { scope: RailScope }): ReactNode {
+function ComposeBar({
+  scope,
+  inline = true,
+}: {
+  scope: RailScope
+  /** WP456-T3（§3.9）：卡上「+」挪到了卡头右边——卡里不再常驻「+ 新对话」那一行，只在点了「+」后出输入格。 */
+  inline?: boolean
+}): ReactNode {
   const { t } = useApp()
   const [open, setOpen] = useComposeOpen()
   const target = composeTarget(scope)
   if (target === undefined) return null
+  if (!open && !inline) return null
   if (open)
     return (
       <NewConversation
@@ -104,11 +112,11 @@ export function ConversationsCard({ scope, limit, onTotal }: RailCardBodyProps):
   useCardTotal(onTotal, all.length + duties.reduce((n, d) => n + d.more + d.archived, 0))
   if (scope === undefined) return null
   return (
-    <div className="flex flex-col gap-1.5" data-testid="conv-card">
-      <ComposeBar scope={scope} />
+    <div className="flex flex-col gap-1" data-testid="conv-card">
+      <ComposeBar scope={scope} inline={false} />
       {all.length === 0 ? (
         ready ? (
-          <p className="px-1.5 text-[12px] text-ws-muted-fg" data-testid="conv-empty">
+          <p className="px-2 text-[12px] text-ws-muted-fg" data-testid="conv-empty">
             {t('conv.empty')}
           </p>
         ) : null

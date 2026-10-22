@@ -27,14 +27,14 @@
  * （「刚建好，还没开工 · N 条职责」）去掉。「卡住了 / 今天的待办」是要人留意的事，有才出，挪到主区顶上那一行提醒里。
  */
 import { useQuery } from '@tanstack/react-query'
-import { Link2Off, PencilLine, SlidersHorizontal } from 'lucide-react'
+import { CheckCircle2, Link2Off, PencilLine, SlidersHorizontal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
 import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
 import { PlatformChooseBanner } from '@/components/connections/platform-cli-card'
 import { DeckSection } from '@/components/deck'
-import { NoticeLine } from '@/components/design/kit'
+import { EmptyState, NoticeLine, SectionHeader } from '@/components/design/kit'
 import { ConnectionTick } from '@/components/position/connection-tick'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PositionSettings } from '@/components/position/position-settings'
@@ -59,7 +59,6 @@ import {
 } from '@/components/shell/top-bar-slots'
 import { RedditWatchAlertNotice } from '@/components/social/reddit-watch-alert'
 import { RedditWriteNotice } from '@/components/social/reddit-write-notice'
-import { Hint } from '@/components/ui/hint'
 import { getPosition, getPositionConnections, getPositions, getPositionWork } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { dutyHref } from '@/lib/duty-href'
@@ -358,9 +357,19 @@ export function PositionPage(): React.ReactNode {
                 },
               })}
         >
-          {t('pos2.banner.missing', {
-            names: missingItems.map((i) => (lang === 'en' ? i.name.en : i.name.zh)).join('、'),
-          })}
+          {/* WP456-T3（§3.1）：多于两样只点前两样的名，「等 N 项」——一行说完 */}
+          {missingItems.length > 2
+            ? t('pos2.banner.missing_more', {
+                names: missingItems
+                  .slice(0, 2)
+                  .map((i) => (lang === 'en' ? i.name.en : i.name.zh))
+                  .join('、'),
+                n: missingItems.length,
+                more: missingItems.length - 2,
+              })
+            : t('pos2.banner.missing', {
+                names: missingItems.map((i) => (lang === 'en' ? i.name.en : i.name.zh)).join('、'),
+              })}
         </NoticeLine>
       )}
 
@@ -406,11 +415,14 @@ export function PositionPage(): React.ReactNode {
             data-testid="position-deck"
           >
             {fresh ? (
+              /* WP456-T3（§2.6 第 2 / 7 条）：节标题 14/600 + 空状态（灰图标 + 一句话） */
               <>
-                <h3 className="ws-display text-[17px]">{t('pos2.deck.title')}</h3>
-                <p className="text-sm text-muted-foreground" data-testid="position-deck-empty">
-                  ✓ {t('pos2.deck.empty')}
-                </p>
+                <SectionHeader as="h3" title={t('pos2.deck.title')} />
+                <EmptyState
+                  icon={CheckCircle2}
+                  text={t('pos2.deck.empty')}
+                  data-testid="position-deck-empty"
+                />
               </>
             ) : (
               /*
@@ -432,16 +444,11 @@ export function PositionPage(): React.ReactNode {
                 title={(total) => {
                   // WP416（自查 kol U7）：数跟下面这副牌走（还没取到时先用岗位视图那个数）
                   const n = total ?? pending
+                  // WP456-T3（§2.6 第 2 条）：节标题 14/600 + 灰色计数；方向键的说明进了卡底最右边，不再挂问号
                   return (
-                    <h3
-                      className="flex min-w-0 items-center gap-2"
-                      data-testid="position-deck-title"
-                    >
-                      <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
-                      {n === 0 ? null : (
-                        <span className="ws-num text-xs text-ws-muted-fg">{n}</span>
-                      )}
-                      <Hint text={t('pos2.deck.hint')} />
+                    <h3 className="ws-sec-title min-w-0" data-testid="position-deck-title">
+                      {t('pos2.deck.title')}
+                      {n === 0 ? null : <span className="ws-sec-count ws-num">{n}</span>}
                     </h3>
                   )
                 }}

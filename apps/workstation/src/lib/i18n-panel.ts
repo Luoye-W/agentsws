@@ -20,6 +20,7 @@ export const PANEL_ZH: Record<string, string> = {
   'landing.waiting': '看等你的 {n} 个对话',
   'landing.connect': '连上{name}',
   'landing.plans': '看等你点头的 {n} 个计划',
+  'landing.more': '更多',
   'duty.boards_moved': '看板',
   'rail.card.reports': '报表',
   'rail.panel.reports': '报表',
@@ -37,6 +38,7 @@ export const PANEL_ZH: Record<string, string> = {
   'rail.cards': '全部卡片',
   'rail.overflow': '更多',
   'rail.card.more': '显示更多',
+  'rail.card.open': '打开全部「{name}」',
   'rail.card.expand': '展开「{name}」',
   'rail.card.collapse': '收起「{name}」',
   'rail.card.drag': '拖动「{name}」换位置（键盘：空格拿起，方向键挪，再按空格放下）',
@@ -99,6 +101,8 @@ export const PANEL_ZH: Record<string, string> = {
   'conncard.connect': '去连接',
   'conncard.connected': '已连好',
   'conncard.dot.todo': '{n} 个连接要处理',
+  'conncard.all': '在设置里看全部连接',
+  'rail.list.label': '更多',
   // WP420：连接卡上插件那几行
   'extconn.paired': '浏览器插件（Agents 工坊助手）',
   'extconn.google_ads': 'Google 广告后台（插件里连上）',
@@ -107,7 +111,6 @@ export const PANEL_ZH: Record<string, string> = {
   'extconn.pair': '去配对',
 
   'settings.row.model': '用的 AI',
-  'settings.model.none': '还没接 AI',
 }
 
 export const PANEL_EN: Record<string, string> = {
@@ -126,6 +129,7 @@ export const PANEL_EN: Record<string, string> = {
   'landing.waiting': '{n} chats waiting for you',
   'landing.connect': 'Connect {name}',
   'landing.plans': '{n} plans waiting for your OK',
+  'landing.more': 'More',
   'duty.boards_moved': 'Boards',
   'rail.card.reports': 'Reports',
   'rail.panel.reports': 'Reports',
@@ -143,6 +147,7 @@ export const PANEL_EN: Record<string, string> = {
   'rail.cards': 'All cards',
   'rail.overflow': 'More',
   'rail.card.more': 'Show more',
+  'rail.card.open': 'Open all of “{name}”',
   'rail.card.expand': 'Expand “{name}”',
   'rail.card.collapse': 'Collapse “{name}”',
   'rail.card.drag':
@@ -205,6 +210,8 @@ export const PANEL_EN: Record<string, string> = {
   'conncard.connect': 'Connect',
   'conncard.connected': 'Connected',
   'conncard.dot.todo': '{n} connections need you',
+  'conncard.all': 'All connections in Settings',
+  'rail.list.label': 'More',
   'extconn.paired': 'Browser helper (Agents Workshop)',
   'extconn.google_ads': 'Google Ads (connected in the helper)',
   'extconn.meta_ads': 'Meta Ads (connected in the helper)',
@@ -212,5 +219,4 @@ export const PANEL_EN: Record<string, string> = {
   'extconn.pair': 'Pair',
 
   'settings.row.model': 'AI',
-  'settings.model.none': 'No AI yet',
 }

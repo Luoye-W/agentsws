@@ -2084,8 +2084,8 @@ const zh: Table = {
   'deck.detail.toggle': '展开 / 收起详情',
   // ── WP96 卡片十一种排版（09-18 设计画布）─────────────────────────────
   'deck.go': '打开这件事',
-  'deck.before': '改之前',
-  'deck.after': '改之后',
+  'deck.before': '现在',
+  'deck.after': '改成',
   'deck.proposer.agent': 'AI',
   'deck.proposer.person': '人',
   'deck.proposer.sentinel': '哨',
@@ -6529,8 +6529,8 @@ const en: Table = {
   'deck.detail.toggle': 'Toggle details',
   // ── WP96 card layouts ────────────────────────────────────────────────
   'deck.go': 'Open this matter',
-  'deck.before': 'before',
-  'deck.after': 'after',
+  'deck.before': 'Now',
+  'deck.after': 'Change to',
   'deck.proposer.agent': 'AI',
   'deck.proposer.person': 'H',
   'deck.proposer.sentinel': 'S',

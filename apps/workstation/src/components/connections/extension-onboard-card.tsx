@@ -9,6 +9,10 @@
  * 配上之后这一块自己消失，换成一行「还差一步」（按岗位要的：插件里连 Reddit / 连广告后台，做完自己打勾）；
  * 都连好、方案还没设 → 「下一步：<方案名>」一个按钮，点了出 WP348 那张方案卡（进「要你处理」）；再没事就整张不画。
  * 界面少字：标题 + 一句为什么（按用途拼）+ 动作；步骤怎么点放进问号。
+ *
+ * WP456-T3（§3.1「先装好浏览器插件整卡占满第一屏」）：岗位页上「还没配上」那一段降成**一行提醒**
+ * （「先装好浏览器插件，这个岗位要靠它…」+ 右边「装插件」链接），点了才在下面展开装插件 + 配对码；
+ * 「稍后」照旧在那一行上。卡不再画描边（规范 §2.5）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, CircleDashed, Puzzle } from 'lucide-react'
@@ -16,6 +20,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ExtensionPairingCode } from '@/components/connections/browser-extension'
 import { ExtensionInstall } from '@/components/connections/extension-install'
+import { NoticeLine } from '@/components/design/kit'
 import { settingsHref } from '@/components/settings-panel/route'
 import { useConnectAssignment } from '@/components/setup/use-connect-flow'
 import { Button } from '@/components/ui/button'
@@ -114,6 +119,8 @@ export function ExtensionOnboardCard(props: {
     refetchInterval: 4000,
   })
   const [later, setLater] = useState(false)
+  /** WP456-T3：岗位页那一行提醒点了「装插件」才展开装 + 配对。 */
+  const [expanded, setExpanded] = useState(false)
   const [planSent, setPlanSent] = useState<string[]>([])
   const snooze = useMutation({
     mutationFn: () => snoozeExtensionNeeds(props.roleIds, props.assignment),
@@ -185,9 +192,54 @@ export function ExtensionOnboardCard(props: {
       </Button>
     )
 
+  // WP456-T3（§3.1）：岗位页上还没配上——一行提醒 +「装插件」链接，点开再给装插件与配对码
+  if (props.mode === 'position' && phase === 'install')
+    return (
+      <div
+        className="flex flex-col gap-2"
+        data-testid="extension-onboard"
+        data-phase={phase}
+        data-mode={props.mode}
+      >
+        <NoticeLine
+          icon={Puzzle}
+          tone="info"
+          end={
+            <span className="flex items-center gap-1">
+              <button
+                type="button"
+                className="ws-link-muted text-xs"
+                disabled={snooze.isPending}
+                title={t('extonboard.later.hint')}
+                onClick={() => snooze.mutate()}
+                data-testid="extension-onboard-later"
+              >
+                {t('extonboard.later')}
+              </button>
+            </span>
+          }
+          action={{
+            label: t(expanded ? 'extonboard.collapse' : 'extonboard.install'),
+            testId: 'extension-onboard-open',
+            data: { 'data-expanded': expanded ? 'true' : 'false' },
+            onClick: () => {
+              setExpanded((x) => !x)
+            },
+          }}
+        >
+          <span data-testid="extension-onboard-why">{t('extonboard.line', { what })}</span>
+        </NoticeLine>
+        {expanded ? (
+          <div className="rounded-xl bg-ws-card p-4 shadow-ws">
+            <ExtensionInstallAndPair owner={owner} />
+          </div>
+        ) : null}
+      </div>
+    )
+
   return (
     <section
-      className="flex flex-col gap-2 rounded-lg border border-ws-line bg-ws-card p-3"
+      className="flex flex-col gap-2 rounded-xl bg-ws-card p-4 shadow-ws"
       data-testid="extension-onboard"
       data-phase={phase}
       data-mode={props.mode}

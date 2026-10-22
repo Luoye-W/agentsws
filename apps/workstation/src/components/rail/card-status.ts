@@ -47,16 +47,19 @@ export function useConversationsStatus({ scope }: RailPanelBodyProps): CardStatu
   const { duties } = useScopeConversations(scope)
   const all = duties.flatMap((d) => d.matters)
   if (all.length === 0) return undefined
+  // WP456-T3（§3.9）：卡头标题后面跟一个灰色计数（「对话 1」）
+  const count = all.length
   const waiting = all.filter((m) => m.state === 'awaiting' || m.state === 'ready').length
   if (waiting > 0)
     return {
       summary: t('conv.summary.waiting', { n: waiting }),
+      count,
       dot: 'attention',
       dotLabel: t('conv.dot.waiting', { n: waiting }),
     }
   const running = all.filter((m) => m.state === 'running').length
-  if (running > 0) return { summary: t('conv.summary.running', { n: running }) }
-  return { summary: t('conv.summary.count', { n: all.length }) }
+  if (running > 0) return { summary: t('conv.summary.running', { n: running }), count }
+  return { summary: t('conv.summary.count', { n: all.length }), count }
 }
 
 /** 报表：最新一份的名字与日期（「周报 · 10-12」）。不亮点——报表看完即过，不要人做什么。 */
@@ -316,7 +319,6 @@ export function useSettingsStatus(
   _props: RailPanelBodyProps,
   detail = true,
 ): CardStatus | undefined {
-  const { t } = useApp()
   const models = useQuery({
     queryKey: MODEL_CHOICES_KEY,
     queryFn: getFreeChatModels,
@@ -325,5 +327,6 @@ export function useSettingsStatus(
   })
   if (models.data === undefined) return undefined
   const label = models.data.choices.find((c) => c.id === models.data?.default)?.label
-  return { summary: label ?? t('settings.model.none') }
+  // WP456-T3（决策 1447）：没接时什么都不写——「还没接 AI」只在输入框那一颗说
+  return label === undefined ? undefined : { summary: label }
 }

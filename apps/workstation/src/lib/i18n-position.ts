@@ -19,6 +19,7 @@ export const POSITION_ZH: Record<string, string> = {
   'pos2.settings': '岗位设置',
   // WP431：不再说「必需」（与 WP424 首次设置同一套说法）
   'pos2.banner.missing': '还没连上：{names}',
+  'pos2.banner.missing_more': '还没连上 {names}等 {n} 项',
   'pos2.banner.go': '去连接',
   // WP288（决策 326）：没有页签了；连接正常 = 标题旁一个绿勾（悬停这两句）
   'pos2.settings.back': '返回',
@@ -41,7 +42,6 @@ export const POSITION_ZH: Record<string, string> = {
 
   // 要你处理
   'pos2.deck.title': '要你处理',
-  'pos2.deck.hint': '要你批、选、改的都在这里，一次一张；方向键也能批',
   'pos2.deck.empty': '没有要你处理的',
 
   // 工作
@@ -218,6 +218,7 @@ export const POSITION_EN: Record<string, string> = {
   'pos2.queue.confirm': 'Schedule',
   'pos2.settings': 'Position settings',
   'pos2.banner.missing': 'Not connected yet: {names}',
+  'pos2.banner.missing_more': 'Not connected yet: {names} and {more} more',
   'pos2.banner.go': 'Connect',
   'pos2.settings.back': 'Back',
   'pos2.tick.shopify': 'Shopify connected',
@@ -238,7 +239,6 @@ export const POSITION_EN: Record<string, string> = {
     'Leave it on auto and the position picks the duty; pick one to use that duty’s rules directly',
 
   'pos2.deck.title': 'Needs you',
-  'pos2.deck.hint': 'Everything you approve, pick or edit is here, one at a time; arrow keys work',
   'pos2.deck.empty': 'Nothing needs you',
 
   'pos2.work.title': 'Work',
