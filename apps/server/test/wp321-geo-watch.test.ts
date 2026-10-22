@@ -559,6 +559,12 @@ describe('WP321 变化大才出卡、指标', () => {
     expect(titles).not.toContain(`写一页回答「${P0}」`)
     expect(titles).toContain('关注词「travel power bank」掉出前 10（上周第 4，这周第 14）')
     expect(matters.find((m) => m.title.startsWith('交公关'))?.position_template_id).toBe('pr')
+    // WP449：改页面的那件带上「好不好被 AI 引用」五条写法；交公关的不带
+    const fix = matters.find((m) => m.title === `写一页回答「${P1}」`) as { summary?: string }
+    expect(fix.summary).toContain('改动稿这样写：先给答案')
+    expect(
+      (matters.find((m) => m.title.startsWith('交公关')) as { summary?: string }).summary,
+    ).not.toContain('改动稿这样写')
     const [rivals] = await cards('geo_watch_competitors')
     if (rivals === undefined) throw new Error('没出竞品卡')
     const rp = rivals.payload as Extract<GeoWatchCardPayload, { form: 'geo_watch_competitors' }>

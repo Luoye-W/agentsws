@@ -94,6 +94,8 @@ const SKILL_NAMES = new Set([
   'brand-system',
   'brand-voice',
   'chargeback-evidence',
+  // WP449：多市场版本（内容与博客，按需）
+  'content-localize',
   'customer-care',
   // WP160 邮件与短信 / 红人营销
   'email-sms',

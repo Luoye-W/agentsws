@@ -33,6 +33,10 @@ describe('seoDraftPrompt', () => {
     const section = seoDraftPrompt({ ...base, kind: 'page_section_add', language: 'zh' })
     expect(section).toContain('"heading"')
     expect(section).toContain('不编任何数字')
+    // WP449：加小节照「好不好被 AI 引用」五条写；改标题那种不带
+    expect(section).toContain('先给答案')
+    expect(section).toContain('能抽成列表 / 表格')
+    expect(meta).not.toContain('Answer first')
   })
 })
 

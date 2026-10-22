@@ -169,9 +169,11 @@ describe('WP329 Reddit 写：起草 → 卡 → 插件填草稿、人点发送 �
     const job = await openAwaiting(b)
     expect(job?.plan).toMatchObject({ platform: 'reddit', kind: 'reddit_reply', pace: 'write' })
     expect(job?.approval_id).toBe(id)
-    expect(job?.plan.steps[0]).toEqual({
+    expect(job?.plan.steps[0]).toMatchObject({
       op: 'goto',
       url: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/c1/',
+      // WP467：带上帖子 id（已经开着这个帖子就地填）
+      post: 'abc',
     })
     expect(job?.plan.allow.values).toEqual([text])
     expect(job?.plan.allow.click.join(' ')).not.toMatch(/save|submit/u)

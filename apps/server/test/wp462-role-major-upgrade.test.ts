@@ -308,10 +308,10 @@ describe('WP462 老品牌从 beta.4 升上来（真服务进程）', () => {
     }
   })
 
-  it('内容接到 3.0.0；同一个人补发了 SEO 与 GEO（采纳率搬过去、跟原分配安放在同一个岗位）', async () => {
+  it('内容接到当前版本（3.1.0，WP449 小版本）；同一个人补发了 SEO 与 GEO（采纳率搬过去、跟原分配安放在同一个岗位）', async () => {
     const mine = await dataOf<Assignment[]>('GET', '/v1/assignments')
     const content = mine.find((a) => a.id === ids.content)
-    expect(content?.role_version).toBe('3.0.0')
+    expect(content?.role_version).toBe('3.1.0')
     expect(Object.keys(content?.automation_state ?? {}).sort()).toEqual([
       'stage_listing_edit',
       'stage_publish_post',
@@ -363,7 +363,7 @@ describe('WP462 老品牌从 beta.4 升上来（真服务进程）', () => {
           role_id: 'dtc.content',
           kind: 'reconfirmed',
           from: '2.0.0',
-          to: '3.0.0',
+          to: '3.1.0',
           via: 'auto',
           reason: 'wp446',
         }),

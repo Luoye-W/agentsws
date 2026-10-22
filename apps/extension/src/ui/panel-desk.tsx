@@ -9,6 +9,9 @@
  *   **写了理由才跟随同类**（AI 按理由判同类的也一并不发，顶上一行能撤回）、才进学习回路；
  * - **稍后**：收到底下一行，两小时后自己回来。
  *
+ * WP467（Luoye 10-22）：「打开这一条」改叫**填入**——你已经开着这个帖子就在那一页里填（不跳转、不另开），没开着才新开
+ * www 原帖；「复制」之后自己粘贴发出去也照样记；认不出就点「我发了，帮我记一下」（贴链接 / 认最近一条）。
+ *
  * 插件**从不**自己开页面、从不点发送（`background.ts` / `queue.ts` / `write.ts` 三处钉住）。
  * WP445（决策 1323）：底部那一栏去掉了；插件与工坊版本对不上时顶上临时出一条（{@link VersionBanner}），平时不显示。
  */
@@ -97,6 +100,8 @@ export function deskEntries(
 
 export interface DeskActions {
   open(entry: DeskEntry, edit: { text?: string; title?: string }): Promise<string | undefined>
+  /** WP467：「我发了，帮我记一下」（贴链接 / 认最近一条）。回没记上那一句。 */
+  sent?(entry: DeskEntry, how: 'link' | 'latest', link?: string): Promise<string | undefined>
   /** 不发（理由可选）。 */
   skip(entry: DeskEntry, reason?: string): Promise<string | undefined>
   later(entry: DeskEntry): void
@@ -224,6 +229,89 @@ function SkipReasons(props: {
           算了，还要发
         </button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * WP467：「我发了，帮我记一下」——插件没认出你自己发出去的那一条时：贴那一条的链接，或「认最近一条」
+ * （插件读这个帖子里你这个号最新发的那一条）。发新帖只能贴链接。
+ */
+export function SentBox(props: {
+  canLatest: boolean
+  sent(how: 'link' | 'latest', link?: string): Promise<string | undefined>
+}): React.ReactNode {
+  const [open, setOpen] = useState(false)
+  const [link, setLink] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ bad: boolean; text: string } | undefined>(undefined)
+  const go = (how: 'link' | 'latest') => {
+    setBusy(true)
+    setMsg(undefined)
+    void props.sent(how, how === 'link' ? link.trim() : undefined).then((m) => {
+      setBusy(false)
+      setMsg(m === undefined ? { bad: false, text: '记下了' } : { bad: true, text: m })
+    })
+  }
+  if (!open)
+    return (
+      <button
+        type="button"
+        className="ws-btn ws-btn--ghost ws-btn--sm"
+        data-testid="ws-sent-open"
+        title="你已经在 Reddit 上自己发了、插件没认出来：贴那一条的链接，或认最近一条"
+        onClick={() => setOpen(true)}
+      >
+        我发了，帮我记一下
+      </button>
+    )
+  return (
+    <div className="ws-reasons" data-testid="ws-sent">
+      <div className="ws-row">
+        <input
+          className="ws-input"
+          data-testid="ws-sent-link"
+          value={link}
+          maxLength={500}
+          placeholder="贴那一条的链接"
+          aria-label="那一条的链接"
+          onChange={(e) => setLink(e.target.value)}
+        />
+        <button
+          type="button"
+          className="ws-btn ws-btn--sm"
+          data-testid="ws-sent-save"
+          disabled={busy || link.trim() === ''}
+          onClick={() => go('link')}
+        >
+          记下
+        </button>
+      </div>
+      <div className="ws-row ws-wrap">
+        {props.canLatest ? (
+          <button
+            type="button"
+            className="ws-btn ws-btn--ghost ws-btn--sm"
+            data-testid="ws-sent-latest"
+            disabled={busy}
+            title="读这个帖子里你这个号最新发的那一条"
+            onClick={() => go('latest')}
+          >
+            认最近一条
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="ws-btn ws-btn--ghost ws-btn--sm"
+          disabled={busy}
+          onClick={() => setOpen(false)}
+        >
+          算了
+        </button>
+      </div>
+      {msg === undefined ? null : (
+        <p className={msg.bad ? 'ws-note ws-note--bad' : 'ws-note'}>{msg.text}</p>
+      )}
     </div>
   )
 }
@@ -374,10 +462,10 @@ export function DeskItem(props: {
                   className="ws-btn ws-btn--primary"
                   data-testid="ws-desk-open"
                   disabled={!props.canAct || busy !== undefined || text.trim() === ''}
-                  title="在这个窗口新开一页、把草稿填进回复框；发送由你自己点"
+                  title="在原帖页里填好（你开着就填在那一页，没开着新开一页）；发送你自己点"
                   onClick={open}
                 >
-                  {busy === 'open' ? '正在打开…' : '打开这一条'}
+                  {busy === 'open' ? '正在填…' : '填入'}
                 </button>
                 <button
                   type="button"
@@ -385,11 +473,16 @@ export function DeskItem(props: {
                   data-testid="ws-desk-copy"
                   onClick={() => {
                     void props.actions.copy(text).then((ok) => {
-                      setMsg({ bad: !ok, text: ok ? '草稿已复制' : '没复制上，选中文字自己复制' })
+                      setMsg({
+                        bad: !ok,
+                        text: ok
+                          ? '已复制——自己粘贴发出去，插件照样记'
+                          : '没复制上，选中文字自己复制',
+                      })
                     })
                   }}
                 >
-                  复制草稿
+                  复制
                 </button>
               </div>
               <div className="ws-actions ws-actions--minor">
@@ -411,6 +504,14 @@ export function DeskItem(props: {
                 >
                   不发
                 </button>
+                {props.actions.sent === undefined || !props.canAct ? null : (
+                  <SentBox
+                    canLatest={v.kind !== 'submit'}
+                    sent={(how, link) =>
+                      props.actions.sent?.(props.entry, how, link) ?? Promise.resolve(undefined)
+                    }
+                  />
+                )}
               </div>
             </>
           )}
@@ -467,7 +568,7 @@ export function PanelDesk(props: {
       <div className="ws-sec-head">
         <b>等你发</b>
         <span className="ws-muted" title="插件不会自己打开页面、也不会点发送">
-          看一眼 · 打开 · 你来发
+          看一眼 · 填入 · 你来发
         </span>
       </div>
       <ul className="ws-cards">

@@ -100442,6 +100442,122 @@
         }
       }
     },
+    "/v1/extension/panel/writes/{job}/sent": {
+      "post": {
+        "operationId": "extensionPanelSent",
+        "summary": "WP467：人在 Reddit 上自己发出去了（插件在原帖页认出来的 / 贴的链接 / 认最近一条）——核过（这个帖子里、文本相近、同一条不记两次）记「已记录」",
+        "tags": ["extension"],
+        "parameters": [
+          {
+            "name": "job",
+            "in": "path",
+            "required": true,
+            "description": "插件动作的那一件 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PanelFillResult",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-returns": "PanelFillResult",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "how": {
+                    "type": "string",
+                    "enum": ["seen", "link", "latest"]
+                  },
+                  "permalink": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "fullname": {
+                    "type": "string",
+                    "pattern": "^t[13]_[a-z0-9]{1,13}$"
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  "author": {
+                    "type": "string",
+                    "maxLength": 40
+                  }
+                },
+                "required": ["how"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/extension/panel/writes/{job}/drop": {
       "post": {
         "operationId": "extensionPanelDrop",

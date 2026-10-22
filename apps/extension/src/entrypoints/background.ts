@@ -15,12 +15,17 @@
  *   WP432：没配对也问（只问版本号）。
  * - WP432（Luoye 10-20 反馈 9）：**插件不自己开 Reddit 页面**——批过的回复在侧边栏里等你点「打开这一条」，
  *   点了才在这个窗口新开标签页、填好、等你自己点发送；图标上出「等你发」的数字，新来的弹一句通知。
+ * - WP467（Luoye 10-22）：「填入」先找**你已经开着的原帖页**就地填（没开着才新开 www 原帖，不用 old.reddit）；
+ *   你自己在原帖页上发出去的（插件填好后点的、或复制粘贴的），插件认出来就记「已记录」。
  */
 
+import { redditJobOnWww } from '@agentsws/browser-action'
 import { defineBackground } from 'wxt/utils/define-background'
 import { onActionClick } from '@/lib/action-click'
 import { adsPanelStatus, recordAdsConsent } from '@/lib/ads/broker'
 import { noteActionClick } from '@/lib/ads/capture-grant'
+import { ADS_CONTENT_SCRIPT } from '@/lib/ads/chrome-driver'
+import type { AdsDomResponse } from '@/lib/ads/dom-messages'
 import type { RunControl } from '@/lib/ads/executor'
 import { executeJob } from '@/lib/ads/executor'
 import { openAdsTab, openRedditTab, seenAdsAccounts } from '@/lib/ads/open-tab'
@@ -46,6 +51,7 @@ import { composeUrlAllowed, workshopCardUrl } from '@/lib/panel/format'
 import { backgroundFetch, chromeRedditTabs, sessionFetch } from '@/lib/reddit/fetcher'
 import { redditConnected } from '@/lib/reddit/permissions'
 import { pollRedditOnce, REDDIT_STATUS_KEY, readRedditStatus } from '@/lib/reddit/poller'
+import { SentWatcher } from '@/lib/reddit/sent-broker'
 import { checkForUpdate, runningVersion } from '@/lib/self-update'
 import { chromeStore, clearQueue, readSettings, writeSettings } from '@/lib/storage'
 import { refreshWaiting } from '@/lib/waiting'
@@ -137,6 +143,8 @@ export default defineBackground(() => {
     if (alarm.name === UPDATE_ALARM) {
       void checkUpdate()
       void badge()
+      // WP467：侧边栏关着时也每分钟看一眼原帖页（人自己发出去的照样记）
+      void sentWatcher.tick().catch(() => undefined)
       return
     }
     if (alarm.name === ADS_ALARM) {
@@ -171,6 +179,36 @@ export default defineBackground(() => {
       },
     })
   })
+  // WP467：人自己在原帖页上发出去的，认出来就记（只读页面，不点任何东西）
+  const sentWatcher = new SentWatcher({
+    store: deps.store,
+    now: () => Date.now(),
+    read: (url) => sessionFetch(backgroundFetch(), chromeRedditTabs())(url),
+    page: {
+      tabs: async () =>
+        (await chrome.tabs.query({ url: 'https://www.reddit.com/*', status: 'complete' }))
+          .filter((t) => t.id !== undefined && t.url !== undefined)
+          .map((t) => ({ id: t.id as number, url: t.url as string })),
+      find: async (tabId, selector, body, text, author) => {
+        await chrome.scripting.executeScript({ target: { tabId }, files: [ADS_CONTENT_SCRIPT] })
+        const out = (await chrome.tabs.sendMessage(tabId, {
+          type: 'ads-dom',
+          op: 'find-posted',
+          selector,
+          body,
+          text,
+          ...(author === undefined ? {} : { author }),
+        })) as AdsDomResponse
+        return Array.isArray(out) ? out : []
+      },
+    },
+  })
+  // Reddit 标签页刚加载完（人发完评论 Reddit 有时会刷新那一页）：看一眼
+  chrome.tabs.onUpdated.addListener((_id, info, tab) => {
+    if (info.status === 'complete' && (tab.url ?? '').startsWith('https://www.reddit.com/'))
+      void sentWatcher.tick().catch(() => undefined)
+  })
+
   // WP413：侧边栏要的那几件（看 / 填进页面 / 不发 / 再填一次），填完马上去领活
   // WP432：人在侧边栏里点了「打开这一条」——在那个窗口新开标签页、填好、等人点发送（同一时刻只开一条）
   let sideRunning = false
@@ -182,8 +220,10 @@ export default defineBackground(() => {
       void pollAds()
     },
     busy: () => sideRunning,
-    runJob: async (job, windowId) => {
-      if (job.plan.platform !== 'reddit') return { ok: false, message: '这一条不在这里打开。' }
+    runJob: async (raw, windowId) => {
+      if (raw.plan.platform !== 'reddit') return { ok: false, message: '这一条不在这里打开。' }
+      // WP467：写路径里不开 old.reddit（WP445 之前排进队的老活换成 www）
+      const job = redditJobOnWww(raw)
       const s = await readSettings(deps.store)
       if (s.token === undefined) return { ok: false, message: '还没配对。' }
       const tab = await openRedditTab(job, windowId).catch(() => ({
@@ -302,11 +342,14 @@ export default defineBackground(() => {
           case 'panel-state': {
             const state = await panelState(panelDeps)
             // WP432：侧边栏刷新时顺手对一下图标上的数字
-            if (state.kind === 'ok')
+            if (state.kind === 'ok') {
               void refreshWaiting(
                 { store: deps.store, action: chrome.action, notify: () => undefined },
                 state.snapshot,
               ).catch(() => undefined)
+              // WP467：侧边栏开着时每次刷新顺手看一眼原帖页
+              void sentWatcher.tick(state.snapshot).catch(() => undefined)
+            }
             reply({ type: 'panel-state', state })
             return
           }
@@ -353,6 +396,20 @@ export default defineBackground(() => {
             })
             void badge()
             return
+          case 'panel-sent': {
+            // WP467：「我发了，帮我记一下」——贴链接 / 认最近一条
+            const out = await sentWatcher.manual(
+              {
+                ...(message.job === undefined ? {} : { job: message.job }),
+                ...(message.card === undefined ? {} : { card: message.card }),
+              },
+              message.how,
+              message.link,
+            )
+            reply({ type: 'panel-act', ...out })
+            void badge()
+            return
+          }
           case 'panel-refill':
             reply({ type: 'panel-act', ...(await panelRefillWrite(panelDeps, message.job)) })
             return

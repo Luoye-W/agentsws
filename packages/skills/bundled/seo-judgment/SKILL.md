@@ -3,14 +3,14 @@ name: seo-judgment
 description: SEO 与 GEO 的判断方式：排名结论怎么查、拿不到的数怎么说、挑哪些词、先修哪一页、怎么写才让人和 AI 都答得出。装在 dtc.seo 职责上，按需加载。
 license: MIT
 tier: open
-version: 1.0.0
+version: 1.1.0
 display_name: SEO 与 GEO
 display_name_en: SEO & GEO
 summary: 挑词、先修哪页、怎么写才答得出
 summary_en: Pick keywords, fix the right page first, write to be answered
 ---
 
-> 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 ai-seo、seo-audit、content-strategy、copy-editing 四个技能；部分判断规矩改编自 every-app/open-seo（MIT）。已按 Agents 工坊的规矩改写，冲突处以本文为准。
+> 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 ai-seo、seo-audit、content-strategy、copy-editing 四个技能；部分判断规矩改编自 every-app/open-seo（MIT）；「对比页」一节与「让 AI 答得出」的五条改编自 AgriciDaniel/claude-seo（MIT）的 seo-competitor-pages、seo-geo 与 AgriciDaniel/claude-blog（MIT）的 blog-geo。已按 Agents 工坊的规矩改写，冲突处以本文为准。
 
 ## 你做什么
 
@@ -97,6 +97,14 @@ summary_en: Pick keywords, fix the right page first, write to be answered
 
 同一篇内容同时给人读、给 AI 搜索引用。不单独给 AI 写一版，也不把文章切成碎块喂给 AI——那样两头都吃亏。
 
+GEO 缺位要改页面时，改动稿照这五条写（发布前的「好不好被 AI 引用」打分也按这五条数，只给建议，不挡发布）：
+
+1. **先给答案**：开头和每个小节的第一句直接回答，不铺垫；
+2. **段落自足**：每段单独拎出来也读得懂，不用「这 / 它 / 如上所述」接上文；
+3. **实体说清**：开头点名品牌和商品全名，全篇叫法一致；
+4. **数字带出处**：每个数都指得回事实卡，引外面的数要链到原页；
+5. **能抽成列表 / 表格**：步骤用编号列表，比较用表格，小标题用买家的原话提问。
+
 - **每一节开头先给答案**，一两句话能单独拎出来读懂；再展开。
 - **问题就用买家的原话当小标题**：「Does it work with a phone case?」比「兼容性说明」好。
 - **比较用表格**，步骤用编号列表，一段只讲一件事。
@@ -104,6 +112,19 @@ summary_en: Pick keywords, fix the right page first, write to be answered
 - **署名与第一手经验**：谁写的、我们自己测过什么，照实写。没测过就不写「我们测试发现」。
 - **不堆关键词**。读起来像为算法写的，人不买、AI 也不引。
 - 买家问 AI「best X for Y」时，AI 更信外面的评价、论坛、媒体，不只信我们自己的页。自己的页做到讲清楚、可引用；外面的提及是公关的事。
+
+## 对比页：X vs Y、X 的替代品
+
+买家在比较的时候搜「我们 vs 某家」「某家 alternative」「某家和某家哪个好」。这一类可以出新页面选题卡，选题卡上写明「这是一页对比」；批了由内容与博客去写，下面这些规矩跟着事项带过去。
+
+- **对比项必须指得回事实卡或公开可核的页面**：我们这边的数只引事实卡；对方的数只引对方官网、说明书、公开价目这类人能自己点开核对的页，链过去，写「截至某日」。对方没公开的写「没公开」，不猜、不引论坛上的说法。
+- **不贬低、不用绝对化词**：只摆事实，承认对方的长处，写清各自适合谁；不写「骗」「垃圾」「智商税」这类词。写清这一页是我们自己写的。
+- **结构**：开头一两句给结论（谁适合选哪个），一张对比表（表头写清比的是什么），各自适合的人，常见问题。
+- **「某家的替代品」**：列我们和另外一两个，说清各自适合谁，不只列自己。
+- **结构化数据只标我们自己的商品**：不给对方的商品标评分、价格；要加标记交给建站。
+- **价钱会变**：对方的价格写日期；过时了按「旧内容翻新」处理。
+
+发布前会查：比竞品的那句指不回事实卡、也没链出处，或者用了贬低的词，挡在草稿；链了出处的会打开那一页核对。
 
 ## 数字与引语
 
