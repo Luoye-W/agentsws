@@ -4,17 +4,22 @@
  * 全是纯函数，三条口径（WP469 示意稿「我自己定的」）：
  * - 只排在工作时间 9:00–18:00，不排周末；
  * - 避开日历上已经占了时段的事（会议、排了钟点的待办），**直播**前后再各空半小时；
+ * - WP474（决策 1530）：前两条按「设置 → 我的作息」（{@link WorkHours}）来，另可避开午饭 12:00–13:00；
+ *   不给就是上面这套默认；
  * - 「换一个」= 这一件的下一个空档（候选在这里一次算好几个，互不重叠）。
  *
  * **这里什么都不写**：算出来的只是候选，人点「采用」才走改待办那条路写 `Todo.scheduled`。
  * 时长先按标题里的动词估（写 / 拍 / 研究约 2 小时，整理 / 核对约 1.5 小时，其余约 1 小时）。
  */
-import type {
-  CalendarItem,
-  Iso8601,
-  Todo,
-  TodoSlotProposal,
-  TodoSlotResult,
+import {
+  type CalendarItem,
+  DEFAULT_WORK_HOURS,
+  type Iso8601,
+  LUNCH_SPAN_MIN,
+  type Todo,
+  type TodoSlotProposal,
+  type TodoSlotResult,
+  type WorkHours,
 } from '@agentsws/contracts'
 import { DAY_MS, MINUTE_MS, ms, startOfDay } from './util.js'
 
@@ -50,8 +55,11 @@ interface Span {
   end: number
 }
 
-/** 日历上哪些时段已经占了：会议、排了钟点的待办（只算没做完的）；直播前后各加半小时。 */
-export function busySpans(items: readonly CalendarItem[]): Span[] {
+/** 日历上哪些时段已经占了：会议、排了钟点的待办（只算没做完的）；直播前后各加半小时（按作息设置）。 */
+export function busySpans(
+  items: readonly CalendarItem[],
+  liveBufferMin: number = LIVE_BUFFER_MIN,
+): Span[] {
   const out: Span[] = []
   for (const i of items) {
     if (i.all_day || i.end === undefined) continue
@@ -60,7 +68,7 @@ export function busySpans(items: readonly CalendarItem[]): Span[] {
     const start = ms(i.start)
     const end = ms(i.end)
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue
-    const pad = LIVE_RE.test(i.title) ? LIVE_BUFFER_MIN * MINUTE_MS : 0
+    const pad = LIVE_RE.test(i.title) ? Math.max(0, liveBufferMin) * MINUTE_MS : 0
     out.push({ start: start - pad, end: end + pad })
   }
   return out
@@ -78,7 +86,10 @@ export function slotStarts(input: {
   to: Iso8601
   now: Iso8601
   tz_offset_minutes: number
+  /** WP474：作息（不给 = 默认 9–18、不排周末） */
+  hours?: WorkHours | undefined
 }): number[] {
+  const hours = input.hours ?? DEFAULT_WORK_HOURS
   const from = Math.max(ms(input.from), ms(input.now))
   const to = ms(input.to)
   const out: number[] = []
@@ -86,8 +97,8 @@ export function slotStarts(input: {
   const step = SLOT_STEP_MIN * MINUTE_MS
   for (let day = startOfDay(from, input.tz_offset_minutes); day < to; day += DAY_MS) {
     const weekday = new Date(day + input.tz_offset_minutes * MINUTE_MS).getUTCDay()
-    if (weekday === 0 || weekday === 6) continue
-    for (let m = WORK_START_MIN; m < WORK_END_MIN; m += SLOT_STEP_MIN) {
+    if (!hours.weekends && (weekday === 0 || weekday === 6)) continue
+    for (let m = hours.start_min; m < hours.end_min; m += SLOT_STEP_MIN) {
       const at = day + m * MINUTE_MS
       if (at < from || at >= to) continue
       // 「现在」之后的第一个整半点起
@@ -109,14 +120,26 @@ export function proposeSlots(input: {
   to: Iso8601
   now: Iso8601
   tz_offset_minutes: number
+  /** WP474（决策 1530）：「我的作息」；不给 = 默认 */
+  hours?: WorkHours | undefined
 }): TodoSlotResult {
-  const busy = busySpans(input.items)
-  const starts = slotStarts(input)
+  const hours = input.hours ?? DEFAULT_WORK_HOURS
+  const busy = busySpans(input.items, hours.live_buffer_min)
+  const starts = slotStarts({ ...input, hours })
   const tz = input.tz_offset_minutes
   const fits = (span: Span): boolean => {
-    // 不跨过下班：起点那天的 18:00 之前结束
+    // 不跨过下班：起点那天的下班之前结束
     const day = startOfDay(span.start, tz)
-    if (span.end > day + WORK_END_MIN * MINUTE_MS) return false
+    if (span.end > day + hours.end_min * MINUTE_MS) return false
+    // 避开午饭：和那天 12:00–13:00 有重叠就不要
+    if (
+      hours.avoid_lunch &&
+      overlaps(span, {
+        start: day + LUNCH_SPAN_MIN.start * MINUTE_MS,
+        end: day + LUNCH_SPAN_MIN.end * MINUTE_MS,
+      })
+    )
+      return false
     return !busy.some((b) => overlaps(b, span))
   }
   const wanted = input.todos.filter(
@@ -174,4 +197,38 @@ export function proposeSlots(input: {
     })
   }
   return { proposals, unplaced }
+}
+
+/**
+ * WP474（决策 1530）：存着的 / 传进来的作息读成一份合法的（坏了的那几格回默认）。
+ * 上下班按半小时对齐、下班晚于上班；直播前后 0–120 分钟。
+ */
+export function normalizeWorkHours(raw: unknown): WorkHours {
+  const r = (raw ?? {}) as Partial<Record<keyof WorkHours, unknown>>
+  const d = DEFAULT_WORK_HOURS
+  const minute = (v: unknown, fallback: number): number =>
+    typeof v === 'number' &&
+    Number.isInteger(v) &&
+    v >= 0 &&
+    v <= 24 * 60 &&
+    v % SLOT_STEP_MIN === 0
+      ? v
+      : fallback
+  let start_min = minute(r.start_min, d.start_min)
+  let end_min = minute(r.end_min, d.end_min)
+  if (end_min <= start_min) {
+    start_min = d.start_min
+    end_min = d.end_min
+  }
+  const buffer = r.live_buffer_min
+  return {
+    start_min,
+    end_min,
+    weekends: typeof r.weekends === 'boolean' ? r.weekends : d.weekends,
+    live_buffer_min:
+      typeof buffer === 'number' && Number.isInteger(buffer) && buffer >= 0 && buffer <= 120
+        ? buffer
+        : d.live_buffer_min,
+    avoid_lunch: typeof r.avoid_lunch === 'boolean' ? r.avoid_lunch : d.avoid_lunch,
+  }
 }

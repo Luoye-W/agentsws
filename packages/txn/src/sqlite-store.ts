@@ -402,6 +402,10 @@ export class SqliteTxnStore implements TxnStore {
     )
   }
 
+  unmarkApproved(change_id: string): void {
+    this.#db.prepare('DELETE FROM approved_changes WHERE change_id = ?').run(change_id)
+  }
+
   // ───────────────────────────── 施行锁 + 围栏号（15 §apply / 31 §3.2）
 
   /**

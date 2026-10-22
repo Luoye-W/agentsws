@@ -130,5 +130,14 @@ export function compositeApprovals(primary: ApprovalBus, secondary: ApprovalBus)
       const bus = await ownerOf(id)
       return bus?.annotate === undefined ? undefined : bus.annotate(id, by, input)
     },
+    // WP474：取消窗口里撤回「通过」/ 问撤不撤得回——同样落到卡住的那一本
+    async unapprove(id, by, input) {
+      const bus = await ownerOf(id)
+      return bus?.unapprove === undefined ? undefined : bus.unapprove(id, by, input)
+    },
+    async undoable(id, by) {
+      const bus = await ownerOf(id)
+      return bus?.undoable === undefined ? undefined : bus.undoable(id, by)
+    },
   } satisfies ApprovalBus
 }

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { runBudgetCaps } from '../src/runtime.js'
 
 describe('runBudgetCaps', () => {
-  it('WP423：缺省 15 万 token、12 次（原来 6 万，8 步就过线）', () => {
+  it('WP474（决策 1571）：缺省 30 万 token、12 次（WP423 原来 6 万 → 15 万；WP472 之后长运行累计 31 万）', () => {
     expect(runBudgetCaps({ themeRun: false, granted: false, browsing: false })).toEqual({
-      max_tokens: 150_000,
+      max_tokens: 300_000,
       max_tool_calls: 12,
     })
   })

@@ -989,6 +989,7 @@ import {
   createWorkArchive,
   type WorkArchiveAssembly,
 } from './work-archive.js'
+import { createWorkHoursStore } from './work-hours.js'
 import {
   createWorkshopServiceTools,
   isBackgroundRun,
@@ -13720,9 +13721,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const cached = workPorts.get(ws)
     if (cached !== undefined) return cached
     const brand = await brandModules.forWorkspace(ws)
+    const hoursDir = brandDirOf(dbDir, ws, workspace.id)
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP474（决策 1530）：「我的作息」——品牌目录下 work-hours.json，每人一份
+      workHours: createWorkHoursStore(
+        hoursDir === undefined ? undefined : join(hoursDir, 'work-hours.json'),
+      ),
       // WP447：事项里附上的投放报表直接入库
       ...(brand.adsExportIntake === undefined ? {} : { fileIntake: brand.adsExportIntake }),
       // WP388：手动「周复盘」也取上一周（目标市场时区）

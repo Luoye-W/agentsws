@@ -90,7 +90,16 @@ export {
   newHandoff,
   settleHandoff,
 } from './handoff.js'
-export { deriveHorizon, type HorizonInput, isOpen, resolveHorizon, WEEK_DAYS } from './horizon.js'
+export {
+  deriveHorizon,
+  effectiveHorizon,
+  type HorizonInput,
+  isOpen,
+  resolveHorizon,
+  startOfWeek,
+  viewTodo,
+  WEEK_DAYS,
+} from './horizon.js'
 export { type Migration, migrate, schemaVersion, WORK_MIGRATIONS } from './migrations.js'
 export {
   BUSY_MAX_SUGGESTIONS,
@@ -146,6 +155,7 @@ export {
   busySpans,
   estimateTodoMinutes,
   LIVE_BUFFER_MIN,
+  normalizeWorkHours,
   proposeSlots,
   SLOT_OPTIONS_MAX,
   SLOT_STEP_MIN,
