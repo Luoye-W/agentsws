@@ -25,7 +25,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
 import { BrandMark, GroupLabel, InfoTip, StatusPill, testedMs, useFresh } from '@/components/design'
-import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
+import { TutorialHint } from '@/components/help/tutorial-link'
 import { AiSourceOrder } from '@/components/models/ai-source-order'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
@@ -1341,24 +1341,25 @@ function AddRow({
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 text-sm font-medium text-ws-ink">
             <span className="truncate">{name}</span>
-            {/* WP156：服务端那段整句介绍进问号；卡面上是下面那一句 */}
-            {item.summary === '' ? null : (
-              <Hint text={item.summary} testId="model-template-summary" />
-            )}
           </p>
           <p className="truncate text-xs text-ws-muted-fg" data-testid="model-template-line">
             {line}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {tutorial !== undefined ? (
-            <TutorialLink slug={tutorial} className="text-ws-muted-fg hover:text-primary" />
-          ) : plan.steps.length + plan.links.length === 0 ? null : (
-            <InlineGuideLink
-              title={item.label}
-              markdown={templateGuide(plan)}
-              className="text-ws-muted-fg hover:text-primary"
+          {/*
+            WP156：服务端那段整句介绍进问号。WP456-T6（§3.8 P2）：每家只留**一个**问号——悬停是介绍，
+            点开是教程（原来是「ⓘ +『看教程』」两颗）。
+          */}
+          {tutorial !== undefined || plan.steps.length + plan.links.length > 0 ? (
+            <TutorialHint
+              text={item.summary}
+              {...(tutorial !== undefined
+                ? { slug: tutorial }
+                : { guide: { title: item.label, markdown: templateGuide(plan) } })}
             />
+          ) : item.summary === '' ? null : (
+            <Hint text={item.summary} testId="model-template-summary" />
           )}
           {keyGroup ? (
             <Button

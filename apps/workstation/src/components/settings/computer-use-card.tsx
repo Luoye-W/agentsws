@@ -254,7 +254,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 {hiddenRoles === 0 ? null : (
                   <button
                     type="button"
-                    className="self-start text-xs text-primary underline-offset-4 hover:underline"
+                    className="ws-link self-start text-xs"
                     data-testid="computer-use-roles-more"
                     onClick={() => {
                       setAllRoles(true)

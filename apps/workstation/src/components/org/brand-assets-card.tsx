@@ -3,7 +3,9 @@
  * 与设计规范同一层（一个品牌一份）；整页在 `/brand-assets`。
  */
 import { useQuery } from '@tanstack/react-query'
+import { ImageIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { EmptyState } from '@/components/design'
 import { AuthedImage } from '@/components/images/authed-image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,7 +35,7 @@ export function BrandAssetsCard(): React.ReactNode {
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
-          <p className="text-[12.5px] text-ws-muted-fg">{t('assets.empty')}</p>
+          <EmptyState icon={ImageIcon} text={t('assets.empty')} />
         ) : (
           <div className="grid grid-cols-6 gap-2">
             {rows.map((r) => (
