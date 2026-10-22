@@ -25,6 +25,7 @@ import {
   KolOutreachBody,
   KolReviewBody,
 } from '@/components/kol/kol-card-bodies'
+import { isMessageRuleCardPayload, MessageRuleCardBody } from '@/components/messages/rule-card-body'
 import {
   GoogleAlertChangeBody,
   isGoogleAlertChangePayload,
@@ -447,6 +448,9 @@ export function DeckCardBody({
         if (isFaqImportPayload(payload)) return <FaqImportBody payload={payload} />
         // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，
         // 下面一句说之后怎样、去哪儿改（不出改之前 / 改之后双格，不出「谁能批」那一行）
+        // WP441：「要建这条规则吗」——一行白话、试跑、会改掉去向的几封；「建」在卡身里（带上「也处理过去 30 天的」）
+        if (isMessageRuleCardPayload(payload))
+          return <MessageRuleCardBody card={card} payload={payload} />
         // WP323：记录去处的「定规矩」——一行预览（列 → 这一条会写成什么）+ 一句之后怎样；不出双格
         if (payload.form === 'record_sink') {
           const rows = (Array.isArray(payload.preview) ? payload.preview : [])
@@ -777,7 +781,9 @@ export function DeckCardBody({
     // WP322：FAQ 导入那张「记下 / 只加新的 / 不用」
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'faq_import' ||
     // WP323：记录去处那张「记下 / 不用」
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'record_sink'
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'record_sink' ||
+    // WP441：「要建这条规则吗」（建 / 不要都在卡身里）
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'message_rule'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (

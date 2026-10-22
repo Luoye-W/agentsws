@@ -57,12 +57,18 @@ export function quickActions(card: DeckCard): DeckAction[] {
     (card.detail.payload as { kind?: unknown } | undefined)?.kind === 'google_alert_change' ||
     (typeof form === 'string' && form.startsWith('service_')) ||
     // WP406：岗位更新的「全部应用 / 这次跳过」在卡身里（带选项）
-    form === 'content_update_digest'
-  return card.available_actions
-    .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
-    .filter((a) => !(bodyPrimary && a === 'approve'))
-    .sort((a, b) => rank(a) - rank(b))
-    .slice(0, MAX_QUICK_ACTIONS)
+    form === 'content_update_digest' ||
+    // WP441：「要建这条规则吗」——「建」要带上「也处理过去 30 天的」那个勾，在卡身里
+    form === 'message_rule'
+  return (
+    card.available_actions
+      .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
+      .filter((a) => !(bodyPrimary && a === 'approve'))
+      // WP441：「要建这条规则吗」的「修改」在卡身里（把原话带回规则面板），底下不再出一个
+      .filter((a) => !(form === 'message_rule' && a === 'instruct'))
+      .sort((a, b) => rank(a) - rank(b))
+      .slice(0, MAX_QUICK_ACTIONS)
+  )
 }
 
 /**
@@ -184,7 +190,8 @@ export function DeckActionBar({
         </span>
       ) : null}
       {extra}
-      {optionMissing === true ? (
+      {/* 主按钮在卡身里的卡（底下没有「通过」）不出「先选一个」 */}
+      {optionMissing === true && quick.includes('approve') ? (
         <span className="text-xs text-muted-foreground">{t('deck.option_required')}</span>
       ) : null}
       {/* WP414：`···` 只留真正少用的（主次都排不上的动作）；没有就不出 */}

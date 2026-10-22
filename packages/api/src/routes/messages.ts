@@ -24,6 +24,7 @@ import type {
   MessageClaimInput,
   MessageConfirmRouteInput,
   MessageConfirmRouteResult,
+  MessageDigest,
   MessageDraft,
   MessageDraftInput,
   MessageFlagsInput,
@@ -37,6 +38,13 @@ import type {
   MessageNoticeAckInput,
   MessageOverview,
   MessageRecord,
+  MessageRule,
+  MessageRuleDraft,
+  MessageRuleList,
+  MessageRulePatch,
+  MessageRuleProposal,
+  MessageRuleProposeInput,
+  MessageRuleTrial,
   MessageSendInput,
   MessageSendResult,
   MessageSuggest,
@@ -304,6 +312,47 @@ export interface MessagesPort {
     approval_item_id: string,
   ): MaybePromise<{ learned: boolean } | undefined>
 
+  /* ── WP441（docs/108 §5.1 / §5.6）：消息规则、试跑、一句话转规则、今天的简报。不实现 = 501 ── */
+
+  /** 消息规则清单（按清单顺序 = 优先级；带系统规则「今天的简报」）。 */
+  messageRules?(actor: MessageActor): MaybePromise<MessageRuleList>
+  /** 直接建一条（表单）。一句话建走 {@link MessagesPort.proposeMessageRule}（出卡要人点）。 */
+  createMessageRule?(
+    actor: MessageActor,
+    draft: MessageRuleDraft,
+  ): MaybePromise<{ rule: MessageRule }>
+  /** 改一条（带版本号；对不上回 409「刚被 X 改过」）。 */
+  updateMessageRule?(
+    actor: MessageActor,
+    id: string,
+    patch: MessageRulePatch,
+  ): MaybePromise<{ rule: MessageRule }>
+  deleteMessageRule?(actor: MessageActor, id: string): MaybePromise<{ deleted: boolean }>
+  /** 撤回刚删的一条消息规则（7 天内，决策 243）。 */
+  restoreMessageRule?(
+    actor: MessageActor,
+    id: string,
+  ): MaybePromise<{ restored: boolean; rule?: MessageRule }>
+  /** 拖动排序：给全部规则的新顺序（不在里面的排在后面）。 */
+  reorderMessageRules?(actor: MessageActor, ids: string[]): MaybePromise<MessageRuleList>
+  /** 试跑（不落库、不执行动作）。 */
+  trialMessageRule?(actor: MessageActor, draft: MessageRuleDraft): MaybePromise<MessageRuleTrial>
+  /** 一句话 → 规则草案 + 试跑 + 「要建这条规则吗」卡。 */
+  proposeMessageRule?(
+    actor: MessageActor,
+    input: MessageRuleProposeInput,
+  ): MaybePromise<MessageRuleProposal>
+  /** 「这封不该归它」：给那条规则加这个发件人的排除，当场生效。 */
+  excludeFromMessageRule?(
+    actor: MessageActor,
+    message_id: string,
+    rule_id: string,
+  ): MaybePromise<{ rule: MessageRule }>
+  /** 今天的简报（还没点「知道了」的，按规则分组）。 */
+  digest?(actor: MessageActor): MaybePromise<MessageDigest>
+  /** 「全部知道了」（或点名几封）。 */
+  ackDigest?(actor: MessageActor, message_ids?: string[]): MaybePromise<{ acked: number }>
+
   /** 立刻收一次。 */
   sync(actor: MessageActor): MaybePromise<MessageSyncReport>
   /** 「再往前取」。 */
@@ -362,6 +411,79 @@ const KINDS = [
   'marketing',
   'personal_other',
 ] as const satisfies readonly MessageKind[]
+
+/* ── WP441：消息规则的入参（条件 / 动作只认这几种；外发动作根本写不进来） ── */
+
+const RuleConditionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('from'), value: z.string().min(1).max(320) }),
+  z.object({ type: z.literal('to_account'), value: z.string().min(1).max(320) }),
+  z.object({ type: z.literal('subject_has'), value: z.string().min(1).max(200) }),
+  z.object({ type: z.literal('body_has'), value: z.string().min(1).max(200) }),
+  z.object({ type: z.literal('kind'), value: z.enum(KINDS) }),
+  z.object({ type: z.literal('source'), value: z.enum(['email', 'chat']) }),
+  z.object({ type: z.literal('has_attachment'), value: z.boolean() }),
+  z.object({ type: z.literal('ai'), value: z.string().min(1).max(300) }),
+])
+
+const RuleActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('hand_to'), position_id: z.string().min(1).max(80) }),
+  z.object({ type: z.literal('notice') }),
+  z.object({ type: z.literal('label'), label: z.string().min(1).max(64) }),
+  z.object({
+    type: z.literal('record'),
+    sink_id: z.string().min(1).max(80).optional(),
+    sink_name: z.string().min(1).max(80).optional(),
+  }),
+  z.object({ type: z.literal('notify'), person_id: z.string().min(1).max(80).optional() }),
+  z.object({ type: z.literal('digest') }),
+  z.object({ type: z.literal('draft'), instruction: z.string().min(1).max(200).optional() }),
+])
+
+const RuleWhenSchema = z.object({
+  match: z.enum(['all', 'any']),
+  conditions: z.array(RuleConditionSchema).min(1).max(12),
+  except: z.array(z.string().min(1).max(320)).max(200).optional(),
+})
+
+const RuleScopeSchema = z.object({
+  kind: z.enum(['brand', 'account', 'personal']),
+  account: z.string().min(3).max(320).optional(),
+})
+
+const RuleDraftBody = z.object({
+  name: z.string().min(1).max(60),
+  scope: RuleScopeSchema.optional(),
+  when: RuleWhenSchema,
+  actions: z.array(RuleActionSchema).min(1).max(10),
+  origin_text: z.string().max(1000),
+  enabled: z.boolean().optional(),
+})
+
+const RulePatchBody = z.object({
+  revision: z.number().int().min(0),
+  name: z.string().min(1).max(60).optional(),
+  scope: RuleScopeSchema.optional(),
+  when: RuleWhenSchema.optional(),
+  actions: z.array(RuleActionSchema).min(1).max(10).optional(),
+  enabled: z.boolean().optional(),
+  origin_text: z.string().max(1000).optional(),
+  time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .optional(),
+})
+
+const RuleOrderBody = z.object({ ids: z.array(z.string().min(1).max(80)).max(500) })
+
+const RuleProposeBody = z.object({
+  text: z.string().min(1).max(1000),
+  rule_id: z.string().min(1).max(80).optional(),
+  revision: z.number().int().min(0).optional(),
+})
+
+const RuleExcludeBody = z.object({ rule_id: z.string().min(1).max(80) })
+
+const DigestAckBody = z.object({ message_ids: z.array(z.string().min(1)).max(1000).optional() })
 
 const KindBody = z.object({ kind: z.enum(KINDS), remember_sender: z.boolean().optional() })
 
@@ -651,6 +773,213 @@ export function messageRoutes(): Route[] {
         return ok(c, await port.restoreSenderRule(actorOf(c), param(c, 'id')))
       },
     ),
+    /* ── WP441：消息规则（老的 `/v1/messages/rules` 是发件人规则，不动；决策 1356） ── */
+    route(
+      {
+        method: 'get',
+        path: '/v1/messages/message-rules',
+        operationId: 'listMessageRules',
+        summary:
+          '消息规则清单（「什么样的信 → 做什么」；顺序就是优先级），带系统规则「今天的简报」（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'MessageRuleList',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.messageRules === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
+        return ok(c, await port.messageRules(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/message-rules',
+        operationId: 'createMessageRule',
+        summary:
+          '建一条消息规则（表单）。动作只有交给岗位 / 只是通知 / 打标签 / 记到某处 / 告诉我 / 进简报 / 起草回复（出卡），没有外发（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: RuleDraftBody,
+        returns: '{ rule: MessageRule }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.createMessageRule === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
+        const input = (await body(c, RuleDraftBody)) as MessageRuleDraft
+        return ok(c, await port.createMessageRule(actorOf(c), input), 201)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/message-rules/trial',
+        operationId: 'trialMessageRule',
+        summary:
+          '试跑一条规则草案：写死条件跑最近 30 天全部，AI 条件最多试最近 50 封；不落库、不执行动作（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: RuleDraftBody,
+        returns: 'MessageRuleTrial',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.trialMessageRule === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
+        const input = (await body(c, RuleDraftBody)) as MessageRuleDraft
+        return ok(c, await port.trialMessageRule(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/message-rules/propose',
+        operationId: 'proposeMessageRule',
+        summary:
+          '一句话 → 规则草案 + 试跑 + 「要建这条规则吗」卡（规则只能由人的话建；建了才生效）（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: RuleProposeBody,
+        returns: 'MessageRuleProposal',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.proposeMessageRule === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
+        const input = (await body(c, RuleProposeBody)) as MessageRuleProposeInput
+        return ok(c, await port.proposeMessageRule(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/message-rules/order',
+        operationId: 'reorderMessageRules',
+        summary: '拖动排序：给规则的新顺序（排最前的优先定去向）（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: RuleOrderBody,
+        returns: 'MessageRuleList',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.reorderMessageRules === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
+        return ok(c, await port.reorderMessageRules(actorOf(c), (await body(c, RuleOrderBody)).ids))
+      },
+    ),
+    route(
+      {
+        method: 'patch',
+        path: '/v1/messages/message-rules/:id',
+        operationId: 'updateMessageRule',
+        summary:
+          '改一条消息规则（开关、名字、条件、动作；系统规则改时间）。带版本号，拿旧版本改的回 409（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: RulePatchBody,
+        returns: '{ rule: MessageRule }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.updateMessageRule === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
+        const input = (await body(c, RulePatchBody)) as MessageRulePatch
+        return ok(c, await port.updateMessageRule(actorOf(c), param(c, 'id'), input))
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/messages/message-rules/:id',
+        operationId: 'deleteMessageRule',
+        summary: '删一条消息规则（当场生效；系统规则删不掉，只能关）（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: '{ deleted: boolean }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.deleteMessageRule === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
+        return ok(c, await port.deleteMessageRule(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/message-rules/:id/restore',
+        operationId: 'restoreMessageRule',
+        summary: '撤回刚删的一条消息规则（7 天内；决策 243：删了能撤回）（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: '{ restored: boolean; rule?: MessageRule }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.restoreMessageRule === undefined)
+          throw new ApiError('not_implemented', '这台机器上删掉的消息规则撤不回来')
+        return ok(c, await port.restoreMessageRule(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/messages/digest',
+        operationId: 'getMessageDigest',
+        summary: '今天的简报：命中「进今天的简报」、还没点「知道了」的信，按规则分组（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'MessageDigest',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.digest === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有今天的简报')
+        return ok(c, await port.digest(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/digest/ack',
+        operationId: 'ackMessageDigest',
+        summary: '简报「全部知道了」（或点名几封）（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: DigestAckBody,
+        returns: '{ acked: number }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.ackDigest === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有今天的简报')
+        const input = await body(c, DigestAckBody)
+        return ok(c, await port.ackDigest(actorOf(c), input.message_ids))
+      },
+    ),
     route(
       {
         method: 'get',
@@ -836,6 +1165,27 @@ export function messageRoutes(): Route[] {
             (await body(c, ConfirmRouteBody)) as MessageConfirmRouteInput,
           ),
         )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/:id/rule-exclude',
+        operationId: 'excludeFromMessageRule',
+        summary: '「这封不该归它」：给那条消息规则加这个发件人的排除，当场生效（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: RuleExcludeBody,
+        returns: '{ rule: MessageRule }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.excludeFromMessageRule === undefined)
+          throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
+        const input = await body(c, RuleExcludeBody)
+        return ok(c, await port.excludeFromMessageRule(actorOf(c), param(c, 'id'), input.rule_id))
       },
     ),
     route(

@@ -30,6 +30,8 @@ export const NOTIFY_ZH: Record<string, string> = {
   'notify.cat.update.hint': '本周岗位更新到了',
   'notify.cat.outbound': '等你发',
   'notify.cat.outbound.hint': '批过的 Reddit 回复 / 帖子，等你在浏览器插件里打开、自己点发送',
+  'notify.cat.messages': '消息',
+  'notify.cat.messages.hint': '消息规则里「告诉我一声」的来信、每天的消息简报',
   'notify.col.inbox': '站内',
   'notify.col.system': '系统',
   'notify.col.inbox.hint': '进右上角的铃铛',
@@ -69,6 +71,9 @@ export const NOTIFY_EN: Record<string, string> = {
   'notify.cat.outbound': 'Ready to send',
   'notify.cat.outbound.hint':
     'Approved Reddit replies / posts waiting for you to open in the browser extension and send yourself',
+  'notify.cat.messages': 'Messages',
+  'notify.cat.messages.hint':
+    'Mail your message rules said to tell you about, and the daily message digest',
   'notify.col.inbox': 'In app',
   'notify.col.system': 'System',
   'notify.col.inbox.hint': 'Shows under the bell, top right',

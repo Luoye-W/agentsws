@@ -39,6 +39,7 @@ import type {
   MeetingRecord,
   MeetingRecordSourceKind,
   MessageClaim,
+  MessageDigest,
   MessageDraft,
   MessageFolder,
   MessageFolderKind,
@@ -47,6 +48,12 @@ import type {
   MessageLabel,
   MessageOverview,
   MessageRecord,
+  MessageRule,
+  MessageRuleDraft,
+  MessageRuleList,
+  MessageRulePatch,
+  MessageRuleProposal,
+  MessageRuleTrial,
   MessageSendResult,
   MessageSuggest,
   MessageSyncReport,
@@ -6723,6 +6730,73 @@ export const restoreMessageSenderRule = (
   id: string,
 ): Promise<{ restored: boolean; rule?: SenderRule }> =>
   api(`/v1/messages/rules/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+
+/* ── WP441（docs/108 §5.1 / §5.6）：消息规则、今天的简报 ─────────────── */
+
+/** 消息规则清单（顺序 = 优先级；带系统规则「今天的简报」）。 */
+export const listMessageRules = (): Promise<MessageRuleList> => api('/v1/messages/message-rules')
+
+/** 一句话 → 草案 + 试跑 + 「要建这条规则吗」卡（`rule_id` = 改这一条）。 */
+export const proposeMessageRule = (input: {
+  text: string
+  rule_id?: string
+  revision?: number
+}): Promise<MessageRuleProposal> =>
+  api('/v1/messages/message-rules/propose', { method: 'POST', body: input })
+
+/** 试跑一条草案（不落库、不执行）。 */
+export const trialMessageRule = (draft: MessageRuleDraft): Promise<MessageRuleTrial> =>
+  api('/v1/messages/message-rules/trial', { method: 'POST', body: draft })
+
+/** 改一条（带版本号；拿旧版本改的回 409「刚被 X 改过」）。 */
+export const updateMessageRule = (
+  id: string,
+  patch: MessageRulePatch,
+): Promise<{ rule: MessageRule }> =>
+  api(`/v1/messages/message-rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch })
+
+export const deleteMessageRule = (id: string): Promise<{ deleted: boolean }> =>
+  api(`/v1/messages/message-rules/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/** 撤回刚删的一条消息规则（7 天内）。 */
+export const restoreMessageRule = (
+  id: string,
+): Promise<{ restored: boolean; rule?: MessageRule }> =>
+  api(`/v1/messages/message-rules/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+
+/** 拖动排序：给新顺序。 */
+export const reorderMessageRules = (ids: string[]): Promise<MessageRuleList> =>
+  api('/v1/messages/message-rules/order', { method: 'POST', body: { ids } })
+
+/** 「这封不该归它」：给那条规则加这个发件人的排除。 */
+export const excludeFromMessageRule = (
+  message_id: string,
+  rule_id: string,
+): Promise<{ rule: MessageRule }> =>
+  api(`/v1/messages/${encodeURIComponent(message_id)}/rule-exclude`, {
+    method: 'POST',
+    body: { rule_id },
+  })
+
+/** 「要建这条规则吗」卡：建（可勾「也处理过去 30 天的」）/ 不要。 */
+export const decideMessageRuleCard = (
+  card_id: string,
+  pick: 'after' | 'after_past' | 'before',
+): Promise<unknown> =>
+  api(`/v1/approvals/${encodeURIComponent(card_id)}/decide`, {
+    method: 'POST',
+    body: { action: 'approve', via: 'workstation', selected_option_id: pick },
+  })
+
+/** 今天的简报（还没点「知道了」的，按规则分组）。 */
+export const getMessageDigest = (): Promise<MessageDigest> => api('/v1/messages/digest')
+
+/** 简报「全部知道了」。 */
+export const ackMessageDigest = (message_ids?: string[]): Promise<{ acked: number }> =>
+  api('/v1/messages/digest/ack', {
+    method: 'POST',
+    body: message_ids === undefined ? {} : { message_ids },
+  })
 
 /** WP212：改判类型（✎）；`remember_sender` = 以后这个发件人都这样。 */
 export const setMessageKind = (

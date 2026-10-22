@@ -81,6 +81,9 @@ function TriageLine({
           kind={kind}
           confidence={triage.kind_confidence ?? triage.confidence}
           by={triage.kind_by}
+          ruleHits={triage.rule_hits}
+          ruleRoute={triage.rule_route}
+          about={{ from: message.from.name ?? message.from.email, subject: message.subject }}
           onDone={(text, tone) => {
             onNotice?.({ text, tone })
           }}

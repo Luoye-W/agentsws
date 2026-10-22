@@ -89,4 +89,11 @@ export const REPORT_OUTBOUND_ACTION = 'report'
  * 发出记录里「只有点名才记」的动作：记录去处的筛选里 `actions` 明确列了它才写进去
  * （报告不是「发出去的一条回复」，不该默认混进回复记录表；决策 768 的口径）。
  */
-export const OUTBOUND_OPT_IN_ACTIONS: readonly string[] = [REPORT_OUTBOUND_ACTION]
+export const OUTBOUND_OPT_IN_ACTIONS: readonly string[] = [
+  REPORT_OUTBOUND_ACTION,
+  // WP441：消息规则「记到某处」记下的来信——只进规则点名的那个去处（或筛选里明确列了它的）
+  'message_rule',
+]
+
+/** WP441：发出记录里消息规则记下的那一行的动作。 */
+export const MESSAGE_RULE_OUTBOUND_ACTION = 'message_rule'

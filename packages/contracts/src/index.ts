@@ -90,6 +90,7 @@ export * from './markets.js'
 // WP259：「交给它」长文本拆成标题 + 完整原文（工作台与服务端共用一条规矩）
 export * from './matter-chat.js'
 export * from './meetings.js'
+export * from './message-rules.js'
 // WP113（63）：消息——统一收件处。v1 只有邮箱一种来源，但数据模型按"来源可扩"建
 export * from './messages.js'
 export * from './model.js'

@@ -84,7 +84,7 @@ import type {
   ResolveMx,
   WecomSocketFactory,
 } from '@agentsws/channels'
-import { replySuggestStubScript, routeOfPosition } from '@agentsws/channels'
+import { messageRuleStubScript, replySuggestStubScript, routeOfPosition } from '@agentsws/channels'
 import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
 import type {
   AdsCaps,
@@ -146,6 +146,7 @@ import {
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
+  MESSAGE_RULE_OUTBOUND_ACTION,
   marketLanguage,
   normalizeGenuiHost,
   OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS,
@@ -594,6 +595,12 @@ import { createMatterTitler } from './matter-title.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createMemoryBook, type MemoryReason } from './memory-book.js'
 import { attachMemoryPersistence } from './memory-persist.js'
+import {
+  isMessageRuleCard,
+  messageRuleCardInput,
+  messageRuleDraftCardInput,
+} from './message-rule-cards.js'
+import { createMessageRuleToolExecutor } from './message-rule-tools.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
 import { hasThinkingEffort } from './model-thinking.js'
@@ -2563,7 +2570,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       providers: [
         stubProvider({
           seed: 7,
-          scripts: [chatAnswerStubScript, emailAnswerStubScript, replySuggestStubScript],
+          scripts: [
+            chatAnswerStubScript,
+            emailAnswerStubScript,
+            replySuggestStubScript,
+            messageRuleStubScript,
+          ],
         }),
       ],
       /*
@@ -2942,6 +2954,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP254（决策 117）：社媒回帖卡批了就发——经这条渠道的出口（Reddit：接口优先、官方号浏览器兜底）
       const socialReply = await brand?.socialService.executor.deliverReply(item)
       if (socialReply !== undefined) return socialReply
+      // WP441：消息规则起草的回信卡批了 → 从收信那只邮箱回（不是这种卡回 undefined）
+      const ruleDraft = await brand?.messages.deliverRuleDraft(item)
+      if (ruleDraft !== undefined) return ruleDraft
       // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
       return (
         (await brand?.chat.deliver(item, opts)) ??
@@ -3407,6 +3422,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 删去处时还没定的卡撤掉（到期作废，不算谁拒的）。
    */
   let outboundCardSeq = 0
+  /** WP441：消息规则的两种卡（「要建这条规则吗」、规则起草的回信）的序号（去重键用）。 */
+  let messageRuleCardSeq = 0
   outboundCard = async (input) => {
     const approver = hasApprovalFlow((await modeOfWorkspace?.(input.workspace_id)) ?? 'company')
       ? (await identity.getWorkspace(input.workspace_id))?.owner_id
@@ -7097,6 +7114,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             // WP323：记录去处的三个工具（所有职责；配置只出「定规矩」卡）
             recordSinkTools: createRecordSinkToolExecutor({ log: () => outboundLog }),
+            // WP441：一句话写消息规则（所有职责；只出「要建这条规则吗」卡）
+            messageRuleTools: createMessageRuleToolExecutor({
+              messages: () => lateMessages.current,
+            }),
             /*
              * WP331（决策 691）：报告积木——查巡查数据 / 立即巡查（只给担巡查的职责）、查发出记录 / 发布报告（所有职责）。
              * 周报不是固定功能：AI 用官方「自动化任务」建定时，到点用这四个取数、出报告。巡查库只在调工具那一刻才取。
@@ -8899,6 +8920,141 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
         }
       },
+      /*
+       * WP441（docs/108 §5.1 / §5.6）：消息规则。动作全是不往外发的：记到某处进发出记录（动作 `message_rule`，
+       * 只写规则点名的那个去处）、告诉我一声 / 简报进铃铛「消息」类、起草回复出卡（批了才从收信那只邮箱回）。
+       */
+      ruleSinks: () =>
+        outboundLog
+          .sinks(ws)
+          .filter((s) => s.state !== 'pending_confirm')
+          .map((s) => ({ id: s.id, name: s.name })),
+      notifyMessages: (n) => {
+        notifications.notify({ workspace_id: ws, category: 'messages', ...n })
+      },
+      notifyMessageRuleChange: async ({ by, action, rule }) => {
+        // 个人邮箱的规则只有写的人看得见：不告诉别人
+        if (rule.scope.kind === 'personal') return
+        const who = (await identity.getPerson(by).catch(() => undefined))?.name ?? by
+        const text =
+          action === 'restored'
+            ? `${who} 撤回了消息规则「${rule.name}」的删除`
+            : `${who} ${action === 'created' ? '建了' : action === 'updated' ? '改了' : '删了'}消息规则「${rule.name}」`
+        // 决策 243：规则交给某个岗位 → 告诉做那个岗位的人；没交给岗位 → 告诉品牌里的人
+        const handTo = rule.actions.find((a) => a.type === 'hand_to')
+        const template =
+          handTo?.type === 'hand_to'
+            ? org.positions().find((t) => t.id === handTo.position_id)
+            : undefined
+        const duties = new Set(template?.roles.map((r) => r.role) ?? [])
+        const to =
+          duties.size === 0
+            ? (await identity.members(ws))
+                .filter((m) => m.left_at === undefined)
+                .map((m) => m.person_id)
+            : roles.assignments
+                .listByWorkspace(ws)
+                .filter((a) => a.revoked_at === undefined && duties.has(a.role_id))
+                .map((a) => a.person_id)
+        for (const person_id of new Set(to)) {
+          if (person_id === by) continue
+          notifications.notify({
+            workspace_id: ws,
+            person_id,
+            category: 'team',
+            text,
+            href: '/messages?panel=rules',
+            key: `message_rule_change:${rule.id}`,
+          })
+        }
+      },
+      recordRuleMessage: ({ record, triage, rules: hitRules, sink_id, sink_name }) => {
+        const sinks = outboundLog.sinks(ws)
+        const want = sink_name?.trim().toLowerCase()
+        const target =
+          (sink_id === undefined ? undefined : sinks.find((s) => s.id === sink_id)) ??
+          (want === undefined || want === ''
+            ? undefined
+            : sinks.find((s) => s.name.trim().toLowerCase() === want))
+        outboundLog.record(ws, {
+          source_key: `message_rule:${record.id}:${target?.id ?? sink_name ?? 'local'}`,
+          sent_at: record.date,
+          channel: record.source,
+          action: MESSAGE_RULE_OUTBOUND_ACTION,
+          kind: MESSAGE_RULE_OUTBOUND_ACTION,
+          counterpart: record.from.name ?? record.from.email,
+          thread_title: record.subject,
+          subject: record.subject,
+          // 不是我们发出去的东西：内容一格放摘要，原文不进这一行
+          content: triage.summary,
+          message: {
+            sender: record.from.email,
+            received_at: record.date,
+            ...(triage.kind === undefined ? {} : { kind: triage.kind }),
+            summary: triage.summary,
+            rule_names: hitRules.map((r) => r.name),
+            link: `/messages?view=all&thread=${encodeURIComponent(record.thread_id)}`,
+          },
+          // 点名的去处没配好（只说了名字）：只记在本机的记录里
+          only_sinks: target === undefined ? [] : [target.id],
+        })
+      },
+      stageRuleCard: async (input) => {
+        messageRuleCardSeq += 1
+        const item = await approvals.create(
+          messageRuleCardInput({
+            ...input,
+            seq: `${Date.parse(clock.now()).toString(36)}_${messageRuleCardSeq}`,
+          }),
+        )
+        return item.state === 'blocked' ? undefined : item.id
+      },
+      stageRuleDraft: async ({ record, rule, subject, text, position_id }) => {
+        // 有对口岗位进那个岗位的人；没有进首页（品牌里第一个持岗位的人）
+        const template =
+          position_id === undefined ? undefined : org.positions().find((t) => t.id === position_id)
+        const duties = template?.roles.map((r) => r.role) ?? []
+        const holder =
+          (duties.length === 0 ? undefined : positionFor(ws, duties)) ?? firstPositionOf(ws)
+        if (holder === undefined) return undefined
+        messageRuleCardSeq += 1
+        const item = await approvals.create(
+          messageRuleDraftCardInput({
+            workspace_id: ws,
+            to: {
+              person_id: holder.person_id,
+              assignment_id: holder.assignment_id,
+              role_id: holder.role_id,
+            },
+            message_id: record.id,
+            thread_id: record.thread_id,
+            account: record.account,
+            from: {
+              email: record.from.email,
+              ...(record.from.name === undefined ? {} : { name: record.from.name }),
+            },
+            subject,
+            text,
+            rule,
+            seq: `${Date.parse(clock.now()).toString(36)}_${messageRuleCardSeq}`,
+          }),
+        )
+        return item.state === 'blocked' ? undefined : item.id
+      },
+      // 用工坊积分时试跑大概花多少（照云上价目估；用自己的模型就不写）
+      trialCredits: (calls, chars) => {
+        const m = effectiveModels()
+        if (!m.configured()) return undefined
+        const ref = m.defaultRef()
+        const official =
+          m.chatChoices().find((c) => c.id === `${ref.provider}/${ref.model}`)?.official === true
+        if (!official) return undefined
+        return chatCredits(pricingCatalog.current()?.pricing, ref.model, {
+          input_tokens: Math.ceil(chars / 4),
+          output_tokens: calls * 200,
+        })
+      },
+      tzOffsetMinutes: () => outboundTz.get(ws) ?? 0,
     })
     lateMessages.current = messages
     /*
@@ -10259,6 +10415,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     // WP323：记录去处的「定规矩」卡被决定 → 生效 / 换成新对照 / 不留（第一次就说不用）
     if (isRecordSinkCard(item)) return outboundLog.onDecided(item)
+    // WP441：「要建这条规则吗」卡被决定 → 建了才生效（勾了「也处理过去 30 天的」顺手处理）
+    if (isMessageRuleCard(item))
+      return (await brands?.forWorkspace(item.workspace_id))?.messages.rules.onCardDecided(item)
     // WP284（决策 275）：「以后都这样」批了（选「按提议改」）→ 这条职责的规矩里多一句；没批 / 维持现状什么都不落
     if (isInstructionRuleCard(item)) {
       roleRules.onDecided(item)
@@ -13713,6 +13872,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
       writeNotes: assistantNotes.write,
       retireNotes: assistantNotes.retireMany,
+      // WP441：一句话写消息规则（转规则用人这一轮的原话；只出「要建吗」卡）
+      messageRules: {
+        propose: (actor, input) =>
+          brand.messages.rules.propose(
+            {
+              person_id: actor.person_id,
+              ...(actor.assignment_id === undefined ? {} : { assignment_id: actor.assignment_id }),
+            },
+            input,
+          ),
+        list: async (actor) =>
+          (await brand.messages.port.messageRules?.({
+            workspace_id: ws,
+            person_id: actor.person_id,
+            assignment_id: actor.assignment_id ?? '',
+          })) ?? { rules: [] },
+      },
       open: async (actor, input) => {
         const port = await positionPortFor(ws)
         const out = await port.open(positionActor(actor), input.position_id, {
@@ -16510,6 +16686,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isAssistantNotesCard(out) ||
           // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
           isRecordSinkCard(out) ||
+          // WP441：「要建这条规则吗」卡（建 = 生效）
+          isMessageRuleCard(out) ||
           // WP416：建合作卡点了「不要」→ 那一行删掉；挑人清单卡批了 → 按清单建合作
           isKolCollaborationCard(out) ||
           out.kind === 'kol_campaign' ||

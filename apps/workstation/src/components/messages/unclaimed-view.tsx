@@ -192,6 +192,11 @@ function UnclaimedCard({
               kind={row.kind}
               confidence={row.kind_confidence}
               by={row.kind_by}
+              ruleHits={row.rule_hits}
+              about={{
+                from: row.participants[0]?.name ?? row.participants[0]?.email ?? '',
+                subject: row.subject,
+              }}
               onDone={(text, tone) => {
                 onNotice({ text, tone })
               }}

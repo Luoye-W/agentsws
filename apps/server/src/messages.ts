@@ -82,6 +82,7 @@ import {
   userVerdict,
 } from '@agentsws/channels'
 import type {
+  ApprovalItem,
   Clock,
   DeletedSenderRule,
   EventEnvelope,
@@ -142,6 +143,13 @@ import {
   type MailboxSwitchSettings,
   MailboxSwitchStore,
 } from './mailbox-switches.js'
+import { MESSAGE_RULE_DRAFT_FORM } from './message-rule-cards.js'
+import {
+  createMessageRuleService,
+  type MessageRuleService,
+  type MessageRuleServiceOptions,
+  TRIAGE_RULES_SYSTEM,
+} from './message-rules.js'
 import { replyLanguage } from './reply-language.js'
 
 /** 客服岗位的那几条职责（开了其中任何一条就算"启用了客服岗位"）。 */
@@ -321,6 +329,31 @@ export interface MessagesOptions {
   autoReplies?(matter_ids: readonly string[]): MessageAutoReplyMark[]
   /** WP440：「这封不该直接回」。不是直接回的那封回 `undefined`。 */
   flagAutoReply?(approval_item_id: string, by: string): { learned: boolean } | undefined
+  /* ── WP441（docs/108 §5.1 / §5.6）：消息规则要的几样（不给 = 那一项不做，规则照样分拣） ── */
+  /** 已配好的记录去处（规则里「记到 X」对上它）。 */
+  ruleSinks?: MessageRuleServiceOptions['sinks']
+  /** 告诉某人一声（铃铛「消息」类）。 */
+  notifyMessages?: MessageRuleServiceOptions['notify']
+  /** 共用模式里有人建 / 改 / 删了消息规则。 */
+  notifyMessageRuleChange?: MessageRuleServiceOptions['notifyChange']
+  /** 规则「记到某处」：写进发出记录（动作 `message_rule`），按去处排写入。 */
+  recordRuleMessage?: MessageRuleServiceOptions['record']
+  /** 出「要建这条规则吗」卡。 */
+  stageRuleCard?: MessageRuleServiceOptions['stageRuleCard']
+  /**
+   * 出规则起草的回信卡（正文已按来信语言、接口吻写好）。卡给谁由宿主按岗位定；回卡 id。
+   */
+  stageRuleDraft?(input: {
+    record: MessageRecord
+    rule: { id: string; name: string }
+    subject: string
+    text: string
+    position_id?: string
+  }): Promise<string | undefined>
+  /** 用工坊积分时一次试跑大概多少积分。 */
+  trialCredits?: MessageRuleServiceOptions['trialCredits']
+  /** 本地时区（分钟）：今天的简报按它到点。 */
+  tzOffsetMinutes?(): number
 }
 
 /** WP212：不进「交给 X ▾」的岗位（负责人：自己处理用「我自己回」）。 */
@@ -401,8 +434,19 @@ export interface MessagesAssembly {
       by: string,
     ): MailboxSwitchSettings & { takeover: boolean; b2b_position: boolean }
   }
-  /** 调度器消费者：拉一轮所有邮箱的所有文件夹。 */
+  /** 调度器消费者：拉一轮所有邮箱的所有文件夹（顺带看今天的简报到没到点）。 */
   poll(): Promise<MessageSyncReport>
+  /** WP441：消息规则（一句话转规则的工具、「要建这条规则吗」卡被决定时用它）。 */
+  rules: MessageRuleService
+  /**
+   * WP441：规则起草的回信卡批了 → 从收信那只邮箱回（不是这种卡回 `undefined`，交给别的渠道）。
+   * 出站急停、发信失败都照实回失败。
+   */
+  deliverRuleDraft(
+    item: ApprovalItem,
+  ): Promise<
+    { status: 'ok' | 'failed'; error?: { message: string; retryable?: boolean } } | undefined
+  >
   close(): void
 }
 
@@ -585,6 +629,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     senderRules: rulesCache,
     model_halted: options.halt.isHalted('model') || options.halt.isHalted('all'),
     at: clock.now(),
+    // WP441：开着的消息规则（清单顺序；系统规则分拣自己跳过）
+    messageRules: ruleService.cache(),
   })
 
   /** 发件人规则在同步那一轮里要被读很多次，开轮时刷一次就够。 */
@@ -772,10 +818,16 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
           references: record.references,
           headers: record.headers,
           has_attachments: record.attachments.length > 0,
+          // WP441：消息规则的收信邮箱 / 来源条件与「生效只管以后进来的」
+          account: record.account,
+          source: record.source,
+          date: record.date,
         },
         triageCtx(record.in_reply_to !== undefined || record.references.length > 0, record.account),
         triageModel,
       ).then(async (verdict) => {
+        // WP441：命中消息规则之后的动作（命中账、记到某处、告诉我、进简报、起草回复出卡）
+        await ruleService.afterTriage(record, verdict)
         // WP172（docs/84 §5 第 5 条）：退订回信、硬退信分拣时直接进抑制名单，不等 Run
         try {
           options.b2b?.observe(record)
@@ -843,6 +895,78 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
 
   const accountOf = (address: string): MailAccount | undefined =>
     options.accounts().find((a) => a.address === address)
+
+  /*
+   * WP441（docs/108 §5.1）：消息规则。起草回复那一下在这里写正文（与「AI 助手」三条建议同一套：
+   * 品牌 / 岗位口吻、按来信语言），出卡交给宿主；规则自己不发信。
+   */
+  const draftKind = (instruction: string | undefined): ReplySuggestionKind =>
+    instruction !== undefined && /婉拒|拒绝|decline/i.test(instruction)
+      ? 'decline'
+      : instruction !== undefined && /详细|detail/i.test(instruction)
+        ? 'detailed'
+        : 'short'
+  const ruleService: MessageRuleService = createMessageRuleService({
+    clock,
+    workspace_id,
+    store,
+    appendEvent: options.appendEvent,
+    logQuiet,
+    models: options.models,
+    ...(options.position === undefined ? {} : { position: options.position }),
+    positions: () => positionOptions(),
+    ...(options.ruleSinks === undefined ? {} : { sinks: options.ruleSinks }),
+    ...(options.personName === undefined ? {} : { personName: options.personName }),
+    ...(options.sharedRules === undefined ? {} : { shared: options.sharedRules }),
+    ...(options.notifyMessages === undefined ? {} : { notify: options.notifyMessages }),
+    ...(options.notifyMessageRuleChange === undefined
+      ? {}
+      : { notifyChange: options.notifyMessageRuleChange }),
+    ...(options.recordRuleMessage === undefined ? {} : { record: options.recordRuleMessage }),
+    ...(options.stageRuleCard === undefined ? {} : { stageRuleCard: options.stageRuleCard }),
+    ...(options.trialCredits === undefined ? {} : { trialCredits: options.trialCredits }),
+    ...(options.tzOffsetMinutes === undefined ? {} : { tzOffsetMinutes: options.tzOffsetMinutes }),
+    ...(options.stageRuleDraft === undefined
+      ? {}
+      : {
+          stageDraft: async ({ record, rule, instruction, position_id }) => {
+            const stage = options.stageRuleDraft
+            if (stage === undefined) return undefined
+            const kind = draftKind(instruction)
+            const voice = await Promise.resolve(options.voice?.({ position_id })).catch(
+              () => undefined,
+            )
+            const knowledge =
+              options.searchKnowledge === undefined
+                ? []
+                : await options
+                    .searchKnowledge(`${record.subject}\n${record.text.slice(0, 500)}`, 3)
+                    .catch(() => [])
+            const out = await suggester.suggest(`${record.id}:rule`, {
+              subject: record.subject,
+              from: record.from.email,
+              body: record.text.slice(0, 2000),
+              context: instruction === undefined ? [] : [`要求：${instruction}`],
+              ...(voice === undefined || voice === '' ? {} : { voice }),
+              knowledge,
+              kinds: [kind],
+              lang: replyLanguage(
+                `${record.subject}\n${record.text.slice(0, 2000)}`,
+                options.brandLanguage?.(),
+              ),
+            })
+            const text = out.find((x) => x.kind === kind)?.text ?? out[0]?.text
+            if (text === undefined || text.trim() === '') return undefined
+            return stage({
+              record,
+              rule,
+              subject: record.subject,
+              text,
+              ...(position_id === undefined ? {} : { position_id }),
+            })
+          },
+        }),
+  })
 
   /** WP204：这只邮箱开着影子模式（只看不动）——人按的已读 / 星标只在本机标，归档 / 删除不做。 */
   const shadowOf = (address: string): boolean =>
@@ -1098,10 +1222,20 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
    */
   const autoHand = async (record: MessageRecord, triage: MessageTriage): Promise<void> => {
     const position_id = triage.suggested_position
-    if (triage.kind_by !== 'sender_rule' || position_id === undefined) return
+    // WP441：消息规则定了「交给 X」（63 那三条路之外的岗位）也在这里交——规则就是人表过态了
+    const byMessageRule =
+      triage.rule_route !== undefined &&
+      ruleService
+        .cache()
+        .find((r) => r.id === triage.rule_route)
+        ?.actions.some((a) => a.type === 'hand_to' && a.position_id === position_id) === true
+    if ((triage.kind_by !== 'sender_rule' && !byMessageRule) || position_id === undefined) return
     if (routeOfPosition(position_id) !== undefined) return
-    const rule = matchSenderRule(rulesCache, record.from.email)
-    const person = rule?.by ?? options.position?.()?.person_id
+    const rule = byMessageRule ? undefined : matchSenderRule(rulesCache, record.from.email)
+    const ruleBy = byMessageRule
+      ? ruleService.cache().find((r) => r.id === triage.rule_route)?.by
+      : undefined
+    const person = rule?.by ?? ruleBy ?? options.position?.()?.person_id
     if (person === undefined) return
     const out = await handToPosition(record, position_id, person)
     if (!out.accepted) return
@@ -1122,14 +1256,14 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       schema_version: 1,
       workspace_id,
       type: 'messages.route_confirmed',
-      actor: { kind: 'system', id: 'sender_rule' },
+      actor: { kind: 'system', id: byMessageRule ? 'message_rule' : 'sender_rule' },
       subject: { type: 'message', id: record.id },
       correlation: { trace_id: `tr_msgauto_${record.id}_${at}` },
       // 63 §10：没有正文、地址遮过
       payload: {
         route: 'position',
         handed_off: true,
-        by: 'sender_rule',
+        by: byMessageRule ? 'message_rule' : 'sender_rule',
         position_id,
         account: maskAddress(record.account),
         ...(out.matter_id === undefined ? {} : { matter_id: out.matter_id }),
@@ -1607,6 +1741,42 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         }
       }
       return { restored: true, rule: senderRuleForList(row.rule, now) }
+    },
+
+    /* ── WP441：消息规则 ─────────────────────────────────────────────── */
+
+    messageRules: (actor) => ruleService.list(actor),
+    async createMessageRule(actor, draft) {
+      return { rule: await ruleService.create(actor, draft) }
+    },
+    async updateMessageRule(actor, id, patch) {
+      return { rule: await ruleService.update(actor, id, patch) }
+    },
+    async deleteMessageRule(actor, id) {
+      return { deleted: await ruleService.remove(actor, id) }
+    },
+    async restoreMessageRule(actor, id) {
+      const rule = await ruleService.restore(actor, id)
+      return rule === undefined ? { restored: false } : { restored: true, rule }
+    },
+    reorderMessageRules: (actor, ids) => ruleService.reorder(actor, ids),
+    trialMessageRule: (_actor, draft) => ruleService.trial(draft),
+    proposeMessageRule: (actor, input) =>
+      ruleService.propose(
+        {
+          person_id: actor.person_id,
+          ...(actor.assignment_id === '' ? {} : { assignment_id: actor.assignment_id }),
+        },
+        input,
+      ),
+    async excludeFromMessageRule(actor, message_id, rule_id) {
+      const rule = await ruleService.exclude(actor, message_id, rule_id)
+      suggester.invalidate(message_id)
+      return { rule }
+    },
+    digest: () => ruleService.digest(),
+    async ackDigest(_actor, message_ids) {
+      return { acked: await ruleService.ackDigest(message_ids) }
     },
 
     async drafts(): Promise<{ drafts: MessageDraft[] }> {
@@ -2102,6 +2272,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     async sync(): Promise<MessageSyncReport> {
       await ensureSeeded()
       rulesCache = await store.senderRules()
+      await ruleService.refresh()
       await refreshFolders()
       return sync.sync()
     },
@@ -2184,17 +2355,79 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     },
   }
 
+  /** WP441：规则起草的回信卡批了 → 从收信那只邮箱回（同人自己按发送那一条路，过出站急停）。 */
+  const deliverRuleDraft: MessagesAssembly['deliverRuleDraft'] = async (item) => {
+    const p = item.payload as Record<string, unknown> | undefined
+    if (item.kind !== 'outbound_draft' || p?.form !== MESSAGE_RULE_DRAFT_FORM) return undefined
+    const message_id = typeof p.message_id === 'string' ? p.message_id : ''
+    const row = await store.get(message_id)
+    const body =
+      (item.decision?.edited_payload as Record<string, unknown> | undefined)?.body ?? p.body
+    const text =
+      typeof (body as { text?: unknown })?.text === 'string' ? (body as { text: string }).text : ''
+    const subject =
+      typeof (body as { subject?: unknown })?.subject === 'string'
+        ? (body as { subject: string }).subject
+        : `Re: ${row?.subject ?? ''}`
+    if (row === undefined || text.trim() === '')
+      return {
+        status: 'failed',
+        error: { message: '没发出去：原来那封信不在了，或者回信是空的。', retryable: false },
+      }
+    try {
+      await port.send(
+        {
+          workspace_id,
+          person_id: item.routing.recipients[0]?.person ?? ('' as PersonId),
+          assignment_id: '',
+        },
+        {
+          account: row.account,
+          to: [
+            {
+              email: row.from.email,
+              ...(row.from.name === undefined ? {} : { name: row.from.name }),
+            },
+          ],
+          subject,
+          text,
+          thread_id: row.thread_id,
+          ...(row.message_id === undefined ? {} : { in_reply_to: row.message_id }),
+        },
+      )
+      return { status: 'ok' }
+    } catch (e) {
+      return {
+        status: 'failed',
+        error: {
+          message: e instanceof Error && e.message !== '' ? e.message : '没发出去。',
+          retryable: true,
+        },
+      }
+    }
+  }
+
   return {
     store,
     sync,
     port,
     switches,
+    rules: ruleService,
+    deliverRuleDraft,
     async poll(): Promise<MessageSyncReport> {
       await ensureSeeded()
       rulesCache = await store.senderRules()
+      await ruleService.refresh()
       // WP161：每只邮箱先列文件夹（各列各的、各缓存各的），再扫
       await refreshFolders()
-      return sync.sync()
+      const report = await sync.sync()
+      // WP441：今天的简报到点了就发一条铃铛（一天一次，0 封不发）
+      try {
+        await ruleService.digestTick()
+      } catch (e) {
+        logQuiet('message_digest_failed', '', e)
+      }
+      return report
     },
     close(): void {
       store.close?.()
@@ -2272,9 +2505,14 @@ async function classifyWithGateway(
   const models = options.models
   if (models === undefined) throw new Error('没有模型网关')
   const position = options.position?.()
+  // WP441：带了要顺带判的消息规则就多一段说明（同一次调用；没有规则时提示词与老的一字不差）
+  const rules = input.rules ?? []
   const completion = await models.complete({
     messages: [
-      { role: 'system', content: TRIAGE_SYSTEM },
+      {
+        role: 'system',
+        content: rules.length === 0 ? TRIAGE_SYSTEM : `${TRIAGE_SYSTEM}\n${TRIAGE_RULES_SYSTEM}`,
+      },
       {
         role: 'user',
         content: JSON.stringify({
@@ -2286,6 +2524,7 @@ async function classifyWithGateway(
           allowed_routes: input.allowed_routes,
           allowed_labels: input.allowed_labels,
           ...(input.allowed_kinds === undefined ? {} : { allowed_kinds: input.allowed_kinds }),
+          ...(rules.length === 0 ? {} : { rules }),
         }),
       },
     ],
@@ -2311,6 +2550,8 @@ async function classifyWithGateway(
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
     // WP212：认不认得由分拣那一侧判（`normalizeVerdict`），这里原样递过去
     ...(typeof parsed.kind === 'string' ? { kind: parsed.kind } : {}),
+    // WP441：顺带判的规则（只认递过去的那几条，由分拣那一侧筛）
+    ...(parsed.rule_hits === undefined ? {} : { rule_hits: parsed.rule_hits }),
   }
 }
 

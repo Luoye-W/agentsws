@@ -1027,7 +1027,11 @@ async function answer(
         }
   const assistantTools = (assistant?.tools() ?? []).filter(
     (t) =>
-      opts.dispatch || (t.name !== ASSISTANT_DISPATCH_TOOL && t.name !== ASSISTANT_FANOUT_TOOL),
+      opts.dispatch ||
+      (t.name !== ASSISTANT_DISPATCH_TOOL &&
+        t.name !== ASSISTANT_FANOUT_TOOL &&
+        // WP441：转规则会出卡——与派活同一把尺子
+        t.name !== 'propose_message_rule'),
   )
   let asks = 0
   let historyAsks = 0
@@ -1142,7 +1146,10 @@ async function answer(
           sink({ type: 'notice', text: '在翻以前聊过的…' })
           content = historyOnce(opts.segments, prompt, call, recalled)
           historyAsks += 1
-        } else if (assistant !== undefined && isAssistantTool(call.name)) {
+        } else if (
+          assistant !== undefined &&
+          (isAssistantTool(call.name) || assistant.handles?.(call.name) === true)
+        ) {
           sink({ type: 'notice', text: ASSISTANT_STATUS[call.name] ?? '在看…' })
           const got = await assistant.call(actor, call, { user_text: prompt.text, source })
           content = got.content
@@ -1261,6 +1268,9 @@ const ASSISTANT_STATUS: Readonly<Record<string, string>> = {
   recent_sent: '在看最近发出去的…',
   matter_progress: '在查那件事到哪了…',
   hand_to_position: '在交给岗位…',
+  // WP441
+  propose_message_rule: '在写成规则、拿过去 30 天的信试一遍…',
+  list_message_rules: '在看消息规则…',
   plan_fanout: '在按岗位拆…',
 }
 

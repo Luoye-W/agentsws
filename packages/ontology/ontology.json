@@ -61,6 +61,7 @@
     "packages/contracts/src/markets.ts",
     "packages/contracts/src/matter-chat.ts",
     "packages/contracts/src/meetings.ts",
+    "packages/contracts/src/message-rules.ts",
     "packages/contracts/src/messages.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/notifications.ts",
@@ -161,7 +162,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "7edad7c8a7ae9d07830c20e50b176399",
+  "source_digest": "04bc988aab466705572cc31fb3260fe8",
   "objects": [
     {
       "id": "ad",

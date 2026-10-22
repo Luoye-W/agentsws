@@ -106,7 +106,10 @@ export function createOutboundLog(options: OutboundLogOptions): OutboundLog {
   const enqueue = (record: OutboundRecord): void => {
     for (const s of store.sinks(record.workspace_id)) {
       if (s.state !== 'active' && s.state !== 'broken') continue
-      if (!matchesFilter(record, s.filter)) continue
+      // WP441：消息规则点名了去处——只写那几个，不看各去处的筛选
+      if (record.only_sinks !== undefined) {
+        if (!record.only_sinks.includes(s.id)) continue
+      } else if (!matchesFilter(record, s.filter)) continue
       store.addWrite({
         sink_id: s.id,
         record_id: record.id,
