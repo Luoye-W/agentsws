@@ -1,3 +1,4 @@
+import type { ContextItem, RunRequest } from '@agentsws/contracts'
 import {
   assemblePromptHash,
   DRAFT_BODY_DESCRIPTION,
@@ -10,7 +11,7 @@ import {
   outputToolDefs,
   STAGE_REFUND_TOOL,
 } from '../src/index.js'
-import { makeRequest } from './helpers.js'
+import { contextItem, makeRequest } from './helpers.js'
 
 describe('装配（17 §1）', () => {
   it('静态前缀两次装配逐字节相同（17 §6.2）', () => {
@@ -36,23 +37,33 @@ describe('装配（17 §1）', () => {
     expect(assembleDirect(changed).static_prefix_hash).not.toBe(before)
   })
 
-  it('换一条上下文项不动静态前缀（缓存纪律，22 §2）', () => {
-    const req = makeRequest()
-    const before = assembleDirect(req).static_prefix_hash
-    const other = makeRequest({
-      context: [
-        ...req.context.slice(0, 3),
-        {
-          id: 'thr_1',
-          kind: 'thread',
-          source_ref: { type: 'thread', id: 'thr_1' },
-          sensitivity: 'internal',
-          content: { subject: '别的主题', text: '别的正文' },
-          bytes: 40,
-        },
-      ],
-    })
-    expect(assembleDirect(other).static_prefix_hash).toBe(before)
+  it('换一条事项摘要 / 岗位状态不动静态前缀（缓存纪律，22 §2；WP472 换成真会变的那两条）', () => {
+    const volatile = (summary: string, cards: string): RunRequest =>
+      makeRequest({
+        context: [
+          ...makeRequest().context,
+          contextItem({
+            id: 'matter_m1',
+            kind: 'matter_summary',
+            source_ref: { type: 'matter', id: 'm1' },
+            content: { summary },
+          }),
+          contextItem({
+            id: 'position_kol',
+            kind: 'summary',
+            source_ref: { type: 'position', id: 'kol' },
+            content: { panel: [{ label: '待你定的卡', value: cards }] },
+          }),
+        ],
+      })
+    const a = assembleDirect(volatile('查完了退货窗口', '1'))
+    const b = assembleDirect(volatile('已经起草了回信', '3'))
+    expect(b.static_prefix_hash).toBe(a.static_prefix_hash)
+    // 不只是哈希：两次请求在变的那两条之前逐字一样，变的那两条走 user 层
+    const firstDiff = a.messages.findIndex((m, i) => m.content !== b.messages[i]?.content)
+    expect(a.messages[firstDiff]?.content).toMatch(/^\[matter_summary:/)
+    expect(a.messages.slice(firstDiff).every((m) => m.role === 'user')).toBe(true)
+    expect(JSON.stringify(a.tools)).toBe(JSON.stringify(b.tools))
   })
 
   it('prompt.assembled.hash 就是回放重组用的那个式子', () => {
@@ -90,31 +101,46 @@ describe('装配（17 §1）', () => {
     ])
   })
 
-  it('装配顺序：策略层 → 其他上下文 → app_events → 用户消息', () => {
-    const req = makeRequest()
-    const withEvents = makeRequest({
+  it('装配顺序（WP472）：静态前缀 + 政策（system）→ 历史 → 记录 → 事项摘要 → 岗位状态 → 设置 → app_events → 时间 → 这一次的话（user）', () => {
+    const base = makeRequest().context
+    const item = (id: string, kind: ContextItem['kind'], src?: ContextItem['source_ref']) =>
+      contextItem({
+        id,
+        kind,
+        content: `${id} body`,
+        ...(src === undefined ? {} : { source_ref: src }),
+      })
+    // 故意按乱序给：装配只认那张表，不认请求里的先后
+    const req = makeRequest({
       context: [
-        ...req.context.slice(0, 3),
-        {
-          id: 'app_events_1',
-          kind: 'app_events',
-          source_ref: 'app_events:thr_1',
-          sensitivity: 'internal',
-          content: '[App events since your last reply: refund applied]',
-          bytes: 48,
-        },
-        ...req.context.slice(3),
+        item('now', 'time'),
+        item('position_kol', 'summary', { type: 'position', id: 'kol' }),
+        ...base,
+        item('setup_state', 'summary'),
+        item('app_events_1', 'app_events'),
+        item('matter_m1', 'matter_summary'),
+        item('history_m1', 'history'),
       ],
     })
-    const { messages } = assembleDirect(withEvents)
-    const bodies = messages.map((m) => `${m.role}:${m.content.slice(0, 24)}`)
-    const appIdx = bodies.findIndex((b) => b.includes('[app_events:'))
-    const threadIdx = bodies.findIndex((b) => b.includes('[thread:'))
-    const policyIdx = bodies.findIndex((b) => b.includes('[policy:'))
-    expect(policyIdx).toBeGreaterThan(1) // 前两条是静态前缀（persona / skills）
-    expect(policyIdx).toBeLessThan(appIdx)
-    expect(appIdx).toBeLessThan(threadIdx)
-    expect(messages[threadIdx]?.role).toBe('user')
+    const { messages } = assembleDirect(req)
+    const tags = messages.map(
+      (m) => `${m.role}:${/^\[([a-z_]+:[^\]]+)\]/.exec(m.content)?.[1] ?? '-'}`,
+    )
+    expect(tags).toEqual([
+      'system:-', // persona
+      'system:-', // skills
+      'system:-', // 登记表
+      'system:policy:policy_workspace',
+      'user:history:history_m1',
+      'user:fact_card:fact_return_window',
+      'user:customer:customer_cus_anna',
+      'user:matter_summary:matter_m1',
+      'user:summary:position_kol',
+      'user:summary:setup_state',
+      'user:app_events:app_events_1',
+      'user:time:now',
+      'user:thread:thr_1',
+    ])
   })
 })
 

@@ -64,7 +64,13 @@ import {
 import { assembleDirect, DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from './assemble.js'
 import { failureOf } from './errors.js'
 import { gateToolCall, inferRefs, type SideEffectLookup } from './gate.js'
-import { CLOSED_TOOL_RESULT, compactHistory, compactHistoryFor, historyTokens } from './history.js'
+import {
+  CLOSED_TOOL_RESULT,
+  COMPACT_TARGET_RATIO,
+  compactHistory,
+  compactHistoryFor,
+  historyTokens,
+} from './history.js'
 import { IDEMPOTENCY_WINDOW_MS, IdempotencyStore } from './idempotency.js'
 import type { DirectGateway } from './tool-choice.js'
 import { supportsToolChoice } from './tool-choice.js'
@@ -101,15 +107,52 @@ export interface DirectRuntimeOptions {
   sideEffectOf?: SideEffectLookup
   /** turn loop 上限（防死循环）；默认 8。请求带了 `budget.max_turns`（WP260）就按请求的。 */
   maxTurns?: number
-  /** A9 compact_history 阈值（token）；默认 `min(max_tokens × 0.6, 12000)`。 */
+  /** A9 compact_history 阈值（token）；不给按 {@link compactLimitFor}（模型窗口的六成，封顶 9.6 万）。 */
   compactThresholdTokens?: number
+  /**
+   * WP472（docs/116 §6 B）：这次运行用的模型上下文窗口（token；宿主从模型目录取）。
+   * 拿不到回 `undefined`，按 {@link DEFAULT_CONTEXT_WINDOW} 算。
+   */
+  contextWindowOf?(req: RunRequest): number | undefined
   idempotencyWindowMs?: number
   seed?: number
 }
 
 const DEFAULT_MAX_TURNS = 8
-const COMPACT_HARD_CAP = 12_000
 const DEFAULT_RETURN_WINDOW_DAYS = 14
+
+/** WP472：模型窗口拿不到时按这个算（DeepSeek 对话模型 64K 起；与助理 `DEFAULT_CONTEXT_WINDOW` 同一个数）。 */
+export const DEFAULT_CONTEXT_WINDOW = 64_000
+/** WP472：历史超过窗口的这一成才压（压缩只防爆窗，不拿来省钱——省钱靠命中）。 */
+export const COMPACT_WINDOW_RATIO = 0.6
+/** WP472：阈值封顶（与 docs/115 §5 C 一致）：窗口再大，一步的输入也不超过这么多。 */
+export const COMPACT_CAP_TOKENS = 96_000
+
+/**
+ * WP472（docs/116 §6 B，决策 1550）：不用浏览器那一档什么时候压历史。
+ *
+ * 以前是 `min(max_tokens × 0.6, 12000)`——历史一过 1.2 万，之后每一步都把最早一条工具结果换成占位，
+ * 从那里往后整段历史每步都按全价付。现在按模型窗口的六成（拿不到按 64K），封顶 9.6 万；
+ * 另外不超过这次运行 token 预算的六成（一步就吃掉大半预算没有意义）。压的时候一次压到阈值的七成
+ * （`COMPACT_TARGET_RATIO`），之后好几步只往后加。
+ */
+export function compactLimitFor(input: {
+  max_tokens: number
+  window?: number | undefined
+}): number {
+  const window =
+    input.window !== undefined && Number.isFinite(input.window) && input.window > 0
+      ? input.window
+      : DEFAULT_CONTEXT_WINDOW
+  return Math.max(
+    1,
+    Math.min(
+      Math.floor(window * COMPACT_WINDOW_RATIO),
+      COMPACT_CAP_TOKENS,
+      Math.floor(input.max_tokens * 0.6),
+    ),
+  )
+}
 
 interface CompleteArgsBase {
   /** WP342：这件事自己选的 AI（`RunRequest.runtime.model_pinned`）；不给 = 网关按 purpose 选。 */
@@ -402,7 +445,10 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       const compactLimit =
         options.compactThresholdTokens ??
         produce?.compact_at_tokens ??
-        Math.max(1, Math.min(Math.floor(req.budget.max_tokens * 0.6), COMPACT_HARD_CAP))
+        compactLimitFor({
+          max_tokens: req.budget.max_tokens,
+          window: options.contextWindowOf?.(req),
+        })
 
       // ── 产出工具：stage / 起草经注入的回调 ────────────────────────────
       const doStage = async (input: Record<string, unknown>): Promise<ToolExecution> => {
@@ -548,10 +594,11 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
 
         // A9 compact_history：超阈值就把最早的工具结果换成占位
         if (historyTokens(messages, tools) > compactLimit) {
-          // WP260：要产出的运行按工作类型压（先压过时的、最近几条不压、换成摘要）；别的照旧
+          // WP260：要产出的运行按工作类型压（先压过时的、最近几条不压、换成摘要）；别的从最早的压起
+          // WP472：两种都一次压到阈值的七成（之后好几步只往后加，前缀命中缓存），不再每步压一条
           const compacted =
             produce === undefined
-              ? compactHistory(messages, tools, compactLimit)
+              ? compactHistory(messages, tools, compactLimit, COMPACT_TARGET_RATIO)
               : compactHistoryFor(messages, tools, compactLimit, {
                   keepRecent: produce.keep_recent_results,
                   summaryOf: (id) => compactLines.get(id),
