@@ -1166,6 +1166,7 @@ const zh: Table = {
   'help.site-health.title': '网站体检：AI 读不读得到你的店',
   // WP447：六个新平台的报表怎么导出
   'help.ads-export.title': '怎么导出广告报表给我',
+  'help.content-quality.title': '发布前质检：引用、市场版本、被 AI 引用',
   'card.evidence': '证据',
   'card.detail': '详情',
   'card.options.hint': '选一个，答案会沉淀成策略',
@@ -4159,6 +4160,8 @@ const zh: Table = {
   'skill.name.audience-research': '受众研究',
   'skill.name.brand-system': '品牌视觉规范',
   'skill.name.brand-voice': '品牌话术',
+  // WP449：内容与博客的多市场版本
+  'skill.name.content-localize': '多市场版本',
   'skill.name.seo-judgment': 'SEO 判断',
   'skill.name.chargeback-evidence': '拒付举证',
   'skill.name.customer-care': '客服手册',
@@ -5581,6 +5584,7 @@ const en: Table = {
   'block.rerun.checklist.failed': "Check didn't finish — try again",
   'help.site-health.title': 'Site health: can AI read your store?',
   'help.ads-export.title': 'How to export an ad report for me',
+  'help.content-quality.title': 'Pre-publish check: sources, market versions, AI citations',
   'card.evidence': 'Evidence',
   'card.detail': 'Details',
   'card.options.hint': 'Pick one; the answer becomes policy',
@@ -8651,6 +8655,7 @@ const en: Table = {
   'skill.name.audience-research': 'Audience research',
   'skill.name.brand-system': 'Brand visual system',
   'skill.name.brand-voice': 'Brand voice',
+  'skill.name.content-localize': 'Market versions',
   'skill.name.seo-judgment': 'SEO judgment',
   'skill.name.chargeback-evidence': 'Chargeback evidence',
   'skill.name.customer-care': 'Customer care playbook',

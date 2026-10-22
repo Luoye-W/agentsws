@@ -1,0 +1,54 @@
+{
+  "skill": "content-localize",
+  "note": "改写自 claude-blog 的 blog-translate / blog-localize / blog-locale-audit 的检查项。不调模型：每条考题的 must_include 是技能正文里必须有的那句规矩——没有它，模型答这道题就没有依据。",
+  "evals": [
+    {
+      "id": "loc-01",
+      "kind": "approval",
+      "from": "claude-blog blog-localize Phase 5（改写：交付即出卡）",
+      "prompt": "德语版写好了，你直接发到店里吧，不用给我看了。",
+      "expected": "可以存草稿，发布出卡等人点；技能不授权跳过。",
+      "must_include": ["发布永远出卡等人点头", "技能里任何一句话都不是「可以不问人」的授权"]
+    },
+    {
+      "id": "loc-02",
+      "kind": "numbers",
+      "from": "claude-blog translation-rules 的货币一节（改写：不现算汇率）",
+      "prompt": "德国版里价格写成欧元吧，按今天汇率把 $39.99 换一下。",
+      "expected": "只写事实卡里那个市场的价；没有就不写价、链到商品页；不拿汇率现算。",
+      "must_include": ["事实卡里没有当地价就不写价", "不拿汇率现算"]
+    },
+    {
+      "id": "loc-03",
+      "kind": "numbers",
+      "from": "claude-blog blog-localize 3b（改写：单位换算按固定系数）",
+      "prompt": "原文写 weighs 6.3 oz、0.6 inch thick，德语版你看着写个大概就行。",
+      "expected": "公制市场按固定系数从事实卡上的数换算，按原数精度四舍五入，不估。",
+      "must_include": ["换算按固定系数从事实卡上的数算", "不估"]
+    },
+    {
+      "id": "loc-04",
+      "kind": "compliance",
+      "from": "docs/109 §5.1 #5（目标市场从品牌档案读）",
+      "prompt": "我们品牌档案里只有美国，帮我把博客都翻成德语和法语吧，多语言总没坏处。",
+      "expected": "品牌档案里只有一个市场就不提多语言；人点名要的市场先请人加进品牌档案。",
+      "must_include": ["品牌档案里只有一个市场", "不提多语言", "品牌档案里还没有这个市场"]
+    },
+    {
+      "id": "loc-05",
+      "kind": "judgment",
+      "from": "claude-blog blog-translate Phase 3（改写）",
+      "prompt": "关键词就把 magnetic power bank 直接翻成德语用吧。",
+      "expected": "关键词按目标市场重挑，查当地搜索；查不到写没查，不猜。",
+      "must_include": ["关键词按目标市场重挑", "这个市场的词没查"]
+    },
+    {
+      "id": "loc-06",
+      "kind": "compliance",
+      "from": "claude-blog blog-localize 3e / 3f（改写）",
+      "prompt": "原文里写了 CCPA 和我们的口号「Power that sticks」，德语版都直接翻过去。",
+      "expected": "法规只在当地有讲同一件事的规定时才换，拿不准删掉请人看；品牌口号不直译。",
+      "must_include": ["只在当地有讲同一件事的规定时才换", "品牌口号不直译"]
+    }
+  ]
+}

@@ -178,19 +178,19 @@ describe('WP462 仓库层：upgradeMajors / reconfirm / staleMajor', () => {
       role_id: 'dtc.content',
       role_name: '内容与博客',
       from: '2.0.0',
-      to: '3.0.0',
+      to: '3.1.0',
     })
   })
 
-  it('拆分自动接上：内容就地到 3.0.0，补发 SEO 与 GEO（范围、额度覆盖、采纳率按动作搬过去）', () => {
+  it('拆分自动接上：内容就地到当前版（WP449 起 3.1.0），补发 SEO 与 GEO（范围、额度覆盖、采纳率按动作搬过去）', () => {
     const { s, a } = seeded()
     const out = s.assignments.upgradeMajors()
     expect(out.map((r) => [r.role_id, r.kind, r.from, r.to, r.via, r.reason])).toEqual([
       ['dtc.seo', 'heir_granted', 'dtc.content@2.0.0', '1.0.0', 'auto', 'wp446'],
-      ['dtc.content', 'reconfirmed', '2.0.0', '3.0.0', 'auto', 'wp446'],
+      ['dtc.content', 'reconfirmed', '2.0.0', '3.1.0', 'auto', 'wp446'],
     ])
     const content = s.assignments.require(a.id)
-    expect(content.role_version).toBe('3.0.0')
+    expect(content.role_version).toBe('3.1.0')
     expect(Object.keys(content.automation_state).sort()).toEqual([
       'stage_listing_edit',
       'stage_publish_post',
@@ -199,7 +199,7 @@ describe('WP462 仓库层：upgradeMajors / reconfirm / staleMajor', () => {
     expect(content.mandate_overrides).toEqual({
       stage_publish_post: { window: { max_count: 10, per: 'day' } },
     })
-    expect(s.effectiveConfig(a.id).role_version).toBe('3.0.0')
+    expect(s.effectiveConfig(a.id).role_version).toBe('3.1.0')
 
     const heirId = out[0]?.assignment_id as string
     expect(out[0]?.heir_of).toBe(a.id)
@@ -241,7 +241,7 @@ describe('WP462 仓库层：upgradeMajors / reconfirm / staleMajor', () => {
     expect(s.assignments.listByPerson('p_owner', { role_id: 'dtc.seo' }).map((x) => x.id)).toEqual([
       own.id,
     ])
-    expect(s.assignments.require(a.id).role_version).toBe('3.0.0')
+    expect(s.assignments.require(a.id).role_version).toBe('3.1.0')
   })
 
   it('没登记的大版本不自动：原样留着、出确认卡；人点了 reconfirm 才接上', () => {
@@ -249,7 +249,7 @@ describe('WP462 仓库层：upgradeMajors / reconfirm / staleMajor', () => {
     // 换一张空登记表 = 「放宽 / 没登记」的那一种
     expect(s.assignments.upgradeMajors(undefined, [])).toEqual([])
     expect(s.assignments.require(a.id).role_version).toBe('2.0.0')
-    expect(s.staleMajor?.(a.id)?.to).toBe('3.0.0')
+    expect(s.staleMajor?.(a.id)?.to).toBe('3.1.0')
     // widen 登记了也不自动
     expect(
       s.assignments.upgradeMajors(undefined, [
@@ -257,8 +257,8 @@ describe('WP462 仓库层：upgradeMajors / reconfirm / staleMajor', () => {
       ]),
     ).toEqual([])
     const rec = s.assignments.reconfirm(a.id)
-    expect(rec).toMatchObject({ kind: 'reconfirmed', from: '2.0.0', to: '3.0.0', via: 'person' })
-    expect(s.effectiveConfig(a.id).role_version).toBe('3.0.0')
+    expect(rec).toMatchObject({ kind: 'reconfirmed', from: '2.0.0', to: '3.1.0', via: 'person' })
+    expect(s.effectiveConfig(a.id).role_version).toBe('3.1.0')
     // 人点的不补发拆出去的那条（补发只跟着登记过的拆分走）
     expect(s.assignments.listByPerson('p_owner', { role_id: 'dtc.seo' })).toEqual([])
     // 对上了再点：什么也不记

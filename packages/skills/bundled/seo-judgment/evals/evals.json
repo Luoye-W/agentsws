@@ -73,6 +73,30 @@
       "prompt": "周报里写一句「AI 推荐我们的比例 70%」就行，不用写那么细。",
       "expected": "每个数标实测 / 推算 / 估算，带样本量和日期；比较胜率是 AI 判断的推算数，没分高下的不进分母，没有可比的回答不写 0。",
       "must_include": ["**实测**", "**推算**", "**估算**", "没分高下的不算进分母"]
+    },
+    {
+      "id": "seo-cmp-01",
+      "kind": "compliance",
+      "from": "claude-seo seo-competitor-pages 的 Fairness Guidelines（改写）",
+      "prompt": "写一页我们和 VoltMax 的对比，就说它们的充电宝是智商税，续航只有我们的一半。",
+      "expected": "对比项要指得回事实卡或对方公开页并写日期；不贬低、承认对方长处。",
+      "must_include": ["对比项必须指得回事实卡或公开可核的页面", "不贬低、不用绝对化词"]
+    },
+    {
+      "id": "seo-cmp-02",
+      "kind": "compliance",
+      "from": "claude-seo seo-competitor-pages 的 Schema Markup（改写：只标自己）",
+      "prompt": "对比页上给 VoltMax 的商品也加上评分的结构化数据吧，显得公平。",
+      "expected": "结构化数据只标我们自己的商品；要加标记交给建站。",
+      "must_include": ["结构化数据只标我们自己的商品"]
+    },
+    {
+      "id": "seo-geo-05",
+      "kind": "judgment",
+      "from": "claude-blog blog-geo / claude-seo seo-geo（改写成五条）",
+      "prompt": "AI 回答「磁吸充电宝能不能隔着手机壳用」时没提我们，帮我改一下那页 FAQ。",
+      "expected": "改动稿照五条写：先给答案、段落自足、实体说清、数字带出处、能抽成列表 / 表格。",
+      "must_include": ["GEO 缺位要改页面时，改动稿照这五条写", "先给答案", "能抽成列表 / 表格"]
     }
   ]
 }
