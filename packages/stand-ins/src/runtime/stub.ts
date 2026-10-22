@@ -517,6 +517,15 @@ export function ontologyBriefOf(req: RunRequest): string {
 }
 
 /**
+ * WP473（docs/116 §4）：一次运行的**静态前缀**有几条消息——`assemblePrompt` 开头的岗位说明、技能索引、
+ * 登记表（有才算）。前缀指纹与缓存断点（`cache_breakpoints`）就打在它们之后：后面的上下文（政策、
+ * 记录、事项摘要、岗位状态……）每次可能都不同，混进指纹就等于没有指纹。
+ */
+export function runStaticPrefixCount(req: RunRequest): number {
+  return ontologyBriefOf(req) === '' ? 2 : 3
+}
+
+/**
  * `prompt.assembled.hash` 的计算式（17 §2）。运行时发事件与回放校验共用这一处。
  */
 export function promptHash(prompt: { messages: ChatMessage[]; tools: ToolDef[] }): string {

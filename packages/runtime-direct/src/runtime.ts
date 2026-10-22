@@ -118,6 +118,8 @@ interface CompleteArgsBase {
   reasoning_effort?: ReasoningEffort
   messages: ChatMessage[]
   tools?: ToolDef[]
+  /** WP473：静态前缀之后的断点（`assembleDirect` 给），网关的前缀指纹按它算。 */
+  cache_breakpoints?: number[]
   meta: Parameters<ModelGateway['complete']>[0]['meta']
   seed?: number
   max_cost_base?: number
@@ -578,6 +580,8 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             : {}),
           messages: [...messages],
           tools,
+          // WP473：断点打在静态前缀之后（压缩只换工具结果，开头那几条不动，断点一直有效）
+          cache_breakpoints: prompt.cache_breakpoints,
           meta: {
             workspace_id: req.workspace_id,
             assignment_id: req.actor.assignment_id,
@@ -849,6 +853,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
               : {}),
             messages: [...messages],
             tools,
+            cache_breakpoints: prompt.cache_breakpoints,
             meta: {
               workspace_id: req.workspace_id,
               assignment_id: req.actor.assignment_id,
