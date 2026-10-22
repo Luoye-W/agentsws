@@ -3274,7 +3274,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
 /**
  * 一次职责运行的 token / 工具调用上限（时间与花费另算）。
  *
- * - 缺省 15 万 token、12 次（WP423：原来 6 万）；
+ * - 缺省 30 万 token、12 次（WP423：原来 6 万；WP474 / 决策 1571：15 万 → 30 万）；
  * - WP144：批过电脑操控授权的 40 次、60 万 token；WP148 / WP179：真挂了浏览器或网页工具的 30 次、40 万 token（WP423）；
  * - 10-07 真机（Fable）：网页模板（带主题工具）一轮读主题规矩 / 目录 / 模板 / 区块就十几次调用、
  *   七万多 token，旧上限连第一页都没改到就「预算不够」停了——放到 40 万 token、60 次；
@@ -3307,14 +3307,16 @@ export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; brow
    * - 查资料 / 浏览（30 次调用、约 31 步）：每步历史从提示词的 6 千左右涨到二三万（网页摘要、帖子列表），
    *   平均按 1.2 万算 ≈ 37 万——放到 **40 万**；
    * - 批过授权的电脑操控（40 次、41 步，带截图）：平均按 1.4 万算 ≈ 57 万——放到 **60 万**；
-   * - 其余（12 次调用、8 回合）：8 步 × 每步一万出头就过了 6 万（自测里普通问答 5 步就到 3 万）——放到 **15 万**。
+   * - 其余（12 次调用、8 回合）：8 步 × 每步一万出头就过了 6 万（自测里普通问答 5 步就到 3 万）——放到 **15 万**；
+   *   WP474（决策 1571）：WP472 压缩线按模型窗口定、一次压到七成之后每步送得更多（14 页的活累计 31 万，
+   *   实际只花 $0.018），15 万会半路停——放到 **30 万**。花费上限不动。
    *
    * 真正的护栏是花费（`max_cost_base`，按价目表算、命中缓存的那部分很便宜）：40 万 token 在 DeepSeek 上大半是缓存，
    * 约一两毛钱；token 上限只防「死循环把历史越滚越大」。到了也不是白停——运行时再跑一次收尾，把查到的交出来。
    */
   if (input.granted) return { max_tokens: 600_000, max_tool_calls: 40 }
   if (input.browsing) return { max_tokens: 400_000, max_tool_calls: 30 }
-  return { max_tokens: 150_000, max_tool_calls: 12 }
+  return { max_tokens: 300_000, max_tool_calls: 12 }
 }
 
 /**
