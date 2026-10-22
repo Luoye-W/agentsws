@@ -82,7 +82,7 @@ export function SafetyNote({
   return (
     <p
       data-slot="safety-note"
-      className={cn('flex items-start gap-1.5 text-[11px] text-muted-foreground', className)}
+      className={cn('flex items-start gap-1.5 text-xs text-muted-foreground', className)}
     >
       <ShieldCheck aria-hidden className="mt-px size-3.5 shrink-0" />
       <span>{text}</span>

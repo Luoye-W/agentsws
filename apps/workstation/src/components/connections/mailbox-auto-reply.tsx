@@ -84,7 +84,7 @@ export function MailboxAutoReply({
         </select>
       ) : null}
       {save.error === null ? null : (
-        <span role="alert" className="text-[11px] text-destructive">
+        <span role="alert" className="text-xs text-destructive">
           {t('connections.mailbox.failed')}
         </span>
       )}

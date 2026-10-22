@@ -122,7 +122,7 @@ export function SourceLine({ sources }: { sources: readonly ReportSourceRef[] })
   if (sources.length === 0) return null
   return (
     <p
-      className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ws-faint"
+      className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ws-faint"
       data-testid="report-source"
     >
       {sources.map((s, i) => {
@@ -327,7 +327,7 @@ export function AiTag(): ReactNode {
     <span
       data-testid="report-ai-tag"
       data-slot="badge"
-      className="inline-flex h-4 shrink-0 items-center rounded-[4px] bg-ws-info-bg px-[5px] text-[10.5px] font-semibold text-ws-info"
+      className="inline-flex h-4 shrink-0 items-center rounded-[4px] bg-ws-info-bg px-[5px] text-ws-tiny font-semibold text-ws-info"
     >
       AI
     </span>

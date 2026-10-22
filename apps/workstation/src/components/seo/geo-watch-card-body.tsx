@@ -198,7 +198,7 @@ function SetupBody({ card, payload }: { card: DeckCard; payload: SetupPayload })
                     />
                     <span>
                       {q.text}
-                      <span className="ml-1 text-[11px] text-ws-muted-fg">
+                      <span className="ml-1 text-xs text-ws-muted-fg">
                         {t(`geo.topic.${q.topic ?? 'other'}`)}
                       </span>
                     </span>

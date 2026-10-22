@@ -37,7 +37,7 @@ export function EmailAutoReplyMark({
   const list = sources.map((s) => s.label).join('、')
   return (
     <div
-      className="flex flex-col gap-0.5 text-[11px] text-muted-foreground"
+      className="flex flex-col gap-0.5 text-xs text-muted-foreground"
       data-testid="email-auto-reply-mark"
       data-card={approvalItemId}
     >
@@ -55,7 +55,7 @@ export function EmailAutoReplyMark({
           <Button
             size="xs"
             variant="ghost"
-            className="h-5 px-1.5 text-[11px]"
+            className="h-5 px-1.5 text-xs"
             data-testid="email-auto-reply-flag"
             disabled={flag.isPending}
             onClick={() => {

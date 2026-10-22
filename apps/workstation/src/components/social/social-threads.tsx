@@ -279,7 +279,7 @@ function TagFilter({
       }}
     >
       {label}
-      <span className="ws-num text-[11px] text-ws-muted-fg">{n}</span>
+      <span className="ws-num text-ws-tiny text-ws-muted-fg">{n}</span>
     </Button>
   )
   return (
@@ -371,7 +371,7 @@ export function SocialThreads({
   return (
     <div className="flex flex-col gap-2" data-testid="social-threads">
       <div className="flex items-center gap-1.5 px-1 text-xs text-ws-muted-fg">
-        <span className="rounded-full bg-ws-surface px-1.5 text-[11px]">{all.length}</span>
+        <span className="rounded-full bg-ws-surface px-1.5 text-xs">{all.length}</span>
         <Hint text={t('threads.hint')} />
         <span className="ml-auto" />
         {view === undefined ? null : (

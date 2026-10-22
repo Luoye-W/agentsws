@@ -116,7 +116,7 @@ function SettingsBody({
                 if (inGroup.length === 0) return null
                 return (
                   <div key={g} className="pt-3" data-testid={`settings-group-${g}`}>
-                    <p className="truncate px-2 pb-1 text-[11px] font-medium text-ws-muted-fg">
+                    <p className="truncate px-2 pb-1 text-xs font-medium text-ws-muted-fg">
                       {groupLabel(g)}
                     </p>
                     {inGroup.map((s) => (
@@ -151,7 +151,7 @@ function SettingsBody({
                 >
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate text-sm">{h.title}</span>
-                    <span className="truncate text-[11px] text-ws-muted-fg">
+                    <span className="truncate text-xs text-ws-muted-fg">
                       {h.sectionTitle === h.title ? h.desc : h.sectionTitle}
                     </span>
                   </span>

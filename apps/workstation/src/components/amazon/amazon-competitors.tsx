@@ -87,7 +87,7 @@ export function AmazonCompetitorsBlock({ assignment }: { assignment: string }): 
         )}
         <button
           type="button"
-          className="ml-auto rounded-md px-1.5 py-0.5 text-[11px] text-ws-muted-fg hover:bg-sidebar-accent/60"
+          className="ml-auto rounded-md px-1.5 py-0.5 text-xs text-ws-muted-fg hover:bg-sidebar-accent/60"
           data-testid="amzcw-run"
           disabled={run.isPending}
           onClick={() => {
@@ -121,7 +121,7 @@ export function AmazonCompetitorsBlock({ assignment }: { assignment: string }): 
           </span>
           <button
             type="button"
-            className="ml-auto rounded-md px-1.5 py-0.5 text-[11px] text-ws-muted-fg hover:bg-sidebar-accent/60"
+            className="ml-auto rounded-md px-1.5 py-0.5 text-xs text-ws-muted-fg hover:bg-sidebar-accent/60"
             data-testid="amzcw-own-toggle"
             disabled={consent.isPending}
             onClick={() => {

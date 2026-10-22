@@ -80,12 +80,12 @@ export function WebSearchToggle({
         开着能搜 / 关着：一个小图标（状态那句在 tooltip）；开着但搜不了：原因常显一句人话。
       */}
       {on && !ready ? (
-        <p className="text-[11px] text-ws-warn" data-slot="status" data-testid="web-search-reason">
+        <p className="text-xs text-ws-warn" data-slot="status" data-testid="web-search-reason">
           {status}
         </p>
       ) : null}
       {save.error === null || save.error === undefined ? null : (
-        <p className="text-[11px] text-destructive">{save.error.message}</p>
+        <p className="text-xs text-destructive">{save.error.message}</p>
       )}
     </section>
   )

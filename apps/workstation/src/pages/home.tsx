@@ -210,7 +210,7 @@ function DecideList({
                     <span
                       data-slot="status"
                       className={cn(
-                        'inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-[11.5px] whitespace-nowrap',
+                        'inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-xs whitespace-nowrap',
                         PILL[u.tone],
                       )}
                     >
@@ -347,7 +347,7 @@ function KeyNumbers({
                     >
                       {fmtValue(m.value, m.format, m.currency ?? 'USD', { full: true })}
                     </span>
-                    <span className="mt-1 block h-4 text-[11.5px]">
+                    <span className="mt-1 block h-4 text-xs">
                       {d === undefined ? (
                         m.note === undefined ? null : (
                           <span className="text-ws-muted-fg">{m.note}</span>
@@ -363,7 +363,7 @@ function KeyNumbers({
                     </span>
                   )}
                 </span>
-                <span className="mt-3 flex items-center gap-1.5 truncate text-[11.5px] text-ws-faint">
+                <span className="mt-3 flex items-center gap-1.5 truncate text-xs text-ws-faint">
                   {inst === undefined ? null : (
                     <PositionIcon
                       position_id={inst.position_id}
@@ -483,7 +483,7 @@ function PositionTile({
       {hasNumber && m !== undefined && headline !== undefined ? (
         <div className="flex items-end justify-between gap-2.5">
           <div className="min-w-0">
-            <p className="truncate text-[11.5px] text-ws-muted-fg">{headline.headline_label}</p>
+            <p className="truncate text-xs text-ws-muted-fg">{headline.headline_label}</p>
             <p className="flex items-baseline gap-1.5">
               <span className="ws-display text-[21px] leading-tight text-ws-ink" data-slot="data">
                 {fmtValue(m.value, m.format, m.currency ?? 'USD')}

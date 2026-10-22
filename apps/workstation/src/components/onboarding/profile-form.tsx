@@ -513,7 +513,7 @@ export function ProfileForm({
                       <AiTag field="category" />
                       <button
                         type="button"
-                        className="text-[11px] text-ws-muted-fg underline hover:text-foreground"
+                        className="text-xs text-ws-muted-fg underline hover:text-foreground"
                         data-testid="insight-accept-category"
                         onClick={() => {
                           setDraft({

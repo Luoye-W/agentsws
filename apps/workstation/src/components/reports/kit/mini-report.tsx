@@ -42,10 +42,10 @@ export function MiniReport({
     <section className="ws-card relative" data-testid="mini-report" data-id={data.id}>
       <header className="flex items-center gap-2.5 px-[18px] pt-3.5">
         <h3 className="text-[15px] font-semibold text-ws-ink">{data.title}</h3>
-        <span className="inline-flex h-[22px] items-center rounded-full bg-ws-secondary px-2 text-[11.5px] text-ws-body">
+        <span className="inline-flex h-[22px] items-center rounded-full bg-ws-secondary px-2 text-xs text-ws-body">
           {chart?.title ?? t('report.range.days', { days })}
         </span>
-        <span className="ml-auto inline-flex h-4 items-center rounded-[4px] bg-ws-info-bg px-[5px] text-[10.5px] font-semibold text-ws-info">
+        <span className="ml-auto inline-flex h-4 items-center rounded-[4px] bg-ws-info-bg px-[5px] text-ws-tiny font-semibold text-ws-info">
           AI
         </span>
       </header>
@@ -120,7 +120,7 @@ export function MiniReport({
             {t('report.edit')}
           </button>
         )}
-        <span className="ml-auto text-[11.5px] text-ws-faint">
+        <span className="ml-auto text-xs text-ws-faint">
           {t('report.data_from', { names: sources.map((s) => s.label).join(' · ') })}
         </span>
       </footer>

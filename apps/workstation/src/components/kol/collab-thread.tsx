@@ -538,14 +538,14 @@ export function CollabThread({
                   <p className="whitespace-pre-wrap text-xs text-muted-foreground">{x.body}</p>
                   {/* 建议不是动作：写清楚下一步该干什么，但不给一个按钮替人点 */}
                   {klass === undefined ? null : (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">下一步：{klass.next}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">下一步：{klass.next}</p>
                   )}
                 </li>
               )
             })}
           </ol>
           <p
-            className="mt-1 rounded-[var(--ws-radius-card)] bg-muted px-2 py-1 text-[11px] text-muted-foreground"
+            className="mt-1 rounded-[var(--ws-radius-card)] bg-muted px-2 py-1 text-xs text-muted-foreground"
             data-testid="kol-thread-cadence"
           >
             跟进节奏：{cadenceText(exchanges.data?.rows ?? [])}

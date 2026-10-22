@@ -90,7 +90,7 @@ function PinPopover({
       />
       <span className="min-w-0">
         <span className="block text-ws-ink">{name}</span>
-        <span className="block text-[11.5px] text-ws-muted-fg">{sub}</span>
+        <span className="block text-xs text-ws-muted-fg">{sub}</span>
       </span>
     </label>
   )
@@ -104,7 +104,7 @@ function PinPopover({
       <h4 className="mb-2.5 text-[13.5px] font-semibold">{t('report.pin.where')}</h4>
       {option('position', info.name ?? result.suggest.position, t('report.pin.position_panel'))}
       {duty === undefined ? null : option('duty', duty.role_name, t('report.pin.duty_panel'))}
-      <p className="mt-2.5 mb-1 text-[11.5px] text-ws-muted-fg">{t('report.pin.how_often')}</p>
+      <p className="mt-2.5 mb-1 text-xs text-ws-muted-fg">{t('report.pin.how_often')}</p>
       <div className="inline-flex rounded-[9px] bg-ws-secondary p-0.5">
         {REFRESH.map((r) => (
           <button

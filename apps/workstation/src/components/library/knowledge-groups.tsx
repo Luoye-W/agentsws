@@ -87,7 +87,7 @@ export function KnowledgeRow({
         </p>
         {/* WP357：助理记的那条带出处（来自哪份资料）与改 / 删 */}
         {isAssistantNote(card) ? (
-          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-ws-muted-fg">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-ws-muted-fg">
             {card.provenance?.[0]?.locator === undefined ? null : (
               <span className="truncate" title={card.provenance[0].quote}>
                 {t('fanout.batch', { title: card.provenance[0].locator })}

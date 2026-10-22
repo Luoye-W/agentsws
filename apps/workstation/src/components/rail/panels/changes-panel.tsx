@@ -30,7 +30,7 @@ const FILE_KINDS = new Set(['publish_theme', 'deploy', 'merge_pr'])
 /** 一条 diff 正文按行上色：`+` 绿、`-` 红、`@@` 灰。 */
 function DiffBody({ diff }: { diff: string }): ReactNode {
   return (
-    <pre className="max-h-80 overflow-auto rounded bg-muted/50 p-2 text-[11px] leading-4">
+    <pre className="max-h-80 overflow-auto rounded bg-muted/50 p-2 text-xs leading-4">
       {diff.split('\n').map((line, i) => (
         <div
           // biome-ignore lint/suspicious/noArrayIndexKey: diff 的行没有 id——行号**就是**它在这一段里的身份，而且这一段只读、不排序、不增删

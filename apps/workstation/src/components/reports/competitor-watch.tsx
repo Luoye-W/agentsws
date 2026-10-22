@@ -117,7 +117,7 @@ export function CompetitorWatchConnectionRow({
       <span className="min-w-0 truncate">{t('cwatch.name')}</span>
       <span
         className={cn(
-          'ml-auto shrink-0 text-[11px] ws-num',
+          'ml-auto shrink-0 text-xs ws-num',
           status.bad ? 'text-ws-bad' : 'text-ws-muted-fg',
         )}
       >
@@ -138,7 +138,7 @@ export function CompetitorWatchPlanRow({ scope }: { scope: RailScope | undefined
       data-testid="competitor-watch-plan"
     >
       <span className="min-w-0 truncate">{t('cwatch.plan')}</span>
-      <span className="ml-auto shrink-0 text-[11px] text-ws-muted-fg ws-num">
+      <span className="ml-auto shrink-0 text-xs text-ws-muted-fg ws-num">
         {whenLabel(view.next_read_at, t)}
       </span>
     </li>
@@ -237,12 +237,10 @@ export function CompetitorChangesTable({
   return (
     <section className="flex flex-col gap-1.5" data-testid="competitor-changes">
       <header className="flex items-center gap-1.5">
-        <h4 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
-          {t('cwatch.title')}
-        </h4>
+        <h4 className="text-xs tracking-wider text-ws-muted-fg uppercase">{t('cwatch.title')}</h4>
         <button
           type="button"
-          className="ml-auto rounded-md px-1.5 py-0.5 text-[11px] text-ws-muted-fg hover:bg-sidebar-accent/60"
+          className="ml-auto rounded-md px-1.5 py-0.5 text-xs text-ws-muted-fg hover:bg-sidebar-accent/60"
           data-testid="competitor-run"
           disabled={run.isPending}
           onClick={() => {

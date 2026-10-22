@@ -72,7 +72,7 @@ export function DesignMdPanel({
                 style={{ backgroundColor: v.value }}
                 title={`${token} ${v.value}`}
               />
-              <span className="text-[10px] text-ws-muted-fg">{token}</span>
+              <span className="text-ws-tiny text-ws-muted-fg">{token}</span>
             </div>
           ))}
         </div>

@@ -351,7 +351,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                     : t('settings.browser.bsk.step2.install')}
                 </Button>
                 <span
-                  className="text-[11px] text-muted-foreground"
+                  className="text-xs text-muted-foreground"
                   data-slot="status"
                   data-testid="browserskill-installed"
                 >
@@ -366,10 +366,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                 </span>
               </span>
               {bskInstall.error === null || bskInstall.error === undefined ? null : (
-                <span
-                  className="text-[11px] text-destructive"
-                  data-testid="browserskill-install-error"
-                >
+                <span className="text-xs text-destructive" data-testid="browserskill-install-error">
                   {bskInstall.error instanceof ApiClientError
                     ? bskInstall.error.message
                     : t('error.generic')}
@@ -395,7 +392,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                 </Button>
                 {bsk === undefined ? null : (
                   <span
-                    className={`text-[11px] ${bsk.ok ? 'text-muted-foreground' : 'text-destructive'}`}
+                    className={`text-xs ${bsk.ok ? 'text-muted-foreground' : 'text-destructive'}`}
                     data-slot="status"
                     data-testid="browserskill-result"
                     data-ok={bsk.ok}
@@ -413,7 +410,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                   data-testid="browserskill-checks"
                 >
                   {bsk.checks.map((check) => (
-                    <li key={check.name} className="flex items-start gap-1 text-[11px]">
+                    <li key={check.name} className="flex items-start gap-1 text-xs">
                       {check.status === 'fail' ? (
                         <X className="size-3 shrink-0 text-destructive" aria-hidden />
                       ) : (

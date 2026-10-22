@@ -50,7 +50,7 @@ function Holder({
     <span className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pr-2 pl-0.5 text-xs">
       <span
         aria-hidden
-        className="flex size-5 items-center justify-center rounded-full bg-muted font-medium text-[11px]"
+        className="flex size-5 items-center justify-center rounded-full bg-muted font-medium text-xs"
       >
         {name.slice(0, 1)}
       </span>

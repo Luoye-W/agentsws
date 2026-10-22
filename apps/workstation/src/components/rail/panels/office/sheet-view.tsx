@@ -261,7 +261,7 @@ export function SheetView({
         </div>
       ) : null}
       <div className="overflow-auto rounded-ws-card bg-ws-card shadow-ws">
-        <table className="w-max border-collapse text-[11px]">
+        <table className="w-max border-collapse text-xs">
           <tbody>
             {slice.map((row, r) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: 表格的行号**就是**它的身份——这张表只读、不排序、不增删

@@ -187,7 +187,7 @@ export function SecureForm({
                 : {})}
             />
             {field.kind === 'email' && detecting ? (
-              <p className="text-[11px] text-muted-foreground" data-testid="mail-detecting">
+              <p className="text-xs text-muted-foreground" data-testid="mail-detecting">
                 {t('connections.mail.detecting')}
               </p>
             ) : null}

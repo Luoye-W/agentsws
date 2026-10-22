@@ -73,7 +73,7 @@ export function MailboxSwitches({
         <Hint text={t('connections.mailbox.title.hint')} />
         <span
           className={cn(
-            'rounded-full px-1.5 py-px text-[11px]',
+            'rounded-full px-1.5 py-px text-xs',
             data.takeover ? 'bg-ws-tint text-ws-brand-ink' : 'bg-muted text-muted-foreground',
           )}
           data-slot="badge"
@@ -125,7 +125,7 @@ export function MailboxSwitches({
         <MailboxAutoReply connectionId={connectionId} assignment={assignment} />
       ) : null}
       {flip.error === null ? null : (
-        <p role="alert" className="text-[11px] text-destructive">
+        <p role="alert" className="text-xs text-destructive">
           {t('connections.mailbox.failed')}
         </p>
       )}

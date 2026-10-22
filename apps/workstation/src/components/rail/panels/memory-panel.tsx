@@ -171,7 +171,7 @@ function Entry({
       ) : (
         <>
           <p className="whitespace-pre-wrap break-words text-sm">{entry.body}</p>
-          <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+          <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             {entry.origin === 'learned' || entry.written_by === 'ai' ? (
               <Sparkles aria-hidden className="size-3" />
             ) : null}
@@ -237,12 +237,12 @@ function Entry({
         </div>
       ) : null}
       {promote.data === undefined ? null : (
-        <p className="mt-1 text-[11px] text-muted-foreground" data-testid="memory-promote-result">
+        <p className="mt-1 text-xs text-muted-foreground" data-testid="memory-promote-result">
           {promote.data.accepted ? t('memory.promote.ok') : promote.data.reason}
         </p>
       )}
       {error === null ? null : (
-        <p role="alert" className="mt-1 text-[11px] text-destructive" data-testid="memory-error">
+        <p role="alert" className="mt-1 text-xs text-destructive" data-testid="memory-error">
           {error}
         </p>
       )}
@@ -496,12 +496,12 @@ export function MemoryPanel({ scope }: { scope: RailScope }): React.ReactNode {
           </div>
         )
       ) : (
-        <p className="text-[11px] text-muted-foreground" data-testid="memory-readonly">
+        <p className="text-xs text-muted-foreground" data-testid="memory-readonly">
           {t('memory.readonly')}
         </p>
       )}
       {error === null ? null : (
-        <p role="alert" className="text-[11px] text-destructive" data-testid="memory-add-error">
+        <p role="alert" className="text-xs text-destructive" data-testid="memory-add-error">
           {error}
         </p>
       )}

@@ -42,7 +42,7 @@ function ReportView({ item }: { item: ReportItem }): ReactNode {
     <article className="flex flex-col gap-2" data-testid="report-view" data-id={item.id}>
       <header className="flex items-baseline gap-2">
         <h3 className="min-w-0 flex-1 text-[15px] font-medium">{item.title}</h3>
-        <span className="ws-num shrink-0 text-[11px] text-ws-muted-fg">{shortDate(item.at)}</span>
+        <span className="ws-num shrink-0 text-xs text-ws-muted-fg">{shortDate(item.at)}</span>
       </header>
       {isReport(payload) ? (
         <ReportBody payload={payload} />
@@ -122,7 +122,7 @@ export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
           </p>
         ) : reports.length === 0 ? null : (
           <>
-            <h3 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+            <h3 className="text-xs tracking-wider text-ws-muted-fg uppercase">
               {t('reports.docs')}
             </h3>
             <ul className="flex flex-col gap-px">
@@ -138,7 +138,7 @@ export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
                     }}
                   >
                     <span className="min-w-0 truncate">{r.title}</span>
-                    <span className="ws-num ml-auto shrink-0 text-[11px] text-ws-muted-fg">
+                    <span className="ws-num ml-auto shrink-0 text-xs text-ws-muted-fg">
                       {shortDate(r.at)}
                     </span>
                   </button>
@@ -155,7 +155,7 @@ export function ReportsPanel(props: RailPanelBodyProps): ReactNode {
       {/* WP433：只剩看数的那几块；「工作」（进行中 / 卡住了…）挪去「计划」，数据看板等 WP434 做成一份报表 */}
       {hasBoards ? (
         <section className="flex flex-col gap-2" data-testid="reports-boards">
-          <h3 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+          <h3 className="text-xs tracking-wider text-ws-muted-fg uppercase">
             {t('reports.boards')}
           </h3>
           <Suspense fallback={null}>

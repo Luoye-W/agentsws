@@ -260,7 +260,7 @@ export function SceneSwitcher({
           <Layers aria-hidden className="size-4 shrink-0" />
           <span className="flex-1 truncate">{t('scenes.entry')}</span>
           {running > 0 ? (
-            <span className="ws-num text-[11px] text-ws-good" data-testid="scene-running-count">
+            <span className="ws-num text-ws-tiny text-ws-good" data-testid="scene-running-count">
               {running}
             </span>
           ) : null}
@@ -297,7 +297,7 @@ export function SceneSwitcher({
             列表上面说一句，每行「官方 / 自建」标签的 tooltip 里是那一行的原话
           */}
           {launchable.some((s) => s.origin !== 'agentsws') ? (
-            <p className="px-1 pb-1.5 text-[11px] text-muted-foreground" data-testid="scene-notice">
+            <p className="px-1 pb-1.5 text-xs text-muted-foreground" data-testid="scene-notice">
               {t('scenes.notice.once')}
             </p>
           ) : null}
@@ -332,9 +332,7 @@ export function SceneSwitcher({
                   </span>
                   <WsTag>{t('scenes.officialDesktop.tag')}</WsTag>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {t('scenes.officialDesktop.note')}
-                </p>
+                <p className="text-xs text-muted-foreground">{t('scenes.officialDesktop.note')}</p>
                 <div className="flex flex-wrap gap-1">
                   <SmallAction
                     icon={AppWindow}
@@ -366,7 +364,7 @@ export function SceneSwitcher({
                 }}
                 className="h-8"
               />
-              <p className="text-[11px] text-muted-foreground">{t('scenes.delete.note')}</p>
+              <p className="text-xs text-muted-foreground">{t('scenes.delete.note')}</p>
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -391,7 +389,7 @@ export function SceneSwitcher({
             </div>
           )}
           {cli.length === 0 ? null : (
-            <p className="mt-2 px-1 text-[11px] text-muted-foreground" data-testid="scene-cli">
+            <p className="mt-2 px-1 text-xs text-muted-foreground" data-testid="scene-cli">
               {t('scenes.cli', { names: cli.map((s) => s.name).join('、') })}
             </p>
           )}
@@ -532,9 +530,7 @@ function SceneRow({
       </div>
       {ours ? null : (
         <>
-          {scene.error === undefined ? null : (
-            <p className="text-[11px] text-ws-bad">{scene.error}</p>
-          )}
+          {scene.error === undefined ? null : <p className="text-xs text-ws-bad">{scene.error}</p>}
           <div className="flex flex-wrap gap-1">
             <SmallAction
               icon={ExternalLink}
