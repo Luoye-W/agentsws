@@ -20,6 +20,7 @@ import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watc
 import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
+import { FEEDBACK_EN, FEEDBACK_ZH } from './i18n-feedback'
 import { FOLLOW_UP_EN, FOLLOW_UP_ZH } from './i18n-follow-up'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
 import {
@@ -9076,6 +9077,8 @@ const TABLES: Record<Lang, Table> = {
     ...CONTENT_DIGEST_ZH,
     // WP429：站内通知（铃铛、面板、设置 → 通知开关）
     ...NOTIFY_ZH,
+    // WP475：左下角「反馈」
+    ...FEEDBACK_ZH,
     // WP431：顶栏标题下拉、左上角、搜索弹窗
     ...TOPBAR_ZH,
     // WP437：看板临时一眼、首页简易对话框
@@ -9136,6 +9139,7 @@ const TABLES: Record<Lang, Table> = {
     ...TABLE_FILTER_EN,
     ...CONTENT_DIGEST_EN,
     ...NOTIFY_EN,
+    ...FEEDBACK_EN,
     ...TOPBAR_EN,
     ...LAYOUT_EN,
     ...REPORTS_EN,

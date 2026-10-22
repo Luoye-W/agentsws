@@ -15,6 +15,8 @@ export const SYSTEM_NOTIFY_TITLE = 'Agents 工坊'
 
 /** 地址是不是这一页（只比路径，不看 `?` 与 `#`）。 */
 export function isSamePage(href: string, pathname: string): boolean {
+  // WP475：`?feedback=mine` 打开的是反馈框（盖在任何一页上），不是一页——人在首页也不能当「看过了」
+  if (/[?&]feedback=/.test(href)) return false
   const path = href.split(/[?#]/)[0] ?? href
   return path === pathname
 }

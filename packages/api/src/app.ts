@@ -58,6 +58,7 @@ import { extensionActionRoutes } from './routes/extension-actions.js'
 import { extensionInstallRoutes } from './routes/extension-install.js'
 import { extensionOnboardingRoutes } from './routes/extension-onboarding.js'
 import { extensionPanelRoutes } from './routes/extension-panel.js'
+import { feedbackRoutes } from './routes/feedback.js'
 import { freeChatRoutes } from './routes/free-chat.js'
 import { genuiImageHostsRoutes } from './routes/genui-image-hosts.js'
 import { haltRoutes } from './routes/halt.js'
@@ -256,6 +257,7 @@ export function collectRoutes(): Route[] {
     ...autoMemoryRoutes(),
     // WP429：站内通知（铃铛）与「设置 → 通知」开关
     ...notificationsRoutes(),
+    ...feedbackRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
     // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）

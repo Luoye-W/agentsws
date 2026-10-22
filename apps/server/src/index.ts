@@ -456,6 +456,7 @@ export {
   type WorkstationPortOptions,
 } from './workstation.js'
 
+import { processErrorRing, tapStderr } from './feedback.js'
 import {
   hostedModeOf,
   pushHostedSnapshot,
@@ -474,6 +475,9 @@ import {
 
 /** 进程入口：启动、打印 /v1/health、挂优雅关闭。 */
 export async function main(): Promise<void> {
+  // WP475：stderr 的每一行也记一份进「最近的错误日志」（反馈里附诊断信息时用；出门前再脱敏）。
+  // 前端报错那几行由 server.ts 结构化地记，这里跳过免得记两遍。
+  tapStderr(processErrorRing, process.stderr, (line) => line.startsWith('[client-error]'))
   // WP18：AGENTSWS_DATA_DIR 存在就整套走 SQLite；不给则全部内存档。
   // 旧名 AGENTSWS_DB_DIR 仍然认，避免已有脚本断掉。
   const dbDir = process.env.AGENTSWS_DATA_DIR ?? process.env.AGENTSWS_DB_DIR

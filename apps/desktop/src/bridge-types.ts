@@ -72,6 +72,17 @@ export interface DesktopBridge {
    * 页面就照普通网页排（不留那块空、顶栏不设拖动区）。
    */
   titleBar?: DesktopTitleBarBridge
+  /**
+   * WP475：反馈框「附上截图」——截当前工坊窗口（只截工坊自己的窗口）。回 JPEG 的 base64；
+   * 截不到 / 太大回 `null`。旧壳没有这一项：先判空（页面退回粘贴 / 拖入图片）。
+   */
+  captureWindow?(): Promise<DesktopCapture | null>
+}
+
+/** WP475：截到的那一张。 */
+export interface DesktopCapture {
+  content_type: 'image/jpeg'
+  data_base64: string
 }
 
 /** WP424：藏起来的标题栏（只有样子与「换主题」一件事）。 */
@@ -238,6 +249,8 @@ export const BRIDGE_CHANNELS = {
   sessionRenew: 'agentsws:session-renew',
   /** WP424 */
   titleBarTheme: 'agentsws:title-bar-theme',
+  /** WP475 */
+  captureWindow: 'agentsws:capture-window',
 } as const
 
 export interface BridgeInfo {

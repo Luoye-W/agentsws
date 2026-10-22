@@ -455,6 +455,14 @@ export {
   isPanelCard,
   panelCardOf,
 } from './routes/extension-panel.js'
+export {
+  FEEDBACK_LOCAL_MAX_BODY,
+  type FeedbackActor,
+  type FeedbackPageContext,
+  type FeedbackPort,
+  feedbackRoutes,
+  routeOnly as feedbackRouteOnly,
+} from './routes/feedback.js'
 // WP188：随便聊
 export type {
   // WP343：「我的助理」

@@ -27,6 +27,8 @@ export type NotificationCategory =
    * 退役模型换了……）——服务端 `system_alert` 系统卡，现在每张一条进铃铛。
    */
   | 'alert'
+  /** WP475：你提的反馈有了回复（或者修好了）。 */
+  | 'feedback'
 
 export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'team',
@@ -37,6 +39,7 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'outbound',
   'messages',
   'alert',
+  'feedback',
 ]
 
 /** 保留多少天（按最后一次更新算）。 */
@@ -109,6 +112,8 @@ export const DEFAULT_NOTIFICATION_PREFS: Readonly<NotificationPrefs> = {
   messages: { inbox: true, system: false },
   // WP466：告警——系统通知只弹紧急档的（店铺日报异常、改版回归·严重）；普通的只进铃铛
   alert: { inbox: true, system: true },
+  // WP475：反馈有了回复——只进铃铛
+  feedback: { inbox: true, system: false },
 }
 
 /** 合并默认值与人改过的（缺的类别用默认；站内关了系统也算关）。 */

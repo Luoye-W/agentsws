@@ -126,3 +126,69 @@ export interface FeedbackStatusRequest {
 export interface FeedbackStatusList {
   items: FeedbackTicketView[]
 }
+
+/* ------------------------------------------------------------------ */
+/* 本机这一侧（工作台 ↔ 本机服务 `/v1/feedback*`）                         */
+/* ------------------------------------------------------------------ */
+
+/** 打开反馈框时本机先给的东西：联系方式默认值 + 将要附上的诊断信息（给人展开看）。 */
+export interface FeedbackDraftView {
+  /** 默认联系方式：关联了工坊账号就是那个邮箱，否则是本人在工坊里的邮箱；都没有就不给。 */
+  contact?: string
+  /** 勾着「附上诊断信息」时会发出去的就是这一份（已脱敏）。 */
+  diagnostics: FeedbackDiagnostics
+}
+
+/** 工作台 → 本机服务：交一条反馈。诊断信息由本机服务自己收（页面只报它知道的几样）。 */
+export interface LocalFeedbackSubmit {
+  kind: FeedbackKind
+  message: string
+  contact?: string
+  include_diagnostics: boolean
+  /** 当前页面路径（本机服务再去一遍查询串）。 */
+  route: string
+  /** 界面语言。 */
+  locale: string
+  /** 桌面壳版本（有桥才有）。 */
+  app_version?: string
+  shell?: 'desktop' | 'browser'
+  screenshot?: FeedbackScreenshot
+}
+
+/**
+ * 本机这一条现在在哪：`queued` = 还没发出去（离线 / 云不通，联网后自动补发）；`sent` = 云收到了；
+ * `failed` = 云明说不收（内容不合规矩，极少见；重发也一样，所以不再补发）。
+ */
+export type LocalFeedbackState = 'queued' | 'sent' | 'failed'
+
+/** 「我的反馈」里的一条（本机记的 + 云上查回来的状态与回复）。 */
+export interface LocalFeedbackItem {
+  /** 本机生成的 id（补发时也是它）。 */
+  client_id: string
+  /** 云上的编号（发出去之后才有）。 */
+  id?: string
+  kind: FeedbackKind
+  message: string
+  state: LocalFeedbackState
+  /** 云上的处理状态（发出去之后才有）。 */
+  status?: FeedbackStatus
+  replies: FeedbackReply[]
+  /** 有几条回复还没看过。 */
+  unread_replies: number
+  has_screenshot: boolean
+  has_diagnostics: boolean
+  created_at: Iso8601
+  updated_at: Iso8601
+}
+
+/** 交完之后：`delivered: false` = 已存本机，联网后自动发出。 */
+export interface LocalFeedbackSubmitted {
+  item: LocalFeedbackItem
+  delivered: boolean
+}
+
+export interface LocalFeedbackList {
+  items: LocalFeedbackItem[]
+  /** 这一次去云上查进度没查成（列表是上一次的）。 */
+  stale?: boolean
+}
