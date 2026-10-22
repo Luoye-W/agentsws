@@ -63,6 +63,7 @@ import { genuiImageHostsRoutes } from './routes/genui-image-hosts.js'
 import { haltRoutes } from './routes/halt.js'
 import { handoffRoutes } from './routes/handoff.js'
 import { healthRoutes } from './routes/health.js'
+import { helpRoutes } from './routes/help.js'
 import { identityRoutes } from './routes/identity.js'
 import { joinRoutes } from './routes/join.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
@@ -162,6 +163,8 @@ export function collectRoutes(): Route[] {
     ...browserRoutes(),
     // WP136（docs/79）：dsh 场景。`/v1/dsh-scenes*` 是新前缀，与别处都不撞
     ...dshScenesRoutes(),
+    // 教程上官网（私有 docs/113）：`/v1/help/*` 是新前缀，与别处都不撞
+    ...helpRoutes(),
     // WP155（docs/81）：搜索数据接口（连接页那一行 + SERP / AI 问答探测）
     ...searchDataRoutes(),
     // WP265：连接页 Shopify 卡的一键授权。`/v1/shopify-connect*` 是新前缀，与 `/v1/connections/:id` 不撞

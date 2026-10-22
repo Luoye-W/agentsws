@@ -532,6 +532,7 @@ import { createGenuiImageHosts } from './genui-image-hosts.js'
 import { createGeoStore } from './geo-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import { createHandoff, type HandoffAssembly, withHandoff } from './handoff.js'
+import { createHelpLibrary, type HelpFetch } from './help-library.js'
 import {
   createHostedOwnerClient,
   ensureCloudModelDefault,
@@ -1339,6 +1340,20 @@ export interface ServerOptions {
   competitorShopCloud?: (workspace_id: WorkspaceId) => ShopPageCloudPort | undefined
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
+  /**
+   * 教程上官网（私有 docs/113 §4）：帮助库。默认装好的桌面版（有数据目录、不在测试里）启动 30 秒后
+   * 与每 6 小时去官网拉一次；`AGENTSWS_HELP_ONLINE=off` 关掉，`AGENTSWS_HELP_SITE` 换站（开发时指到本机）。
+   * 测试塞替身：`online` / `fetch` / `bundled` / `schedule`。
+   */
+  help?: {
+    online?: boolean
+    site?: string
+    fetch?: HelpFetch
+    bundled?: Record<string, string>
+    /** 起不起定时（默认跟着 `online`）。 */
+    schedule?: boolean
+    appVersion?: string
+  }
   /** demo：把模拟世界接进来（同一进程）。 */
   mount?: MountedWorld
   /**
@@ -3214,6 +3229,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 或测试 / demo 注入）且**有存放处**时装配；内置公钥是空的就照样装配、但通道关着（设置里照实说）。
    * 出卡走同一条审批总线：内容更新卡批了 / 冲突卡选了，在 `contentUpdates.wrap` 里接住。
    */
+  // 教程上官网（私有 docs/113 §4）：右栏「教程」与「查工坊帮助」共用的帮助库
+  const helpOpts = options.help
+  const helpOnline =
+    helpOpts?.online ??
+    (env.AGENTSWS_HELP_ONLINE !== 'off' && process.env.VITEST === undefined && dbDir !== undefined)
+  const helpSite = helpOpts?.site ?? env.AGENTSWS_HELP_SITE
+  const helpLibrary = createHelpLibrary({
+    appVersion: helpOpts?.appVersion ?? env.AGENTSWS_VERSION ?? '0.0.0-dev',
+    online: helpOnline,
+    ...(dbDir === undefined ? {} : { cacheDir: join(dbDir, 'help-cache') }),
+    ...(helpSite === undefined ? {} : { site: helpSite }),
+    ...(helpOpts?.fetch === undefined ? {} : { fetch: helpOpts.fetch }),
+    ...(helpOpts?.bundled === undefined ? {} : { bundled: helpOpts.bundled }),
+    ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
+  })
+  if (helpOnline && helpOpts?.schedule !== false) helpLibrary.start()
+
   const contentOpts = options.contentUpdates
   const contentRoot =
     contentOpts?.root ?? (dbDir === undefined ? undefined : join(dbDir, 'content-updates'))
@@ -15602,6 +15634,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     workshopServices: workshopServicesPort((ws) => workshopServicesOf(ws), {
       positionOf: (ws, role_id, assignment_id) => cloudPositionOf(ws, role_id, assignment_id),
     }),
+    help: {
+      catalog: (lang) => {
+        helpLibrary.refreshIfStale()
+        return helpLibrary.catalog(lang)
+      },
+      article: (slug, lang, kind) => helpLibrary.article(slug, lang, kind),
+    },
     dshScenes: {
       list: async () => {
         const manager = dshScenesSetup.manager
@@ -16877,6 +16916,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       outboundLog.close()
       // WP429：注入的那一份由测试自己关
       if (options.notifications === undefined) notifications.close()
+      helpLibrary.stop()
       outboundStore.close()
       redditWatchStore.close()
       secrets.close()

@@ -280,3 +280,51 @@ export function helpNeedsNewerApp(requires: string | undefined, appVersion: stri
   if (requires === HELP_REQUIRES_NEXT) return true
   return compareHelpVersion(appVersion, requires) < 0
 }
+
+// ── 本机服务给工作台的视图（`GET /v1/help/catalog`、`GET /v1/help/articles/:slug`）──────────
+
+/** 软件里显示的这一份从哪来：官网拉回来存在本机的，还是安装包自带的。 */
+export type HelpSourceKind = 'online' | 'bundled'
+
+/** 目录里的一条（已按本机版本挑好用哪一份）。 */
+export interface HelpCatalogEntry {
+  kind: HelpKind
+  slug: string
+  lang: HelpLang
+  title: string
+  description: string
+  /** 官网页面（安装包自带、官网还没有的那几篇没有）。 */
+  url?: string
+  positions: string[]
+  roles: string[]
+  group?: HelpGroup
+  order?: number
+  requires?: string
+  aliases?: string[]
+  date?: string
+  updated?: string
+  source: HelpSourceKind
+  /** 这篇讲的东西这台还没有（新版才有，目录里标「新版」）。 */
+  needs_newer_app: boolean
+}
+
+export interface HelpCatalogView {
+  lang: HelpLang
+  app_version: string
+  items: HelpCatalogEntry[]
+  /** 最近一次从官网拉成功的时间；从没拉成功过就没有。 */
+  fetched_at?: string
+  /** 官网教程对应的最新正式版。 */
+  release?: string
+}
+
+/** 一篇的正文。 */
+export interface HelpArticleView extends HelpCatalogEntry {
+  /** 去掉元数据的 markdown（教程互链是 `help:<slug>`）。 */
+  markdown: string
+  /**
+   * 显示的是安装包自带那份（和这台的版本对得上），官网上那份讲的是新版——
+   * 顶上一句「新版里这部分变了 · 去更新」。
+   */
+  newer_online: boolean
+}
