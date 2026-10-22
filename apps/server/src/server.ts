@@ -161,7 +161,6 @@ import {
   socialChannelSpec,
 } from '@agentsws/contracts'
 import {
-  EXTERNAL_FENCE,
   evaluateGuardrail,
   extractFigures,
   isInstructionRuleCard,
@@ -985,6 +984,7 @@ import { createWeeklyReviewService } from './weekly-review.js'
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
 import {
+  archiveRerankUser,
   createArchiveStateStore,
   createWorkArchive,
   type WorkArchiveAssembly,
@@ -14592,10 +14592,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const ref = models.defaultRef()
     if (ref.provider === 'stub') return undefined
     const gateway = await brandModules.gateway(ws)
-    const lines = pool.map(
-      (c) =>
-        `${c.id} | ${c.last_activity.slice(0, 10)} | ${c.title.replace(/\s+/g, ' ')} | ${c.summary.replace(/\s+/g, ' ').slice(0, 160)}`,
-    )
     const out = await gateway.complete({
       model: ref,
       messages: [
@@ -14607,7 +14603,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         },
         {
           role: 'user',
-          content: `用户的描述：${query}\n今天：${clock.now().slice(0, 10)}\n\n${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(lines.join('\n'), 8000)}\n${EXTERNAL_FENCE.close}`,
+          // WP471（决策 1549）：归档清单在前（按 id 排），用户的描述与「今天」在后
+          content: archiveRerankUser(pool, query, clock.now().slice(0, 10)),
         },
       ],
       meta: {
