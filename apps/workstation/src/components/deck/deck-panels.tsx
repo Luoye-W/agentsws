@@ -11,6 +11,7 @@ import type { InstructionScope } from '@agentsws/deck'
 import { INSTRUCTION_SCOPES } from '@agentsws/deck'
 import { useState } from 'react'
 import { AskAiPanel, type AskAiScope } from '@/components/deck/ask-ai-panel'
+import { Segmented } from '@/components/design/segmented'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Textarea } from '@/components/ui/textarea'
@@ -102,23 +103,16 @@ export function DeckNotePanel({
       {mode === 'instruct' ? (
         <div className="flex flex-wrap items-center gap-1.5 text-xs" data-testid="deck-scopes">
           <span className="text-muted-foreground">{t('card.instruct.scope')}</span>
-          {INSTRUCTION_SCOPES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={scope === s}
-              className={
-                scope === s
-                  ? 'rounded-full border border-primary bg-primary px-2.5 py-0.5 text-primary-foreground'
-                  : 'rounded-full border px-2.5 py-0.5 text-muted-foreground hover:text-foreground'
-              }
-              onClick={() => {
-                setScope(s)
-              }}
-            >
-              {t(`card.instruct.scope.${s}`)}
-            </button>
-          ))}
+          <Segmented
+            size="sm"
+            label={t('card.instruct.scope')}
+            value={scope}
+            options={INSTRUCTION_SCOPES.map((s) => ({
+              value: s,
+              label: t(`card.instruct.scope.${s}`),
+            }))}
+            onChange={setScope}
+          />
         </div>
       ) : null}
       <div className="flex gap-2">

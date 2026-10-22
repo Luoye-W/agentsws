@@ -5,10 +5,10 @@
  * 「文件」还是占位（`builtin-panels.tsx` 的 `UNBUILT_PANELS`），做好了加成第四个标签。
  */
 import { type ComponentType, type LazyExoticComponent, lazy, type ReactNode, Suspense } from 'react'
+import { Segmented } from '@/components/design/segmented'
 import { useRailState } from '@/components/rail/rail-state'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { useApp } from '@/lib/app-context'
-import { cn } from '@/lib/utils'
 
 export const OUTPUT_TABS = ['records', 'outbound', 'evidence'] as const
 type OutputTab = (typeof OUTPUT_TABS)[number]
@@ -30,33 +30,23 @@ export function OutputsPanel(props: RailPanelBodyProps): ReactNode {
   const needsScope = tab === 'records' && props.scope === undefined
   return (
     <div className="flex flex-col gap-3" data-testid="outputs-panel" data-tab={tab}>
-      <div
-        role="tablist"
-        aria-label={t('rail.panel.outputs')}
-        className="-mx-1 flex flex-wrap items-center gap-1 border-b pb-2"
-      >
-        {OUTPUT_TABS.map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            data-testid={`outputs-tab-${value}`}
-            className={cn(
-              'rounded-md px-2 py-0.5 text-xs',
-              tab === value
-                ? 'bg-secondary font-medium text-secondary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-            )}
-            onClick={() => {
-              // 标签就是旧 id：别名把它落回这里的这个标签
-              if (tab !== value) rail.show(value)
-            }}
-          >
-            {t(`outputs.tab.${value}`)}
-          </button>
-        ))}
-      </div>
+      {/* WP456-T2：全站唯一那种分段切换（页签语义） */}
+      <Segmented
+        kind="tabs"
+        size="sm"
+        className="self-start"
+        label={t('rail.panel.outputs')}
+        value={tab}
+        options={OUTPUT_TABS.map((value) => ({
+          value,
+          label: t(`outputs.tab.${value}`),
+          testId: `outputs-tab-${value}`,
+        }))}
+        onChange={(value) => {
+          // 标签就是旧 id：交给右栏，别名把它落回这里的这个标签
+          rail.show(value)
+        }}
+      />
       <div role="tabpanel" data-testid={`outputs-panel-${tab}`}>
         <Suspense
           fallback={

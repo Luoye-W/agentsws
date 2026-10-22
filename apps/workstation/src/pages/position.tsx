@@ -34,6 +34,7 @@ import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
 import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
 import { PlatformChooseBanner } from '@/components/connections/platform-cli-card'
 import { DeckSection } from '@/components/deck'
+import { NoticeLine } from '@/components/design/kit'
 import { ConnectionTick } from '@/components/position/connection-tick'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PositionSettings } from '@/components/position/position-settings'
@@ -337,32 +338,30 @@ export function PositionPage(): React.ReactNode {
 
       {/* WP238：只在真缺要连的连接时出一行；补上了自己消失（WP431：不再说「必需」，邮件营销按档案说过的那家才算） */}
       {firstMissing === undefined ? null : (
-        <div
-          className="flex items-center gap-2 rounded-lg bg-ws-warn-bg px-3 py-2 text-sm"
+        // WP456-T2：缺连接只说一行（浅底、黄图标、右边一个「去连接」链接）
+        <NoticeLine
+          icon={Link2Off}
           data-testid="position-missing-banner"
-          data-slot="status"
+          {...(firstMissing.connect_service === undefined
+            ? {}
+            : {
+                // WP324（决策 690）：缺的那几样在第三栏一张连接卡里就地连
+                action: {
+                  label: t('pos2.banner.go'),
+                  testId: 'position-missing-go',
+                  data: {
+                    'data-connect': missingItems.flatMap((i) => i.connect_service ?? []).join('+'),
+                  },
+                  onClick: () => {
+                    openConnect(missingItems.flatMap((i) => i.connect_service ?? []))
+                  },
+                },
+              })}
         >
-          <Link2Off className="size-4 shrink-0 text-ws-warn" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">
-            {t('pos2.banner.missing', {
-              names: missingItems.map((i) => (lang === 'en' ? i.name.en : i.name.zh)).join('、'),
-            })}
-          </span>
-          {firstMissing.connect_service === undefined ? null : (
-            // WP324（决策 690）：缺的那几样在第三栏一张连接卡里就地连
-            <button
-              type="button"
-              onClick={() => {
-                openConnect(missingItems.flatMap((i) => i.connect_service ?? []))
-              }}
-              className="shrink-0 rounded-md bg-card px-2 py-0.5 text-xs font-medium shadow-xs hover:bg-accent"
-              data-testid="position-missing-go"
-              data-connect={missingItems.flatMap((i) => i.connect_service ?? []).join('+')}
-            >
-              {t('pos2.banner.go')}
-            </button>
-          )}
-        </div>
+          {t('pos2.banner.missing', {
+            names: missingItems.map((i) => (lang === 'en' ? i.name.en : i.name.zh)).join('、'),
+          })}
+        </NoticeLine>
       )}
 
       {/*

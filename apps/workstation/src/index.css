@@ -71,6 +71,9 @@
   --ws-hover: color-mix(in srgb, var(--ws-ink) 5%, transparent);
   --ws-pop: #ffffff;
   --ws-card-edge: 0 0 #0000;
+  /* WP456-T2：分段切换选中那一格的底（浅色就是卡的白；深色比卡亮一档，不然看不出选了哪格） */
+  --ws-seg-on: var(--ws-card);
+  --ws-seg-on-shadow: 0 1px 2px rgba(20, 40, 30, 0.08), 0 0 0 0.5px rgba(20, 40, 30, 0.04);
   /* 卡：圆角 16、无边框、两层浅阴影 */
   --ws-radius-card: 16px;
   --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
@@ -196,6 +199,8 @@
   --ws-hover: color-mix(in srgb, var(--ws-ink) 6%, transparent);
   --ws-pop: #1d211e;
   --ws-card-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+  --ws-seg-on: color-mix(in srgb, var(--ws-ink) 10%, var(--ws-card));
+  --ws-seg-on-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   --ws-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
   --ws-shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
   --ws-shadow-dialog: 0 24px 72px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
@@ -621,6 +626,482 @@
     outline: 2px solid var(--ring);
     outline-offset: 1px;
   }
+
+  /*
+   * WP456-T2（WP456 §2.6，决策 1446）：**共用组件的样子只写在这一处**。
+   * React 件在 `components/design/kit.tsx` / `segmented.tsx` / `decision-card.tsx`，genui 宿主自己画的那几种
+   * （`components/answer/genui/host-nodes.tsx`）也用同一批类；genui 插件自己画的卡在 `genui-view.css` 里把它的
+   * 档位接到下面同一组数上（决策 847）。数字全在规范的档位里：字号 22/16/14/13/12/11，圆角 6/8/12/16/全圆。
+   */
+
+  /* ── 页头：标题 22 + 一行灰字，右边是操作（最多一个主按钮 + 一个分段切换） ── */
+  .ws-phead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px 16px;
+  }
+  .ws-phead-title {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 22px;
+    line-height: 30px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ws-ink);
+  }
+  .ws-phead-sub {
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--ws-muted-fg);
+  }
+  .ws-phead-acts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ── 节标题 14/600 + 灰色计数；列表里的分组名 12/600 灰字 ── */
+  .ws-sec-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 28px;
+  }
+  .ws-sec-title {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    line-height: 22px;
+    font-weight: 600;
+    color: var(--ws-ink);
+  }
+  .ws-sec-count {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ws-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .ws-group-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--ws-muted-fg);
+  }
+
+  /* ── 列表组：一张卡里多行，行间一条细线，每行至少 44，悬停一层底色 ── */
+  .ws-group {
+    overflow: hidden;
+    border-radius: var(--ws-radius-card);
+    background-color: var(--ws-card);
+    box-shadow: var(--ws-card-edge), var(--ws-shadow);
+  }
+  .ws-row {
+    position: relative;
+    display: flex;
+    min-height: 44px;
+    width: 100%;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--ws-ink);
+    text-align: left;
+  }
+  .ws-row + .ws-row {
+    box-shadow: inset 0 1px 0 var(--ws-line);
+  }
+  .ws-row-act {
+    cursor: pointer;
+    transition: background-color 120ms ease-out;
+  }
+  .ws-row-act:hover {
+    background-color: var(--ws-hover);
+  }
+  .ws-row-act:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+  .ws-row-end {
+    margin-left: auto;
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ws-muted-fg);
+  }
+  .ws-row-chev {
+    flex: none;
+    color: var(--ws-faint);
+  }
+
+  /* ── 标签三种：状态药丸（点 + 字）、分类标签（灰底没有点）、数字徽章 ── */
+  .ws-pill {
+    display: inline-flex;
+    height: 22px;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    border-radius: 9999px;
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .ws-pill-dot {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    border-radius: 9999px;
+    background-color: currentColor;
+  }
+  .ws-tag {
+    display: inline-flex;
+    height: 22px;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background-color: var(--ws-secondary);
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--ws-body);
+    white-space: nowrap;
+  }
+  .ws-tag-outline {
+    background-color: transparent;
+    box-shadow: inset 0 0 0 1px var(--ws-line-strong);
+  }
+  .ws-count {
+    display: inline-flex;
+    height: 18px;
+    min-width: 18px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    border-radius: 9999px;
+    background-color: var(--ws-secondary);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--ws-muted-fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .ws-count[data-tone="brand"] {
+    background-color: var(--ws-brand);
+    color: var(--ws-brand-fg);
+  }
+  .ws-count[data-tone="alert"] {
+    background-color: var(--ws-bad);
+    color: #fff;
+  }
+  /* 挂在图标钮右上角的那一颗：小一号，外面一圈纸色把它和图标分开 */
+  .ws-count-corner {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    height: 16px;
+    min-width: 16px;
+    padding: 0 4px;
+    box-shadow: 0 0 0 2px var(--ws-paper);
+  }
+
+  /* ── 分段切换：只有一种——灰底，选中那格白底加一点小阴影（页签、筛选、浅 / 深色都用它） ── */
+  .ws-seg {
+    display: inline-flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    margin: 0;
+    border: 0;
+    border-radius: 8px;
+    background-color: var(--ws-secondary);
+    min-inline-size: 0;
+    /* 放在竖排容器里也只占自己那么宽，不被拉满一整行 */
+    width: fit-content;
+    max-width: 100%;
+  }
+  .ws-seg-item {
+    display: inline-flex;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--ws-muted-fg);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 120ms ease-out,
+      color 120ms ease-out;
+  }
+  .ws-seg-sm .ws-seg-item {
+    height: 22px;
+    padding: 0 8px;
+  }
+  .ws-seg-item:hover:not(:disabled) {
+    color: var(--ws-ink);
+  }
+  .ws-seg-item[data-on="true"] {
+    background-color: var(--ws-seg-on);
+    color: var(--ws-ink);
+    font-weight: 600;
+    box-shadow: var(--ws-seg-on-shadow);
+  }
+  .ws-seg-item:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+  .ws-seg-item:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+  .ws-seg-item svg {
+    width: 14px;
+    height: 14px;
+    flex: none;
+  }
+  .ws-seg-count {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ws-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── 一行提醒：缺连接 / 缺设置从整卡、黄条降到一行（浅底、黄图标、右边一个链接） ── */
+  .ws-notice {
+    display: flex;
+    min-height: 36px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background-color: var(--ws-surface);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--ws-body);
+  }
+  .ws-notice-icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--ws-warn);
+  }
+  .ws-notice[data-tone="bad"] .ws-notice-icon {
+    color: var(--ws-bad);
+  }
+  .ws-notice[data-tone="info"] .ws-notice-icon {
+    color: var(--ws-info);
+  }
+  .ws-notice-text {
+    min-width: 0;
+    flex: 1 1 0%;
+  }
+  .ws-notice:not([data-wrap="true"]) .ws-notice-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ws-notice-end {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  /* ── 空状态：灰图标 + 一句话 + 最多一个链接，不画插图 ── */
+  .ws-empty {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--ws-muted-fg);
+  }
+  .ws-empty-icon {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    color: var(--ws-faint);
+  }
+
+  /* ── 骨架：和真内容一样高、一样排；一行骨架 = 勾选框 + 半行字 + 右边小块 ── */
+  .ws-skel {
+    display: block;
+    height: 12px;
+    border-radius: 6px;
+    background: linear-gradient(
+      90deg,
+      var(--ws-secondary) 0%,
+      var(--ws-surface) 50%,
+      var(--ws-secondary) 100%
+    );
+    background-size: 200% 100%;
+    animation: ws-skel-sweep 1.4s ease-in-out infinite;
+  }
+  .ws-skel-box {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border-radius: 6px;
+  }
+
+  /* ── 决定卡外壳（「要你处理」、事项页的卡、卡片流共用一种）：无边框 + 卡阴影 ── */
+  .ws-dcard {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: var(--ws-radius-card);
+    background-color: var(--ws-card);
+    color: var(--ws-ink);
+    box-shadow: var(--ws-card-edge), var(--ws-shadow);
+  }
+  .ws-dcard-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px 0;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--ws-muted-fg);
+  }
+  .ws-dcard-head-end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ws-dcard-body {
+    padding: 8px 20px 16px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--ws-body);
+  }
+  .ws-dcard-title {
+    margin: 0;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 600;
+    color: var(--ws-ink);
+    overflow-wrap: anywhere;
+  }
+  .ws-dcard-desc {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--ws-muted-fg);
+  }
+  .ws-dcard-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    box-shadow: inset 0 1px 0 var(--ws-line);
+  }
+  .ws-dcard-keys {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--ws-faint);
+  }
+  /* 对比块：现在 / 改成 */
+  .ws-cmp {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .ws-cmp-cell {
+    border-radius: 12px;
+    padding: 8px 12px;
+    background-color: var(--ws-surface);
+    color: var(--ws-ink);
+  }
+  .ws-cmp-cell[data-after="true"] {
+    background-color: var(--ws-tint);
+  }
+  .ws-cmp-label {
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--ws-muted-fg);
+  }
+  .ws-cmp-cell[data-after="true"] .ws-cmp-label {
+    color: var(--ws-brand-ink);
+  }
+  /* 选项组：整行可点，选中那行品牌浅底 */
+  .ws-opts {
+    margin-top: 12px;
+    overflow: hidden;
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 1px var(--ws-line);
+  }
+  .ws-opt {
+    display: flex;
+    min-height: 40px;
+    width: 100%;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--ws-ink);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 120ms ease-out;
+  }
+  .ws-opt + .ws-opt {
+    box-shadow: inset 0 1px 0 var(--ws-line);
+  }
+  .ws-opt:hover:not(:disabled) {
+    background-color: var(--ws-hover);
+  }
+  .ws-opt[data-on="true"] {
+    background-color: var(--ws-tint);
+    color: var(--ws-brand-ink);
+    font-weight: 500;
+  }
+  .ws-opt:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+  .ws-opt:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+  .ws-opt-radio {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border-radius: 9999px;
+    box-shadow: inset 0 0 0 1.5px var(--ws-line-strong);
+  }
+  .ws-opt[data-on="true"] .ws-opt-radio {
+    box-shadow: inset 0 0 0 5px var(--ws-brand);
+  }
 }
 
 /*
@@ -1037,4 +1518,22 @@
   html[data-shell] .ws-drag-strip {
     display: none;
   }
+}
+
+/* WP456-T2：骨架的那道光（动效关了就停） */
+@keyframes ws-skel-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-ws-motion="on"]) .ws-skel {
+    animation: none;
+  }
+}
+:root[data-ws-motion="off"] .ws-skel {
+  animation: none;
 }

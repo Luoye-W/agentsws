@@ -42,6 +42,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { isThemeChoicePayload, ThemeChoiceBody } from '@/components/deck/theme-choice-body'
+import { StatusPill } from '@/components/design/primitives'
 import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { isSetupCard, SetupDeckBody } from '@/components/setup/setup-deck-body'
@@ -311,19 +312,13 @@ export function PreviewCard({
         }),
   ].filter((x): x is string => x !== undefined)
   return (
-    <div
-      className="mt-3 max-w-[520px] overflow-hidden rounded-2xl border border-ws-line bg-ws-card shadow-ws"
-      data-testid="matter-preview-card"
-    >
-      <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+    <div className="mt-3 ws-dcard max-w-[520px]" data-testid="matter-preview-card">
+      <div className="ws-dcard-head">
         <Eye aria-hidden className="size-3.5" />
         {t('matter.preview.ready')}
-        <span className="ml-auto inline-flex h-[22px] items-center gap-1.5 rounded-full bg-muted px-2 text-xs text-ws-body">
-          <i aria-hidden className="size-1.5 rounded-full bg-ws-muted-fg" />
-          {t('matter.preview.unpublished')}
-        </span>
+        <StatusPill className="ml-auto">{t('matter.preview.unpublished')}</StatusPill>
       </div>
-      <div className="flex gap-3.5 px-3.5 pt-2.5 pb-3">
+      <div className="ws-dcard-body flex gap-3.5">
         {/* 缩略图先用占位（真截图以后接）：一块深色小页面，几条色块示意分区 */}
         <div
           aria-hidden
@@ -336,17 +331,13 @@ export function PreviewCard({
           <i className="block h-1.5 rounded-[2px] bg-ws-brand/70" />
         </div>
         <div className="min-w-0">
-          <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
-            {preview.label}
-          </p>
-          {meta.length === 0 ? null : (
-            <p className="mt-0.5 text-[12.5px] text-ws-muted-fg">{meta.join(' · ')}</p>
-          )}
+          <p className="ws-dcard-title">{preview.label}</p>
+          {meta.length === 0 ? null : <p className="ws-dcard-desc">{meta.join(' · ')}</p>}
         </div>
       </div>
       {diff ? (
         <ul
-          className="border-t border-ws-line px-3.5 py-2 font-mono text-xs text-ws-body"
+          className="border-t border-ws-line px-5 py-2 font-mono text-xs text-ws-body"
           data-testid="matter-preview-files"
         >
           {files === undefined || files.length === 0 ? (
@@ -356,7 +347,7 @@ export function PreviewCard({
           )}
         </ul>
       ) : null}
-      <div className="flex items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2.5">
+      <div className="ws-dcard-foot">
         <Button size="sm" className="gap-1.5" data-testid="matter-preview-open" onClick={onOpen}>
           <ExternalLink aria-hidden />
           {t('matter.preview.open')}
@@ -856,24 +847,21 @@ export function BlockedCard({
   return (
     <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
       <p className="text-[14.5px] leading-[1.7] text-ws-ink">{event.text}</p>
-      <div
-        className="mt-3 max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-bad/45 bg-ws-card shadow-ws"
-        data-testid="matter-blocked-card"
-      >
-        <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+      <div className="mt-3 ws-dcard max-w-[520px]" data-testid="matter-blocked-card">
+        <div className="ws-dcard-head">
           <Plug aria-hidden className="size-3.5" />
           {t('matter.blocked.head')}
-          <span className="ml-auto inline-flex h-[22px] items-center rounded-full bg-ws-bad-bg px-2 text-xs font-medium text-ws-bad">
+          <StatusPill tone="bad" className="ml-auto">
             {t('matter.blocked.pill')}
-          </span>
+          </StatusPill>
         </div>
-        <div className="px-3.5 pt-2.5 pb-3">
-          <p className="text-[15px] leading-[1.35] font-semibold text-ws-ink">
+        <div className="ws-dcard-body">
+          <p className="ws-dcard-title">
             {what === '' ? t('matter.blocked.title.any') : t('matter.blocked.title', { what })}
           </p>
-          <p className="mt-0.5 text-[12.5px] text-ws-muted-fg">{t('matter.blocked.hint')}</p>
+          <p className="ws-dcard-desc">{t('matter.blocked.hint')}</p>
         </div>
-        <div className="flex items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2.5">
+        <div className="ws-dcard-foot">
           <Button
             size="sm"
             className="gap-1.5"
@@ -912,15 +900,9 @@ export function ChoiceCard({
   const { t } = useApp()
   return (
     <AiShell id={event.id} name={t('matter.card.choice')} at={event.at}>
-      <div
-        className="max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-warn/55 bg-ws-card shadow-ws"
-        data-testid="matter-choice-card"
-      >
-        <p className="px-3.5 pt-3 pb-2.5 text-[14px] leading-[1.5] text-ws-ink">{event.text}</p>
-        <div
-          className="flex flex-wrap items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2.5"
-          data-testid="matter-route-options"
-        >
+      <div className="ws-dcard max-w-[520px]" data-testid="matter-choice-card">
+        <p className="ws-dcard-body pt-4 text-ws-read text-ws-ink">{event.text}</p>
+        <div className="ws-dcard-foot" data-testid="matter-route-options">
           {(event.route?.options ?? []).map((o) => (
             <Button
               key={o.role_id}
@@ -1049,22 +1031,20 @@ export function InlineCard({
     return (
       <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
         <div
-          className="max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-brand/45 bg-ws-card shadow-ws"
+          className="ws-dcard max-w-[520px]"
           data-testid="matter-service-card"
           data-card={card.id}
         >
-          <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+          <div className="ws-dcard-head">
             <Handshake aria-hidden className="size-3.5" />
             {t('svc.card.head')}
           </div>
-          <div className="px-3.5 pt-2 pb-3">
-            <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
-              {card.title}
-            </p>
+          <div className="ws-dcard-body">
+            <p className="ws-dcard-title">{card.title}</p>
             <ServiceCardBody card={card} />
           </div>
           {card.available_actions.includes('reject') ? (
-            <div className="flex items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2">
+            <div className="ws-dcard-foot">
               <Button
                 size="sm"
                 variant="ghost"
@@ -1085,23 +1065,17 @@ export function InlineCard({
   if (isSetupCard(card))
     return (
       <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
-        <div
-          className="max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-brand/45 bg-ws-card shadow-ws"
-          data-testid="matter-setup-card"
-          data-card={card.id}
-        >
-          <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+        <div className="ws-dcard max-w-[520px]" data-testid="matter-setup-card" data-card={card.id}>
+          <div className="ws-dcard-head">
             <Plug aria-hidden className="size-3.5" />
             {t(setupHeadKey(card))}
           </div>
-          <div className="px-3.5 pt-2 pb-3">
-            <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
-              {card.title}
-            </p>
+          <div className="ws-dcard-body">
+            <p className="ws-dcard-title">{card.title}</p>
             <SetupDeckBody card={card} />
           </div>
           {card.available_actions.includes('reject') ? (
-            <div className="flex items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2">
+            <div className="ws-dcard-foot">
               <Button
                 size="sm"
                 variant="ghost"
@@ -1139,27 +1113,21 @@ export function InlineCard({
   const options = card.options ?? []
   return (
     <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
-      <div
-        className="max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-warn/55 bg-ws-card shadow-ws"
-        data-testid="matter-card"
-        data-card={card.id}
-      >
-        <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+      <div className="ws-dcard max-w-[520px]" data-testid="matter-card" data-card={card.id}>
+        <div className="ws-dcard-head">
           <Stamp aria-hidden className="size-3.5" />
           {options.length > 0 ? t('matter.card.choice') : t('matter.card.await')}
           {options.length > 0 ? null : (
-            <span className="ml-auto inline-flex h-[22px] items-center rounded-full bg-ws-warn-bg px-2 text-xs font-medium text-ws-warn">
+            <StatusPill tone="warn" className="ml-auto">
               {approve}
-            </span>
+            </StatusPill>
           )}
         </div>
-        <div className="px-3.5 pt-2.5 pb-2">
-          <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
-            {card.title}
-          </p>
+        <div className="ws-dcard-body pb-2">
+          <p className="ws-dcard-title">{card.title}</p>
         </div>
         {summary.length === 0 ? null : (
-          <ul className="flex flex-col gap-1 px-3.5 pb-3 text-[13px] text-ws-body">
+          <ul className="flex flex-col gap-1 px-5 pb-4 text-ws-ui text-ws-body">
             {summary.map((l) => (
               <li key={l} className="break-words">
                 {l}
@@ -1167,7 +1135,7 @@ export function InlineCard({
             ))}
           </ul>
         )}
-        <div className="flex flex-wrap items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2.5">
+        <div className="ws-dcard-foot">
           {options.length > 0 ? (
             options.map((o) => (
               <Button
@@ -1232,19 +1200,13 @@ function MatterThemeChoice({
   const { t } = useApp()
   const [option, setOption] = useState('')
   return (
-    <div
-      className="max-w-[520px] overflow-hidden rounded-2xl border-[1.5px] border-ws-warn/55 bg-ws-card shadow-ws"
-      data-testid="matter-card"
-      data-card={card.id}
-    >
-      <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+    <div className="ws-dcard max-w-[520px]" data-testid="matter-card" data-card={card.id}>
+      <div className="ws-dcard-head">
         <Stamp aria-hidden className="size-3.5" />
         {t('matter.card.choice')}
       </div>
-      <div className="px-3.5 pt-2.5 pb-3">
-        <p className="text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
-          {card.title}
-        </p>
+      <div className="ws-dcard-body">
+        <p className="ws-dcard-title">{card.title}</p>
         <ThemeChoiceBody
           payload={payload}
           options={card.options ?? []}
@@ -1252,7 +1214,7 @@ function MatterThemeChoice({
           onOption={setOption}
         />
       </div>
-      <div className="flex flex-wrap items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2.5">
+      <div className="ws-dcard-foot">
         <Button
           size="sm"
           className="gap-1.5"

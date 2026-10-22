@@ -9,8 +9,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HandHeart, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
+import { SkeletonList } from '@/components/design/kit'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { ApiClientError, claimTodo, listClaimPool } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -40,7 +40,7 @@ export function ClaimPool(): React.ReactNode {
     },
   })
 
-  if (pool.isPending) return <Skeleton className="h-16 w-full" />
+  if (pool.isPending) return <SkeletonList rows={1} check={false} />
   if (pool.error !== null)
     return (
       <p role="alert" className="text-sm text-destructive">

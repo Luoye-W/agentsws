@@ -76,16 +76,10 @@ export function ImageCard({
   if (isBudget(payload))
     return (
       <AiShell id={eventId} roleId={roleId} name={roleName} at={at}>
-        <div
-          className="max-w-[560px] overflow-hidden rounded-2xl border-[1.5px] border-ws-warn/55 bg-ws-card shadow-ws"
-          data-testid="image-budget-card"
-          data-card={card.id}
-        >
-          <div className="px-3.5 pt-3 pb-1 text-[15px] leading-[1.35] font-semibold text-ws-ink">
-            {card.title}
-          </div>
-          <p className="px-3.5 pb-3 text-[13px] text-ws-body">{card.summary}</p>
-          <div className="flex items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2.5">
+        <div className="ws-dcard max-w-[560px]" data-testid="image-budget-card" data-card={card.id}>
+          <div className="ws-dcard-title px-5 pt-4 pb-1">{card.title}</div>
+          <p className="px-5 pb-4 text-ws-ui text-ws-body">{card.summary}</p>
+          <div className="ws-dcard-foot">
             <Button
               size="sm"
               disabled={deciding}
@@ -117,12 +111,8 @@ export function ImageCard({
     variants.length === 1 ? 'grid-cols-1' : variants.length === 3 ? 'grid-cols-3' : 'grid-cols-2'
   return (
     <AiShell id={eventId} roleId={roleId} name={roleName} at={at}>
-      <div
-        className="max-w-[560px] overflow-hidden rounded-2xl border-[1.5px] border-ws-warn/55 bg-ws-card shadow-ws"
-        data-testid="image-pick-card"
-        data-card={card.id}
-      >
-        <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
+      <div className="ws-dcard max-w-[560px]" data-testid="image-pick-card" data-card={card.id}>
+        <div className="ws-dcard-head">
           <Images aria-hidden className="size-3.5" />
           {t('images.pick.head')}
           <span className="ml-auto text-[12px]">
@@ -133,16 +123,14 @@ export function ImageCard({
                 : t('images.pick.credits', { credits: pick.credits })}
           </span>
         </div>
-        <p className="px-3.5 pt-2 text-[15px] leading-[1.35] font-semibold break-words text-ws-ink">
-          {card.title}
-        </p>
+        <p className="ws-dcard-title px-5 pt-2">{card.title}</p>
         {pick?.upload === true ? (
-          <p className="flex items-center gap-1.5 px-3.5 pt-1 text-[12.5px] text-ws-muted-fg">
+          <p className="flex items-center gap-1.5 px-5 pt-1 text-xs text-ws-muted-fg">
             <Store aria-hidden className="size-3.5" />
             {t('images.pick.upload')}
           </p>
         ) : null}
-        <div className={`grid ${cols} gap-2 px-3.5 pt-3 pb-3`} data-testid="image-pick-grid">
+        <div className={`grid ${cols} gap-2 px-5 pt-3 pb-4`} data-testid="image-pick-grid">
           {variants.map((v) => (
             <figure key={v.id} className="flex flex-col gap-1.5" data-testid="image-pick-variant">
               <div
@@ -175,7 +163,7 @@ export function ImageCard({
             </figure>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-2 border-t border-ws-line bg-ws-surface px-3.5 py-2.5">
+        <div className="ws-dcard-foot">
           <Button
             size="sm"
             variant="outline"

@@ -13,6 +13,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
+import { NoticeLine } from '@/components/design/kit'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { getPositions, listModelProviders } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -66,26 +67,20 @@ export function NoModelBanner({
       </button>
     )
 
+  // WP456-T2：一行提醒（浅底、黄图标、右边一个链接），不再是黄底带框的一条
   return (
-    <p
-      className="flex items-start gap-2 rounded-lg border border-ws-warn/40 bg-ws-warn-bg px-3 py-2 text-sm"
+    <NoticeLine
       data-testid="no-model-banner"
       role="status"
+      action={{
+        label: t('models.banner.cta'),
+        data: { 'data-connect': 'model' },
+        onClick: () => {
+          openConnect('model')
+        },
+      }}
     >
-      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-ws-warn" aria-hidden />
-      <span>
-        {t('models.banner')}{' '}
-        <button
-          type="button"
-          data-connect="model"
-          className="text-primary underline-offset-4 hover:underline"
-          onClick={() => {
-            openConnect('model')
-          }}
-        >
-          {t('models.banner.cta')}
-        </button>
-      </span>
-    </p>
+      {t('models.banner')}
+    </NoticeLine>
   )
 }

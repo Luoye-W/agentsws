@@ -5,7 +5,6 @@
  */
 import { filterGenuiSpec, type GenuiSpecLite, type GenuiToolOutcome } from '@agentsws/contracts'
 import { GenuiBlock, processGenuiSpec } from '@changfenhuang/dsh-genui/embed'
-import { Loader2 } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import { useApp } from '@/lib/app-context'
 import { wrapGenuiTables } from './table-filter-node'
@@ -80,12 +79,9 @@ export function ToolResult({
   )
   if (error !== undefined) return line(t('genui.tool.failed', { why: error }), 'text-ws-bad')
   if (outcome === undefined)
+    // WP456-T2（规范 §2.6 第 9 条）：在跑用流光字，不用转圈图标
     return (
-      <p
-        className="mt-2 flex items-center gap-1.5 text-xs text-ws-muted-fg"
-        data-testid="genui-tool-result"
-      >
-        <Loader2 aria-hidden className="size-3 animate-spin" />
+      <p className="ws-shimmer mt-2 text-xs" data-testid="genui-tool-result" role="status">
         {t('genui.tool.running', { label })}
       </p>
     )

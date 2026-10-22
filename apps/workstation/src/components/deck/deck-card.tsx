@@ -376,7 +376,8 @@ export function DeckCardView({
       data-layout={card.layout}
       data-band={card.priority_band}
       className={[
-        'ws-card relative flex flex-col overflow-hidden transition-all duration-300 ease-out',
+        // WP456-T2：决定卡外壳（无边框 + 卡阴影），和事项页、「要你处理」同一种
+        'ws-dcard relative transition-all duration-300 ease-out',
         DECK_CARD_MIN_HEIGHT_CLASS,
         exiting == null ? '' : EXIT_CLASS[exiting],
       ].join(' ')}
@@ -409,10 +410,7 @@ export function DeckCardView({
         「岗位 · 类别」（优先级变成它的颜色）→ 等待时长 → 证据 N → 谁提的。
         渠道、合并 N 张、预检那些都在右上角那个"证据 N"里，点开在第三栏看。
       */}
-      <div
-        className="flex flex-wrap items-center gap-2 border-b border-ws-line px-5 py-3 text-xs"
-        data-testid="deck-tag-row"
-      >
+      <div className="ws-dcard-head" data-testid="deck-tag-row">
         <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
           {pillPosition === undefined ? category : `${pillPosition} · ${category}`}
         </StatusPill>
@@ -481,7 +479,7 @@ export function DeckCardView({
         }}
       >
         {/* ② 一句话标题 */}
-        <p className="text-[15px] leading-6 font-semibold">{card.title}</p>
+        <p className="ws-dcard-title">{card.title}</p>
         {/* WP174：转给了谁、为什么（路由真做过判断的卡才有这一句） */}
         {card.routed_note === undefined ? null : (
           <p className="mt-0.5 text-xs text-muted-foreground" data-testid="deck-routed-note">
@@ -532,7 +530,7 @@ export function DeckCardView({
       </div>
 
       {/* ④ 动作行 —— 或者它就地展开的那块面板；右下角的 → 圆钮全类都有 */}
-      <div className="flex items-center gap-3 border-t border-ws-line bg-ws-surface px-5 py-3">
+      <div className="ws-dcard-foot flex-nowrap gap-3">
         <div className="min-w-0 flex-1">
           {error === undefined ? null : (
             <p role="alert" className="mb-2 text-xs text-destructive">

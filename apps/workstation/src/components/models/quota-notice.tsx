@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ExternalLink, TriangleAlert } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
+import { NoticeLine } from '@/components/design/kit'
 import { Button } from '@/components/ui/button'
 import { getPositions, isDeepSeekAccountKind, listModelProviders } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -26,32 +27,34 @@ export function QuotaNotice({
   topUpUrl: string | undefined
 }): React.ReactNode {
   const { t } = useApp()
+  // WP456-T2：一行提醒（浅底、黄图标），不再铺一整条黄
   return (
-    <div
+    <NoticeLine
       role="alert"
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-ws-warn-bg px-2 py-1.5 text-xs text-ws-warn"
+      wrap
       data-testid="model-quota"
       data-route={account ? 'account' : 'api_key'}
+      {...(topUpUrl === undefined
+        ? {}
+        : {
+            end: (
+              <Button
+                size="xs"
+                variant="outline"
+                data-testid="model-quota-top-up"
+                data-href={topUpUrl}
+                onClick={() => {
+                  openExternal(topUpUrl)
+                }}
+              >
+                {t('models.quota.top_up')}
+                <ExternalLink aria-hidden className="size-3" />
+              </Button>
+            ),
+          })}
     >
-      <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 font-medium">
-        {account ? t('dsa.quota') : t('models.quota.api')}
-      </span>
-      {topUpUrl === undefined ? null : (
-        <Button
-          size="xs"
-          variant="outline"
-          data-testid="model-quota-top-up"
-          data-href={topUpUrl}
-          onClick={() => {
-            openExternal(topUpUrl)
-          }}
-        >
-          {t('models.quota.top_up')}
-          <ExternalLink aria-hidden className="size-3" />
-        </Button>
-      )}
-    </div>
+      {account ? t('dsa.quota') : t('models.quota.api')}
+    </NoticeLine>
   )
 }
 

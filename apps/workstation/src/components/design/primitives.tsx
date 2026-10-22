@@ -26,7 +26,10 @@ export function WsCard({
   )
 }
 
-/** 状态胶囊：一个小圆点 + 一句话（画布 `.st`）。 */
+/**
+ * 状态药丸：一个小圆点 + 一句话（画布 `.st`）。WP456-T2：样子收进 `.ws-pill`（高 22、12/500、全圆），
+ * 颜色只表示状态——好 / 要留意 / 出错 / 提示；分类请用 `CategoryTag`（灰底、没有点）。
+ */
 export function StatusPill({
   tone = 'neutral',
   children,
@@ -38,34 +41,23 @@ export function StatusPill({
       data-testid="ws-status-pill"
       data-slot="status"
       data-tone={tone}
-      className={cn(
-        'inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium',
-        TONE_PILL[tone],
-        className,
-      )}
+      className={cn('ws-pill', TONE_PILL[tone], className)}
       {...rest}
     >
-      <i aria-hidden className="size-1.5 rounded-full bg-current" />
+      <i aria-hidden className="ws-pill-dot" />
       {children}
     </span>
   )
 }
 
-/** 芯片：方角一点的灰底小标签（画布 `.tag`）。 */
+/** 芯片：方角一点的灰底小标签（画布 `.tag`）。WP456-T2：和 `CategoryTag` 同一个样子（`.ws-tag`）。 */
 export function WsTag({
   children,
   className,
   ...rest
 }: React.HTMLAttributes<HTMLSpanElement>): React.ReactNode {
   return (
-    <span
-      data-testid="ws-tag"
-      className={cn(
-        'inline-flex h-[22px] items-center rounded-md bg-ws-surface px-2 text-xs text-ws-body',
-        className,
-      )}
-      {...rest}
-    >
+    <span data-testid="ws-tag" className={cn('ws-tag', className)} {...rest}>
       {children}
     </span>
   )

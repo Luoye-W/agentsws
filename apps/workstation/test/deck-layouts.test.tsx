@@ -314,10 +314,11 @@ describe('全类共用的头与脚', () => {
     expect(container.textContent ?? '').not.toContain('售后客服 Agent')
   })
 
-  it('卡壳走 .ws-card（圆角 16、无边框、浅阴影都在这一个 class 里）', () => {
+  // WP456-T2：卡片流、事项页、「要你处理」共用一种决定卡外壳 `.ws-dcard`（圆角 16、无边框、卡阴影）
+  it('卡壳走决定卡外壳 .ws-dcard（圆角 16、无边框、浅阴影都在这一个 class 里）', () => {
     renderCard(layoutCard('outbound'))
     const card = screen.getByTestId('deck-card')
-    expect(card.className).toContain('ws-card')
+    expect(card.className).toContain('ws-dcard')
     expect(card.dataset.layout).toBe('outbound')
   })
 })

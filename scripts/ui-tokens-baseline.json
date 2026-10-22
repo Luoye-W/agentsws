@@ -14,10 +14,6 @@
     "apps/workstation/src/components/amazon/listing-checkup.tsx": {
       "radius": 2
     },
-    "apps/workstation/src/components/answer/genui/host-nodes.tsx": {
-      "font-size": 1,
-      "radius": 1
-    },
     "apps/workstation/src/components/app-shell.tsx": {
       "font-size": 1,
       "radius": 1
@@ -76,12 +72,6 @@
     "apps/workstation/src/components/deck/deck-card-body.tsx": {
       "font-size": 2,
       "radius": 11
-    },
-    "apps/workstation/src/components/deck/deck-card.tsx": {
-      "font-size": 1
-    },
-    "apps/workstation/src/components/deck/deck-filters.tsx": {
-      "font-size": 1
     },
     "apps/workstation/src/components/deck/faq-import-body.tsx": {
       "radius": 2
@@ -150,11 +140,7 @@
     "apps/workstation/src/components/kol/kol-panel.tsx": {
       "radius": 4
     },
-    "apps/workstation/src/components/library/skill-groups.tsx": {
-      "font-size": 1
-    },
     "apps/workstation/src/components/matter/image-pick-card.tsx": {
-      "font-size": 4,
       "radius": 1
     },
     "apps/workstation/src/components/matter/mask-dialog.tsx": {
@@ -169,7 +155,7 @@
       "font-size": 3
     },
     "apps/workstation/src/components/matter/matter-timeline.tsx": {
-      "font-size": 24,
+      "font-size": 10,
       "radius": 9,
       "color": 5
     },
@@ -205,9 +191,6 @@
     "apps/workstation/src/components/models/subscription-plan.tsx": {
       "radius": 1
     },
-    "apps/workstation/src/components/notifications/notification-bell.tsx": {
-      "font-size": 1
-    },
     "apps/workstation/src/components/onboarding/position-planner.tsx": {
       "font-size": 1
     },
@@ -242,9 +225,6 @@
       "font-size": 1
     },
     "apps/workstation/src/components/position/work-bits.tsx": {
-      "radius": 1
-    },
-    "apps/workstation/src/components/position/work-calendar.tsx": {
       "radius": 1
     },
     "apps/workstation/src/components/position/work-list.tsx": {
@@ -285,7 +265,6 @@
       "radius": 2
     },
     "apps/workstation/src/components/rail/right-rail.tsx": {
-      "font-size": 1,
       "radius": 1
     },
     "apps/workstation/src/components/reports/kit/blocks.tsx": {
@@ -445,7 +424,7 @@
     },
     "apps/workstation/src/pages/calendar.tsx": {
       "font-size": 1,
-      "radius": 3
+      "radius": 2
     },
     "apps/workstation/src/pages/duty.tsx": {
       "font-size": 2
@@ -464,12 +443,6 @@
     "apps/workstation/src/pages/im-channels.tsx": {
       "font-size": 1
     },
-    "apps/workstation/src/pages/in-progress.tsx": {
-      "font-size": 1
-    },
-    "apps/workstation/src/pages/influencer.tsx": {
-      "font-size": 1
-    },
     "apps/workstation/src/pages/login.tsx": {
       "font-size": 1
     },
@@ -479,7 +452,7 @@
     },
     "apps/workstation/src/pages/messages.tsx": {
       "font-size": 1,
-      "radius": 10
+      "radius": 9
     },
     "apps/workstation/src/pages/onboarding.tsx": {
       "font-size": 1

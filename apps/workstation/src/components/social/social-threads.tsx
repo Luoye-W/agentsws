@@ -18,7 +18,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Mail, MessageSquare, MessagesSquare, Plug } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { connectServiceForChannel } from '@/components/connections/links'
-import { WsTag } from '@/components/design'
+import { Segmented, WsTag } from '@/components/design'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { ReplyButton } from '@/components/social/reply-button'
 import { Button } from '@/components/ui/button'
@@ -266,33 +266,32 @@ function TagFilter({
     return m
   }, [rows])
   if (counts.size === 0) return null
-  const chip = (key: string | undefined, label: string, n: number) => (
-    <Button
-      key={key ?? 'all'}
-      size="xs"
-      variant={value === key ? 'secondary' : 'ghost'}
-      aria-pressed={value === key}
-      data-testid="threads-tag"
-      data-tag={key ?? 'all'}
-      onClick={() => {
-        onChange(key)
-      }}
-    >
-      {label}
-      <span className="ws-num text-ws-tiny text-ws-muted-fg">{n}</span>
-    </Button>
-  )
+  // WP456-T2：全站唯一那种分段切换（「全部」用一个占位值，回调时还原成 undefined）
+  const ALL = '__all'
+  const option = (key: string | undefined, label: string, n: number) => ({
+    value: key ?? ALL,
+    label,
+    count: n,
+    testId: 'threads-tag',
+    data: { 'data-tag': key ?? 'all' } as Record<`data-${string}`, string>,
+  })
   return (
-    <fieldset
-      className="m-0 flex flex-wrap items-center gap-1 border-0 p-0"
-      aria-label={t('threads.tags.label')}
-      data-testid="threads-tags"
-    >
-      {chip(undefined, t('threads.tags.all'), rows.length)}
-      {TAG_ORDER.filter((k) => counts.has(k)).map((k) =>
-        chip(k, t(`threads.triage.${k}`), counts.get(k) ?? 0),
-      )}
-    </fieldset>
+    <Segmented
+      size="sm"
+      label={t('threads.tags.label')}
+      testId="threads-tags"
+      value={value ?? ALL}
+      reselect
+      options={[
+        option(undefined, t('threads.tags.all'), rows.length),
+        ...TAG_ORDER.filter((k) => counts.has(k)).map((k) =>
+          option(k, t(`threads.triage.${k}`), counts.get(k) ?? 0),
+        ),
+      ]}
+      onChange={(v) => {
+        onChange(v === ALL ? undefined : v)
+      }}
+    />
   )
 }
 

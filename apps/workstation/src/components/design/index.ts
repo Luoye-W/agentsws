@@ -11,6 +11,33 @@ export {
   usePageHidden,
   usePrefersReducedMotion,
 } from './brand-mark'
+// WP456-T2：决定卡外壳（「要你处理」、事项页的卡、卡片流共用一种）
+export {
+  CompareBlock,
+  DecisionCard,
+  DecisionCardBody,
+  DecisionCardFoot,
+  DecisionCardHead,
+  type DecisionOption,
+  OptionGroup,
+} from './decision-card'
+// WP456-T2：一套共用的小件（页头、节标题、列表组 / 行、标签、徽章、一行提醒、空状态、骨架）
+export {
+  CategoryTag,
+  CountBadge,
+  countText,
+  EmptyState,
+  GroupLabel,
+  ListGroup,
+  ListRow,
+  type NoticeAction,
+  NoticeLine,
+  PageHeader,
+  SectionHeader,
+  SkeletonBar,
+  SkeletonList,
+  SkeletonRow,
+} from './kit'
 export {
   applyMotionPref,
   MOTION_PREFS,
@@ -40,6 +67,8 @@ export {
   WsCard,
   WsTag,
 } from './primitives'
+// WP456-T2：分段切换全站只留一种
+export { Segmented, type SegmentedOption } from './segmented'
 export { StatRow } from './stat-row'
 export { StatTile } from './stat-tile'
 // WP214（36 §7 第四档）：状态用图标——四态、tooltip、可键盘聚焦、明暗两套

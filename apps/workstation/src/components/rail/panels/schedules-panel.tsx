@@ -14,12 +14,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Clock, Pause, Play, Trash2 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { StatusPill } from '@/components/design'
+import { SkeletonList } from '@/components/design/kit'
 import { PanelError } from '@/components/rail/panel-error'
 import { parseMatterPath } from '@/components/rail/rail-layout'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   deleteSchedule,
   getMySchedules,
@@ -49,7 +49,7 @@ export function SchedulesPanel({ pathname, scope }: RailPanelBodyProps): ReactNo
   const matter_id = parseMatterPath(pathname)
   const list = useQuery({ queryKey: KEY, queryFn: getMySchedules })
 
-  if (list.isPending) return <Skeleton className="h-24 w-full" />
+  if (list.isPending) return <SkeletonList rows={2} check={false} />
   if (list.error !== null) return <PanelError error={list.error} />
 
   const rows = list.data.filter(isListedSchedule)

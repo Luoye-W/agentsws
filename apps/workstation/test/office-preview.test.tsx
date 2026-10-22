@@ -434,7 +434,8 @@ describe('照 WP96 的新风格画（共用件，不自己写一套）', () => {
     renderPanel('年度明细.xlsx')
     const pill = await screen.findByTestId('rail-office-too-large')
     expect(pill.dataset.tone).toBe('warn')
-    expect(pill.className).toContain('rounded-full')
+    // WP456-T2：状态药丸的样子收进 `.ws-pill`（全圆、点 + 字）
+    expect(pill.className).toContain('ws-pill')
   })
 })
 

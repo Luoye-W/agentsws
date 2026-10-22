@@ -13,6 +13,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { PageHeader } from '@/components/design/kit'
 import { AskSecretary } from '@/components/secretary/ask-secretary'
 import { MeetDialog } from '@/components/secretary/meet-dialog'
 import { Button } from '@/components/ui/button'
@@ -30,7 +31,7 @@ export function PeoplePage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4" data-testid="people-page">
-      <h1 className="font-semibold text-base">{t('people.title')}</h1>
+      <PageHeader title={t('people.title')} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {people.data.map((p) => (
           <Card key={p.person_id} data-testid="person-card" data-person={p.person_id}>

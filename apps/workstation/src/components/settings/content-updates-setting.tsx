@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Package, RefreshCw, ShieldCheck } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { ContentDiffDialog } from '@/components/content-updates/content-diff-dialog'
+import { Segmented } from '@/components/design/segmented'
 import { StatusIcons, type StatusState } from '@/components/design/status-icons'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -102,31 +103,16 @@ export function ContentUpdatesSetting(): ReactNode {
             </Button>
           )}
         </span>
-        <fieldset
-          className="inline-flex rounded-full border p-0.5 text-xs"
-          aria-label={t('content_updates.title')}
-          data-testid="content-updates-mode"
-        >
-          {MODES.map((m) => (
-            <button
-              key={m}
-              type="button"
-              aria-pressed={m === v.mode}
-              data-value={m}
-              disabled={busy}
-              className={
-                m === v.mode
-                  ? 'rounded-full bg-primary px-2.5 py-0.5 text-primary-foreground'
-                  : 'rounded-full px-2.5 py-0.5 text-muted-foreground hover:text-foreground'
-              }
-              onClick={() => {
-                if (m !== v.mode) mode.mutate(m)
-              }}
-            >
-              {t(`content_updates.mode.${m}`)}
-            </button>
-          ))}
-        </fieldset>
+        <Segmented
+          label={t('content_updates.title')}
+          testId="content-updates-mode"
+          disabled={busy}
+          value={v.mode}
+          options={MODES.map((m) => ({ value: m, label: t(`content_updates.mode.${m}`) }))}
+          onChange={(m) => {
+            mode.mutate(m)
+          }}
+        />
       </div>
       {v.state === 'error' && v.reason !== undefined ? (
         <p className="text-xs text-ws-bad" data-testid="content-updates-reason">

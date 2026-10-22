@@ -58,7 +58,7 @@ import {
 } from 'lucide-react'
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { StatusPill, WsAvatar, WsTag } from '@/components/design'
+import { PageHeader, Segmented, StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
 import {
@@ -566,7 +566,7 @@ export function MessagesPage(): ReactNode {
   if (list.length === 0)
     return source === 'chat' ? (
       <div className="flex flex-col gap-3" data-testid="messages-page" data-view="all">
-        <h1 className="text-[22px] font-semibold">{t('nav.messages')}</h1>
+        <PageHeader title={t('nav.messages')} />
         <div className="flex h-[calc(100vh-10rem)] gap-3">
           <SiteChatView
             initial={threadParam}
@@ -625,18 +625,23 @@ export function MessagesPage(): ReactNode {
     )
 
   const header = (
-    <header className="flex flex-wrap items-center gap-3">
-      <h1 className="text-[22px] font-semibold">{t('nav.messages')}</h1>
-      {/* WP439：顶栏右边「规则」（右栏规则清单） */}
-      <MessageRulesButton />
-      <ViewToggle
-        view={view}
-        unclaimed={overview.data?.unclaimed}
-        onChange={(next) => {
-          switchView(next)
-        }}
-      />
-    </header>
+    // WP456-T2：页头一种写法——标题在左，操作（规则 + 分段切换）在右
+    <PageHeader
+      title={t('nav.messages')}
+      actions={
+        <>
+          {/* WP439：顶栏右边「规则」（右栏规则清单） */}
+          <MessageRulesButton />
+          <ViewToggle
+            view={view}
+            unclaimed={overview.data?.unclaimed}
+            onChange={(next) => {
+              switchView(next)
+            }}
+          />
+        </>
+      }
+    />
   )
 
   // WP212：默认视图「没人接的」（方向 A）
@@ -1251,36 +1256,22 @@ function ViewToggle({
   onChange(view: 'unclaimed' | 'all'): void
 }): ReactNode {
   const { t } = useApp()
+  // WP456-T2：全站唯一那种分段切换
   return (
-    <div
-      className="ml-auto inline-flex rounded-[12px] bg-ws-surface p-0.5 text-[13px]"
-      role="tablist"
-      data-testid="messages-view-toggle"
-    >
-      {(['unclaimed', 'all'] as const).map((v) => (
-        <button
-          key={v}
-          type="button"
-          role="tab"
-          aria-selected={view === v}
-          data-testid={`messages-view-${v}`}
-          className={cn(
-            'rounded-[10px] px-3 py-1',
-            view === v
-              ? 'bg-ws-card font-medium shadow-ws'
-              : 'text-ws-muted-fg hover:text-foreground',
-          )}
-          onClick={() => {
-            onChange(v)
-          }}
-        >
-          {t(`messages.view.${v}`)}
-          {v === 'unclaimed' && unclaimed !== undefined ? (
-            <span className="ws-num ml-1">{unclaimed}</span>
-          ) : null}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      kind="tabs"
+      label={t('nav.messages')}
+      testId="messages-view-toggle"
+      value={view}
+      reselect
+      options={(['unclaimed', 'all'] as const).map((v) => ({
+        value: v,
+        label: t(`messages.view.${v}`),
+        testId: `messages-view-${v}`,
+        ...(v === 'unclaimed' && unclaimed !== undefined ? { count: unclaimed } : {}),
+      }))}
+      onChange={onChange}
+    />
   )
 }
 
@@ -1655,7 +1646,7 @@ function NoMailbox({ onSiteChat }: { onSiteChat?: () => void }): ReactNode {
   const openConnect = useOpenConnect()
   return (
     <div className="flex max-w-lg flex-col gap-3" data-testid="messages-no-mailbox">
-      <h1 className="text-base font-semibold">{t('nav.messages')}</h1>
+      <PageHeader title={t('nav.messages')} />
       <p className="flex items-center gap-1 text-sm text-ws-muted-fg">
         {t('messages.no_mailbox')}
         <Hint text={t('messages.no_mailbox.hint')} />
