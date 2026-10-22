@@ -47,10 +47,10 @@ const GENUI_CSS = readFileSync(
   'utf8',
 )
 
-/** index.css 里 WP456-T2 那一段（从注释开头到骨架那段收尾）。 */
+/** index.css 里 WP456-T2 那一段（从注释开头到选项组最后一条）。 */
 function kitBlock(): string {
   const start = CSS.indexOf('WP456-T2（WP456 §2.6，决策 1446）')
-  const end = CSS.indexOf('@keyframes ws-skel-sweep')
+  const end = CSS.indexOf('.ws-opt[data-on="true"] .ws-opt-radio')
   expect(start).toBeGreaterThan(0)
   expect(end).toBeGreaterThan(start)
   return CSS.slice(start, end)

@@ -1104,24 +1104,6 @@
   }
 }
 
-/* WP456-T2：骨架的那道光（动效关了就停） */
-@keyframes ws-skel-sweep {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: -100% 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  :root:not([data-ws-motion="on"]) .ws-skel {
-    animation: none;
-  }
-}
-:root[data-ws-motion="off"] .ws-skel {
-  animation: none;
-}
-
 /*
  * WP112 · 母品牌标记的四种姿态。
  *
@@ -1536,4 +1518,22 @@
   html[data-shell] .ws-drag-strip {
     display: none;
   }
+}
+
+/* WP456-T2：骨架的那道光（动效关了就停） */
+@keyframes ws-skel-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-ws-motion="on"]) .ws-skel {
+    animation: none;
+  }
+}
+:root[data-ws-motion="off"] .ws-skel {
+  animation: none;
 }
