@@ -4,7 +4,7 @@
  */
 import type { PanelRecord, PanelSinkView } from '@agentsws/browser-action'
 import { ACTION_LABEL, clock } from '@/lib/panel/format'
-import { IconAlert, IconCheck, IconClock, IconExternal, IconX } from './panel-icons'
+import { IconAlert, IconCheck, IconExternal, IconInbox } from './panel-icons'
 
 const SINK_STATE: Record<PanelSinkView['state'], string> = {
   pending_confirm: '等你在工坊里确认',
@@ -18,14 +18,12 @@ function SinkResults(props: { record: PanelRecord }): React.ReactNode {
   return (
     <div className="ws-sinkres" data-testid="ws-sinkres">
       {props.record.sinks.map((s) => {
-        const Icon = s.status === 'written' ? IconCheck : s.status === 'failed' ? IconX : IconClock
         return (
           <span
             key={s.name}
             className={`ws-pill ws-pill--${s.status === 'written' ? 'good' : s.status === 'failed' ? 'bad' : 'wait'}`}
             title={s.message ?? (s.status === 'written' ? '写进去了' : '排着，等会儿写')}
           >
-            <Icon className="ws-ico ws-ico--sm" />
             {s.name}
           </span>
         )
@@ -41,7 +39,7 @@ export function PanelRecords(props: {
 }): React.ReactNode {
   const now = props.now ?? new Date()
   return (
-    <section className="ws-sec" data-testid="ws-records">
+    <section className="ws-sec ws-records" data-testid="ws-records">
       {props.sinks.length === 0 ? null : (
         <ul className="ws-sinks" data-testid="ws-sinks">
           {props.sinks.map((s) => (
@@ -65,7 +63,7 @@ export function PanelRecords(props: {
       )}
       {props.records.length === 0 ? (
         <p className="ws-empty" data-testid="ws-records-empty">
-          还没有发出记录
+          <IconInbox className="ws-ico" /> 还没有发出记录
         </p>
       ) : (
         <ul className="ws-recs">
@@ -81,7 +79,7 @@ export function PanelRecords(props: {
                   </span>
                 )}
                 {r.via_extension === true ? (
-                  <span className="ws-pill" data-testid="ws-via-ext">
+                  <span className="ws-tag" data-testid="ws-via-ext">
                     在插件里批的
                   </span>
                 ) : null}

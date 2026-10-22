@@ -12,7 +12,7 @@ import {
   progressHead,
   stageTone,
 } from '@/lib/panel/format'
-import { IconAlert, IconCheck, IconClock, IconMinus, IconX } from './panel-icons'
+import { IconAlert, IconCheck, IconClock, IconInfo, IconMinus, IconX } from './panel-icons'
 
 const TONE_ICON: Record<PartTone, (p: { className?: string }) => React.ReactNode> = {
   good: IconCheck,
@@ -47,7 +47,12 @@ export function PanelProgressView(props: {
           </span>
         )}
       </div>
-      {p.note === undefined ? null : <p className="ws-note ws-note--warn">{p.note}</p>}
+      {p.note === undefined ? null : (
+        <p className="ws-note ws-note--warn">
+          <IconAlert className="ws-ico" />
+          <span className="ws-note-text">{p.note}</span>
+        </p>
+      )}
 
       {parts.length === 0 ? null : (
         <ul className="ws-parts" data-testid="ws-parts">
@@ -68,7 +73,7 @@ export function PanelProgressView(props: {
         </ul>
       )}
 
-      <div className="ws-now" data-testid="ws-now">
+      <div className="ws-now ws-stat" data-testid="ws-now">
         <span className="ws-chip" title="AI 正在写回复草稿的条数">
           起草中 <b>{p.drafting}</b>
         </span>
@@ -96,7 +101,8 @@ export function PanelProgressView(props: {
           className="ws-note"
           title="自家版块、关键词、品牌号这些在 Agents 工坊的 Reddit 运营岗位里设"
         >
-          巡查在工坊里设好后，这里会显示每次读了什么。
+          <IconInfo className="ws-ico" />
+          <span className="ws-note-text">巡查在工坊里设好后，这里会显示每次读了什么。</span>
         </p>
       )}
     </section>
@@ -120,12 +126,12 @@ export function StageLine(props: {
       data-testid="ws-stage"
       data-kind={st.kind}
     >
-      <Icon className="ws-ico ws-ico--sm" />
+      <Icon className="ws-ico" />
       <span>{st.text}</span>
       {st.card_id === undefined || props.openCard === undefined ? null : (
         <button
           type="button"
-          className="ws-btn ws-btn--ghost ws-btn--sm"
+          className="ws-link ws-note-end"
           data-testid="ws-stage-open"
           onClick={() => props.openCard?.(st.card_id ?? '')}
         >
