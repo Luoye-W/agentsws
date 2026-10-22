@@ -101,6 +101,15 @@ const DEMO_BRAND_INSIGHTS = {
     { name: 'BLUETTI', reason: '主打大容量、家庭应急' },
   ],
 }
+/**
+ * WP449：发布前「引用核查」在 demo 里打开的是**现编的**一页（`.example.org` 保留域，不出网）——
+ * 文章里引它的数，对得上就过、对不上就挡在草稿，两种都演得出来。没列的网址照旧回 404。
+ */
+const DEMO_CITATION_PAGES: Record<string, string> = {
+  'https://research.example.org/charging-survey':
+    '<!doctype html><html><body><main><h1>Mobile charging habits survey 2026</h1><p>We asked 2,400 smartphone owners how they charge on the go.</p><p>42% of respondents carry a power bank at least three days a week.</p></main></body></html>',
+}
+
 /** WP204：demo 里「显示图片」代取回来的那张题图（10×2 品牌绿 PNG，与题图 5:1 同比例）。 */
 /** WP381：体检在 demo 里抓的那几页（现编；按路径认）。 */
 const DEMO_SITE_HEALTH_PAGES: Record<string, string> = {
@@ -1608,7 +1617,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     },
     brandIntakeFetch: async (url: string) => {
       // WP140（docs/78 §2 向导 ②）：手输不带结尾斜杠的 `https://nordvolt.example` 也认
-      const body = siteFixtures.get(siteFixtureKey(url))
+      const body = siteFixtures.get(siteFixtureKey(url)) ?? DEMO_CITATION_PAGES[url]
       // 剧本里没有的网址回 **404**，不是 503：这一句会原样显示给用户
       //（"有 N 个页面没读着（…）"），而 503 说的是"对方服务器出错"——
       // 那是替商家的网站撒了一个我们不知道的谎。404 才是"这一页不存在"。

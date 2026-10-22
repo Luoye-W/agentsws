@@ -946,5 +946,8 @@ describe('WP449：发布前质检整套（引用核查 / 市场版本 / 竞品 /
     expect(weak.gate.ai_citability?.score).toBeLessThan(70)
     expect(weak.out.notes?.join('\n')).toContain('好不好被 AI 引用')
     expect(weak.out.notes?.join('\n')).toContain('不挡发布')
+    // 卡上只看得到说明：建议也写进说明
+    expect(weak.out.approval.summary).toContain('这篇会出现在店里的博客上。')
+    expect(weak.out.approval.summary).toContain('好不好被 AI 引用')
   })
 })

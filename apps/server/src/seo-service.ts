@@ -2387,11 +2387,18 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         ...(result.locale === undefined ? {} : { language: result.locale.language }),
       })
       const advice = result.advice ?? []
+      // 建议（不挡发布）也写进卡的说明里——卡上只看得到说明
+      const adviceText = advice.length === 0 ? '' : `\n${advice.join('\n')}`
       if (result.passed)
         return {
           ...input,
           after: { ...after, quality_gate: result },
-          ...(advice.length === 0 ? {} : { notes: [...(input.notes ?? []), ...advice] }),
+          ...(advice.length === 0
+            ? {}
+            : {
+                notes: [...(input.notes ?? []), ...advice],
+                approval: { ...input.approval, summary: `${input.approval.summary}${adviceText}` },
+              }),
         }
       return {
         ...input,
@@ -2406,7 +2413,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         approval: {
           ...input.approval,
           title: `没过质检，先留在草稿：${title ?? input.target.id}`,
-          summary: qualitySummary(result),
+          summary: `${qualitySummary(result)}${adviceText}`,
         },
       }
     },
