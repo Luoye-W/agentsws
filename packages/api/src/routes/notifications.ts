@@ -1,7 +1,8 @@
 /**
  * WP429：站内通知（顶栏铃铛）与「设置 → 通知」按类别的开关。
  *
- * - `GET  /v1/notifications?view=unread|all&limit=`：本人在这个品牌里的通知（新的在前）+ 未读数；
+ * - `GET  /v1/notifications?view=unread|all&limit=`：本人在这个品牌里的通知（新的在前；没读的紧急档最上）+ 未读数；
+ *   WP466：回之前先把本人现在挂着的系统卡（原首页告警区，`WorkstationPort.systemCards`）对进铃铛；
  * - `POST /v1/notifications/read`：把这几条标成已读（`{ ids }`）；
  * - `POST /v1/notifications/read-all`：全部已读；
  * - `GET  /v1/settings/notifications` / `PUT`：每类「站内 / 系统」两个开关。
@@ -17,6 +18,7 @@ import {
   type PersonId,
   type WorkspaceId,
 } from '@agentsws/contracts'
+import type { DeckCard } from '@agentsws/deck'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, principalOf } from '../helpers.js'
@@ -44,6 +46,28 @@ export interface NotificationsPort {
     actor: NotificationActor,
     patch: Partial<Record<NotificationCategory, { inbox?: boolean; system?: boolean }>>,
   ): MaybePromise<NotificationPrefs>
+  /**
+   * WP466：本人现在挂着的系统卡（`system_alert`，原首页告警区）对进铃铛——新的进来、没了的收成已读。
+   * 不给 = 这个宿主不同步（铃铛里只有别的几类）。
+   */
+  syncAlerts?(actor: NotificationActor, alerts: readonly DeckCard[]): MaybePromise<void>
+}
+
+/**
+ * WP466：铃铛来问之前先对一遍系统卡。**永不抛**：系统卡取不到就照旧回已有的通知，铃铛不能因此空掉。
+ */
+async function syncSystemAlerts(
+  deps: GatewayDeps,
+  port: NotificationsPort,
+  actor: NotificationActor,
+): Promise<void> {
+  if (port.syncAlerts === undefined || deps.workstation === undefined) return
+  try {
+    const system = await deps.workstation.systemCards(actor)
+    await port.syncAlerts(actor, system.alerts)
+  } catch {
+    // 取不到就这一次不对，下一次再来
+  }
 }
 
 const ReadBody = z.object({ ids: z.array(z.string().min(1).max(200)).max(500) })
@@ -99,7 +123,9 @@ export function notificationsRoutes(): Route[] {
         const view = c.req.query('view') === 'all' ? 'all' : 'unread'
         const raw = Number(c.req.query('limit') ?? 50)
         const limit = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.trunc(raw))) : 50
-        return ok(c, await portOf(deps).list(actor, { view, limit }))
+        const port = portOf(deps)
+        await syncSystemAlerts(deps, port, actor)
+        return ok(c, await port.list(actor, { view, limit }))
       },
     ),
     route(

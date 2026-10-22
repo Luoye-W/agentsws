@@ -13,7 +13,7 @@
 import type { DeckCard } from '@agentsws/deck'
 import { actionsFor, labelsFor, layoutFor } from '@agentsws/deck'
 
-/** 提醒在首页告警区挂几天（没人动就自己退场；人改过模型当场退场）。 */
+/** 提醒（铃铛里那条，原首页告警区）挂几天（没人动就自己退场；人改过模型当场退场）。 */
 export const RETIRED_MODEL_NOTICE_DAYS = 7
 
 /** 点开去哪：设置页里的模型那一块（与余额不足提示、顶栏同一个链接）。 */
@@ -34,7 +34,7 @@ export function retiredSwapLive(swap: RetiredModelSwap, current: string, now: st
   return age < RETIRED_MODEL_NOTICE_DAYS * 86_400_000
 }
 
-/** 提醒 → 首页告警区那一行（`system_alert`，点「去处理」到设置页的模型那一块）。 */
+/** 提醒 → 系统卡（`system_alert`；WP466 起在铃铛里一条，原首页告警区，点「去处理」到设置页的模型那一块）。 */
 export function retiredModelNoticeCard(input: {
   /** 同一个人同一处同一次换模型，id 稳定（首页按 id 去重 / 记已读）。 */
   id: string

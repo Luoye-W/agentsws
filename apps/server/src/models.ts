@@ -531,7 +531,7 @@ export interface ModelsAssembly {
   exportSettings(): ModelSettingsSnapshot
   /**
    * WP294：启动时被自动换掉的退役订阅模型里，还该提醒的那几条（没过期、人没再改过）。
-   * 首页告警区据此出一行。
+   * 据此出一张系统卡（WP466 起在铃铛里一条，原首页告警区）。
    */
   retiredSwaps(): RetiredProviderSwap[]
   /**

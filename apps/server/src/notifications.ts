@@ -8,7 +8,9 @@
  *    交给 {@link NotificationsService.onEvent}——同事接下 / 没接 / 退回了你交的事、上级派给你的、卡到了
  *    你这儿要你批（同事交给你的、审批到你的）、本周岗位更新到了、模型订阅要重新登录（WP430 的事件）；
  * 2. **装配处直接发**（{@link NotificationsService.notify}）：任务跑完 / 被停下、连接断了、积分快用完、
- *    同事回你了（WP417 替我答，原来是一张「知道了」卡）。
+ *    同事回你了（WP417 替我答，原来是一张「知道了」卡）；
+ * 3. **系统卡同步**（{@link NotificationsService.syncAlerts}，WP466）：原来首页告警区的 `system_alert`，
+ *    每次铃铛来问时按本人现在挂着的那几张对一遍——新的进来、没了的收成已读（见 `alert-notifications.ts`）。
  *
  * 规矩：
  * - **同一件事合并**：同一个 `key` 还没读时再来一次，不另起一条——顶上来、计数加一；已读过的再来就重新变未读；
@@ -36,7 +38,9 @@ import {
   resolveNotificationPrefs,
   type WorkspaceId,
 } from '@agentsws/contracts'
+import type { DeckCard } from '@agentsws/deck'
 import type BetterSqlite3 from 'better-sqlite3'
+import { ALERT_KEY_PREFIX, alertNotificationOf } from './alert-notifications.js'
 
 type MaybeAsync<T> = T | Promise<T>
 
@@ -60,6 +64,13 @@ interface Backend {
 
 const byNewest = (a: InboxNotification, b: InboxNotification): number =>
   b.updated_at.localeCompare(a.updated_at) || b.id.localeCompare(a.id)
+
+/** WP466：没读的紧急档排最上面，其余照新的在前。 */
+const urgentFirst = (a: InboxNotification, b: InboxNotification): number => {
+  const ua = a.urgent === true && a.read_at === undefined ? 0 : 1
+  const ub = b.urgent === true && b.read_at === undefined ? 0 : 1
+  return ua - ub || byNewest(a, b)
+}
 
 function createMemoryBackend(): Backend {
   const rows = new Map<string, InboxNotification>()
@@ -415,6 +426,11 @@ export interface NotificationsService {
   ): InboxNotification | undefined
   /** 这件事办完了：同键还没读的都收成已读（不给人 = 这个品牌里所有人的）。 */
   settle(ws: WorkspaceId, key: string, person?: PersonId): void
+  /**
+   * WP466：本人现在挂着的系统卡（原首页告警区）对一遍——没进过铃铛的进来（一张一条），
+   * 已经在的不加计数、不改已读，不在了的那几条收成已读。
+   */
+  syncAlerts(actor: NotificationActor, alerts: readonly DeckCard[]): void
   list(actor: NotificationActor, query: { view: 'unread' | 'all'; limit: number }): NotificationList
   markRead(actor: NotificationActor, ids: readonly string[]): { unread: number }
   markAllRead(actor: NotificationActor): { unread: number }
@@ -483,6 +499,10 @@ export function createNotifications(options: NotificationsOptions): Notification
     backend.remove(drop.map((r) => r.id))
   }
 
+  /** 告警这一类「系统」开着也只弹紧急档的（普通的只进铃铛，决策 1489）。 */
+  const systemOf = (input: NotificationInput, on: boolean): boolean =>
+    on && (input.category !== 'alert' || input.urgent === true)
+
   const notify = (
     input: NotificationInput,
     opts?: { at?: string; read?: boolean },
@@ -509,7 +529,8 @@ export function createNotifications(options: NotificationsOptions): Notification
             count: 1,
             created_at: at,
             updated_at: at,
-            system: prefs.system,
+            system: systemOf(input, prefs.system),
+            ...(input.urgent === true ? { urgent: true } : {}),
           }
         : {
             id: prev.id,
@@ -523,7 +544,8 @@ export function createNotifications(options: NotificationsOptions): Notification
             count: prev.read_at === undefined ? prev.count + 1 : 1,
             created_at: prev.created_at,
             updated_at: at,
-            system: prefs.system,
+            system: systemOf(input, prefs.system),
+            ...(input.urgent === true ? { urgent: true } : {}),
           }
     const stored = opts?.read === true ? { ...row, read_at: at } : row
     backend.put(stored)
@@ -538,9 +560,41 @@ export function createNotifications(options: NotificationsOptions): Notification
         backend.put({ ...r, read_at: at })
   }
 
+  const syncAlerts: NotificationsService['syncAlerts'] = (actor, alerts) => {
+    const live = new Set<string>()
+    for (const card of alerts) {
+      const n = alertNotificationOf(card, actor)
+      if (n?.key === undefined || live.has(n.key)) continue
+      live.add(n.key)
+      const prev = backend.byKey(actor.workspace_id, actor.person_id, n.key)
+      if (prev === undefined) {
+        // 卡上的时间是那件事发生的时间；铃铛里按「来到铃铛」的那一刻算（不然一进来就排到底下）
+        notify(n)
+        continue
+      }
+      // 还挂着：一个状态，不加计数、不变回未读；只把字 / 去处 / 档位对齐（读回结果补上了之类）
+      const href = n.href
+      const same =
+        prev.text === n.text && prev.href === href && (prev.urgent === true) === (n.urgent === true)
+      if (same) continue
+      const { href: _h, urgent: _u, ...rest } = prev
+      backend.put({
+        ...rest,
+        text: n.text,
+        ...(href === undefined ? {} : { href }),
+        ...(n.urgent === true ? { urgent: true } : {}),
+      })
+    }
+    // 不在了的：那件事过去了，没读的收成已读
+    const at = now()
+    for (const r of backend.all(actor.workspace_id, actor.person_id))
+      if (r.key.startsWith(ALERT_KEY_PREFIX) && !live.has(r.key) && r.read_at === undefined)
+        backend.put({ ...r, read_at: at })
+  }
+
   const list: NotificationsService['list'] = (actor, query) => {
     maybePrune()
-    const all = backend.all(actor.workspace_id, actor.person_id)
+    const all = backend.all(actor.workspace_id, actor.person_id).sort(urgentFirst)
     const unread = all.filter((r) => r.read_at === undefined)
     const items = (query.view === 'all' ? all : unread).slice(0, query.limit)
     return { items, unread: unread.length }
@@ -627,6 +681,7 @@ export function createNotifications(options: NotificationsOptions): Notification
   const service: NotificationsService = {
     notify,
     settle,
+    syncAlerts,
     list,
     markRead,
     markAllRead,
@@ -650,6 +705,9 @@ export function createNotifications(options: NotificationsOptions): Notification
       markAllRead: (actor) => markAllRead(actor),
       prefs: (actor) => prefsOf(actor.workspace_id, actor.person_id),
       setPrefs: (actor, patch) => setPrefs(actor, patch),
+      syncAlerts: (actor, alerts) => {
+        syncAlerts(actor, alerts)
+      },
     },
     close: () => {
       backend.close()
@@ -747,6 +805,8 @@ export function seedDemoNotifications(
   ws: WorkspaceId,
   person_id: PersonId,
   now: string,
+  /** WP466：告警那两条点了去哪（店铺管理的职责页；没有就回首页）。 */
+  links: { store?: string } = {},
 ): void {
   if (svc.list({ workspace_id: ws, person_id }, { view: 'all', limit: 1 }).items.length > 0) return
   const t = Date.parse(now)
@@ -809,6 +869,35 @@ export function seedDemoNotifications(
       3,
     ],
   ]
+  /*
+   * WP466：原首页告警区那一类——一条紧急（店铺日报异常）、一条普通（目标市场校正）。
+   * 演示世界的订单里没有骤降、也没有断货，真的系统卡出不来；键用 `demo:` 开头，铃铛对系统卡时不会把它们收掉。
+   */
+  rows.push(
+    [
+      {
+        workspace_id: ws,
+        person_id,
+        category: 'alert',
+        text: '目标市场按店铺后台改了：加上了 英国',
+        href: '/settings#company',
+        key: 'demo:alert:markets',
+      },
+      60 * 3,
+    ],
+    [
+      {
+        workspace_id: ws,
+        person_id,
+        category: 'alert',
+        text: '店铺日报：销售额比上一期跌了 42%',
+        href: links.store ?? '/',
+        key: 'demo:alert:store',
+        urgent: true,
+      },
+      25,
+    ],
+  )
   for (const [input, min, read] of rows) svc.notify(input, { at: ago(min), read: read === true })
   // 同一件事又来了两次（合并成一条 ×3）
   svc.notify(rows[2]?.[0] as NotificationInput, { at: ago(40) })
