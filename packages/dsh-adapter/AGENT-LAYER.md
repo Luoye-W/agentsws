@@ -491,6 +491,34 @@ install / postinstall / prepare 脚本、无原生模块**（逐条核实过）�
 
 ---
 
+### 9.8 第三种：用户自己装的 ego（WP463）
+
+个人档的又一种挂法：**用户自己装的 ego 浏览器**（lite.ego.app）。和 Claude Code 调 ego 一样原样调用——
+AI 读 `ego-browser skill` 的说明，把一段 JS 交给 `ego-browser nodejs`。工坊的 AI 没有通用终端，
+所以给它三个自己写的工具（`src/ego.ts`）：
+
+```
+run(req)  —— req.browser.mode === 'ego'
+  └─ createHarness
+       ├─ 先跑一次 `ego-browser skill`（读不到 = 这次运行明明白白失败）
+       ├─（不挂 BrowserUseRegistry / 附件库 / 工作目录——浏览器在 ego 自己的进程里）
+       └─ ctx.agents.create({ setup: async (agentCtx, agent) => {
+            installGate(ctx, { …, egoGuide })          ← skill 原文进 persona 的 complete 段
+            agentCtx.tools.register(ego_run / ego_guide / ego_status)   ← scoped，不列进 restrict
+          }})
+```
+
+| 工具 | 做什么 |
+|---|---|
+| `ego_run({ script, timeout_seconds? })` | spawn `ego-browser nodejs`，脚本走 **stdin**、**不经 shell**；回 stdout / stderr / 退出码 / 耗时；超时缺省 120 秒、最多 600 秒 |
+| `ego_guide()` | 本次运行缓存的那份 `skill` 原文 |
+| `ego_status()` | 版本 + 能不能跑 |
+
+门禁（`gate.ts`）：三个工具单独一条分支——**不过网站白名单、不按读写分类、不套 WP387**
+（Luoye 10-22：「用 ego 的时候不要给它加我们的限制」）；只留痕：脚本原文在 `tool.call` 里，
+每段跑完记一条 `progress{step:'ego_run'}`（退出码 · 耗时 · 输出摘要）。在不在只取决于
+`RunRequest.browser.mode === 'ego'`，服务端只在个人档、① 个人用法、而且 `skill` 跑得通时才给。
+
 ## 10. 职责 preset 与凭据
 
 §9 是"这次运行开不开浏览器"，这一节是"**这条职责有哪些连接**"。两件事共用同一条纪律：
