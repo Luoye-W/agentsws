@@ -168,12 +168,23 @@ export interface MessageRule {
   last_hit_at?: Iso8601
   /** 命中账：按天记几次（`YYYY-MM-DD` → 次数，只留最近 30 天）。界面不用读它。 */
   hit_days?: Record<string, number>
+  /**
+   * 删了的时间（决策 243「能撤回」）：删了当场不再生效，留 {@link MESSAGE_RULE_UNDO_DAYS} 天能撤回，过了才真删。
+   */
+  deleted_at?: Iso8601
+  deleted_by?: PersonId
 }
+
+/** 删掉的消息规则留几天可撤回。 */
+export const MESSAGE_RULE_UNDO_DAYS = 7
 
 /** 清单里的一行（带人名）。 */
 export interface MessageRuleView extends MessageRule {
   by_name?: string
   updated_by_name?: string
+  /** 刚删的那几条：谁删的。 */
+  deleted_by_name?: string
+  deleted_by_me?: boolean
   /** 是看清单的这个人写的。 */
   by_me?: boolean
   /** 最近命中的几封（「看最近命中」那一格，新的在前，最多 5 封）。 */
@@ -195,6 +206,8 @@ export interface MessageRuleList {
   rules: MessageRuleView[]
   /** 品牌共用（同事 / 公司模式）：谁都能改、留名、通知、能撤回（决策 243）。 */
   shared?: boolean
+  /** 刚删的几条（新的在前；过了 {@link MESSAGE_RULE_UNDO_DAYS} 天就不在了）。 */
+  recently_deleted?: MessageRuleView[]
 }
 
 /* ── 建 / 改 ──────────────────────────────────────────────────────────── */

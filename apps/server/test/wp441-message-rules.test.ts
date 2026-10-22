@@ -600,3 +600,43 @@ describe('WP441 我的助理：一句话写规则', () => {
     expect(bare.tools().map((t) => t.name)).not.toContain('propose_message_rule')
   })
 })
+
+describe('WP441 删了能撤回（决策 243）', () => {
+  it('删了当场不生效、7 天内能撤回；同事模式「刚删的」写谁删的；过了 7 天真删', async () => {
+    const changes: string[] = []
+    const h = harness({
+      sharedRules: () => true,
+      personName: (id) => (id === 'p_lin' ? '林二' : '王一'),
+      notifyMessageRuleChange: ({ by, action }) => {
+        changes.push(`${by}:${action}`)
+      },
+    })
+    const made = await h.messages.port.createMessageRule?.(ACTOR, {
+      name: 'A',
+      when: { match: 'all', conditions: [{ type: 'from', value: '@x.example' }] },
+      actions: [{ type: 'label', label: 'billing' }],
+      origin_text: 'A',
+    })
+    const id = made?.rule.id ?? ''
+    expect(await h.messages.port.deleteMessageRule?.(OTHER, id)).toEqual({ deleted: true })
+    h.time.now = '2026-10-22T03:00:00.000Z'
+    h.rows.push(mime(1, 'q@x.example', 'one', h.time.now))
+    await h.messages.poll()
+    expect((await byFrom(h, 'q@x.example', 'one')).triage?.rule_hits).toBeUndefined()
+    const seen = await h.messages.port.messageRules?.(ACTOR)
+    expect(seen?.rules.some((r) => r.id === id)).toBe(false)
+    expect(seen?.recently_deleted?.[0]).toMatchObject({ id, deleted_by_name: '林二' })
+    const back = await h.messages.port.restoreMessageRule?.(ACTOR, id)
+    expect(back).toMatchObject({ restored: true, rule: { id, revision: 2 } })
+    h.rows.push(mime(2, 'q@x.example', 'two', h.time.now))
+    await h.messages.poll()
+    expect((await byFrom(h, 'q@x.example', 'two')).labels).toContain('billing')
+    expect(changes).toEqual(['p_owner:created', 'p_lin:deleted', 'p_owner:restored'])
+    // 过了 7 天：撤不回、库里真删
+    await h.messages.port.deleteMessageRule?.(ACTOR, id)
+    h.time.now = '2026-10-30T03:00:00.000Z'
+    expect(await h.messages.port.restoreMessageRule?.(ACTOR, id)).toEqual({ restored: false })
+    await h.messages.port.messageRules?.(ACTOR)
+    expect(((await h.messages.store.messageRules?.()) ?? []).some((r) => r.id === id)).toBe(false)
+  })
+})

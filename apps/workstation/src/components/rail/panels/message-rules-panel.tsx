@@ -23,7 +23,7 @@ import type {
   SenderRuleList,
   SenderRuleView,
 } from '@agentsws/contracts'
-import { SENDER_RULE_UNDO_DAYS } from '@agentsws/contracts'
+import { MESSAGE_RULE_UNDO_DAYS, SENDER_RULE_UNDO_DAYS } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, GripVertical, Pencil, Sparkles, Trash2, Undo2 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
@@ -45,6 +45,7 @@ import {
   listMessageSenderRules,
   proposeMessageRule,
   reorderMessageRules,
+  restoreMessageRule,
   restoreMessageSenderRule,
   updateMessageRule,
 } from '@/lib/api'
@@ -72,7 +73,14 @@ export const RULES_QUERY_KEY = ['messages', 'rules'] as const
 /** WP441：消息规则清单。 */
 export const MESSAGE_RULES_QUERY_KEY = ['messages', 'message-rules'] as const
 
-type Echo = { text: string; tone: 'ok' | 'error'; undo?: string }
+type Echo = {
+  text: string
+  tone: 'ok' | 'error'
+  /** 撤回发件人规则（WP439）。 */
+  undo?: string
+  /** WP441：撤回刚删的消息规则。 */
+  undoRule?: string
+}
 
 export function MessageRulesPanel(): ReactNode {
   const { t } = useApp()
@@ -122,13 +130,32 @@ export function MessageRulesPanel(): ReactNode {
     },
     onSettled: refresh,
   })
-  const busy = remove.isPending || restore.isPending
+  // WP441：撤回刚删的消息规则（7 天内，决策 243）
+  const restoreRule = useMutation({
+    mutationFn: (id: string) => restoreMessageRule(id),
+    onSuccess: (r) => {
+      setEcho(
+        r.restored
+          ? { text: t('message_rules.restored.message'), tone: 'ok' }
+          : {
+              text: t('message_rules.restore.gone.message', { days: MESSAGE_RULE_UNDO_DAYS }),
+              tone: 'error',
+            },
+      )
+    },
+    onError: (e) => {
+      setEcho({ text: t('message_rules.error', { why: apiErrorText(e, t) }), tone: 'error' })
+    },
+    onSettled: refresh,
+  })
+  const busy = remove.isPending || restore.isPending || restoreRule.isPending
 
   if (list.isPending) return <Skeleton className="m-3 h-40" />
   if (list.error !== null) return <PanelError error={list.error} />
   const data: SenderRuleList = list.data
   const groups = groupsOf(data, t)
   const deleted = data.shared === true ? (data.recently_deleted ?? []) : []
+  const deletedRules = msgRules.data?.shared === true ? (msgRules.data.recently_deleted ?? []) : []
   const mrules = msgRules.data?.rules ?? []
   const userRules = mrules.filter((r) => r.system === undefined)
   const systemRules = mrules.filter((r) => r.system !== undefined)
@@ -182,15 +209,15 @@ export function MessageRulesPanel(): ReactNode {
           )}
         >
           <span className="min-w-0 flex-1">{echo.text}</span>
-          {echo.undo === undefined ? null : (
+          {echo.undo === undefined && echo.undoRule === undefined ? null : (
             <button
               type="button"
               data-testid="message-rules-undo"
               disabled={busy}
               className="shrink-0 font-medium text-ws-brand hover:underline disabled:opacity-60"
               onClick={() => {
-                const id = echo.undo
-                if (id !== undefined) restore.mutate(id)
+                if (echo.undoRule !== undefined) restoreRule.mutate(echo.undoRule)
+                else if (echo.undo !== undefined) restore.mutate(echo.undo)
               }}
             >
               {t('message_rules.restore')}
@@ -213,8 +240,8 @@ export function MessageRulesPanel(): ReactNode {
           onEdit={(r) => {
             setSeed({ text: r.origin_text, rule_id: r.id, revision: r.revision, n: Date.now() })
           }}
-          onEcho={(text, tone) => {
-            setEcho({ text, tone })
+          onEcho={(text, tone, undoRule) => {
+            setEcho({ text, tone, ...(undoRule === undefined ? {} : { undoRule }) })
           }}
         />
       )}
@@ -229,7 +256,7 @@ export function MessageRulesPanel(): ReactNode {
         />
       )}
 
-      {deleted.length === 0 ? null : (
+      {deleted.length === 0 && deletedRules.length === 0 ? null : (
         <section
           className="flex flex-col gap-1.5"
           data-testid="message-rules-group"
@@ -247,6 +274,16 @@ export function MessageRulesPanel(): ReactNode {
                 busy={busy}
                 onRestore={() => {
                   restore.mutate(d.rule.id)
+                }}
+              />
+            ))}
+            {deletedRules.map((r) => (
+              <DeletedMessageRuleRow
+                key={r.id}
+                rule={r}
+                busy={busy}
+                onRestore={() => {
+                  restoreRule.mutate(r.id)
                 }}
               />
             ))}
@@ -577,7 +614,7 @@ function MessageRuleGroup({
   rules: MessageRuleView[]
   shared: boolean
   onEdit(rule: MessageRuleView): void
-  onEcho(text: string, tone: 'ok' | 'error'): void
+  onEcho(text: string, tone: 'ok' | 'error', undoRule?: string): void
 }): ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -678,7 +715,7 @@ function MessageRuleRow({
   onDropHere(): void
   onMove(to: number): void
   onEdit(): void
-  onEcho(text: string, tone: 'ok' | 'error'): void
+  onEcho(text: string, tone: 'ok' | 'error', undoRule?: string): void
 }): ReactNode {
   const { t, lang } = useApp()
   const client = useQueryClient()
@@ -700,7 +737,7 @@ function MessageRuleRow({
   const remove = useMutation({
     mutationFn: () => deleteMessageRule(rule.id),
     onSuccess: () => {
-      onEcho(t('message_rules.message.deleted', { name: rule.name }), 'ok')
+      onEcho(t('message_rules.message.deleted', { name: rule.name }), 'ok', rule.id)
     },
     onError: (e) => {
       onEcho(t('message_rules.error', { why: apiErrorText(e, t) }), 'error')
@@ -979,6 +1016,52 @@ function SystemRuleRow({
           save.mutate({ enabled: v })
         }}
       />
+    </li>
+  )
+}
+
+/** WP441：刚删的一条消息规则（同事 / 公司模式「能撤回」那一格）。 */
+function DeletedMessageRuleRow({
+  rule,
+  busy,
+  onRestore,
+}: {
+  rule: MessageRuleView
+  busy: boolean
+  onRestore(): void
+}): ReactNode {
+  const { t } = useApp()
+  const who =
+    rule.deleted_by_me === true
+      ? t('message_rules.deleted_by.me')
+      : rule.deleted_by_name !== undefined
+        ? t('message_rules.deleted_by.name', { name: rule.deleted_by_name })
+        : t('message_rules.deleted_by.someone')
+  return (
+    <li
+      className="flex items-center gap-2 px-3 py-2"
+      data-testid="message-rule-deleted"
+      data-rule={rule.id}
+    >
+      <div className="min-w-0 flex-1">
+        <div
+          className="truncate text-[13px] text-ws-muted-fg line-through"
+          title={rule.origin_text}
+        >
+          {rule.name}
+        </div>
+        <div className="text-[12px] text-ws-muted-fg">{who}</div>
+      </div>
+      <button
+        type="button"
+        data-testid="message-rule-restore"
+        disabled={busy}
+        className="inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-1 text-[12px] font-medium text-ws-brand hover:bg-ws-surface disabled:opacity-60"
+        onClick={onRestore}
+      >
+        <Undo2 aria-hidden className="size-3.5" />
+        {t('message_rules.restore')}
+      </button>
     </li>
   )
 }

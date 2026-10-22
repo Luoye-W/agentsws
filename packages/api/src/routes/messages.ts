@@ -328,6 +328,11 @@ export interface MessagesPort {
     patch: MessageRulePatch,
   ): MaybePromise<{ rule: MessageRule }>
   deleteMessageRule?(actor: MessageActor, id: string): MaybePromise<{ deleted: boolean }>
+  /** 撤回刚删的一条消息规则（7 天内，决策 243）。 */
+  restoreMessageRule?(
+    actor: MessageActor,
+    id: string,
+  ): MaybePromise<{ restored: boolean; rule?: MessageRule }>
   /** 拖动排序：给全部规则的新顺序（不在里面的排在后面）。 */
   reorderMessageRules?(actor: MessageActor, ids: string[]): MaybePromise<MessageRuleList>
   /** 试跑（不落库、不执行动作）。 */
@@ -914,6 +919,25 @@ export function messageRoutes(): Route[] {
         if (port.deleteMessageRule === undefined)
           throw new ApiError('not_implemented', '这个服务进程还没有消息规则')
         return ok(c, await port.deleteMessageRule(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/message-rules/:id/restore',
+        operationId: 'restoreMessageRule',
+        summary: '撤回刚删的一条消息规则（7 天内；决策 243：删了能撤回）（WP441）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: '{ restored: boolean; rule?: MessageRule }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.restoreMessageRule === undefined)
+          throw new ApiError('not_implemented', '这台机器上删掉的消息规则撤不回来')
+        return ok(c, await port.restoreMessageRule(actorOf(c), param(c, 'id')))
       },
     ),
     route(

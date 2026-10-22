@@ -6737,6 +6737,12 @@ export const updateMessageRule = (
 export const deleteMessageRule = (id: string): Promise<{ deleted: boolean }> =>
   api(`/v1/messages/message-rules/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
+/** 撤回刚删的一条消息规则（7 天内）。 */
+export const restoreMessageRule = (
+  id: string,
+): Promise<{ restored: boolean; rule?: MessageRule }> =>
+  api(`/v1/messages/message-rules/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+
 /** 拖动排序：给新顺序。 */
 export const reorderMessageRules = (ids: string[]): Promise<MessageRuleList> =>
   api('/v1/messages/message-rules/order', { method: 'POST', body: { ids } })

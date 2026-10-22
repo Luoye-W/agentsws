@@ -98,6 +98,7 @@ const api = {
   decide: vi.fn(async (_id: string, _pick: string) => ({})),
   update: vi.fn(async (_id: string, _p: unknown): Promise<unknown> => ({})),
   remove: vi.fn(async (_id: string) => ({ deleted: true })),
+  restore: vi.fn(async (_id: string) => ({ restored: true })),
   reorder: vi.fn(async (_ids: string[]) => rules),
   exclude: vi.fn(async (_m: string, _r: string) => ({})),
   ack: vi.fn(async () => ({ acked: 2 })),
@@ -121,6 +122,7 @@ vi.mock('@/lib/api', async () => {
     decideMessageRuleCard: (id: string, pick: string) => api.decide(id, pick),
     updateMessageRule: (id: string, p: unknown) => api.update(id, p),
     deleteMessageRule: (id: string) => api.remove(id),
+    restoreMessageRule: (id: string) => api.restore(id),
     reorderMessageRules: (ids: string[]) => api.reorder(ids),
     excludeFromMessageRule: (m: string, r: string) => api.exclude(m, r),
     getMessageDigest: async () => digest,
@@ -262,6 +264,36 @@ describe('WP441 规则面板：消息规则一组、系统规则', () => {
     fireEvent.blur(time)
     await waitFor(() => {
       expect(api.update).toHaveBeenCalledWith('mrule_sys_digest', { revision: 1, time: '08:30' })
+    })
+  })
+
+  it('删了回声带「撤回」；同事模式「刚删的」写谁删的、能撤回', async () => {
+    rules = {
+      shared: true,
+      rules: [rule({ id: 'a', name: '结算通知' })],
+      recently_deleted: [
+        rule({
+          id: 'z',
+          name: '旧规则',
+          deleted_at: T0,
+          deleted_by: 'p_lin',
+          deleted_by_name: '林二',
+        }),
+      ],
+    }
+    const user = userEvent.setup()
+    renderWithProviders(<MessageRulesPanel />)
+    const item = await screen.findByTestId('message-rule-item')
+    await user.click(within(item).getByTestId('message-rule-remove'))
+    await user.click(await screen.findByTestId('message-rules-undo'))
+    await waitFor(() => {
+      expect(api.restore).toHaveBeenCalledWith('a')
+    })
+    const gone = screen.getByTestId('message-rule-deleted')
+    expect(gone.textContent).toContain('林二 删的')
+    await user.click(within(gone).getByTestId('message-rule-restore'))
+    await waitFor(() => {
+      expect(api.restore).toHaveBeenCalledWith('z')
     })
   })
 

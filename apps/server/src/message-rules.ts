@@ -62,6 +62,7 @@ import {
   MESSAGE_DIGEST_DEFAULT_TIME,
   MESSAGE_RULE_NOTIFY_MERGE_MS,
   MESSAGE_RULE_TRIAL_AI_LIMIT,
+  MESSAGE_RULE_UNDO_DAYS,
 } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
 import type { MessageRuleCardRequest } from './message-rule-cards.js'
@@ -101,7 +102,7 @@ export interface MessageRuleServiceOptions {
   /** 共用模式里有人建 / 改 / 删了一条消息规则（告诉别的人一声，铃铛「同事」类）。 */
   notifyChange?(input: {
     by: PersonId
-    action: 'created' | 'updated' | 'deleted'
+    action: 'created' | 'updated' | 'deleted' | 'restored'
     rule: MessageRule
   }): void | Promise<void>
   /** 记到某处。 */
@@ -129,6 +130,8 @@ export interface MessageRuleService {
   create(actor: MessageActor, draft: MessageRuleDraft): Promise<MessageRule>
   update(actor: MessageActor, id: string, patch: MessageRulePatch): Promise<MessageRule>
   remove(actor: MessageActor, id: string): Promise<boolean>
+  /** 撤回刚删的（7 天内）；撤不回了回 `undefined`。 */
+  restore(actor: MessageActor, id: string): Promise<MessageRule | undefined>
   reorder(actor: MessageActor, ids: readonly string[]): Promise<MessageRuleList>
   trial(draft: MessageRuleDraft): Promise<MessageRuleTrial>
   propose(
@@ -177,7 +180,20 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
     })
   }
 
-  const all = async (): Promise<MessageRule[]> => sortRules((await store.messageRules?.()) ?? [])
+  /** 库里的全部（含刚删、还能撤回的）。 */
+  const withDeleted = async (): Promise<MessageRule[]> =>
+    sortRules((await store.messageRules?.()) ?? [])
+  /** 生效中的（不含刚删的）。 */
+  const all = async (): Promise<MessageRule[]> =>
+    (await withDeleted()).filter((r) => r.deleted_at === undefined)
+  const UNDO_MS = MESSAGE_RULE_UNDO_DAYS * 86_400_000
+  /** 删了超过撤回期限的真删掉。 */
+  const purge = async (): Promise<void> => {
+    const floor = Date.parse(now()) - UNDO_MS
+    for (const r of await withDeleted())
+      if (r.deleted_at !== undefined && Date.parse(r.deleted_at) < floor)
+        await store.deleteMessageRule?.(r.id)
+  }
 
   /** 系统规则「今天的简报」：第一次用到时补上（默认 09:00、开着）。 */
   const ensureSystem = async (): Promise<void> => {
@@ -206,6 +222,7 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
 
   const refresh = async (): Promise<void> => {
     await ensureSystem()
+    await purge()
     cache = await all()
   }
 
@@ -228,7 +245,7 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
 
   const tellOthers = async (
     by: PersonId,
-    action: 'created' | 'updated' | 'deleted',
+    action: 'created' | 'updated' | 'deleted' | 'restored',
     rule: MessageRule,
   ): Promise<void> => {
     if (!(await isShared())) return
@@ -288,7 +305,21 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
     }
     const rules: MessageRuleView[] = []
     for (const r of cache) if (visible(r, actor)) rules.push(await viewOf(r, actor, shared, recent))
-    return { rules, shared }
+    // 刚删的（能撤回）：新的在前
+    const recently_deleted: MessageRuleView[] = []
+    const deleted = (await withDeleted())
+      .filter((r) => r.deleted_at !== undefined && visible(r, actor))
+      .sort((a, b) => (b.deleted_at ?? '').localeCompare(a.deleted_at ?? ''))
+    for (const r of deleted) {
+      const v = await viewOf(r, actor, shared, recent)
+      const who = r.deleted_by === undefined || !shared ? undefined : await nameOf(r.deleted_by)
+      recently_deleted.push({
+        ...v,
+        ...(who === undefined ? {} : { deleted_by_name: who }),
+        ...(r.deleted_by === actor.person_id ? { deleted_by_me: true } : {}),
+      })
+    }
+    return { rules, shared, ...(recently_deleted.length === 0 ? {} : { recently_deleted }) }
   }
 
   const nextOrder = (): number =>
@@ -398,16 +429,40 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
     return next
   }
 
+  /** 删：当场不再生效；留 7 天能撤回（决策 243），过了才真删。 */
   const remove = async (actor: MessageActor, id: string): Promise<boolean> => {
     const prior = await requireRule(id, actor)
     if (prior.system !== undefined) throw new ApiError('invalid_input', '系统规则删不掉，只能关。')
-    const deleted = (await store.deleteMessageRule?.(id)) ?? false
+    if (store.putMessageRule === undefined) return false
+    await store.putMessageRule({ ...prior, deleted_at: now(), deleted_by: actor.person_id })
     await refresh()
-    if (deleted) {
-      event('message_rule.deleted', { kind: 'person', id: actor.person_id }, id, {})
-      await tellOthers(actor.person_id, 'deleted', prior)
+    event('message_rule.deleted', { kind: 'person', id: actor.person_id }, id, {})
+    await tellOthers(actor.person_id, 'deleted', prior)
+    return true
+  }
+
+  /** 撤回刚删的那一条（同一个 id 放回去，命中账一起回来）。 */
+  const restore = async (actor: MessageActor, id: string): Promise<MessageRule | undefined> => {
+    const row = (await withDeleted()).find(
+      (r) =>
+        r.id === id &&
+        r.deleted_at !== undefined &&
+        visible(r, actor) &&
+        Date.parse(now()) - Date.parse(r.deleted_at) <= UNDO_MS,
+    )
+    if (row === undefined) return undefined
+    const { deleted_at: _a, deleted_by: _b, ...rest } = row
+    const next: MessageRule = {
+      ...rest,
+      revision: row.revision + 1,
+      updated_by: actor.person_id,
+      updated_at: now(),
     }
-    return deleted
+    await store.putMessageRule?.(next)
+    await refresh()
+    event('message_rule.restored', { kind: 'person', id: actor.person_id }, id, {})
+    if (actor.person_id !== row.deleted_by) await tellOthers(actor.person_id, 'restored', next)
+    return next
   }
 
   const reorder = async (actor: MessageActor, ids: readonly string[]): Promise<MessageRuleList> => {
@@ -952,6 +1007,7 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
     create: (actor, draft) => create(actor, draft),
     update,
     remove,
+    restore,
     reorder,
     trial,
     propose,

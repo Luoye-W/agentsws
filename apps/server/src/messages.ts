@@ -1755,6 +1755,10 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     async deleteMessageRule(actor, id) {
       return { deleted: await ruleService.remove(actor, id) }
     },
+    async restoreMessageRule(actor, id) {
+      const rule = await ruleService.restore(actor, id)
+      return rule === undefined ? { restored: false } : { restored: true, rule }
+    },
     reorderMessageRules: (actor, ids) => ruleService.reorder(actor, ids),
     trialMessageRule: (_actor, draft) => ruleService.trial(draft),
     proposeMessageRule: (actor, input) =>

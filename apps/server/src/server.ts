@@ -8900,17 +8900,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         notifications.notify({ workspace_id: ws, category: 'messages', ...n })
       },
       notifyMessageRuleChange: async ({ by, action, rule }) => {
-        const who = (await identity.getPerson(by).catch(() => undefined))?.name ?? by
-        const verb = action === 'created' ? '建了' : action === 'updated' ? '改了' : '删了'
         // 个人邮箱的规则只有写的人看得见：不告诉别人
         if (rule.scope.kind === 'personal') return
-        for (const m of await identity.members(ws)) {
-          if (m.left_at !== undefined || m.person_id === by) continue
+        const who = (await identity.getPerson(by).catch(() => undefined))?.name ?? by
+        const text =
+          action === 'restored'
+            ? `${who} 撤回了消息规则「${rule.name}」的删除`
+            : `${who} ${action === 'created' ? '建了' : action === 'updated' ? '改了' : '删了'}消息规则「${rule.name}」`
+        // 决策 243：规则交给某个岗位 → 告诉做那个岗位的人；没交给岗位 → 告诉品牌里的人
+        const handTo = rule.actions.find((a) => a.type === 'hand_to')
+        const template =
+          handTo?.type === 'hand_to'
+            ? org.positions().find((t) => t.id === handTo.position_id)
+            : undefined
+        const duties = new Set(template?.roles.map((r) => r.role) ?? [])
+        const to =
+          duties.size === 0
+            ? (await identity.members(ws))
+                .filter((m) => m.left_at === undefined)
+                .map((m) => m.person_id)
+            : roles.assignments
+                .listByWorkspace(ws)
+                .filter((a) => a.revoked_at === undefined && duties.has(a.role_id))
+                .map((a) => a.person_id)
+        for (const person_id of new Set(to)) {
+          if (person_id === by) continue
           notifications.notify({
             workspace_id: ws,
-            person_id: m.person_id,
+            person_id,
             category: 'team',
-            text: `${who} ${verb}消息规则「${rule.name}」`,
+            text,
             href: '/messages?panel=rules',
             key: `message_rule_change:${rule.id}`,
           })
