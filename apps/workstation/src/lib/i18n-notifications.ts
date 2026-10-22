@@ -30,6 +30,10 @@ export const NOTIFY_ZH: Record<string, string> = {
   'notify.cat.update.hint': '本周岗位更新到了',
   'notify.cat.outbound': '等你发',
   'notify.cat.outbound.hint': '批过的 Reddit 回复 / 帖子，等你在浏览器插件里打开、自己点发送',
+  'notify.cat.alert': '告警',
+  'notify.cat.alert.hint':
+    '店铺日报异常、广告改动没做成、改版回归、目标市场改了、模型自动换了；系统通知只弹紧急的',
+  'notify.urgent': '紧急',
   'notify.col.inbox': '站内',
   'notify.col.system': '系统',
   'notify.col.inbox.hint': '进右上角的铃铛',
@@ -69,6 +73,10 @@ export const NOTIFY_EN: Record<string, string> = {
   'notify.cat.outbound': 'Ready to send',
   'notify.cat.outbound.hint':
     'Approved Reddit replies / posts waiting for you to open in the browser extension and send yourself',
+  'notify.cat.alert': 'Alerts',
+  'notify.cat.alert.hint':
+    'Store report anomalies, ad changes that failed, site regressions, target markets or models changed for you; only urgent ones pop a system notification',
+  'notify.urgent': 'Urgent',
   'notify.col.inbox': 'In app',
   'notify.col.system': 'System',
   'notify.col.inbox.hint': 'Shows under the bell, top right',

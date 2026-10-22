@@ -1,13 +1,13 @@
 /**
- * WP96 交付 3：「不是卡」的两块——报表块与告警块。
+ * WP96 交付 3：「不是卡」的报表块。
  *
- * 钉三件事：报表块出数、两块都**没有批准 / 驳回**（它们不要人决定）、
- * 两块都有右下角那个 → 圆钮（看完想细看就点它）。
+ * 钉三件事：报表块出数、**没有批准 / 驳回**（不要人决定）、右下角那个 → 圆钮（看完想细看就点它）。
+ * 告警块 WP466 起并进了右上铃铛（见 `wp466-alerts-to-bell.test.tsx`），这里只留系统卡去处的那条。
  */
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
+import { ReportBlocks } from '@/components/deck/panel-blocks'
 import { matterUrl } from '@/lib/work'
 import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
@@ -24,14 +24,6 @@ const report = draftCard({
     ...draftCard().detail,
     payload: { orders: 61, low_stock: 3, pending: 0 },
   },
-})
-
-const alert = draftCard({
-  id: 'ap_alert',
-  kind: 'system_alert',
-  layout: 'aftermath',
-  priority_band: 'P0',
-  title: 'Meta 像素 24 小时没有回传事件',
 })
 
 describe('报表块', () => {
@@ -69,21 +61,6 @@ describe('报表块', () => {
   })
 })
 
-describe('告警块', () => {
-  it('一条一行，带档位胶囊，没有决定按钮', () => {
-    renderWithProviders(<AlertBlocks alerts={[alert]} onOpen={noop} />)
-    const block = screen.getByTestId('alert-block')
-    expect(block.textContent).toContain('像素')
-    expect(within(block).getByTestId('ws-status-pill').dataset.tone).toBe('bad')
-    expect(block.textContent).not.toContain('批准')
-  })
-
-  it('一条都没有时整块不出', () => {
-    renderWithProviders(<AlertBlocks alerts={[]} onOpen={noop} />)
-    expect(screen.queryByTestId('alerts')).toBeNull()
-  })
-})
-
 describe('WP169 店铺校正的通知：点开到设置页公司档案', () => {
   const notice = draftCard({
     id: 'mkt_notice_1',
@@ -97,12 +74,8 @@ describe('WP169 店铺校正的通知：点开到设置页公司档案', () => {
     },
   })
 
-  it('告警区一行，点「去处理」去 /settings#company', async () => {
-    const onOpen = vi.fn()
-    renderWithProviders(<AlertBlocks alerts={[notice]} onOpen={onOpen} />)
-    expect(screen.getByTestId('alert-block').textContent).toContain('加上了 英国')
-    await userEvent.click(screen.getByTestId('ws-go'))
-    expect(matterUrl(onOpen.mock.calls[0]?.[0])).toBe('/settings#company')
+  it('点开去 /settings#company（铃铛那条与卡上的去处同一个）', () => {
+    expect(matterUrl(notice)).toBe('/settings#company')
   })
 
   it('只认站内路径：外链与 // 开头的不跟，退回岗位页', () => {

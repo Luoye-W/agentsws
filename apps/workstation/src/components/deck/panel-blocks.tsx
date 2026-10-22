@@ -1,17 +1,17 @@
 /**
- * WP96（09-18）：**不是卡的那两样**——报表块与告警块。
+ * WP96（09-18）：**不是卡的那两样**——报表块与告警块（WP466 起告警块不在这里了，见下）。
  *
  * 只有要人决定的才是卡（36 §2）。日报（WP63）与上线检查单（WP77）一个决定都不要
  * 人做，它们是"看一眼就过"；像素异常 / 库存告急 / 负面预警 / 超期未发也不要人决定，
  * 它们要的是**被看见**。于是这两样都离开卡片队列：
  *
  * - 报表块：一行标题 + 几个数，右下角一个 → 进详情；**没有批准 / 驳回**
- * - 告警块：一条一行，带 tone；它同时已经走了通知（06 §1.2 immediate）
+ * - 告警块：WP466（决策 1311）起不再单独成区——每张系统卡在右上铃铛里一条（「告警」一类，紧急档红点）
  *
  * 它们**引出的**决定照旧是卡：恢复投放（⑦）、补货（②）、回应舆情（①）。
  */
 import type { DeckCard } from '@agentsws/deck'
-import { GoButton, StatusPill, WsCard } from '@/components/design'
+import { GoButton, WsCard } from '@/components/design'
 import { Hint } from '@/components/ui/hint'
 import { useApp } from '@/lib/app-context'
 import { fieldLabel, fieldValue } from '@/lib/humanize'
@@ -118,43 +118,6 @@ export function ReportBlocks({
           ),
         )}
       </div>
-    </section>
-  )
-}
-
-export function AlertBlocks({
-  alerts,
-  onOpen,
-}: {
-  alerts: DeckCard[]
-  onOpen: (card: DeckCard) => void
-}): React.ReactNode {
-  const { t } = useApp()
-  if (alerts.length === 0) return null
-  return (
-    <section data-testid="alerts">
-      <div className="mb-2 flex items-center gap-2">
-        <h2 className="text-sm font-medium">{t('home.alerts')}</h2>
-        <Hint text={t('panel.alerts.hint')} testId="panel-alerts-hint" />
-      </div>
-      <ul className="flex flex-col gap-2">
-        {alerts.map((a) => (
-          <li key={a.id}>
-            <WsCard data-testid="alert-block" className="flex items-center gap-3 px-4 py-3">
-              <StatusPill tone={a.priority_band === 'P0' ? 'bad' : 'warn'}>
-                {t(`band.${a.priority_band}`)}
-              </StatusPill>
-              <span className="min-w-0 flex-1 truncate text-sm">{a.title}</span>
-              <GoButton
-                label={t('deck.go')}
-                onClick={() => {
-                  onOpen(a)
-                }}
-              />
-            </WsCard>
-          </li>
-        ))}
-      </ul>
     </section>
   )
 }

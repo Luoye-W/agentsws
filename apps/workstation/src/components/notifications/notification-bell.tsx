@@ -6,6 +6,7 @@
  *   点一条 = 标已读 + 跳到那件事；右上「全部已读」与「通知设置」两个小图标；
  * - 每 30 秒问一次（切回窗口时也问）；新来的、类别开了「系统」的，桌面版同时弹系统通知（{@link useSystemNotify}）；
  *   正看着那一页时来的那条直接算已读、不弹。
+ * - WP466：原首页告警区的系统卡也在这里（「告警」一类）；紧急档的没读时排最上、红色图标与红点、带「紧急」两个字。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -17,6 +18,7 @@ import {
   RefreshCw,
   SendHorizontal,
   Settings2,
+  TriangleAlert,
   Unplug,
   Users,
   Zap,
@@ -51,7 +53,12 @@ export const CATEGORY_LOOK: Record<NotificationCategory, { icon: LucideIcon; ton
   update: { icon: RefreshCw, tone: 'bg-ws-brand-soft text-ws-brand' },
   // WP432：等你在插件里发
   outbound: { icon: SendHorizontal, tone: 'bg-ws-warn-bg text-ws-warn' },
+  // WP466：原首页告警区那几样（紧急档的换成红色，见 {@link URGENT_TONE}）
+  alert: { icon: TriangleAlert, tone: 'bg-ws-warn-bg text-ws-warn' },
 }
+
+/** WP466：紧急档（店铺日报异常、改版回归·严重……）的图标底色与未读点。 */
+export const URGENT_TONE = 'bg-ws-bad-bg text-ws-bad'
 
 /** 「刚刚 / 5 分钟前 / 3 小时前 / 昨天 / 4 天前」。 */
 export function agoText(
@@ -276,6 +283,7 @@ function NotificationRow({
   const look = CATEGORY_LOOK[n.category] ?? CATEGORY_LOOK.team
   const Icon = look.icon
   const unread = n.read_at === undefined
+  const urgent = n.urgent === true
   return (
     <li>
       <button
@@ -283,6 +291,7 @@ function NotificationRow({
         data-testid="notify-item"
         data-category={n.category}
         data-unread={unread}
+        data-urgent={urgent}
         title={t(`notify.cat.${n.category}`)}
         className="group flex w-full items-start gap-2.5 rounded-[8px] px-2 py-2 text-left transition-colors hover:bg-sidebar-accent/60"
         onClick={onOpen}
@@ -290,7 +299,7 @@ function NotificationRow({
         <span
           className={cn(
             'mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full',
-            look.tone,
+            urgent ? URGENT_TONE : look.tone,
           )}
         >
           <Icon aria-hidden className="size-3.5" />
@@ -305,6 +314,11 @@ function NotificationRow({
             {n.text}
           </span>
           <span className="flex items-center gap-1.5 text-xs text-ws-muted-fg">
+            {urgent ? (
+              <span className="font-medium text-ws-bad" data-testid="notify-item-urgent">
+                {t('notify.urgent')}
+              </span>
+            ) : null}
             <span>{ago}</span>
             {n.count > 1 ? (
               <span
@@ -317,7 +331,13 @@ function NotificationRow({
           </span>
         </span>
         {unread ? (
-          <span aria-hidden className="mt-2 size-2 shrink-0 rounded-full bg-ws-brand" />
+          <span
+            aria-hidden
+            className={cn(
+              'mt-2 size-2 shrink-0 rounded-full',
+              urgent ? 'bg-ws-bad' : 'bg-ws-brand',
+            )}
+          />
         ) : null}
       </button>
     </li>

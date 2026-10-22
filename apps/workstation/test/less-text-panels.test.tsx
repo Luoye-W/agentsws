@@ -14,7 +14,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { PositionConnections } from '@/components/connections/position-connections'
-import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
+import { ReportBlocks } from '@/components/deck/panel-blocks'
 import { PositionBoards } from '@/components/reports/scope-boards'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import type { PositionConnectionItem, PositionSummary, RoleDetailView } from '@/lib/api'
@@ -238,19 +238,11 @@ describe('职责页', () => {
 })
 
 describe('职责面板的小块', () => {
-  it('报表块、告警块的小节头：说明进问号', () => {
+  it('报表块的小节头：说明进问号（告警块 WP466 起并进铃铛）', () => {
     const report = draftCard({ id: 'r1', kind: 'daily_report', layout: 'aftermath', title: '昨天' })
-    const alert = draftCard({ id: 'a1', kind: 'system_alert', layout: 'aftermath', title: '像素' })
-    renderWithProviders(
-      <>
-        <ReportBlocks reports={[report]} onOpen={() => {}} />
-        <AlertBlocks alerts={[alert]} onOpen={() => {}} />
-      </>,
-    )
+    renderWithProviders(<ReportBlocks reports={[report]} onOpen={() => {}} />)
     const reports = screen.getByTestId('panel-reports')
-    const alerts = screen.getByTestId('alerts')
     check('报表块 · 小节头', reports.firstElementChild as Element)
-    check('告警块 · 小节头', alerts.firstElementChild as Element)
     expect(screen.getByTestId('panel-reports-hint').getAttribute('data-hint')).not.toBe('')
   })
 
