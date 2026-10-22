@@ -490,10 +490,14 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     }
     const s = settings()
     const { since } = redditWeekWindow(options.now(), options.tzOffsetMinutes())
+    // WP471（决策 1549）：按第一次出现的先后排（库里是新的在前，翻过来）——新话题只往后加，
+    // 前面那段每批不变；原来新的在前，每批都整段换序
     const topics = [
       ...new Set(
         store
           .list(ws, { source: 'external', since, limit: 500 })
+          .slice()
+          .reverse()
           .map((x) => x.judgement?.topic)
           .filter((t): t is string => t !== undefined),
       ),

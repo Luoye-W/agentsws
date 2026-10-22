@@ -9789,10 +9789,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               const holder = redditHolder()
               if (ref === undefined || ref.provider === 'stub' || holder === undefined)
                 return undefined
-              return async (prompt: string) =>
+              return async (prompt: string, system?: string) =>
                 (
                   await gatewayProxy.complete({
-                    messages: [{ role: 'user', content: prompt }],
+                    // WP471：固定判断说明在系统提示，话题清单与待判内容在用户消息
+                    messages: [
+                      ...(system === undefined
+                        ? []
+                        : [{ role: 'system' as const, content: system }]),
+                      { role: 'user', content: prompt },
+                    ],
                     meta: {
                       workspace_id: ws,
                       assignment_id: holder.id as never,

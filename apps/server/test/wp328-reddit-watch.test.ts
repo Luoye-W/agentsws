@@ -3,7 +3,7 @@
  * 替身插件（直接调 next / result）、替身数据渠道；不打开真 Reddit、不联网。
  */
 import { type RedditFetched, runRedditRead } from '@agentsws/browser-action'
-import type { ConnectNeed, RedditWatchRun } from '@agentsws/contracts'
+import type { ConnectNeed, RedditWatchEntry, RedditWatchRun } from '@agentsws/contracts'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createRedditWatch,
@@ -13,6 +13,7 @@ import {
   redditWatchSourceOf,
   topicKey,
 } from '../src/reddit-watch/index.js'
+import { JUDGE_BATCH, judgeItems, judgeMessages, judgePrompt } from '../src/reddit-watch/judge.js'
 
 const t = (id: string, kind: 't1' | 't3', over: Record<string, unknown> = {}) => ({
   kind,
@@ -472,5 +473,51 @@ describe('配置卡的设置目标', () => {
       every_hours: 12,
     })
     expect(await target.satisfied()).toBe(true)
+  })
+})
+
+describe('WP471（决策 1549）：巡查判断固定在前、待判内容在后', () => {
+  const ctx = {
+    brand: 'IVRA',
+    own_subreddits: ['ivraxr'],
+    watch_subreddits: ['vr'],
+    keywords: ['IVRA'],
+  }
+  const item = (id: string, text: string): RedditWatchEntry =>
+    ({
+      id,
+      fullname: `t3_${id}`,
+      source: 'external',
+      keyword: 'IVRA',
+      subreddit: 'vr',
+      kind: 'post',
+      title: `post ${id}`,
+      text,
+    }) as RedditWatchEntry
+
+  it('两批：系统提示逐字相同；话题清单在待判内容之前；前一批的用户消息开头与话题只往后加', async () => {
+    const seen: { system?: string; user: string }[] = []
+    const complete = async (user: string, system?: string) => {
+      seen.push({ user, ...(system === undefined ? {} : { system }) })
+      return '[]'
+    }
+    const items = Array.from({ length: JUDGE_BATCH + 1 }, (_, i) =>
+      item(`p${i}`, `IVRA Air3 question number ${i}`),
+    )
+    await judgeItems(items, { ...ctx, topics: ['续航'] }, complete)
+    expect(seen).toHaveLength(2)
+    const [a, b] = seen
+    expect(a?.system).toBeDefined()
+    expect(b?.system).toBe(a?.system)
+    expect(a?.system).toContain('每条判：')
+    expect(a?.system).not.toContain('IVRA Air3 question')
+    const u = a?.user ?? ''
+    expect(u.indexOf('本周已有的话题：续航')).toBeLessThan(u.indexOf('<external_data>'))
+    expect(u.trimEnd().endsWith('</external_data>')).toBe(true)
+    // 拼起来的一整段 = 两段（字不改，只调位置）
+    const m = judgeMessages([items[0] as RedditWatchEntry], { ...ctx, topics: [] })
+    expect(judgePrompt([items[0] as RedditWatchEntry], { ...ctx, topics: [] })).toBe(
+      `${m.system}\n${m.user}`,
+    )
   })
 })
