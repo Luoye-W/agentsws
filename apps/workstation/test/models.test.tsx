@@ -167,6 +167,25 @@ const USAGE: ModelUsageView = {
       cached_tokens: 0,
       cost_base: 0.0007,
     },
+    // WP473：「运行」按功能拆开的两行（一行命中八成、一行没命中）
+    {
+      purpose: 'run',
+      feature: 'position_run',
+      calls: 2,
+      input_tokens: 1000,
+      output_tokens: 100,
+      cached_tokens: 800,
+      cost_base: 0.0002,
+    },
+    {
+      purpose: 'run',
+      feature: 'support_chat',
+      calls: 5,
+      input_tokens: 500,
+      output_tokens: 50,
+      cached_tokens: 0,
+      cost_base: 0.0001,
+    },
   ],
   total: {
     purpose: 'run',
@@ -309,7 +328,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-const { ModelsPanel } = await import('@/components/models/models-panel')
+const { ModelsPanel, cacheRateText } = await import('@/components/models/models-panel')
 const { suggestProviderId } = await import('@/components/models/model-form')
 const { NoModelBanner } = await import('@/components/models/no-model-banner')
 const { AppShell } = await import('@/components/app-shell')
@@ -742,6 +761,30 @@ describe('WP25 §C 模型面板：已配的那几条', () => {
     const table = await screen.findByTestId('model-usage')
     expect(table.textContent).toContain('跑活')
     expect(table.textContent).toContain('3')
+  })
+
+  it('WP473：每行一个「命中缓存」百分比（问号里说为什么省钱）；「运行」按功能拆开', async () => {
+    state.providers = [ACTIVE]
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const table = await screen.findByTestId('model-usage')
+    expect(table.textContent).toContain('命中缓存')
+    expect(table.querySelector('[data-hint]')?.getAttribute('data-hint')).toContain('1/30～1/50')
+    const rows = [...table.querySelectorAll('[data-testid="model-usage-row"]')]
+    const cell = (feature: string) => rows.find((r) => r.getAttribute('data-feature') === feature)
+    expect(cell('position_run')?.textContent).toContain('岗位运行')
+    expect(
+      cell('position_run')?.querySelector('[data-testid="model-usage-cache"]')?.textContent,
+    ).toBe('80%')
+    expect(cell('support_chat')?.textContent).toContain('客服聊天窗')
+    expect(
+      cell('support_chat')?.querySelector('[data-testid="model-usage-cache"]')?.textContent,
+    ).toBe('0%')
+  })
+
+  it('WP473：命中率按 cached / input 算；没有输入显示「—」', () => {
+    expect(cacheRateText({ input_tokens: 1000, cached_tokens: 774 })).toBe('77%')
+    expect(cacheRateText({ input_tokens: 0, cached_tokens: 0 })).toBe('—')
+    expect(cacheRateText({ input_tokens: 10, cached_tokens: 99 })).toBe('100%')
   })
 
   it('按 purpose 选模型：六件事各一行，选项来自能用的那几条', async () => {
