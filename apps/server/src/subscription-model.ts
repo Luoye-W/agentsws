@@ -17,7 +17,7 @@ import type {
   SubscriptionChatRequest,
   SubscriptionChatResult,
 } from '@agentsws/dsh-adapter'
-import { GatewayError, ProviderError } from '@agentsws/model-gateway'
+import { GatewayError, ProviderError, promptCacheKeyOf } from '@agentsws/model-gateway'
 
 /** 网关上 / 默认模型里订阅那一条的来源名（`provider_id/model` 的前半）。 */
 export const SUBSCRIPTION_SOURCE_ID = 'openai-codex'
@@ -80,6 +80,12 @@ function effortOf(
   return standard === undefined ? {} : { reasoning_effort: standard }
 }
 
+/** WP473：订阅那一跳的会话标识（{@link promptCacheKeyOf}；没有 meta 就不带）。 */
+function sessionIdOf(meta: Parameters<typeof promptCacheKeyOf>[0]): { session_id?: string } {
+  const key = promptCacheKeyOf(meta)
+  return key === undefined ? {} : { session_id: key }
+}
+
 /** 网关上订阅那一条（一个模型一个实例，与别的来源同一种挂法）。 */
 export function subscriptionModelProvider(input: {
   port: SubscriptionModelPort
@@ -115,6 +121,8 @@ export function subscriptionModelProvider(input: {
           ...effortOf(req.reasoning_effort, req.thinking, input.defaultEffort),
           ...(req.on_delta === undefined ? {} : { on_delta: req.on_delta }),
           ...(req.signal === undefined ? {} : { signal: req.signal }),
+          // WP473：会话标识 = 缓存分组键的哈希（工作区 + 职责 / 助理的段），不含个人信息
+          ...sessionIdOf(req.meta),
         })
         return {
           text: r.text,
