@@ -1,6 +1,6 @@
 {
   "$comment": "各家官网的 favicon，构建期抓一次入库（WP48 起；WP210 改成连接目录每一家都取）。手动跑 `pnpm icons:fetch` 更新，跑完人自己看一眼再提交。运行时不联网。规矩见 docs/36 §8。",
-  "fetched_at": "2026-09-30",
+  "fetched_at": "2026-10-22",
   "min_bitmap": 32,
   "icons": {
     "shopify_admin": {
@@ -360,6 +360,32 @@
       "note": "钉钉官网首页 <link rel=icon>",
       "fetched_at": "2026-09-30"
     },
+    "pinterest_ads": {
+      "brand": "Pinterest",
+      "file": "pinterest_ads.png",
+      "format": "png",
+      "width": 144,
+      "height": 144,
+      "bytes": 3352,
+      "sha256": "5410764149903d1db37bbd92d37aa6e08ff4c129bd13d7d9e65762312d4da774",
+      "source_url": "https://s.pinimg.com/webapp/logo_transparent_144x144-3da7a67b.png",
+      "source_page": "https://ads.pinterest.com",
+      "note": "Pinterest 广告站首页的 apple-touch-icon（144px，静态资源域 pinimg.com）",
+      "fetched_at": "2026-10-22"
+    },
+    "snapchat_ads": {
+      "brand": "Snapchat",
+      "file": "snapchat_ads.png",
+      "format": "png",
+      "width": 192,
+      "height": 192,
+      "bytes": 4318,
+      "sha256": "0d5c44c46aa3ddb82cb6384d1661070adf752a4ebb3eec3eb911b8eed0875637",
+      "source_url": "https://static.snapchat.com/images/favicon/favicon-192x192.png",
+      "source_page": "https://www.snapchat.com",
+      "note": "Snapchat 官网首页 <link rel=icon> 的 192px 那张",
+      "fetched_at": "2026-10-22"
+    },
     "amazon": {
       "brand": "Amazon",
       "file": "amazon.png",
@@ -381,8 +407,8 @@
     "x_ads": "x_api",
     "tiktok_content": "tiktok_research",
     "tiktok_ads": "tiktok_research",
-    "reddit_ads": "reddit",
-    "linkedin_ads": "linkedin_api"
+    "linkedin_ads": "linkedin_api",
+    "reddit_ads": "reddit"
   },
   "fallbacks": {}
 }

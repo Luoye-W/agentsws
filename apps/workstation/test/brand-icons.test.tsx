@@ -182,16 +182,22 @@ describe('BrandIcon', () => {
    */
   it('连接目录里每一家都戴官网 favicon（缺一家就红）', () => {
     /*
-     * WP447：投放那四张「这一期不用连」的新平台卡照派工单先用许可清楚的现成图标集（simple-icons，CC0）；
-     * Microsoft 在 simple-icons 里没有，走首字母徽标。要不要也去抓官网图（`pnpm icons:fetch`，人看过再提交）
-     * 是一条留给 Luoye 定的事——这里点名列出来，不是放水：别的卡缺官网图照样红。
+     * WP460（决策 1397，Luoye 10-22）：Pinterest / Snapchat 抓了官网图；Microsoft、Apple 的商标指南写明
+     * 没授权不许用标志，**故意**不抓、走首字母徽标。这里点名列出来，不是放水：别的卡缺官网图照样红。
      */
-    const CC0_FOR_NOW = ['microsoft_ads', 'pinterest_ads', 'snapchat_ads', 'apple_ads']
+    const LETTER_BY_TRADEMARK_RULES = ['microsoft_ads', 'apple_ads']
     const missing = catalogServices().filter(
       (service) =>
-        service !== 'imap_smtp' && !CC0_FOR_NOW.includes(service) && !hasOfficialIcon(service),
+        service !== 'imap_smtp' &&
+        !LETTER_BY_TRADEMARK_RULES.includes(service) &&
+        !hasOfficialIcon(service),
     )
-    for (const service of CC0_FOR_NOW) expect(catalogServices()).toContain(service)
+    for (const service of LETTER_BY_TRADEMARK_RULES) {
+      expect(catalogServices()).toContain(service)
+      expect(hasOfficialIcon(service), service).toBe(false)
+    }
+    expect(hasOfficialIcon('pinterest_ads')).toBe(true)
+    expect(hasOfficialIcon('snapchat_ads')).toBe(true)
     expect(missing, `这几家还没有官网图标，跑 pnpm icons:fetch：${missing.join('、')}`).toEqual([])
     expect(hasOfficialIcon('track17')).toBe(true)
     expect(hasOfficialIcon('youtube_data')).toBe(true)
@@ -224,16 +230,24 @@ describe('BrandIcon', () => {
     expect(icon.getAttribute('data-provider')).toBe('meta_marketing')
   })
 
-  it('WP447：Apple 的官方标志是单色——跟着主题（深色模式下不会是一个看不见的黑苹果）；Pinterest 照官方红', () => {
-    const { unmount } = render(<BrandIcon provider="apple_ads" />)
-    expect(screen.getByTestId('brand-icon').querySelector('path')?.getAttribute('fill')).toBe(
-      'currentColor',
-    )
-    unmount()
-    render(<BrandIcon provider="pinterest_ads" />)
-    expect(screen.getByTestId('brand-icon').querySelector('path')?.getAttribute('fill')).toBe(
-      '#BD081C',
-    )
+  it('WP460：Apple / Microsoft 走首字母徽标（不用苹果标志）；Pinterest / Snapchat 戴官网图', () => {
+    for (const [provider, letter] of [
+      ['apple_ads', 'a'],
+      ['microsoft_ads', 'm'],
+    ] as const) {
+      const { unmount } = render(<BrandIcon provider={provider} />)
+      const icon = screen.getByTestId('brand-icon')
+      expect(icon.getAttribute('data-icon'), provider).toBe(`letter-${letter}`)
+      expect(icon.querySelector('path'), provider).toBeNull()
+      unmount()
+    }
+    for (const provider of ['pinterest_ads', 'snapchat_ads']) {
+      const { unmount } = render(<BrandIcon provider={provider} />)
+      const icon = screen.getByTestId('brand-icon')
+      expect(icon.tagName, provider).toBe('IMG')
+      expect(icon.getAttribute('data-icon'), provider).toBe('official')
+      unmount()
+    }
   })
 
   it('认不出的 id 回落到通用插头', () => {
