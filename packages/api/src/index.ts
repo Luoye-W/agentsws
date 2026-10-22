@@ -505,6 +505,7 @@ export {
   type PersonUsageView,
 } from './routes/handoff.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
+export { inboxRoutes } from './routes/inbox.js'
 export {
   type JoinActor,
   type JoinDecisionInput,
@@ -935,7 +936,6 @@ export {
   workshopServicesRoutes,
 } from './routes/workshop-services.js'
 export { fromDeckError, workstationRoutes } from './routes/workstation.js'
-export { inboxRoutes } from './routes/inbox.js'
 export {
   classify,
   HALT_ONLY_EVENT,
