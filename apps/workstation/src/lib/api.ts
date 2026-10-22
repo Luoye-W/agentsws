@@ -39,14 +39,26 @@ import type {
   MeetingRecord,
   MeetingRecordSourceKind,
   MessageClaim,
+  MessageDigest,
   MessageDraft,
   MessageFolder,
   MessageFolderKind,
+  MessageFollowUp,
+  MessageFollowUpAction,
+  MessageFollowUpRow,
+  MessageFollowUpSettings,
+  MessageFollowUpSettingsPatch,
   MessageImagesReport,
   MessageKind,
   MessageLabel,
   MessageOverview,
   MessageRecord,
+  MessageRule,
+  MessageRuleDraft,
+  MessageRuleList,
+  MessageRulePatch,
+  MessageRuleProposal,
+  MessageRuleTrial,
   MessageSendResult,
   MessageSuggest,
   MessageSyncReport,
@@ -2466,12 +2478,15 @@ export const setCapabilitySources = (
 /** 这台机器上的浏览器怎么配（`GET`/`PUT /v1/settings/browser` 的形状）。 */
 export interface BrowserSettings {
   /** WP92：`browserskill` = 用你正在用的那个浏览器（腾讯 BrowserSkill，55 §10）。 */
-  mode: 'off' | 'attach' | 'launch' | 'browserskill'
+  /** WP463：`ego` = 用户自己装的 ego 浏览器（docs/111 §3，只有个人用法）。 */
+  mode: 'off' | 'attach' | 'launch' | 'browserskill' | 'ego'
   endpoint?: string
   executable_path?: string
   headless?: boolean
   /** WP92：`bsk` 的路径；不给就用我们自己装的那一份。 */
   bsk_path?: string
+  /** WP463：`ego-browser` 的路径；一般不填，服务端自己找。 */
+  ego_path?: string
 }
 
 export interface BrowserSettingsView extends BrowserSettings {
@@ -2481,7 +2496,23 @@ export interface BrowserSettingsView extends BrowserSettings {
   /** WP92：同一条理由——bsk 与浏览器扩展都在你那台电脑上。 */
   browserskill_allowed: boolean
   browserskill_blocked_reason?: string
+  /** WP463：同一条理由——ego 装在你那台电脑上。老服务进程没有这一格（当不允许）。 */
+  ego_allowed?: boolean
+  ego_blocked_reason?: string
 }
+
+/** WP463：这台机器上 ego 装没装、能不能跑（`GET /v1/settings/browser/ego`）。 */
+export interface EgoBrowserStatus {
+  allowed: boolean
+  installed: boolean
+  ego_path?: string
+  version?: string
+  detail?: string
+}
+
+/** 现探一次 ego（服务端跑一次 `ego-browser skill`，零点几秒）。 */
+export const getEgoBrowserStatus = (assignment?: string): Promise<EgoBrowserStatus> =>
+  api('/v1/settings/browser/ego', withAssignment(assignment))
 
 export interface BrowserProbeResult {
   ok: boolean
@@ -6723,6 +6754,97 @@ export const restoreMessageSenderRule = (
   id: string,
 ): Promise<{ restored: boolean; rule?: SenderRule }> =>
   api(`/v1/messages/rules/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+
+/* ── WP441（docs/108 §5.1 / §5.6）：消息规则、今天的简报 ─────────────── */
+
+/** 消息规则清单（顺序 = 优先级；带系统规则「今天的简报」）。 */
+export const listMessageRules = (): Promise<MessageRuleList> => api('/v1/messages/message-rules')
+
+/** 一句话 → 草案 + 试跑 + 「要建这条规则吗」卡（`rule_id` = 改这一条）。 */
+export const proposeMessageRule = (input: {
+  text: string
+  rule_id?: string
+  revision?: number
+}): Promise<MessageRuleProposal> =>
+  api('/v1/messages/message-rules/propose', { method: 'POST', body: input })
+
+/** 试跑一条草案（不落库、不执行）。 */
+export const trialMessageRule = (draft: MessageRuleDraft): Promise<MessageRuleTrial> =>
+  api('/v1/messages/message-rules/trial', { method: 'POST', body: draft })
+
+/** 改一条（带版本号；拿旧版本改的回 409「刚被 X 改过」）。 */
+export const updateMessageRule = (
+  id: string,
+  patch: MessageRulePatch,
+): Promise<{ rule: MessageRule }> =>
+  api(`/v1/messages/message-rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch })
+
+export const deleteMessageRule = (id: string): Promise<{ deleted: boolean }> =>
+  api(`/v1/messages/message-rules/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/** 撤回刚删的一条消息规则（7 天内）。 */
+export const restoreMessageRule = (
+  id: string,
+): Promise<{ restored: boolean; rule?: MessageRule }> =>
+  api(`/v1/messages/message-rules/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+
+/** 拖动排序：给新顺序。 */
+export const reorderMessageRules = (ids: string[]): Promise<MessageRuleList> =>
+  api('/v1/messages/message-rules/order', { method: 'POST', body: { ids } })
+
+/** 「这封不该归它」：给那条规则加这个发件人的排除。 */
+export const excludeFromMessageRule = (
+  message_id: string,
+  rule_id: string,
+): Promise<{ rule: MessageRule }> =>
+  api(`/v1/messages/${encodeURIComponent(message_id)}/rule-exclude`, {
+    method: 'POST',
+    body: { rule_id },
+  })
+
+/** 「要建这条规则吗」卡：建（可勾「也处理过去 30 天的」）/ 不要。 */
+export const decideMessageRuleCard = (
+  card_id: string,
+  pick: 'after' | 'after_past' | 'before',
+): Promise<unknown> =>
+  api(`/v1/approvals/${encodeURIComponent(card_id)}/decide`, {
+    method: 'POST',
+    body: { action: 'approve', via: 'workstation', selected_option_id: pick },
+  })
+
+/** 今天的简报（还没点「知道了」的，按规则分组）。 */
+export const getMessageDigest = (): Promise<MessageDigest> => api('/v1/messages/digest')
+
+/** 简报「全部知道了」。 */
+export const ackMessageDigest = (message_ids?: string[]): Promise<{ acked: number }> =>
+  api('/v1/messages/digest/ack', {
+    method: 'POST',
+    body: message_ids === undefined ? {} : { message_ids },
+  })
+
+/** WP442：「等对方回」——我们发出去、对方还没回的会话（到期早的在前）。 */
+export const listMessageFollowUps = (): Promise<{ rows: MessageFollowUpRow[] }> =>
+  api('/v1/messages/follow-ups')
+
+/** WP442：系统规则「发出 N 个工作日没回 → 提醒我」。 */
+export const getMessageFollowUpSettings = (): Promise<MessageFollowUpSettings> =>
+  api('/v1/messages/follow-ups/settings')
+
+/** WP442：改系统规则（给 `account` 只改那只邮箱；`reset` = 回到跟着总设置）。 */
+export const setMessageFollowUpSettings = (
+  patch: MessageFollowUpSettingsPatch,
+): Promise<MessageFollowUpSettings> =>
+  api('/v1/messages/follow-ups/settings', { method: 'PATCH', body: patch })
+
+/** WP442：「等对方回」那一行上直接点（不用跟了 / 再等等 / 接着跟 / 现在就催）。 */
+export const actOnMessageFollowUp = (
+  thread_id: string,
+  action: MessageFollowUpAction,
+): Promise<{ follow_up: MessageFollowUp }> =>
+  api(`/v1/messages/threads/${encodeURIComponent(thread_id)}/follow-up`, {
+    method: 'POST',
+    body: { action },
+  })
 
 /** WP212：改判类型（✎）；`remember_sender` = 以后这个发件人都这样。 */
 export const setMessageKind = (

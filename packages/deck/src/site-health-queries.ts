@@ -4,7 +4,12 @@
  * 体检四块走 `site`（我们自己跑出来的结论，永远算连上）；AI 来源流量走 `shop`（数从店铺来，没连就「去连接」）。
  * 界面少字：只列有问题的行，全好就一行「都没问题」；没体检过就一行「还没体检」——不出空表。
  */
-import type { AiCrawlerVerdict, RawHtmlFactCheck } from '@agentsws/contracts'
+import type {
+  AiCrawlerVerdict,
+  DriftFinding,
+  RawHtmlFactCheck,
+  TechAuditIssue,
+} from '@agentsws/contracts'
 import type { QueryDef } from './queries.js'
 import type { QueryContext, TableResult } from './types.js'
 
@@ -276,6 +281,154 @@ export const SITE_HEALTH_QUERIES: QueryDef[] = [
         rows,
         footer: {
           text: `实测 · ${s.since.slice(0, 10)} – ${s.until.slice(0, 10)} · 占全部成交 ${String(share)}%${s.visits === 'no_scope' ? ' · 访问数要店铺授权里加「店铺报表」' : ''}`,
+        },
+      }
+    },
+  },
+]
+
+/* ── WP448：技术体检与改版回归 ─────────────────────────────────────── */
+
+const TECH_AREA: Record<TechAuditIssue['area'], string> = {
+  indexing: '收录',
+  canonical: '规范网址',
+  redirect: '跳转与死链',
+  sitemap: '站点地图',
+  hreflang: 'hreflang',
+  schema: '结构化数据',
+  speed: '速度',
+}
+
+const OWNER_WORD: Record<TechAuditIssue['owner'], string> = {
+  'site.shopify-build': '整站搭建',
+  'site.shopify-theme': '主题',
+}
+
+const SEVERITY_WORD = { high: '高', medium: '中', low: '低' } as const
+
+const DRIFT_SEVERITY_WORD: Record<DriftFinding['severity'], string> = {
+  critical: '严重',
+  warning: '注意',
+  info: '知道一下',
+}
+
+const DRIFT_PAGE_WORD: Record<DriftFinding['kind'], string> = {
+  home: '首页',
+  product: '商品页',
+  collection: '合集页',
+  article: '文章',
+}
+
+const DRIFT_TRIGGER_WORD = {
+  theme_publish: '主题发布后',
+  app_change: 'App 装卸后',
+  weekly: '例行检查',
+  manual: '手动',
+} as const
+
+export const SITE_TECH_QUERIES: QueryDef[] = [
+  {
+    name: 'site.tech_audit',
+    source: 'site',
+    returns: 'table',
+    run: (ctx) => {
+      const columns = [
+        { key: 'issue', label: '问题' },
+        { key: 'where', label: '证据' },
+        { key: 'owner', label: '交给' },
+      ]
+      const run = ctx.site_health?.run
+      if (run === undefined) return notRun(columns, '还没体检')
+      const tech = run.tech
+      if (tech === undefined) return { ...notRun(columns, '这次没做技术体检'), ...footerOf(ctx) }
+      const rows =
+        tech.issues.length === 0
+          ? [{ issue: '都没问题', where: '', owner: '' }]
+          : tech.issues.slice(0, 20).map((i) => ({
+              issue: `${SEVERITY_WORD[i.severity]} · ${TECH_AREA[i.area]}`,
+              where: i.detail,
+              owner: OWNER_WORD[i.owner],
+            }))
+      const bits: string[] = []
+      if (tech.indexing === 'not_connected') bits.push('收录要 Search Console 接上才看得到')
+      if (tech.speed === 'lab') bits.push('速度是实验室数')
+      if (tech.speed === 'mixed') bits.push('速度：有的页只有实验室数')
+      const at = run.finished_at ?? run.started_at
+      const sent = tech.dispatched?.[0]
+      return {
+        columns,
+        rows,
+        footer: {
+          text: [
+            `体检于 ${at.slice(0, 10)}`,
+            ...bits,
+            ...(sent === undefined
+              ? []
+              : [
+                  `已交给建站（${String((tech.dispatched ?? []).reduce((n, d) => n + d.issues, 0))} 条）`,
+                ]),
+          ].join(' · '),
+          ...(sent === undefined
+            ? {}
+            : { href: `/matters/${encodeURIComponent(sent.matter_id)}`, link_label: '看那件事' }),
+        },
+      }
+    },
+  },
+  {
+    name: 'site.drift',
+    source: 'site',
+    returns: 'table',
+    run: (ctx) => {
+      // 级别并进「哪一页」那一格（单列两个字太窄，报表里会竖着折）
+      const columns = [
+        { key: 'page', label: '哪一页' },
+        { key: 'change', label: '变了什么' },
+      ]
+      const view = ctx.site_health?.drift
+      const last = view?.last
+      if (last === undefined) return notRun(columns, '还没比过')
+      const when = `${DRIFT_TRIGGER_WORD[last.trigger.kind]} · ${(last.finished_at ?? last.started_at).slice(0, 10)}`
+      if (last.status === 'baseline')
+        return { ...notRun(columns, '第一次：存好了基线，下次改版后比'), footer: { text: when } }
+      if (last.status === 'failed')
+        return { ...notRun(columns, last.notes[0] ?? '这次没比成'), footer: { text: when } }
+      // 最近一次「都没变」时，最近一次有发现的那一轮还在 7 天内就照样列出来
+      const show =
+        last.findings.length > 0
+          ? last
+          : view?.last_with_findings !== undefined &&
+              Date.parse(last.started_at) - Date.parse(view.last_with_findings.started_at) <
+                7 * 86_400_000
+            ? view.last_with_findings
+            : last
+      const rows =
+        show.findings.length === 0
+          ? [{ page: '都没问题', change: '' }]
+          : show.findings.slice(0, 20).map((f) => {
+              let path = f.url
+              try {
+                path = new URL(f.url).pathname
+              } catch {
+                // 原样
+              }
+              return {
+                page: `${DRIFT_SEVERITY_WORD[f.severity]} · ${DRIFT_PAGE_WORD[f.kind]} ${path}`,
+                change: `${f.detail}${f.before !== undefined && f.after !== undefined ? `：${f.before} → ${f.after}` : ''}`,
+              }
+            })
+      const showWhen = `${show.trigger.label ?? DRIFT_TRIGGER_WORD[show.trigger.kind]} · ${(show.finished_at ?? show.started_at).slice(0, 10)}`
+      return {
+        columns,
+        rows,
+        footer: {
+          text: show.dispatched === undefined ? showWhen : `${showWhen} · 严重的已交给建站`,
+          ...(show.dispatched === undefined
+            ? {}
+            : {
+                href: `/matters/${encodeURIComponent(show.dispatched.matter_id)}`,
+                link_label: '看那件事',
+              }),
         },
       }
     },

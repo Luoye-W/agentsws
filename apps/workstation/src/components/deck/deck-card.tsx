@@ -15,6 +15,7 @@
  * ③ 内容盒：一次一种语言 + 证据芯片 + 实体芯片
  * ④ 动作行：≤ 3 个快捷决定 + 安静区；折叠区就地替换它
  */
+import { FOLLOW_UP_CARD_FORM } from '@agentsws/contracts'
 import type { DeckAction, DeckCard, DeckContentMode, InstructionScope } from '@agentsws/deck'
 import { categoryKey } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
@@ -206,6 +207,9 @@ export function categoryOf(card: DeckCard, t: (key: string) => string): string {
   // WP249：自家版的版务卡是「做之前」的（排成改动卡），不是「处置后」
   if (card.change_kind === 'community_moderation' && card.layout === 'change')
     return t('category.own_sub_moderation')
+  // WP442：催促卡——「催一下」，不是「回信」
+  if ((card.detail.payload as { form?: unknown } | undefined)?.form === FOLLOW_UP_CARD_FORM)
+    return t('follow_up.category')
   const key = categoryKey(card.kind, card.change_kind)
   return t(key ?? `kind.${card.kind}`)
 }
@@ -295,6 +299,16 @@ export function DeckCardView({
   const routeChoice = (card.kind === 'claim' && isQuestion && !handoffOffer) || peerNotice
   const examples = useTaskExamples(card.role_id)
   const positionName = usePositionName(card.role_id)
+  /**
+   * WP442（决策 1452）：没归属的催促卡挂在品牌里第一个持岗位的人名下，但它不是那个岗位的事——
+   * 头一行写「消息 · 催一下」，不写那个岗位的名字。
+   */
+  const pillPosition =
+    (card.detail.payload as { form?: unknown; surface?: unknown } | undefined)?.form ===
+      FOLLOW_UP_CARD_FORM &&
+    (card.detail.payload as { surface?: unknown } | undefined)?.surface === 'messages'
+      ? t('follow_up.surface.messages')
+      : positionName
   const rail = useRailState()
   const evidence = evidenceLines(card, t, (iso) => formatDateTime(iso, lang))
   // WP100：头一行那个类别写人话（"网站运营 · 改价"）；表里没登记的退回枚举名那一版
@@ -362,7 +376,8 @@ export function DeckCardView({
       data-layout={card.layout}
       data-band={card.priority_band}
       className={[
-        'ws-card relative flex flex-col overflow-hidden transition-all duration-300 ease-out',
+        // WP456-T2：决定卡外壳（无边框 + 卡阴影），和事项页、「要你处理」同一种
+        'ws-dcard relative transition-all duration-300 ease-out',
         DECK_CARD_MIN_HEIGHT_CLASS,
         exiting == null ? '' : EXIT_CLASS[exiting],
       ].join(' ')}
@@ -395,12 +410,9 @@ export function DeckCardView({
         「岗位 · 类别」（优先级变成它的颜色）→ 等待时长 → 证据 N → 谁提的。
         渠道、合并 N 张、预检那些都在右上角那个"证据 N"里，点开在第三栏看。
       */}
-      <div
-        className="flex flex-wrap items-center gap-2 border-b border-ws-line px-5 py-3 text-xs"
-        data-testid="deck-tag-row"
-      >
+      <div className="ws-dcard-head" data-testid="deck-tag-row">
         <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
-          {positionName === undefined ? category : `${positionName} · ${category}`}
+          {pillPosition === undefined ? category : `${pillPosition} · ${category}`}
         </StatusPill>
         {/*
           WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长。
@@ -467,7 +479,7 @@ export function DeckCardView({
         }}
       >
         {/* ② 一句话标题 */}
-        <p className="text-[15px] leading-6 font-semibold">{card.title}</p>
+        <p className="ws-dcard-title">{card.title}</p>
         {/* WP174：转给了谁、为什么（路由真做过判断的卡才有这一句） */}
         {card.routed_note === undefined ? null : (
           <p className="mt-0.5 text-xs text-muted-foreground" data-testid="deck-routed-note">
@@ -518,7 +530,7 @@ export function DeckCardView({
       </div>
 
       {/* ④ 动作行 —— 或者它就地展开的那块面板；右下角的 → 圆钮全类都有 */}
-      <div className="flex items-center gap-3 border-t border-ws-line bg-ws-surface px-5 py-3">
+      <div className="ws-dcard-foot flex-nowrap gap-3">
         <div className="min-w-0 flex-1">
           {error === undefined ? null : (
             <p role="alert" className="mb-2 text-xs text-destructive">

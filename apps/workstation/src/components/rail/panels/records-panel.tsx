@@ -15,8 +15,8 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ExecutionPill } from '@/components/deck/execution-note'
+import { SkeletonList } from '@/components/design/kit'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
-import { Skeleton } from '@/components/ui/skeleton'
 import { getPositionAnswers, getPositionRecords, listReviews } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
@@ -64,7 +64,7 @@ export function RecordsPanel({ scope }: RailPanelBodyProps): ReactNode {
     queryFn: () => getPositionAnswers(answerOf as string),
     enabled: answerOf !== undefined,
   })
-  if (records.some((r) => r.isPending)) return <Skeleton className="h-40 w-full" />
+  if (records.some((r) => r.isPending)) return <SkeletonList rows={4} check={false} />
 
   const seen = new Set<string>()
   const recordRows: Row[] = records

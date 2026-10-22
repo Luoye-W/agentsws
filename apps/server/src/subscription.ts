@@ -123,7 +123,7 @@ export interface SubscriptionAssembly {
   port: SubscriptionPortLike
   /**
    * WP294：这个人存着的订阅模型启动时被自动换掉了的那几条（还该提醒的：没过期、他没再改过）。
-   * 首页告警区据此出一行。
+   * 据此出一张系统卡（WP466 起在铃铛里一条，原首页告警区）。
    */
   retiredSwaps(person_id: string): (RetiredModelSwap & { provider: string })[]
   /**

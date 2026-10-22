@@ -10,7 +10,7 @@
  * 纪律照旧：这里只**排版**，不算数也不编。payload 里没有的字段就不出那一格，
  * 绝不用"—"以外的东西填空（14 §2 数字不经模型手）。
  */
-import { isAssistantNotesPayload } from '@agentsws/contracts'
+import { isAssistantNotesPayload, isFollowUpNudgePayload } from '@agentsws/contracts'
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
@@ -25,6 +25,8 @@ import {
   KolOutreachBody,
   KolReviewBody,
 } from '@/components/kol/kol-card-bodies'
+import { FollowUpCardBody } from '@/components/messages/follow-up-card-body'
+import { isMessageRuleCardPayload, MessageRuleCardBody } from '@/components/messages/rule-card-body'
 import {
   GoogleAlertChangeBody,
   isGoogleAlertChangePayload,
@@ -447,6 +449,9 @@ export function DeckCardBody({
         if (isFaqImportPayload(payload)) return <FaqImportBody payload={payload} />
         // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，
         // 下面一句说之后怎样、去哪儿改（不出改之前 / 改之后双格，不出「谁能批」那一行）
+        // WP441：「要建这条规则吗」——一行白话、试跑、会改掉去向的几封；「建」在卡身里（带上「也处理过去 30 天的」）
+        if (isMessageRuleCardPayload(payload))
+          return <MessageRuleCardBody card={card} payload={payload} />
         // WP323：记录去处的「定规矩」——一行预览（列 → 这一条会写成什么）+ 一句之后怎样；不出双格
         if (payload.form === 'record_sink') {
           const rows = (Array.isArray(payload.preview) ? payload.preview : [])
@@ -751,6 +756,9 @@ export function DeckCardBody({
       default:
         // WP329：Reddit「发出去」卡——卡上能改字，「发送」在卡身里（批了交给插件填进页面、你自己点发送）
         if (isRedditWritePayload(payload)) return <RedditWriteBody card={card} payload={payload} />
+        // WP442：催促卡——「X 还没回」：你哪天发的、催促草稿（就地修改）、「发出」在卡身里
+        if (isFollowUpNudgePayload(payload))
+          return <FollowUpCardBody card={card} payload={payload} />
         // WP416：红人开发信——卡面直接放正文（前 6 行可展开）与要先看一眼的几句
         if (isKolOutreachPayload(payload)) return <KolOutreachBody payload={payload} />
         return (
@@ -777,7 +785,9 @@ export function DeckCardBody({
     // WP322：FAQ 导入那张「记下 / 只加新的 / 不用」
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'faq_import' ||
     // WP323：记录去处那张「记下 / 不用」
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'record_sink'
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'record_sink' ||
+    // WP441：「要建这条规则吗」（建 / 不要都在卡身里）
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'message_rule'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (

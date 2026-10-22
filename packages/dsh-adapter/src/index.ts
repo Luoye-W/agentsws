@@ -59,6 +59,27 @@ export {
   redactComputerUseValue,
   SCREENSHOT_OMITTED,
 } from './computer-use.js'
+export type { EgoProcessResult, EgoSkillRead } from './ego.js'
+export {
+  EGO_GUIDE_TOOL,
+  EGO_OUTPUT_MAX_CHARS,
+  EGO_RUN_DEFAULT_SECONDS,
+  EGO_RUN_MAX_SECONDS,
+  EGO_RUN_TOOL,
+  EGO_SKILL_TIMEOUT_MS,
+  EGO_STATUS_TOOL,
+  EGO_TOOLS,
+  egoBrief,
+  egoPathOf,
+  egoRunNote,
+  egoRunTimeoutMs,
+  egoSkillVerdict,
+  egoToolDefinitions,
+  isEgoTool,
+  parseEgoSkillHeader,
+  readEgoSkill,
+  spawnEgo,
+} from './ego.js'
 export { DshAdapterError } from './errors.js'
 export type { AskedBoundary, DraftArgs, GateApi, GateInput, StageArgs } from './gate.js'
 export { CONTEXT_PREFIX, installGate, PERSONA_SECTION } from './gate.js'

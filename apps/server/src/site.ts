@@ -520,6 +520,8 @@ export function createSiteService(options: SiteServiceOptions): SiteServiceAssem
         blockers: saved.blockers,
         warnings: saved.warnings,
         ready: saved.ready,
+        // WP448：读到的已装 App（和上次不一样就跑一次改版回归）；没读到就不写
+        ...(facts.apps === undefined ? {} : { apps_installed: facts.apps.installed }),
       })
       return { run: saved, staged }
     },

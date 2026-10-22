@@ -252,6 +252,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../../packages/browser-action
       '@agentsws/connect-adapter':
         specifier: workspace:*
         version: link:../../packages/connect-adapter
@@ -470,6 +473,9 @@ importers:
       hono:
         specifier: ^4.13.7
         version: 4.13.7
+      linkedom:
+        specifier: 0.18.13
+        version: 0.18.13
       playwright-core:
         specifier: 1.63.0-alpha-2026-08-31
         version: 1.63.0-alpha-2026-08-31
@@ -538,6 +544,9 @@ importers:
       '@schedule-x/calendar-controls':
         specifier: 3.7.3
         version: 3.7.3(@preact/signals@2.11.2(preact@10.29.8))(preact@10.29.8)
+      '@schedule-x/current-time':
+        specifier: 3.7.3
+        version: 3.7.3
       '@schedule-x/drag-and-drop':
         specifier: 3.7.3
         version: 3.7.3(@preact/signals@2.11.2(preact@10.29.8))(preact@10.29.8)
@@ -780,6 +789,9 @@ importers:
       better-sqlite3:
         specifier: ^12.0.0
         version: 12.11.1
+      chrono-node:
+        specifier: 2.10.2
+        version: 2.10.2
       imapflow:
         specifier: 2.0.0
         version: 2.0.0
@@ -1581,6 +1593,9 @@ importers:
 
   packages/site-core:
     dependencies:
+      '@adobe/structured-data-validator':
+        specifier: 1.7.0
+        version: 1.7.0
       '@agentsws/brand-intake':
         specifier: workspace:*
         version: link:../brand-intake
@@ -1711,6 +1726,10 @@ packages:
       '@deepseek-ai/dsh-settings': '*'
       '@deepseek-ai/dsh-web': '*'
       '@deepseek-ai/schemastery': '*'
+
+  '@adobe/structured-data-validator@1.7.0':
+    resolution: {integrity: sha512-7z4MDfbYUBeMW2XyDzcpEh5FtDYaXmuERBCdmeDOkcsrOuLe0NJb97tAKoqoe+qll17fX9C5V8zgU1z+7hIWMg==}
+    engines: {node: '>=18.0.0'}
 
   '@agentclientprotocol/sdk@1.4.0':
     resolution: {integrity: sha512-/eufudw+aFY1LKLolT6yFE6UMmYRl7fMJ/DEONSIyR6wI3slHWITBsANRGqXEY8FRzqUxwh7QEaGiZHcJPVThg==}
@@ -6893,6 +6912,9 @@ packages:
       preact: ^10.19.2
       temporal-polyfill: 0.3.0
 
+  '@schedule-x/current-time@3.7.3':
+    resolution: {integrity: sha512-rv8gEaEad5bHvRhmDEjFwBUiMg6PXHYtdAUyGiHN5SPiqV4hf2hY5x7zusdHtYjjLiVJwF6LQfWjlRxrp82/7g==}
+
   '@schedule-x/drag-and-drop@3.7.3':
     resolution: {integrity: sha512-nHwZKzdIKWNTdT5BEXy4vLlHOmOH3C3M744QUIU0EOXPAFZQR1bBTviGs2NhmvaLiGstnVx2/TZtdhocy60hgg==}
     peerDependencies:
@@ -7877,6 +7899,10 @@ packages:
 
   chromium-pickle-js@0.2.0:
     resolution: {integrity: sha512-1R5Fho+jBq0DDydt+/vHWj5KJNJCKdARKOCwZUen84I5BreWoLqRLANH1U87eJy1tiASPtMnGqJJq0ZsLoRPOw==}
+
+  chrono-node@2.10.2:
+    resolution: {integrity: sha512-xBCwGGmodF2YVtzE7/8ewNDajbCg72jgZHyOXvhkuQiYhIQ1KbqyXJJJw2fLaQ603LL4oMVhOyjckEBve45S4w==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   ci-info@4.3.1:
     resolution: {integrity: sha512-Wdy2Igu8OcBpI2pZePZ5oWjPC38tmDVx5WKUXKwlLYkA0ozo85sLsLvkBbBn/sZaSCMFOGZJ14fvW9t5/d7kdA==}
@@ -11914,6 +11940,8 @@ snapshots:
       '@deepseek-ai/dsh-settings': 0.2.1-rc.2(f19463d923a7a6aadc4d6ed675af1c31)
       '@deepseek-ai/dsh-web': 0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))
       '@deepseek-ai/schemastery': 3.18.5
+
+  '@adobe/structured-data-validator@1.7.0': {}
 
   '@agentclientprotocol/sdk@1.4.0(zod@4.5.4)':
     dependencies:
@@ -17893,6 +17921,8 @@ snapshots:
       preact: 10.29.8
       temporal-polyfill: 0.3.0
 
+  '@schedule-x/current-time@3.7.3': {}
+
   '@schedule-x/drag-and-drop@3.7.3(@preact/signals@2.11.2(preact@10.29.8))(preact@10.29.8)':
     dependencies:
       '@preact/signals': 2.11.2(preact@10.29.8)
@@ -19057,6 +19087,8 @@ snapshots:
   chownr@3.0.0: {}
 
   chromium-pickle-js@0.2.0: {}
+
+  chrono-node@2.10.2: {}
 
   ci-info@4.3.1: {}
 

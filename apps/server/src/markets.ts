@@ -303,7 +303,7 @@ export function createStoreMarketsSync(options: {
 /* WP169：店铺校正改了市场 → 给工作区所有者推一条通知                     */
 /* ------------------------------------------------------------------ */
 
-/** 校正通知在首页告警区挂几天（没人动就自己退场；人改过市场当场退场）。 */
+/** 校正通知（铃铛里那条，原首页告警区）挂几天（没人动就自己退场；人改过市场当场退场）。 */
 export const STORE_MARKETS_NOTICE_DAYS = 7
 
 /** 点开去哪：设置页「公司档案」那一张（工作台按 `#company` 滚到那里）。 */
@@ -373,7 +373,7 @@ export function createStoreMarketsNotices(options: { dir?: string; now(): string
   }
 }
 
-/** 通知 → 首页告警区那一行（`system_alert`，点「去处理」到设置页公司档案）。 */
+/** 通知 → 系统卡（`system_alert`；WP466 起在铃铛里一条，原首页告警区，点「去处理」到设置页公司档案）。 */
 export function storeMarketsNoticeCard(n: StoreMarketsNotice): DeckCard {
   const title = `目标市场按店铺后台改了：${n.note.replace(/^按店铺后台的(「市场」|配送区域)(校正：)?/, '')}`
   const summary = `${n.note}。不对的话去设置页「公司档案」改。`

@@ -20,6 +20,7 @@ import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watc
 import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
+import { FOLLOW_UP_EN, FOLLOW_UP_ZH } from './i18n-follow-up'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
 import {
   GOOGLE_ALERTS_EN,
@@ -595,9 +596,7 @@ const zh: Table = {
   'nav.settings': '设置',
   'home.queue': '今日卡片队列',
   'home.queue.empty': '队列清空了。今天没有需要你决定的事。',
-  'home.alerts': '告警',
   // ── WP96：只有要人决定的才是卡；这两样改成面板块 ─────────────────────
-  'panel.alerts.hint': '不用你决定，看见就行；要处理的那一步会另出一张卡',
   'panel.reports': '报表',
   'panel.reports.hint': '日报、报告与上线检查单 · 看完即过，没有要批的东西',
   'home.digest': '每日摘要',
@@ -741,6 +740,9 @@ const zh: Table = {
   'rail.browser.handover.dismiss': '先不管了',
   'rail.browser.executor.playwright': '独立浏览器（官方 provider）',
   'rail.browser.executor.browserskill': '你正在用的浏览器（BrowserSkill）',
+  'rail.browser.executor.ego': 'ego 浏览器',
+  'rail.browser.ego.live': '实时画面在 ego 自己的窗口里',
+  'rail.browser.ego.none': '还没跑过脚本。',
   'rail.browser.executor.none': '这次运行没有开过浏览器',
   'rail.browser.running': '还在跑',
   'rail.browser.finished': '已结束',
@@ -2335,19 +2337,24 @@ const zh: Table = {
   'calendar.empty': '这段时间没有安排。',
   'calendar.source.meeting': '会议',
   'calendar.source.todo': '待办',
-  'calendar.source.scheduled_task': '定时',
+  'calendar.source.scheduled_task': '定时任务',
   'calendar.source.card_due': '卡片到期',
   'calendar.source.social_post': '社媒排期',
   'calendar.source.kol_deliverable': '红人交付物',
   'calendar.source.standby': '值守续期',
   'calendar.open': '在日历里看',
-  'calendar.layers': '图层',
+  // WP456-T5：图层列的标题照示意稿写「显示」（勾的是「这一屏画不画」）
+  'calendar.layers': '显示',
   'calendar.layers.hint': '勾掉的那一层还在，只是这一屏不画它。',
   'calendar.layers.none': '没开图层',
   'calendar.event.later': '先不管',
   // WP96 画布《日历 · 新风格》：左栏主按钮 / 顶栏统计 / 图层那一行
   'calendar.schedule': '安排一件事',
   'calendar.count': '本周 {n} 项',
+  // WP456-T5：页头那句随视图换说法；全天区左边那格
+  'calendar.count.day': '这天 {n} 项',
+  'calendar.count.month': '本月 {n} 项',
+  'calendar.all_day': '全天',
   'calendar.layers.only_this': '只看这个岗位',
   // 小月历自己的上下月（与主视图的"上一页 / 下一页"分开：两个都在这一屏上）
   'calendar.month.prev': '上个月',
@@ -3265,6 +3272,13 @@ const zh: Table = {
 
   // WP92（55 §10）：设置 → 浏览器 → 「我正在用的浏览器」（腾讯 BrowserSkill）
   'settings.browser.bsk': '我正在用的浏览器',
+  'settings.browser.ego': 'ego',
+  'settings.browser.ego.note':
+    'ego 是一个给 AI 用的浏览器，需要你自己安装。AI 会在 ego 里单独的空间干活，不动你开着的标签。',
+  'settings.browser.ego.version': '已装好 · {version}',
+  'settings.browser.ego.missing': '没装',
+  'settings.browser.ego.site': '去官网',
+  'settings.browser.ego.blocked': '这一档用不了（ego 装在你自己那台电脑上）。',
   'settings.browser.bsk.note':
     '用你日常那个浏览器（Chrome / Edge）。你登录过的东西它直接就看得到，不用再登一次；AI 在一个单独的窗口里操作，要用你已经开着的标签会先问你。',
   'settings.browser.bsk.blocked': '这一档用不了（扩展和 bsk 都在你自己那台电脑上）。',
@@ -4988,9 +5002,7 @@ const en: Table = {
   'nav.settings': 'Settings',
   'home.queue': "Today's cards",
   'home.queue.empty': 'Queue is clear. Nothing needs you today.',
-  'home.alerts': 'Alerts',
   // ── WP96: only decisions are cards; these two became panel blocks ────
-  'panel.alerts.hint': 'Nothing to decide — the follow-up action gets its own card',
   'panel.reports': 'Reports',
   'panel.reports.hint': 'Daily reports, reports and launch checklists · read and move on',
   'home.digest': 'Daily digest',
@@ -5105,6 +5117,9 @@ const en: Table = {
   'rail.browser.handover.dismiss': 'Not now',
   'rail.browser.executor.playwright': 'Standalone browser (official provider)',
   'rail.browser.executor.browserskill': 'The browser you already use (BrowserSkill)',
+  'rail.browser.executor.ego': 'ego browser',
+  'rail.browser.ego.live': 'Watch it live in the ego window',
+  'rail.browser.ego.none': 'No script has run yet.',
   'rail.browser.executor.none': 'This run never opened a browser',
   'rail.browser.running': 'running',
   'rail.browser.finished': 'finished',
@@ -6753,13 +6768,16 @@ const en: Table = {
   'calendar.source.kol_deliverable': 'Creator deliverable',
   'calendar.source.standby': 'Standby renewal',
   'calendar.open': 'Open in calendar',
-  'calendar.layers': 'Layers',
+  'calendar.layers': 'Show',
   'calendar.layers.hint': 'An unchecked layer is still there — this screen just does not draw it.',
   'calendar.layers.none': 'No layer is on — tick one on the left.',
   'calendar.event.later': 'Later',
   // WP96 canvas: left-column primary button / top-bar count / layer row
   'calendar.schedule': 'Schedule something',
   'calendar.count': '{n} this week',
+  'calendar.count.day': '{n} this day',
+  'calendar.count.month': '{n} this month',
+  'calendar.all_day': 'All day',
   'calendar.layers.only_this': 'Only this position',
   'calendar.month.prev': 'Previous month',
   'calendar.month.next': 'Next month',
@@ -7694,6 +7712,13 @@ const en: Table = {
 
   // WP92 (55 §10): Settings → Browser → "The browser I already use" (Tencent BrowserSkill)
   'settings.browser.bsk': 'The browser I already use',
+  'settings.browser.ego': 'ego',
+  'settings.browser.ego.note':
+    'ego is a browser made for AI that you install yourself. The AI works in its own space inside ego and leaves your open tabs alone.',
+  'settings.browser.ego.version': 'Installed · {version}',
+  'settings.browser.ego.missing': 'Not installed',
+  'settings.browser.ego.site': 'Website',
+  'settings.browser.ego.blocked': 'Not available here (ego lives on your own computer).',
   'settings.browser.bsk.note':
     'Uses your everyday browser (Chrome or Edge). Anything you are signed in to is visible right away; the AI works in a separate window and asks before touching a tab you already have open.',
   'settings.browser.bsk.blocked':
@@ -8998,6 +9023,7 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_ZH,
     // WP439：消息页右栏「规则」
     ...MESSAGE_RULES_ZH,
+    ...FOLLOW_UP_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
@@ -9071,6 +9097,7 @@ const TABLES: Record<Lang, Table> = {
     ...MODE_EN,
     ...PEERS_EN,
     ...MESSAGE_RULES_EN,
+    ...FOLLOW_UP_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...GOOGLE_ALERTS_EN,

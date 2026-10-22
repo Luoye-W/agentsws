@@ -4,7 +4,7 @@
  * 全应用只有一个后端：`/v1`。没有模型 SDK，没有全局聊天框。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type ReactNode, useEffect } from 'react'
+import { lazy, type ReactNode, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppShell } from '@/components/app-shell'
 import { BootSplash } from '@/components/boot-splash'
@@ -54,6 +54,9 @@ import { PeoplePage, PersonPage } from '@/pages/people'
 import { PositionPage } from '@/pages/position'
 import { SkillsPage } from '@/pages/skills'
 import { TodosPage } from '@/pages/todos'
+
+/** WP456-T2：组件一览（`/ui-kit`，左栏不放入口；单独一块，平时不下载）。 */
+const UiKitPage = lazy(() => import('@/pages/ui-kit'))
 
 /**
  * 登录与接受邀请这两条路不需要会话（WP28）：同事点着邀请链接进来时，
@@ -279,6 +282,14 @@ function Workspace(): ReactNode {
         */}
         <Route path="/influencer/creators" element={<InfluencerPage />} />
         <Route path="/influencer/setup" element={<InfluencerPage setup />} />
+        <Route
+          path="/ui-kit"
+          element={
+            <Suspense fallback={null}>
+              <UiKitPage />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

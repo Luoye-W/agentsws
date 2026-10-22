@@ -170,6 +170,7 @@ type ThreadClaim = Pick<
   | 'summary'
   | 'priority'
   | 'handed_to'
+  | 'rule_hits'
 >
 
 /**
@@ -199,6 +200,10 @@ export function claimOfThread(sorted: readonly MessageRecord[]): ThreadClaim {
         ? {}
         : { summary: m.triage.summary }),
       ...(m.triage?.priority === undefined ? {} : { priority: m.triage.priority }),
+      // WP441：命中的消息规则（「为什么这样处理」）
+      ...(m.triage?.rule_hits === undefined || m.triage.rule_hits.length === 0
+        ? {}
+        : { rule_hits: m.triage.rule_hits }),
     }
   }
   const handedTo = newestFirst.map(handedPositionOf).find((p) => p !== undefined)

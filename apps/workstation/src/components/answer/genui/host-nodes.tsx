@@ -6,6 +6,9 @@
  *   连上后只告诉处理器「这一格已填好」（名字，没有值）。没绑服务的，给一个「去连接」开第三栏。
  * - **「点开看」的外部媒体**（`ws-media`）：不在常见来源里的图片 / 音视频先不加载，标出真实域名，点了才画；
  *   旁边「以后这个网站的图都直接显示」记进品牌的白名单（849），白名单里的（含已连店铺的域名）直接画。
+ *
+ * WP456-T2：两种都用工作台的共用件（口令格是一张 `.ws-group` 卡、「点开看」是小号次按钮、白名单是 `ws-link-muted`），
+ * 和插件画的卡（`genui-view.css` 接过档位）看着是一套。
  */
 import { type ConnectNeed, type GenuiNodeLite, genuiHostAllowed } from '@agentsws/contracts'
 import { Image as ImageIcon, Lock } from 'lucide-react'
@@ -38,7 +41,7 @@ export function SecretNode({ node, onAction }: HostGenuiProps): ReactNode {
   }, [onAction, label])
   return (
     <div
-      className="flex flex-col gap-2 rounded-[10px] border border-ws-line bg-ws-card p-2.5"
+      className="ws-group flex flex-col gap-2 p-4"
       data-testid="genui-secret"
       data-service={service}
     >
@@ -53,7 +56,7 @@ export function SecretNode({ node, onAction }: HostGenuiProps): ReactNode {
         <div>
           <Button
             size="sm"
-            variant="outline"
+            variant="secondary"
             data-testid="genui-secret-connect"
             onClick={() => {
               openConnect(undefined)
@@ -91,7 +94,7 @@ export function MediaGateNode({ node, renderChildren }: HostGenuiProps): ReactNo
         type="button"
         title={src}
         data-testid="genui-media-gate"
-        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-ws-surface px-3 py-1 text-[12.5px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:text-ws-ink"
+        className="ws-btn ws-btn-secondary ws-btn-sm w-fit"
         onClick={() => {
           setOpen(true)
         }}
@@ -104,7 +107,7 @@ export function MediaGateNode({ node, renderChildren }: HostGenuiProps): ReactNo
           type="button"
           data-testid="genui-media-always"
           disabled={hosts.busy}
-          className="text-[12px] text-ws-muted-fg underline-offset-2 hover:text-ws-ink hover:underline"
+          className="ws-link-muted text-xs"
           onClick={() => {
             hosts.add(host)
           }}

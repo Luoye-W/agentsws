@@ -23,8 +23,10 @@ import type {
   BrowserProbeResult,
   BrowserSettings,
   BrowserSettingsView,
+  EgoBrowserStatus,
   RunBrowser,
 } from '@agentsws/contracts'
+import { detectEgoBrowser, type EgoDetection } from './ego-browser.js'
 
 /** 探一次最多等多久。等太久等于连不上——用户要的是一个答案，不是一个转圈。 */
 export const BROWSER_PROBE_TIMEOUT_MS = 2000
@@ -77,6 +79,15 @@ export interface BrowserSettingsOptions {
   defaultBskPath?(): string | undefined
   /** 这个文件在不在（测试注入；缺省 `existsSync`）。 */
   bskExists?(path: string): boolean
+  /**
+   * WP463：探一次 ego（测试注入；缺省 `ego-browser.ts` 的 `detectEgoBrowser`：
+   * 存过的路径 → PATH → 常见安装位置，跑 `ego-browser skill` 看能不能用）。
+   */
+  detectEgo?(savedPath: string | undefined): EgoDetection
+  /** WP463：探测结果记多久（毫秒，缺省 30 秒）。`forRun()` 每次运行都问，不能每次都起子进程。 */
+  egoCacheMs?: number
+  /** 现在几点（测试注入；缺省 `Date.now`）。 */
+  nowMs?(): number
 }
 
 export interface BrowserSettingsAssembly {
@@ -92,6 +103,8 @@ export interface BrowserSettingsAssembly {
   forRun(): RunBrowser | undefined
   /** WP92：这台机器上 `bsk` 该在哪（设置里填过就是那个）。 */
   bskPath(): string | undefined
+  /** WP463：这台机器上 ego 装没装、能不能跑（现探一次，顺便刷新 `forRun()` 用的那份缓存）。 */
+  egoStatus(): EgoBrowserStatus
 }
 
 /** CDP 的 endpoint 只允许 http(s) / ws(s)，且不能带空白（上游 provider 的同一条口径）。 */
@@ -170,6 +183,32 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
   const browserSkillAllowed = attachAllowed
   const bskExists = options.bskExists ?? ((path: string) => existsSync(path))
   const bskPathOf = (): string | undefined => settings.bsk_path ?? options.defaultBskPath?.()
+  /*
+   * WP463（docs/111 §3）：ego 与 BrowserSkill 同一条判据——它装在**用户那台电脑**上，
+   * 服务不在那台电脑上就调不到。探测结果短暂缓存：`forRun()` 每次运行都问，
+   * 跑一次 `ego-browser skill` 要零点几秒，不该每次都起子进程。缓存的是**经联接的那条路径**，
+   * 不是版本目录（升级后联接指向会变，下一次照样跑得到新的那一份）。
+   */
+  const egoAllowed = attachAllowed
+  const detectEgo =
+    options.detectEgo ??
+    ((saved) => detectEgoBrowser(saved === undefined ? {} : { savedPath: saved }))
+  const egoCacheMs = options.egoCacheMs ?? 30_000
+  const nowMs = options.nowMs ?? Date.now
+  let egoCache: { at: number; saved: string | undefined; result: EgoDetection } | undefined
+  const egoDetection = (fresh: boolean): EgoDetection => {
+    const saved = settings.ego_path
+    if (
+      !fresh &&
+      egoCache !== undefined &&
+      egoCache.saved === saved &&
+      nowMs() - egoCache.at < egoCacheMs
+    )
+      return egoCache.result
+    const result = detectEgo(saved)
+    egoCache = { at: nowMs(), saved, result }
+    return result
+  }
 
   const view = (): BrowserSettingsView => ({
     ...settings,
@@ -188,6 +227,13 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
           browserskill_blocked_reason:
             '这台服务不在你自己的电脑上（Docker / 托管档）：bsk 与浏览器扩展都装在你那台' +
             '电脑上，连不过来。这一档只能用「独立的 Chrome」那一种。',
+        }),
+    ego_allowed: egoAllowed(),
+    ...(egoAllowed()
+      ? {}
+      : {
+          ego_blocked_reason:
+            '这台服务不在你自己的电脑上（Docker / 托管档）：ego 装在你那台电脑上，调不过来。',
         }),
   })
 
@@ -229,6 +275,20 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
         }
         const path = (input.bsk_path ?? '').trim()
         settings = { mode: 'browserskill', ...(path === '' ? {} : { bsk_path: path }) }
+      } else if (input.mode === 'ego') {
+        /*
+         * WP463：只记「选了 ego」和用户手动指过的路径（一般不填，服务端自己找）。
+         * 装没装、能不能跑由 `forRun()` / `egoStatus()` 现探——存一个设置不该等一个子进程。
+         */
+        if (!egoAllowed()) {
+          throw new BrowserSettingsError(
+            'forbidden',
+            '这一档不能用 ego（docs/111 §3：ego 装在用户那台电脑上，只有个人档能用）',
+          )
+        }
+        const path = (input.ego_path ?? '').trim()
+        settings = { mode: 'ego', ...(path === '' ? {} : { ego_path: path }) }
+        egoCache = undefined
       } else {
         settings = { mode: 'off' }
       }
@@ -270,6 +330,16 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
         if (path === undefined || !bskExists(path)) return undefined
         return { mode: 'browserskill', bsk_path: path }
       }
+      if (settings.mode === 'ego') {
+        /*
+         * WP463：**探到能跑才给**（同 WP92「装好了才挂」）。没装 / 跑不起来 / 档位变了
+         * 就当这次运行没有浏览器——与"没配浏览器"是同一种结果。
+         */
+        if (!egoAllowed()) return undefined
+        const found = egoDetection(false)
+        if (!found.ok || found.path === undefined) return undefined
+        return { mode: 'ego', ego_path: found.path }
+      }
       if (settings.mode === 'launch') {
         return {
           mode: 'launch',
@@ -282,5 +352,22 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
       return undefined
     },
     bskPath: bskPathOf,
+    egoStatus() {
+      if (!egoAllowed()) {
+        return {
+          allowed: false,
+          installed: false,
+          detail: '这台服务不在你自己的电脑上（Docker / 托管档），用不了 ego。',
+        }
+      }
+      const found = egoDetection(true)
+      return {
+        allowed: true,
+        installed: found.ok,
+        ...(found.path === undefined ? {} : { ego_path: found.path }),
+        ...(found.version === undefined ? {} : { version: found.version }),
+        ...(found.detail === undefined ? {} : { detail: found.detail }),
+      }
+    },
   }
 }

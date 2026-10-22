@@ -8,6 +8,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Siren, X } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { NoticeLine } from '@/components/design/kit'
 import { redditWriteAssignment } from '@/components/social/reddit-write-notice'
 import { useApp } from '@/lib/app-context'
 import {
@@ -66,40 +67,41 @@ function AlertRow({ item, onDismiss }: { item: RedditWatchEntry; onDismiss(): vo
     .filter((s) => s !== '')
     .join(' · ')
   return (
-    <div
-      className="flex flex-wrap items-center gap-2 rounded-lg bg-ws-warn-bg px-3 py-2 text-sm"
+    // WP456-T2：一行提醒（浅底、黄图标），不再铺一整条黄
+    <NoticeLine
+      icon={Siren}
       data-testid="reddit-watch-alert-row"
-      data-slot="status"
+      end={
+        <>
+          {item.url === undefined ? null : (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              aria-label={t('rwatch.open')}
+              title={t('rwatch.open')}
+              className="shrink-0 rounded-md p-1 text-ws-muted-fg hover:bg-ws-hover"
+              data-testid="reddit-watch-alert-open"
+            >
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          )}
+          <button
+            type="button"
+            className="shrink-0 rounded-md p-1 text-ws-muted-fg hover:bg-ws-hover"
+            aria-label={t('rwatch.alert.dismiss')}
+            title={t('rwatch.alert.dismiss')}
+            onClick={onDismiss}
+            data-testid="reddit-watch-alert-dismiss"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </>
+      }
     >
-      <Siren className="size-4 shrink-0 text-ws-warn" aria-hidden />
-      <span className="min-w-0 flex-1 truncate">
-        {t('rwatch.alert.title', { words: (item.alert_hits ?? []).join(' / ') })}
-        {where === '' ? null : <span className="text-ws-muted-fg"> · {where}</span>}
-        <span className="text-ws-muted-fg"> · {line}</span>
-      </span>
-      {item.url === undefined ? null : (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noreferrer noopener"
-          aria-label={t('rwatch.open')}
-          title={t('rwatch.open')}
-          className="shrink-0 rounded-md p-1 text-ws-muted-fg hover:bg-accent"
-          data-testid="reddit-watch-alert-open"
-        >
-          <ExternalLink className="size-3.5" aria-hidden />
-        </a>
-      )}
-      <button
-        type="button"
-        className="shrink-0 rounded-md p-1 text-ws-muted-fg hover:bg-accent"
-        aria-label={t('rwatch.alert.dismiss')}
-        title={t('rwatch.alert.dismiss')}
-        onClick={onDismiss}
-        data-testid="reddit-watch-alert-dismiss"
-      >
-        <X className="size-3.5" aria-hidden />
-      </button>
-    </div>
+      {t('rwatch.alert.title', { words: (item.alert_hits ?? []).join(' / ') })}
+      {where === '' ? null : <span className="text-ws-muted-fg"> · {where}</span>}
+      <span className="text-ws-muted-fg"> · {line}</span>
+    </NoticeLine>
   )
 }

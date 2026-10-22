@@ -549,6 +549,13 @@ const SITE_PRODUCT_HEALTH_BLOCKS = (): BlockDef[] => [
   block('site.health.chatgpt', 'table', '能否进 ChatGPT 购物', 'site.chatgpt_shopping'),
 ]
 
+/**
+ * WP448（docs/109 §4.4）：技术体检（没收录、规范网址、跳转与死链、站点地图、hreflang、结构化数据、页面速度）与改版回归。
+ * SEO 与 GEO 看全部（它是体检的主人，只看不改）；建站两条看技术体检（要改的交到它们那里）。
+ */
+const SITE_TECH_AUDIT_BLOCK = (id: string): BlockDef =>
+  block(id, 'table', '技术体检', 'site.tech_audit', { rerun: SITE_HEALTH_RERUN })
+
 const SITE_THEME_BLOCKS = (): BlockDef[] => [
   block('site.theme.copies', 'table', '主题副本与预览', 'site.theme_copies'),
   block('site.theme.pending', 'table', '待发布', 'changes.pending_theme_publish'),
@@ -701,6 +708,12 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
     // WP381：AI 来源流量（实测），和上面 AI 平台里的引用并排
     block('seo.ai_orders', 'stat_tile', 'AI 带来的成交（实测）', 'seo.ai_orders'),
     block('seo.ai_traffic', 'table', 'AI 带来的访问与成交', 'seo.ai_traffic'),
+    // WP448：技术体检、改版回归、每周抢词
+    SITE_TECH_AUDIT_BLOCK('seo.tech_audit'),
+    block('seo.drift', 'table', '改版回归', 'site.drift', {
+      rerun: { path: '/v1/site-health/drift', label: '现在比一次' },
+    }),
+    block('seo.cannibalization', 'table', '两页抢同一组词', 'seo.cannibalization'),
   ],
   // WP67（48 §5.1）：五条渠道职责，面板骨架相同（找人 / 建联 / 合作 / 审核 / 归因）。
   //
@@ -755,8 +768,13 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
    * 这一版把它补上：一块店铺后台的积木都不放，因为这四条职责的 scopes 里
    * 商品与订单是只读的、没有 analytics 写口（19 §3）。
    */
-  'site.shopify-build': () => [...SITE_CHECKLIST_BLOCKS(), ...SITE_TECH_HEALTH_BLOCKS()],
-  'site.shopify-theme': () => SITE_THEME_BLOCKS(),
+  'site.shopify-build': () => [
+    ...SITE_CHECKLIST_BLOCKS(),
+    ...SITE_TECH_HEALTH_BLOCKS(),
+    // WP448：技术体检交来的活在这里看得到
+    SITE_TECH_AUDIT_BLOCK('site.health.tech'),
+  ],
+  'site.shopify-theme': () => [...SITE_THEME_BLOCKS(), SITE_TECH_AUDIT_BLOCK('site.theme.tech')],
   'site.shopify-email': () => SITE_EMAIL_BLOCKS(),
   'site.shopify-apps': () => SITE_APP_BLOCKS(),
   /*

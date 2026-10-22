@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { PageHeader } from '@/components/design/kit'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -106,18 +107,20 @@ export function MeetingsPage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-sm font-semibold">{t('meetings.title')}</h1>
-        <Button
-          size="sm"
-          onClick={() => {
-            setOpen((v) => !v)
-          }}
-        >
-          <Plus aria-hidden />
-          {t('meetings.new')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('meetings.title')}
+        actions={
+          <Button
+            size="sm"
+            onClick={() => {
+              setOpen((v) => !v)
+            }}
+          >
+            <Plus aria-hidden />
+            {t('meetings.new')}
+          </Button>
+        }
+      />
 
       {open ? (
         <Card>

@@ -8,7 +8,7 @@ import type { PositionWorkGroup, PositionWorkItem } from '@agentsws/contracts'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { WsTag } from '@/components/design'
+import { Segmented, WsTag } from '@/components/design'
 import { useApp } from '@/lib/app-context'
 import { localDay } from '@/lib/position-work'
 
@@ -142,22 +142,18 @@ export function WorkCalendar({
           >
             {t('pos2.cal.today')}
           </button>
-          <span className="inline-flex rounded-md border p-0.5 text-xs">
-            {(['month', 'week'] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                aria-pressed={mode === m}
-                data-testid={`work-cal-${m}`}
-                className={`rounded px-2 py-0.5 ${mode === m ? 'bg-accent font-medium' : 'text-muted-foreground'}`}
-                onClick={() => {
-                  onMode(m)
-                }}
-              >
-                {t(`pos2.cal.${m}`)}
-              </button>
-            ))}
-          </span>
+          <Segmented
+            size="sm"
+            label={t('pos2.cal.title', { y: anchor.getFullYear(), m: anchor.getMonth() + 1 })}
+            value={mode}
+            reselect
+            options={(['month', 'week'] as const).map((m) => ({
+              value: m,
+              label: t(`pos2.cal.${m}`),
+              testId: `work-cal-${m}`,
+            }))}
+            onChange={onMode}
+          />
         </span>
       </div>
       <div className="grid grid-cols-7 border-b text-center text-xs text-ws-muted-fg">

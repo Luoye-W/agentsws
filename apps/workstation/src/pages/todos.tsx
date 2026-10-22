@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, MoreHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { PageHeader } from '@/components/design/kit'
 import { HandoffDialog } from '@/components/peers/handoff-dialog'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -310,10 +311,14 @@ export function TodosPage(): React.ReactNode {
   return (
     <div className="flex max-w-3xl flex-col gap-6" data-testid="todos">
       {tabs}
-      <h1 className="flex items-center gap-1 text-base font-semibold">
-        {t('todos.title')}
-        <Hint text={t('todos.drag_hint')} />
-      </h1>
+      <PageHeader
+        title={
+          <>
+            {t('todos.title')}
+            <Hint text={t('todos.drag_hint')} />
+          </>
+        }
+      />
 
       <form
         className="flex gap-2"

@@ -140,13 +140,13 @@ describe('37 §1 第 1 / 3 行：卡片几何与标题', () => {
       expect(screen.getByTestId('deck-body').className).toContain(cls)
   })
 
-  it('标题单行 15px 半粗', () => {
+  // WP456-T2：决定卡标题收进外壳的 `.ws-dcard-title`（16 / 600，规范 §2.6 第 13 条），不再手写 15px
+  it('标题走决定卡外壳的标题档（16 半粗）', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
     const title = screen.getByText(draftCard().title)
-    expect(title.className).toContain('text-[15px]')
-    expect(title.className).toContain('font-semibold')
+    expect(title.className).toContain('ws-dcard-title')
   })
 })
 

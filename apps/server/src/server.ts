@@ -84,7 +84,7 @@ import type {
   ResolveMx,
   WecomSocketFactory,
 } from '@agentsws/channels'
-import { replySuggestStubScript, routeOfPosition } from '@agentsws/channels'
+import { messageRuleStubScript, replySuggestStubScript, routeOfPosition } from '@agentsws/channels'
 import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
 import type {
   AdsCaps,
@@ -146,6 +146,7 @@ import {
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
+  MESSAGE_RULE_OUTBOUND_ACTION,
   marketLanguage,
   normalizeGenuiHost,
   OFFICIAL_CONTENT_SIGNING_PUBLIC_KEYS,
@@ -232,7 +233,7 @@ import {
   ruleFromFact,
   type SearchConsolePort,
 } from '@agentsws/seo-core'
-import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
+import { type RedirectProbe, siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
 import {
   CONTENT_REJECT_TEXT,
   createSkills,
@@ -594,6 +595,17 @@ import { createMatterTitler } from './matter-title.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 import { createMemoryBook, type MemoryReason } from './memory-book.js'
 import { attachMemoryPersistence } from './memory-persist.js'
+import {
+  createMessageFollowUp,
+  isFollowUpCard,
+  type MessageFollowUpService,
+} from './message-follow-up.js'
+import {
+  isMessageRuleCard,
+  messageRuleCardInput,
+  messageRuleDraftCardInput,
+} from './message-rule-cards.js'
+import { createMessageRuleToolExecutor } from './message-rule-tools.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
 import { hasThinkingEffort } from './model-thinking.js'
@@ -852,6 +864,7 @@ import {
   SecretStoreError,
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
+import { driftAlertCards } from './seo-drift-alerts.js'
 import {
   claimRuleCard,
   createSeoService,
@@ -896,6 +909,12 @@ import {
   type SiteHealthService,
   trafficOrdersFromRows,
 } from './site-health.js'
+import {
+  manualRedirectProbe,
+  pageSpeedReader,
+  probeFromPageFetch,
+  type RawFetch,
+} from './site-health-net.js'
 import { createChromeRenderer } from './site-health-render.js'
 import { siteHealthSetupTarget } from './site-health-setup.js'
 import { createSiteHealthToolExecutor } from './site-health-tools.js'
@@ -950,6 +969,7 @@ import {
   bskJsonOf,
   createBrowserWebSearch,
   createOwnBrowserReader,
+  createOwnChromeGate,
   createSearchThrottle,
   type KeylessSearch,
   type NativeSearchPort,
@@ -1391,6 +1411,16 @@ export interface ServerOptions {
    * （托管实例没有）。
    */
   siteHealthRenderer?: PageRenderer | false
+  /**
+   * WP448：技术体检「不跟跳转抓一次」那一口（查跳转链与死链）。不给 = 给了 `siteHealthFetch` / `brandIntakeFetch`
+   * 替身时从替身推一口（不跳）；都没给就是真请求（`redirect: 'manual'`）。
+   */
+  siteHealthProbe?: RedirectProbe
+  /**
+   * WP448：页面速度（PageSpeed Insights 回包）。`false` = 不量；不给 = 给了抓取替身时不量（测试不联网），
+   * 否则调 Google 公开的 PageSpeed Insights（不要 key、不花钱）。
+   */
+  siteHealthPageSpeed?: ((url: string) => Promise<unknown>) | false
   /**
    * WP90（55 §9 Q8）：起订阅登录那棵 dsh 树的工厂（测试注入替身 → 全程不联网、
    * 也不真的装一棵 Cordis 树）。生产不传：第一次有人点"用订阅登录"时才
@@ -2069,6 +2099,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP334（决策 725 / 726）：IM 渠道连上 / 云账号关联上了 → 这个品牌还在等的连接卡复查一遍
     if (e.type === 'connection.changed' || e.type === 'cloud.account_linked')
       setupRecheckSink?.(e.workspace_id as WorkspaceId)
+    // WP448：主题发布生效 / 巡检读到的 App 变了 → 那个品牌跑一次改版回归（不等、不抛）
+    if (e.type === 'site_theme.published' || e.type === 'site.checklist_ran')
+      driftSink?.(
+        e.workspace_id as WorkspaceId,
+        e.type,
+        e.payload !== null && typeof e.payload === 'object'
+          ? (e.payload as Record<string, unknown>)
+          : {},
+      )
     // WP425：关联 / 解除工坊账号 → 各品牌重装一次网关（「自己的用不了时用工坊积分」那条备用跟着有 / 没有）
     if (e.type === 'cloud.account_linked' || e.type === 'cloud.account_unlinked')
       cloudLinkChangedSink?.()
@@ -2084,6 +2123,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let cloudLinkChangedSink: (() => void) | undefined
   /** WP334：晚绑定——连接卡那一套装好之后才挂上（`recheckSetupCards`）。 */
   let setupRecheckSink: ((ws: WorkspaceId) => void) | undefined
+  /** WP448：晚绑定——品牌那一套装好之后才挂上（主题发布 / App 变了跑一次改版回归）。 */
+  let driftSink:
+    | ((ws: WorkspaceId, type: string, payload: Record<string, unknown>) => void)
+    | undefined
   /** WP360：晚绑定——插件配对表在后面才建出来（这个品牌有没有一个没撤掉的插件配上了）。 */
   let extensionPairedRef: ((ws: WorkspaceId) => boolean) | undefined
   /** WP360：晚绑定——需要插件的岗位引导装插件（第一次在岗位上说话时带卡）。 */
@@ -2563,7 +2606,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       providers: [
         stubProvider({
           seed: 7,
-          scripts: [chatAnswerStubScript, emailAnswerStubScript, replySuggestStubScript],
+          scripts: [
+            chatAnswerStubScript,
+            emailAnswerStubScript,
+            replySuggestStubScript,
+            messageRuleStubScript,
+          ],
         }),
       ],
       /*
@@ -2936,12 +2984,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       const sandboxed = kolSandboxIntercept(brand, item)
       if (sandboxed !== undefined) return sandboxed
+      // WP442：催促卡批了 → 从原邮箱在原会话里回一封（已连邮箱的 sendMail：急停、outbox 幂等）
+      const nudged = await brand?.followUp?.deliver(item, opts)
+      if (nudged !== undefined) return nudged
       // WP329：Reddit「发出去」卡批了 → 交给插件填进页面、人点发送（读回之后才记发出记录）
       const redditSent = await brand?.redditWrites?.deliver(item)
       if (redditSent !== undefined) return redditSent
       // WP254（决策 117）：社媒回帖卡批了就发——经这条渠道的出口（Reddit：接口优先、官方号浏览器兜底）
       const socialReply = await brand?.socialService.executor.deliverReply(item)
       if (socialReply !== undefined) return socialReply
+      // WP441：消息规则起草的回信卡批了 → 从收信那只邮箱回（不是这种卡回 undefined）
+      const ruleDraft = await brand?.messages.deliverRuleDraft(item)
+      if (ruleDraft !== undefined) return ruleDraft
       // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
       return (
         (await brand?.chat.deliver(item, opts)) ??
@@ -3407,6 +3461,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 删去处时还没定的卡撤掉（到期作废，不算谁拒的）。
    */
   let outboundCardSeq = 0
+  /** WP441：消息规则的两种卡（「要建这条规则吗」、规则起草的回信）的序号（去重键用）。 */
+  let messageRuleCardSeq = 0
   outboundCard = async (input) => {
     const approver = hasApprovalFlow((await modeOfWorkspace?.(input.workspace_id)) ?? 'company')
       ? (await identity.getWorkspace(input.workspace_id))?.owner_id
@@ -4725,6 +4781,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     minGapMs: 0,
     maxGapMs: 0,
   })
+  /*
+   * WP455（决策 1434）：「用你的 Chrome 搜 Google」那一环的整台机那一份——每小时最多 20 次、
+   * 被 Google 拦了停到北京时间第二天零点（用户的 Chrome 只有一个，几个品牌共用）。读页本身是各品牌那一份
+   * BrowserSkill 读页（WP402，下面装配品牌时晚绑定）。
+   */
+  const ownChromeGate = createOwnChromeGate({
+    now: () => Date.now(),
+    ...(dbDir === undefined ? {} : { file: join(dbDir, 'web-search-own-chrome.json') }),
+  })
   if (webSearchSetup !== undefined)
     process.stdout.write(
       `web search: ${webSearchChannel === undefined ? '没有内置浏览器（没有桌面壳）' : '工坊内置浏览器'}\n`,
@@ -4911,7 +4976,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       googleReads.invalidate()
     })
     /*
-     * WP169：店铺校正改了目标市场 → 给工作区所有者的那条通知（首页告警区一行，点开到设置页
+     * WP169：店铺校正改了目标市场 → 给工作区所有者的那条通知（WP466 起铃铛里一条、原首页告警区，点开到设置页
      * 公司档案）。照 36 §2.2b「`system_alert` → 通知 + 告警块」那条现成的路走，不是卡。
      */
     const storeMarketsNotices = createStoreMarketsNotices({
@@ -4920,7 +4985,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     /*
      * WP294（决策 375）：ChatGPT 订阅存着的退役模型（gpt-5.4 / gpt-5.4-mini）启动时换成了 gpt-5.5 →
-     * 首页告警区一行（照 WP169 同一条路，不是卡）。两处来源：本人的订阅选择（按人）、这个品牌
+     * 铃铛里一条（WP466，原首页告警区；照 WP169 同一条路，不是卡）。两处来源：本人的订阅选择（按人）、这个品牌
      * 模型设置里那条订阅（大家共用，谁打开都看得到）；同一对「从 → 到」只出一行。
      * 模型装配在下面才建好，这里先占位、建好后填上。
      */
@@ -4993,7 +5058,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     /** WP238：取数路由走得通哪一级（云客户端在下面才建好，这里先占位、建好后填上）。 */
     const readLevelHolder: { of?: (route: string) => DataSourceLevel | undefined } = {}
-    /** WP418：日报装配比 `workData` 晚一步建（它要 `workData` 取面板），告警区只同步看一眼。 */
+    /** WP418：日报装配比 `workData` 晚一步建（它要 `workData` 取面板），告警（铃铛同步那一下）只同步看一眼。 */
     let storeDigestRef: StoreDigest | undefined
     const workData: WorkstationDataSource = {
       ...baseWorkData,
@@ -5006,6 +5071,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...retiredModelAlerts(actor.person_id),
           // WP418（自查 B7）：店铺日报查出来的异常（销售骤降 / 断货），当天给店铺管理担着的人
           ...(storeDigestRef?.alerts(actor.person_id) ?? []),
+          // WP448：改版回归里严重的那几条（担 SEO 与 GEO 或整站搭建的人看；点「去处理」到交给建站的那件事）
+          ...driftAlertCards({
+            view: siteHealth.driftView(),
+            now: clock.now(),
+            ...(() => {
+              const a = roles.assignments
+                .listByPerson(actor.person_id, { workspace_id: ws })
+                .find(
+                  (x) =>
+                    x.revoked_at === undefined &&
+                    (x.role_id === 'dtc.seo' || x.role_id === 'site.shopify-build'),
+                )
+              return a === undefined
+                ? {}
+                : {
+                    position: {
+                      position_id: a.id,
+                      role_id: a.role_id,
+                      href: `/positions/${encodeURIComponent(a.id)}/duties/${encodeURIComponent(a.role_id)}`,
+                    },
+                  }
+            })(),
+          }),
           // WP316：广告改动——等你确认提交 / 退回 / 交给你 / 读回对不上（点「去处理」到职责页那一块）
           ...adsNoticeCards({
             rows: adsWiringNow.entries(),
@@ -5245,6 +5333,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP353（决策 912）：这个品牌的联网搜索后端（缓存与暂停记在品牌目录 `web-search/` 下）。
      * 云端 Google 那一路就是上面这个搜索数据接口（接了才走；官方按积分、自带 key 不扣）。
      */
+    // WP455：这个品牌的「你自己的浏览器」读页在下面（WP402 那一份）才建——晚绑定
+    const ownChromeLate: { reader?: () => OwnBrowserReader | undefined } = {}
     const webBrowser: BrowserWebSearch | undefined =
       webSearchSetup === undefined
         ? undefined
@@ -5261,6 +5351,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             keyless: webSearchKeyless,
             native: webSearchNative,
             nativeThrottle: webSearchNativeThrottle,
+            ownChrome: { reader: () => ownChromeLate.reader?.(), gate: ownChromeGate },
             now: () => Date.now(),
             log: (line) => process.stdout.write(`${line}\n`),
           })
@@ -6449,6 +6540,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 邮箱开关，那两样比渠道、运行时都晚建）。渠道问它「这一封能不能直接回」，运行时问它「那张卡为什么没直接回」。
      */
     let emailAutoReplyRef: EmailAutoReply | undefined
+    /** WP442（docs/108 §5.3）：回信跟进（要消息库，消息建好之后才建；消息那一侧晚绑定着取它）。 */
+    let followUpRef: MessageFollowUpService | undefined
     /** WP417（自查 A8 / C23）：客服查询类工具的数据（消息库与聊天车道比记录源晚建，建好再填）。 */
     let supportInboxRef: SupportInboxPort | undefined
     /** WP417（自查 C2 / D9）：运行起草的回复回哪个渠道（聊天车道比运行时晚建，建好再填）。 */
@@ -7097,6 +7190,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             // WP323：记录去处的三个工具（所有职责；配置只出「定规矩」卡）
             recordSinkTools: createRecordSinkToolExecutor({ log: () => outboundLog }),
+            // WP441：一句话写消息规则（所有职责；只出「要建这条规则吗」卡）
+            messageRuleTools: createMessageRuleToolExecutor({
+              messages: () => lateMessages.current,
+            }),
             /*
              * WP331（决策 691）：报告积木——查巡查数据 / 立即巡查（只给担巡查的职责）、查发出记录 / 发布报告（所有职责）。
              * 周报不是固定功能：AI 用官方「自动化任务」建定时，到点用这四个取数、出报告。巡查库只在调工具那一刻才取。
@@ -7346,7 +7443,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP181：官方「自动化任务」的四个工具（装了那个官方插件才挂；执行器是进程那一份）
             automation,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
-            browser: () => browserSettings.forRun(),
+            // WP463：ego 只在 ① 个人用法里接（docs/111 §0 第 4 条）——② 同事互联、③ 公司集体不给
+            browser: () => {
+              const b = browserSettings.forRun()
+              if (b?.mode === 'ego' && (modeOfWorkspaceSync?.(ws) ?? 'company') !== 'solo')
+                return undefined
+              return b
+            },
             // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
             computerUse,
             /*
@@ -7729,6 +7832,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP381（决策 1066）：网站 / 商品体检与 AI 来源流量（这个品牌一份，落在品牌目录的 `site-health.json`）。
      * 只读：公开页面只 GET、店铺走店铺授权的只读口；不一致交给担「店铺管理」的人开一件事。
      */
+    // WP158：连上了就是真读数（`google-reads.ts`）；注入的模拟世界里「连着」却没有真连接的，
+    // 照旧说"读数那一步还没接"。WP448：技术体检读网址检查也走这一口。
+    const searchConsoleOf = (): SearchConsolePort => {
+      const injectedPort = options.searchConsoleFor?.(ws)
+      if (injectedPort !== undefined) return injectedPort
+      const real = googleReads.searchConsole()
+      if (real.connected()) return real
+      return workData.sources().some((s) => s.id === 'gsc' && s.connected)
+        ? pendingSearchConsole()
+        : disconnectedSearchConsole()
+    }
+    /** WP448：技术问题交给建站的哪一条（没人担主题就交整站搭建；都没人担就不派，清单留在报表里）。 */
+    const siteHandoff = async (input: {
+      owner: 'site.shopify-build' | 'site.shopify-theme'
+      title: string
+      text: string
+    }): Promise<{ matter_id: string } | undefined> => {
+      const live = roles.assignments.listByWorkspace(ws).filter((a) => a.revoked_at === undefined)
+      const holder =
+        live.find((a) => a.role_id === input.owner) ??
+        live.find((a) => a.role_id === 'site.shopify-build')
+      if (holder === undefined) return undefined
+      const port = await positionPortFor(ws)
+      const out = await port.open(
+        { workspace_id: ws, person_id: holder.person_id, assignment_id: holder.id },
+        holder.id,
+        {
+          ...fitTaskTitle({ title: input.title, summary: input.text }),
+          role_id: holder.role_id,
+          mode: 'task',
+          detach: true,
+        },
+      )
+      return { matter_id: out.matter.id }
+    }
+    const healthFetch =
+      options.siteHealthFetch ?? options.brandIntakeFetch ?? (globalThis.fetch as never)
+    const stubbedFetch =
+      options.siteHealthFetch !== undefined || options.brandIntakeFetch !== undefined
     const siteHealth = createSiteHealthService({
       clock,
       newId: (prefix) =>
@@ -7743,7 +7885,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         if (domain === undefined || domain === '') return undefined
         return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`
       },
-      fetch: options.siteHealthFetch ?? options.brandIntakeFetch ?? (globalThis.fetch as never),
+      fetch: healthFetch,
+      // WP448：技术体检的跳转 / 死链、网址检查、目标市场、页面速度、交建站
+      probe:
+        options.siteHealthProbe ??
+        (stubbedFetch
+          ? probeFromPageFetch(healthFetch)
+          : manualRedirectProbe(globalThis.fetch as unknown as RawFetch)),
+      indexStatus: async () => {
+        const gsc = searchConsoleOf()
+        if (!gsc.connected()) return undefined
+        // 真读数那一口的页面清单是读行时一起拉回来的
+        await gsc.rows({ end: clock.now() }).catch(() => [])
+        return gsc.pages()
+      },
+      markets: () => onboardingRef?.brandProfile(ws).markets?.length ?? 1,
+      ...(options.siteHealthPageSpeed === false ||
+      (options.siteHealthPageSpeed === undefined && stubbedFetch)
+        ? {}
+        : {
+            pageSpeed: options.siteHealthPageSpeed ?? pageSpeedReader(globalThis.fetch as never),
+          }),
+      handoff: (input) => siteHandoff(input),
       renderer: () =>
         options.siteHealthRenderer === false || hostedInstance
           ? undefined
@@ -7789,6 +7952,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       // WP381：周报里和引用数并排的 AI 来源流量（实测）
       aiTraffic: () => siteHealth.aiTraffic(),
+      // WP448：改版回归的「注意 / 知道一下」进当天简报一行
+      drift: () => siteHealth.driftView().last,
       routeScopeManager,
       clock,
       random,
@@ -7812,15 +7977,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       // WP158：连上了就是真读数（`google-reads.ts`）；注入的模拟世界里「连着」却没有真连接的，
       // 照旧说"读数那一步还没接"
-      searchConsole: (): SearchConsolePort => {
-        const injectedPort = options.searchConsoleFor?.(ws)
-        if (injectedPort !== undefined) return injectedPort
-        const real = googleReads.searchConsole()
-        if (real.connected()) return real
-        return workData.sources().some((s) => s.id === 'gsc' && s.connected)
-          ? pendingSearchConsole()
-          : disconnectedSearchConsole()
-      },
+      searchConsole: searchConsoleOf,
       ga4: () => googleReads.ga4Conversions(),
       ga4Note: () => googleReads.ga4Note(),
       ga4Window: () => googleReads.ga4Window?.(),
@@ -8816,6 +8973,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }
         })
       },
+      // WP441 / WP442：今天的简报到点、分拣时抽「对方说哪天答复」都按品牌时区算；列表 / 会话上挂回信跟进、来信撤卡
+      tzOffsetMinutes: () => workData.tz_offset_minutes,
+      followUp: () => followUpRef,
       // WP440：「全部」时间线里 AI 直接回的那几封，与「这封不该直接回」
       autoReplies: (matter_ids) => emailAutoReplyRef?.forMatters(matter_ids) ?? [],
       flagAutoReply: (approval_item_id, by) =>
@@ -8899,8 +9059,194 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
         }
       },
+      /*
+       * WP441（docs/108 §5.1 / §5.6）：消息规则。动作全是不往外发的：记到某处进发出记录（动作 `message_rule`，
+       * 只写规则点名的那个去处）、告诉我一声 / 简报进铃铛「消息」类、起草回复出卡（批了才从收信那只邮箱回）。
+       */
+      ruleSinks: () =>
+        outboundLog
+          .sinks(ws)
+          .filter((s) => s.state !== 'pending_confirm')
+          .map((s) => ({ id: s.id, name: s.name })),
+      notifyMessages: (n) => {
+        notifications.notify({ workspace_id: ws, category: 'messages', ...n })
+      },
+      notifyMessageRuleChange: async ({ by, action, rule }) => {
+        // 个人邮箱的规则只有写的人看得见：不告诉别人
+        if (rule.scope.kind === 'personal') return
+        const who = (await identity.getPerson(by).catch(() => undefined))?.name ?? by
+        const text =
+          action === 'restored'
+            ? `${who} 撤回了消息规则「${rule.name}」的删除`
+            : `${who} ${action === 'created' ? '建了' : action === 'updated' ? '改了' : '删了'}消息规则「${rule.name}」`
+        // 决策 243：规则交给某个岗位 → 告诉做那个岗位的人；没交给岗位 → 告诉品牌里的人
+        const handTo = rule.actions.find((a) => a.type === 'hand_to')
+        const template =
+          handTo?.type === 'hand_to'
+            ? org.positions().find((t) => t.id === handTo.position_id)
+            : undefined
+        const duties = new Set(template?.roles.map((r) => r.role) ?? [])
+        const to =
+          duties.size === 0
+            ? (await identity.members(ws))
+                .filter((m) => m.left_at === undefined)
+                .map((m) => m.person_id)
+            : roles.assignments
+                .listByWorkspace(ws)
+                .filter((a) => a.revoked_at === undefined && duties.has(a.role_id))
+                .map((a) => a.person_id)
+        for (const person_id of new Set(to)) {
+          if (person_id === by) continue
+          notifications.notify({
+            workspace_id: ws,
+            person_id,
+            category: 'team',
+            text,
+            href: '/messages?panel=rules',
+            key: `message_rule_change:${rule.id}`,
+          })
+        }
+      },
+      recordRuleMessage: ({ record, triage, rules: hitRules, sink_id, sink_name }) => {
+        const sinks = outboundLog.sinks(ws)
+        const want = sink_name?.trim().toLowerCase()
+        const target =
+          (sink_id === undefined ? undefined : sinks.find((s) => s.id === sink_id)) ??
+          (want === undefined || want === ''
+            ? undefined
+            : sinks.find((s) => s.name.trim().toLowerCase() === want))
+        outboundLog.record(ws, {
+          source_key: `message_rule:${record.id}:${target?.id ?? sink_name ?? 'local'}`,
+          sent_at: record.date,
+          channel: record.source,
+          action: MESSAGE_RULE_OUTBOUND_ACTION,
+          kind: MESSAGE_RULE_OUTBOUND_ACTION,
+          counterpart: record.from.name ?? record.from.email,
+          thread_title: record.subject,
+          subject: record.subject,
+          // 不是我们发出去的东西：内容一格放摘要，原文不进这一行
+          content: triage.summary,
+          message: {
+            sender: record.from.email,
+            received_at: record.date,
+            ...(triage.kind === undefined ? {} : { kind: triage.kind }),
+            summary: triage.summary,
+            rule_names: hitRules.map((r) => r.name),
+            link: `/messages?view=all&thread=${encodeURIComponent(record.thread_id)}`,
+          },
+          // 点名的去处没配好（只说了名字）：只记在本机的记录里
+          only_sinks: target === undefined ? [] : [target.id],
+        })
+      },
+      stageRuleCard: async (input) => {
+        messageRuleCardSeq += 1
+        const item = await approvals.create(
+          messageRuleCardInput({
+            ...input,
+            seq: `${Date.parse(clock.now()).toString(36)}_${messageRuleCardSeq}`,
+          }),
+        )
+        return item.state === 'blocked' ? undefined : item.id
+      },
+      stageRuleDraft: async ({ record, rule, subject, text, position_id }) => {
+        // 有对口岗位进那个岗位的人；没有进首页（品牌里第一个持岗位的人）
+        const template =
+          position_id === undefined ? undefined : org.positions().find((t) => t.id === position_id)
+        const duties = template?.roles.map((r) => r.role) ?? []
+        const holder =
+          (duties.length === 0 ? undefined : positionFor(ws, duties)) ?? firstPositionOf(ws)
+        if (holder === undefined) return undefined
+        messageRuleCardSeq += 1
+        const item = await approvals.create(
+          messageRuleDraftCardInput({
+            workspace_id: ws,
+            to: {
+              person_id: holder.person_id,
+              assignment_id: holder.assignment_id,
+              role_id: holder.role_id,
+            },
+            message_id: record.id,
+            thread_id: record.thread_id,
+            account: record.account,
+            from: {
+              email: record.from.email,
+              ...(record.from.name === undefined ? {} : { name: record.from.name }),
+            },
+            subject,
+            text,
+            rule,
+            seq: `${Date.parse(clock.now()).toString(36)}_${messageRuleCardSeq}`,
+          }),
+        )
+        return item.state === 'blocked' ? undefined : item.id
+      },
+      // 用工坊积分时试跑大概花多少（照云上价目估；用自己的模型就不写）
+      trialCredits: (calls, chars) => {
+        const m = effectiveModels()
+        if (!m.configured()) return undefined
+        const ref = m.defaultRef()
+        const official =
+          m.chatChoices().find((c) => c.id === `${ref.provider}/${ref.model}`)?.official === true
+        if (!official) return undefined
+        return chatCredits(pricingCatalog.current()?.pricing, ref.model, {
+          input_tokens: Math.ceil(chars / 4),
+          output_tokens: calls * 200,
+        })
+      },
     })
     lateMessages.current = messages
+    /*
+     * WP442（docs/108 §5.3 / M4，Luoye 10-21）：**回信跟进**——发出去 N 个工作日没回 → 出卡附催促草稿。
+     * 卡走同一条审批总线：归岗位的会话给做那个岗位的人，没归属的给品牌里第一个持岗位的人（消息页「等对方回」
+     * 就地批，决策 1452）；批了经执行器 → 这里的 deliver → 已连邮箱 sendMail（急停、outbox 幂等）。
+     */
+    followUpRef = createMessageFollowUp({
+      workspace_id: ws,
+      clock,
+      appendEvent,
+      store: messages.store,
+      accounts: () => connections.mailAccounts().map((a) => a.address),
+      tz: () => workData.tz_offset_minutes,
+      otherFollowUp: (thread_id, refs) => messages.otherFollowUp(thread_id, refs),
+      recipientFor: (position_id) => {
+        if (position_id === undefined) return firstPositionOf(ws)
+        const template = org.positions().find((t) => t.id === position_id)
+        const duties = template?.roles.map((r) => r.role) ?? []
+        return duties.length === 0 ? firstPositionOf(ws) : positionFor(ws, duties)
+      },
+      approvals,
+      applyApproval: (id) => txn.executor.applyApproval(id),
+      cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
+      sendMail: (input) => channels.sendMail(input),
+      halt: brandHalt,
+      models: gatewayProxy,
+      modelReady: () => {
+        const models = effectiveModels()
+        return models.configured() && models.defaultRef().provider !== 'stub'
+      },
+      voice: async (position_id) => {
+        const template =
+          position_id === undefined ? undefined : org.positions().find((t) => t.id === position_id)
+        const duties = template?.roles.map((r) => r.role) ?? []
+        const holder = duties.length === 0 ? undefined : positionFor(ws, duties)
+        const held = holder !== undefined && duties.includes(holder.role_id) ? holder : undefined
+        const role_id = held?.role_id ?? 'common.member'
+        const resolved = await skills.registry
+          .resolve(BRAND_VOICE_SKILL, {
+            person_id: held?.person_id ?? firstPositionOf(ws)?.person_id ?? person.id,
+            workspace_id: ws,
+            role_id,
+          })
+          .catch(() => undefined)
+        return supportVoiceSection(role_id, brandVoiceCard(resolved))?.text
+      },
+      brandLanguage: () => {
+        const profile = onboardingRef?.brandProfile(ws)
+        const market = profile?.markets?.[0]
+        return market === undefined ? undefined : marketLanguage(market, profile?.market_languages)
+      },
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
     /*
      * WP440（docs/108 M9，Luoye 10-21）：**邮件客服也按把握直接回**——照在线客服 WP428 那一套。
      * 判断层的三道自主门放行（`auto_reply`）**且**置信度过线才直接发；走审批总线的自动批路径
@@ -9241,6 +9587,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ownBrowserMemo = { path, reader: createOwnBrowserReader({ bsk: bskJsonOf(path) }) }
       return ownBrowserMemo.reader
     }
+    ownChromeLate.reader = ownBrowserReader
     const amazonOwnHolder = ():
       | { person_id: string; assignment_id: string; role_id: string }
       | undefined => {
@@ -10195,6 +10542,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(startRun === undefined ? {} : { startRun }),
       channels,
       messages,
+      followUp: followUpRef,
       chat,
       chatWidget,
       supportJudgment,
@@ -10206,6 +10554,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       async dispose() {
         await chat.close()
         messages.close()
+        followUpRef?.close()
         await channels.close()
         liveData?.close()
         connections.close()
@@ -10247,6 +10596,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP442：催促卡定了——批了过取消窗口施行；再等等 → 撤卡顺延 3 个工作日；不用跟了 → 停
+    if (isFollowUpCard(item)) {
+      await (await brands?.forWorkspace(item.workspace_id))?.followUp?.onDecided(item)
+      return
+    }
     // WP428：全自动——建议卡点了 → 开 / 记下先不开；同类卡定了 → 看够不够条件、出没出事
     await autopilot.afterDecided(item).catch(() => undefined)
     if (isAutopilotCard(item)) return
@@ -10259,6 +10613,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     // WP323：记录去处的「定规矩」卡被决定 → 生效 / 换成新对照 / 不留（第一次就说不用）
     if (isRecordSinkCard(item)) return outboundLog.onDecided(item)
+    // WP441：「要建这条规则吗」卡被决定 → 建了才生效（勾了「也处理过去 30 天的」顺手处理）
+    if (isMessageRuleCard(item))
+      return (await brands?.forWorkspace(item.workspace_id))?.messages.rules.onCardDecided(item)
     // WP284（决策 275）：「以后都这样」批了（选「按提议改」）→ 这条职责的规矩里多一句；没批 / 维持现状什么都不落
     if (isInstructionRuleCard(item)) {
       roleRules.onDecided(item)
@@ -10464,6 +10821,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   const brandModules: BrandModules = brands
   /*
+   * WP448（docs/109 §4.4）：主题发布生效 → 跑一次改版回归，指到是哪张发布卡；巡检读到的已装 App 和上次不一样 →
+   * 也跑一次。只对已经装起来的品牌（`peek`），没装起来的等每周那一次兜底。
+   */
+  driftSink = (ws, type, payload) => {
+    const health = brandModules.peek(ws)?.siteHealth
+    if (health === undefined) return
+    if (type === 'site_theme.published') {
+      const change_id = typeof payload.change_id === 'string' ? payload.change_id : undefined
+      void health
+        .drift({
+          kind: 'theme_publish',
+          ...(change_id === undefined ? {} : { change_id }),
+          label: '主题发布',
+        })
+        .catch(() => undefined)
+      return
+    }
+    const apps = payload.apps_installed
+    if (Array.isArray(apps))
+      void health
+        .appsSeen(apps.filter((a): a is string => typeof a === 'string'))
+        .catch(() => undefined)
+  }
+  /*
    * WP429：站内通知从事件里认人、认标题——按品牌现取（名字走身份层、卡走审批总线、
    * 交出去的那件事走那个品牌的工作模型；那个品牌还没装起来就只给标题兜底）。
    */
@@ -10569,7 +10950,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP429：演示世界里铃铛里放几条（截图看得出样子）
   if (mount !== undefined) {
     const owner = (await identity.getWorkspace(workspace.id))?.owner_id
-    if (owner !== undefined) seedDemoNotifications(notifications, workspace.id, owner, clock.now())
+    if (owner !== undefined) {
+      // WP466：铃铛里那条演示用的店铺日报异常，点了去店铺管理的职责页
+      const store = roles.assignments
+        .listByPerson(owner, { workspace_id: workspace.id })
+        .find((a) => a.revoked_at === undefined && a.role_id === 'dtc.store')
+      seedDemoNotifications(notifications, workspace.id, owner, clock.now(), {
+        ...(store === undefined
+          ? {}
+          : { store: `/positions/${encodeURIComponent(store.id)}/duties/dtc.store` }),
+      })
+    }
   }
   if (mount !== undefined) {
     seedDemoKol(boot.kol, clock.now())
@@ -11008,8 +11399,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP418（自查 B7 / B13）：店铺日报 + 异常提醒；网站体检每周一自动跑
     registerStoreDigest(s, {
       digest: async () => (await of()).storeDigest?.run() ?? { skipped: 'not_installed' },
-      siteHealth: async () =>
-        (await (await of()).siteHealth?.run()) ?? { skipped: 'not_installed' },
+      // WP448：同一轮里另跑一次改版回归（每周兜底；主题发布 / App 装卸之后另有即时那一次）
+      siteHealth: async () => {
+        const health = (await of()).siteHealth
+        if (health === undefined) return { skipped: 'not_installed' }
+        const run = await health.run()
+        const drift = await health.drift({ kind: 'weekly' }).catch(() => undefined)
+        return { ...run, ...(drift === undefined ? {} : { drift_run: drift.id }) }
+      },
     })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
     registerPrMonitor(s, {
@@ -11072,7 +11469,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     // WP57：聊天求助超时；WP125：首响 SLA
     s.register(CHAT_ASSIST_TIMEOUT_HANDLER, async () => (await of()).chat.sweepAssistTimeouts())
-    s.register(SUPPORT_SLA_HANDLER, async () => (await of()).supportJudgment.sweepSla())
+    // WP442（docs/108 §5.3）：回信跟进挂在同一拍上（不另起定时），自己一小时最多跑一次
+    s.register(SUPPORT_SLA_HANDLER, async () => {
+      const b = await of()
+      const sla = await b.supportJudgment.sweepSla()
+      const followUp = await b.followUp?.sweepIfDue().catch(() => undefined)
+      return followUp === undefined ? sla : { ...sla, follow_up: followUp }
+    })
   }
 
   /**
@@ -13713,6 +14116,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
       writeNotes: assistantNotes.write,
       retireNotes: assistantNotes.retireMany,
+      // WP441：一句话写消息规则（转规则用人这一轮的原话；只出「要建吗」卡）
+      messageRules: {
+        propose: (actor, input) =>
+          brand.messages.rules.propose(
+            {
+              person_id: actor.person_id,
+              ...(actor.assignment_id === undefined ? {} : { assignment_id: actor.assignment_id }),
+            },
+            input,
+          ),
+        list: async (actor) =>
+          (await brand.messages.port.messageRules?.({
+            workspace_id: ws,
+            person_id: actor.person_id,
+            assignment_id: actor.assignment_id ?? '',
+          })) ?? { rules: [] },
+      },
       open: async (actor, input) => {
         const port = await positionPortFor(ws)
         const out = await port.open(positionActor(actor), input.position_id, {
@@ -14642,10 +15062,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const siteHealthViewOf = (svc: SiteHealthService): SiteHealthView => {
     const run = svc.latest()
     const traffic = svc.lastTraffic()
+    const drift = svc.driftView()
     return {
       ...(run === undefined ? {} : { run }),
       ...(traffic === undefined ? {} : { ai_traffic: traffic }),
       settings: svc.settings(),
+      ...(drift.last === undefined ? {} : { drift }),
     }
   }
   const siteHealthPort: SiteHealthPort = {
@@ -14664,6 +15086,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     saveSettings: async (actor, input) => {
       const svc = await siteHealthOf(actor.workspace_id)
       svc.saveSettings(input)
+      return siteHealthViewOf(svc)
+    },
+    // WP448：面板「改版回归」块头的「现在比一次」
+    drift: async (actor) => {
+      const svc = await siteHealthOf(actor.workspace_id)
+      await svc.drift({ kind: 'manual' })
       return siteHealthViewOf(svc)
     },
   }
@@ -15400,6 +15828,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           throw err
         }
       },
+      // WP463：ego 装没装、能不能跑（现探一次 `ego-browser skill`）
+      egoStatus: () => browserSettings.egoStatus(),
       /*
        * WP95（36 §11）：第三栏「运行中的浏览器」读的那一份。
        * 纯投影——把这次运行的事件折成"哪种执行器、当前域、最近一次导航 / 拒绝、
@@ -16510,6 +16940,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isAssistantNotesCard(out) ||
           // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
           isRecordSinkCard(out) ||
+          // WP441：「要建这条规则吗」卡（建 = 生效）
+          isMessageRuleCard(out) ||
           // WP416：建合作卡点了「不要」→ 那一行删掉；挑人清单卡批了 → 按清单建合作
           isKolCollaborationCard(out) ||
           out.kind === 'kol_campaign' ||

@@ -7,9 +7,11 @@
  */
 export * from './b2b-signals.js'
 export * from './folders.js'
+export * from './follow-up.js'
 export * from './intake.js'
 export * from './kind.js'
 export * from './labels.js'
+export * from './message-rules.js'
 export * from './parse.js'
 export * from './query.js'
 export * from './remote-images.js'

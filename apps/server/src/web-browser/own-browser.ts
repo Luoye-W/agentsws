@@ -10,9 +10,13 @@
  * 没有就是 `undefined`（取数链跳过这一条）。两个更新开关和 WP92 一样永远带着（不自己换版本、不去查新版本）。
  *
  * 一个品牌一份；同一轮里连着读几页时复用同一个窗口，闲 30 秒就关。
+ *
+ * WP455（docs/110 §3，决策 1434）：同一个窗口也给「用你的 Chrome 搜 Google」用（{@link OwnBrowserReader.serp}）：
+ * 还是那四个读动作；`navigate` 等到 `domcontentloaded`（Google 结果页是服务端直接给的，不必等整页停止加载），
+ * 读回来如果还是过渡页，隔 1 秒再 `get-html` 一次，最多等 8 秒，再交给调用方解析。
  */
 import { execFile } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import type { BrowserTextRead } from '@agentsws/brand-intake'
 
 /** 跑一次 `bsk <args> --json`，交回解析好的那份 JSON（失败抛错，错里带它自己的那句话）。 */
@@ -24,6 +28,10 @@ export const OWN_BROWSER_PAGE_TIMEOUT_MS = 30_000
 export const OWN_BROWSER_MAX_BYTES = 8_000_000
 /** 窗口闲多久就关。 */
 export const OWN_BROWSER_IDLE_MS = 30_000
+/** WP455：搜索结果页读回来还是过渡页时，最多再等多久（毫秒）。 */
+export const OWN_BROWSER_SERP_SETTLE_MS = 8_000
+/** WP455：等过渡页跳走时，隔多久再读一次。 */
+export const OWN_BROWSER_SERP_POLL_MS = 1_000
 
 const NO_UPDATE_MANIFEST = 'http://127.0.0.1:1/agentsws-no-update-check.json'
 
@@ -90,6 +98,19 @@ export function dataTextOfHtml(html: string): string {
   return pre?.[1] === undefined ? html : unescapeHtml(pre[1].replace(/<[^>]+>/gu, ''))
 }
 
+/** WP455：搜索结果页读一次的结果（HTML 原文，解析与判被拦在调用方）。 */
+export type OwnBrowserSerpRead =
+  | {
+      ok: true
+      final_url: string
+      html: string
+      /** 过渡页后又读了几次。 */
+      rereads: number
+      /** 等满 8 秒还是「还没好」。 */
+      settled: boolean
+    }
+  | { ok: false; reason: 'timeout' | 'failed'; message: string }
+
 export interface OwnBrowserReader {
   /**
    * 读一个地址：`data` = 数据地址（JSON / 文本，取 `<pre>` 里的原文）；`html` = 网页原文（Amazon 商品页）。
@@ -98,23 +119,36 @@ export interface OwnBrowserReader {
   read(url: string, kind: 'data' | 'html'): ReturnType<BrowserTextRead>
   /** 只读数据地址那种（给独立站的取数链）。 */
   dataRead: BrowserTextRead
+  /**
+   * WP455：读一个搜索结果页（只给 Google 用）。`pending(html, final_url)` 回 true = 还是过渡页，
+   * 隔 1 秒再读一次，最多 8 秒。老替身没有这一口 = 这条路没有。
+   */
+  serp?(
+    url: string,
+    opts: { pending(html: string, final_url: string): boolean },
+  ): Promise<OwnBrowserSerpRead>
   /** 关掉自己开着的窗口（品牌下线 / 测试收尾）。 */
   close(): Promise<void>
 }
 
 export interface OwnBrowserReaderOptions {
   bsk: BskJson
-  /** 生成 request-id（测试给固定的）。 */
+  /** 生成 request-id（bsk 要求 `<过期毫秒>:<UUID>`，最长十分钟；测试给固定的）。 */
   newId?(): string
   idleMs?: number
+  /** WP455：等过渡页用的（测试给假的）。 */
+  sleep?(ms: number): Promise<void>
+  now?(): number
   log?(message: string, fields?: Record<string, unknown>): void
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 
 export function createOwnBrowserReader(options: OwnBrowserReaderOptions): OwnBrowserReader {
-  const newId = options.newId ?? (() => `agentsws-${randomBytes(6).toString('hex')}`)
+  const newId = options.newId ?? (() => `${Date.now() + 9 * 60_000}:${randomUUID()}`)
   const idleMs = options.idleMs ?? OWN_BROWSER_IDLE_MS
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+  const now = options.now ?? (() => Date.now())
   let session: string | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let queue: Promise<unknown> = Promise.resolve()
@@ -134,21 +168,36 @@ export function createOwnBrowserReader(options: OwnBrowserReaderOptions): OwnBro
     timer.unref?.()
   }
 
+  /** 还没开窗口就开一个（后台、不抢焦点）；开不出来回 `undefined`。 */
+  const ensureSession = async (): Promise<string | undefined> => {
+    if (session === undefined) {
+      // bsk 0.3.3：先登记请求（--prepare）再拿同一个 id 开窗口，否则报「request is not prepared」。
+      // 决策 1496：Mac 上 --no-focus 的窗口照样会出现在屏幕上，开小一点（400×300）不显眼
+      const id = newId()
+      await options.bsk(['session', 'request', id, '--prepare'], OWN_BROWSER_PAGE_TIMEOUT_MS)
+      const started = await options.bsk(
+        ['session', 'start', '--request-id', id, '--no-focus', '--width', '400', '--height', '300'],
+        OWN_BROWSER_PAGE_TIMEOUT_MS,
+      )
+      session = str(started.session_id)
+    }
+    return session
+  }
+  const getHtml = async (s: string): Promise<Record<string, unknown>> =>
+    options.bsk(
+      ['get-html', '--session', s, '--max-bytes', String(OWN_BROWSER_MAX_BYTES)],
+      OWN_BROWSER_PAGE_TIMEOUT_MS,
+    )
+
   const once = async (url: string, kind: 'data' | 'html'): ReturnType<BrowserTextRead> => {
     try {
-      if (session === undefined) {
-        const started = await options.bsk(
-          ['session', 'start', '--request-id', newId(), '--no-focus'],
-          OWN_BROWSER_PAGE_TIMEOUT_MS,
-        )
-        session = str(started.session_id)
-        if (session === undefined) return { ok: false, message: '插件没开出窗口' }
-      }
+      const sid = await ensureSession()
+      if (sid === undefined) return { ok: false, message: '插件没开出窗口' }
       const nav = await options.bsk(
         [
           'navigate',
           '--session',
-          session,
+          sid,
           '--wait-until',
           'load',
           '--timeout',
@@ -157,10 +206,7 @@ export function createOwnBrowserReader(options: OwnBrowserReaderOptions): OwnBro
         ],
         OWN_BROWSER_PAGE_TIMEOUT_MS + 5_000,
       )
-      const got = await options.bsk(
-        ['get-html', '--session', session, '--max-bytes', String(OWN_BROWSER_MAX_BYTES)],
-        OWN_BROWSER_PAGE_TIMEOUT_MS,
-      )
+      const got = await getHtml(sid)
       touch()
       const html = str(got.html) ?? ''
       return {
@@ -179,19 +225,63 @@ export function createOwnBrowserReader(options: OwnBrowserReaderOptions): OwnBro
     }
   }
 
+  /** WP455：搜索结果页——打开、读回；还是过渡页就隔 1 秒再读，最多 8 秒。 */
+  const serpOnce = async (
+    url: string,
+    pending: (html: string, final_url: string) => boolean,
+  ): Promise<OwnBrowserSerpRead> => {
+    try {
+      const sid = await ensureSession()
+      if (sid === undefined) return { ok: false, reason: 'failed', message: '插件没开出窗口' }
+      const nav = await options.bsk(
+        [
+          'navigate',
+          '--session',
+          sid,
+          '--wait-until',
+          'domcontentloaded',
+          '--timeout',
+          `${OWN_BROWSER_PAGE_TIMEOUT_MS}ms`,
+          url,
+        ],
+        OWN_BROWSER_PAGE_TIMEOUT_MS + 5_000,
+      )
+      const finalUrl = str(nav.final_url) ?? str(nav.url) ?? url
+      let html = str((await getHtml(sid)).html) ?? ''
+      let rereads = 0
+      const t0 = now()
+      while (pending(html, finalUrl) && now() - t0 < OWN_BROWSER_SERP_SETTLE_MS) {
+        await sleep(OWN_BROWSER_SERP_POLL_MS)
+        html = str((await getHtml(sid)).html) ?? ''
+        rereads += 1
+      }
+      touch()
+      return { ok: true, final_url: finalUrl, html, rereads, settled: !pending(html, finalUrl) }
+    } catch (e) {
+      await stop()
+      const message = e instanceof Error ? e.message : String(e)
+      options.log?.('你自己的浏览器这一页搜索没读成', { message })
+      return {
+        ok: false,
+        reason: /timed? ?out|timeout|超时/iu.test(message) ? 'timeout' : 'failed',
+        message: `插件没读成（${message}）`,
+      }
+    }
+  }
+
   /** 一次只读一页（同一个窗口）。 */
-  const read = (url: string, kind: 'data' | 'html'): ReturnType<BrowserTextRead> => {
-    const next = queue.then(
-      () => once(url, kind),
-      () => once(url, kind),
-    )
+  const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
+    const next = queue.then(task, task)
     queue = next.catch(() => undefined)
     return next
   }
+  const read = (url: string, kind: 'data' | 'html'): ReturnType<BrowserTextRead> =>
+    enqueue(() => once(url, kind))
 
   return {
     read,
     dataRead: (url) => read(url, 'data'),
+    serp: (url, opts) => enqueue(() => serpOnce(url, opts.pending)),
     close: stop,
   }
 }

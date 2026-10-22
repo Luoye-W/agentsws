@@ -17,6 +17,7 @@
  *   「需要补素材」并进「修改」（点开同一个框：说一句怎么改，或贴素材）；
  * - **`···`**：只留真正少用的（主次都排不上的动作）；没有就不出。
  */
+import { FOLLOW_UP_CARD_FORM } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsws/deck'
 import { MoreHorizontal } from 'lucide-react'
@@ -57,12 +58,22 @@ export function quickActions(card: DeckCard): DeckAction[] {
     (card.detail.payload as { kind?: unknown } | undefined)?.kind === 'google_alert_change' ||
     (typeof form === 'string' && form.startsWith('service_')) ||
     // WP406：岗位更新的「全部应用 / 这次跳过」在卡身里（带选项）
-    form === 'content_update_digest'
-  return card.available_actions
-    .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
-    .filter((a) => !(bodyPrimary && a === 'approve'))
-    .sort((a, b) => rank(a) - rank(b))
-    .slice(0, MAX_QUICK_ACTIONS)
+    form === 'content_update_digest' ||
+    // WP441：「要建这条规则吗」——「建」要带上「也处理过去 30 天的」那个勾，在卡身里
+    form === 'message_rule' ||
+    // WP442：催促卡的「发出」「修改」都在卡身里（就地改字、带着改过的那一版批）
+    form === FOLLOW_UP_CARD_FORM
+  return (
+    card.available_actions
+      .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
+      .filter((a) => !(bodyPrimary && a === 'approve'))
+      // WP441：「要建这条规则吗」的「修改」在卡身里（把原话带回规则面板）；WP442 催促卡的「修改」也在卡身里
+      .filter(
+        (a) => !((form === 'message_rule' || form === FOLLOW_UP_CARD_FORM) && a === 'instruct'),
+      )
+      .sort((a, b) => rank(a) - rank(b))
+      .slice(0, MAX_QUICK_ACTIONS)
+  )
 }
 
 /**
@@ -79,6 +90,11 @@ export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) 
   if ((card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff') {
     if (a === 'approve') return t('handoff.accept')
     if (a === 'reject') return t('handoff.decline')
+  }
+  // WP442：催促卡底下那排是「再等等」（顺延 3 个工作日）/「不用跟了」
+  if ((card.detail.payload as { form?: unknown } | undefined)?.form === FOLLOW_UP_CARD_FORM) {
+    if (a === 'snooze') return t('follow_up.verb.wait')
+    if (a === 'reject') return t('follow_up.verb.stop')
   }
   if (themePublish(card)) {
     if (a === 'approve') return t('verb.publish_theme.approve')
@@ -184,7 +200,8 @@ export function DeckActionBar({
         </span>
       ) : null}
       {extra}
-      {optionMissing === true ? (
+      {/* 主按钮在卡身里的卡（底下没有「通过」）不出「先选一个」 */}
+      {optionMissing === true && quick.includes('approve') ? (
         <span className="text-xs text-muted-foreground">{t('deck.option_required')}</span>
       ) : null}
       {/* WP414：`···` 只留真正少用的（主次都排不上的动作）；没有就不出 */}

@@ -47,7 +47,7 @@ import type {
   SetModelDefaultsInput,
   SetModelImageInput,
 } from '@agentsws/api'
-import { replySuggestStubScript } from '@agentsws/channels'
+import { messageRuleStubScript, replySuggestStubScript } from '@agentsws/channels'
 import type {
   Attribution,
   Clock,
@@ -531,7 +531,7 @@ export interface ModelsAssembly {
   exportSettings(): ModelSettingsSnapshot
   /**
    * WP294：启动时被自动换掉的退役订阅模型里，还该提醒的那几条（没过期、人没再改过）。
-   * 首页告警区据此出一行。
+   * 据此出一张系统卡（WP466 起在铃铛里一条，原首页告警区）。
    */
   retiredSwaps(): RetiredProviderSwap[]
   /**
@@ -2375,7 +2375,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       providers.push(
         stubProvider({
           seed: 7,
-          scripts: [chatAnswerStubScript, emailAnswerStubScript, replySuggestStubScript],
+          scripts: [
+            chatAnswerStubScript,
+            emailAnswerStubScript,
+            replySuggestStubScript,
+            messageRuleStubScript,
+          ],
         }),
       )
     // WP127 / WP274：生图单独一档，每次出图前按 `imageRoute()` 现解析（单独指定 > 文字模型同厂商 > 云）

@@ -210,10 +210,19 @@ describe('WP402 · 独立站：云端代读与你自己的浏览器', () => {
 
 function fakeBsk(pages: Record<string, string>, fail?: string) {
   const calls: string[][] = []
+  const prepared = new Set<string>()
   const bsk: BskJson = async (args) => {
     calls.push(args)
     const [cmd, sub] = args
-    if (cmd === 'session' && sub === 'start') return { session_id: 'sess_1' }
+    // bsk 0.3.3：开窗口前必须先 `session request <id> --prepare`，否则报 not prepared
+    if (cmd === 'session' && sub === 'request' && args[3] === '--prepare') {
+      prepared.add(args[2] as string)
+      return { state: 'prepared', request_id: args[2] }
+    }
+    if (cmd === 'session' && sub === 'start') {
+      if (!prepared.has(args[3] as string)) throw new Error('request is not prepared')
+      return { session_id: 'sess_1' }
+    }
     if (cmd === 'session' && sub === 'stop') return { ok: true }
     if (cmd === 'navigate') {
       const url = args.at(-1) as string
@@ -250,7 +259,18 @@ describe('WP402 · 你自己的浏览器（只读）', () => {
     await reader.dataRead(`${RIVAL}/robots.txt`)
     const cmds = b.calls.map((c) => c.slice(0, 2).join(' '))
     expect(cmds.filter((c) => c === 'session start')).toHaveLength(1)
-    expect(b.calls[0]).toEqual(['session', 'start', '--request-id', 'req_1', '--no-focus'])
+    expect(b.calls[0]).toEqual(['session', 'request', 'req_1', '--prepare'])
+    expect(b.calls[1]).toEqual([
+      'session',
+      'start',
+      '--request-id',
+      'req_1',
+      '--no-focus',
+      '--width',
+      '400',
+      '--height',
+      '300',
+    ])
     // 只用读的动作：开窗口 / 打开 / 读原文 / 关窗口
     for (const c of b.calls) expect(['session', 'navigate', 'get-html']).toContain(c[0] as string)
     await reader.close()

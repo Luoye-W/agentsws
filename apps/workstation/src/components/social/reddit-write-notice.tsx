@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RotateCcw, SendHorizontal, X } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { ExtensionReloadPrompt } from '@/components/connections/extension-reload'
+import { NoticeLine } from '@/components/design/kit'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { useApp } from '@/lib/app-context'
@@ -106,47 +107,48 @@ export function RedditWriteNotice({
       )}
       {awaiting === 0 ? null : <ExtensionReloadPrompt waiting />}
       {rows.slice(0, MAX_ROWS).map((w) => (
-        <div
+        // WP456-T2：一行提醒（浅底、黄图标），不再铺一整条黄
+        <NoticeLine
           key={w.approval_item_id}
-          className="flex flex-wrap items-center gap-2 rounded-lg bg-ws-warn-bg px-3 py-2 text-sm"
+          icon={SendHorizontal}
           data-testid="reddit-write-notice-row"
           data-outcome={w.outcome}
-          data-slot="status"
-        >
-          <SendHorizontal className="size-4 shrink-0 text-ws-warn" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">
-            {t('redditw.notice.title', { what: label(w) })}
-            {w.message === undefined ? null : (
-              <span className="text-ws-muted-fg"> · {w.message}</span>
-            )}
-          </span>
-          {w.can_refill === true ? (
+          end={
             <>
-              <Hint text={t('redditw.notice.refill.hint')} />
-              <Button
-                size="xs"
-                className="gap-1"
-                disabled={refill.isPending}
-                onClick={() => refill.mutate(w.job_id)}
-                data-testid="reddit-write-refill"
+              {w.can_refill === true ? (
+                <>
+                  <Hint text={t('redditw.notice.refill.hint')} />
+                  <Button
+                    size="xs"
+                    className="gap-1"
+                    disabled={refill.isPending}
+                    onClick={() => refill.mutate(w.job_id)}
+                    data-testid="reddit-write-refill"
+                  >
+                    <RotateCcw className="size-3.5" aria-hidden />
+                    {t('redditw.notice.refill')}
+                  </Button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                className="shrink-0 rounded-md p-1 text-ws-muted-fg hover:bg-ws-hover"
+                aria-label={t('redditw.notice.dismiss')}
+                title={t('redditw.notice.dismiss')}
+                disabled={dismiss.isPending}
+                onClick={() => dismiss.mutate(w.job_id)}
+                data-testid="reddit-write-dismiss"
               >
-                <RotateCcw className="size-3.5" aria-hidden />
-                {t('redditw.notice.refill')}
-              </Button>
+                <X className="size-3.5" aria-hidden />
+              </button>
             </>
-          ) : null}
-          <button
-            type="button"
-            className="shrink-0 rounded-md p-1 text-ws-muted-fg hover:bg-accent"
-            aria-label={t('redditw.notice.dismiss')}
-            title={t('redditw.notice.dismiss')}
-            disabled={dismiss.isPending}
-            onClick={() => dismiss.mutate(w.job_id)}
-            data-testid="reddit-write-dismiss"
-          >
-            <X className="size-3.5" aria-hidden />
-          </button>
-        </div>
+          }
+        >
+          {t('redditw.notice.title', { what: label(w) })}
+          {w.message === undefined ? null : (
+            <span className="text-ws-muted-fg"> · {w.message}</span>
+          )}
+        </NoticeLine>
       ))}
       {rows.length > MAX_ROWS ? (
         <p className="px-1 text-xs text-ws-muted-fg">

@@ -20,10 +20,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpFromLine, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { SkeletonList } from '@/components/design/kit'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { getSkills, promoteSkillTo, type SkillSummary, setSkillExcluded } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { skillLabel, skillsForScope } from '@/lib/library'
@@ -114,7 +114,7 @@ export function SkillsPanel({ scope }: { scope: RailScope }): React.ReactNode {
     void client.invalidateQueries({ queryKey: ['skills'] })
   }
 
-  if (skills.isPending) return <Skeleton className="h-40 w-full" />
+  if (skills.isPending) return <SkeletonList rows={4} check={false} />
   if (skills.error !== null || skills.data === undefined) return <PanelError error={skills.error} />
   const rows = skillsForScope(skills.data, scope)
 

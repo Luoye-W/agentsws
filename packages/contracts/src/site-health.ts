@@ -175,6 +175,8 @@ export interface SiteHealthRun {
     dating: ProductSourceDating[]
   }
   chatgpt_shopping?: ChatGptShoppingAssessment
+  /** WP448：技术体检（没收录、规范网址、跳转与死链、站点地图、hreflang、结构化数据、页面速度）。 */
+  tech?: TechAuditResult
   /** 读不到的地方（人话）。 */
   notes: string[]
   /** 不一致清单派给了网站运营（开了一件事）。 */
@@ -210,4 +212,124 @@ export interface AiTrafficSummary {
   previous?: { ai_orders: number; ai_revenue: number }
   /** 窗口里逐天来自 AI 的单数（画小折线；最早的一天在前）。 */
   daily?: number[]
+}
+
+/* ------------------------------------------------------------------ */
+/* WP448（docs/109 §4.4、§5.1 #1–2）：技术体检与改版回归                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 技术体检查的七块（规则表在 `@agentsws/site-core` 的 `TECH_AUDIT_RULES`，是数据）：
+ * 没收录 / 规范网址 / 跳转与死链 / 站点地图 / hreflang / 结构化数据 / 页面速度。
+ */
+export type TechAuditArea =
+  | 'indexing'
+  | 'canonical'
+  | 'redirect'
+  | 'sitemap'
+  | 'hreflang'
+  | 'schema'
+  | 'speed'
+
+/** 技术问题交给建站的哪一条：网址骨架（跳转、站点地图、死链）归整站搭建，模板里的标签归主题。 */
+export type TechAuditOwner = 'site.shopify-build' | 'site.shopify-theme'
+
+/** 一条技术问题（只列有问题的）。数全由规则算出来，不经模型。 */
+export interface TechAuditIssue {
+  /** 规则 id（`TECH_AUDIT_RULES` 的键，如 `redirect.chain`）。 */
+  rule: string
+  area: TechAuditArea
+  severity: 'high' | 'medium' | 'low'
+  owner: TechAuditOwner
+  /** 出问题的那一页（站内路径或完整网址）。 */
+  url?: string
+  /** 一句人话，带证据（「3 跳：/a → /b → /c」「LCP 4.1 秒」）。 */
+  detail: string
+  /** 跳转类：可以直接出 `stage_url_redirect` 的那一行（旧路径 → 新路径；都是站内路径）。 */
+  redirect?: { path: string; target: string }
+  /** 速度类：真实用户数据还是实验室数。 */
+  measured?: 'field' | 'lab'
+}
+
+/** 一次技术体检（跟着 WP381 那一轮跑，挂在 `SiteHealthRun.tech` 上）。 */
+export interface TechAuditResult {
+  checked_at: string
+  /** 抓了几页（首页、抽查的商品、合集、文章…）。 */
+  pages: number
+  /** 没收录那一项：Search Console 网址检查读到了 / 没连 / 连了但没读到。 */
+  indexing: 'checked' | 'not_connected' | 'no_data'
+  sitemap: 'found' | 'missing' | 'unreadable' | 'unknown'
+  /** 只有一个市场时不查 hreflang。 */
+  hreflang: 'checked' | 'single_market'
+  /** 速度：真实用户数据 / 只有实验室数 / 两样都有 / 没读到 / 没开。 */
+  speed: 'field' | 'lab' | 'mixed' | 'unavailable' | 'off'
+  issues: TechAuditIssue[]
+  /** 交给建站的事项（按担哪一条分开；同一份清单 7 天内不重派）。 */
+  dispatched?: { owner: TechAuditOwner; matter_id: string; at: string; issues: number }[]
+}
+
+/** 改版回归抓的那几页（首页、两件商品、一个合集、一篇文章）。 */
+export type DriftPageKind = 'home' | 'product' | 'collection' | 'article'
+
+/** 一页的基线（改版前后各抓一份比）。 */
+export interface DriftSnapshot {
+  url: string
+  kind: DriftPageKind
+  /** 状态码（抓不到 = 0）。 */
+  status: number
+  title?: string
+  description?: string
+  canonical?: string
+  /** robots meta 与 `X-Robots-Tag` 合在一起（小写）。 */
+  robots?: string
+  h1: string[]
+  /** 结构化数据摘要：有哪些类型、Product 的价格与币种（比「被改坏」用，不存全文）。 */
+  schema: { types: string[]; product_price?: string; product_currency?: string; hash: string }
+  captured_at: string
+}
+
+/** 改版回归的三级：严重（出卡）/ 注意 / 知道一下（进简报）。 */
+export type DriftSeverity = 'critical' | 'warning' | 'info'
+
+/** 一条回归（比对规则表 `DRIFT_RULES` 里的一条命中了）。 */
+export interface DriftFinding {
+  rule: string
+  severity: DriftSeverity
+  url: string
+  kind: DriftPageKind
+  /** 改版前 → 改版后（人话；比如「index → noindex」）。 */
+  before?: string
+  after?: string
+  detail: string
+}
+
+/** 这一次回归是什么引起的（「指到是哪次改版」）。 */
+export interface DriftTrigger {
+  kind: 'theme_publish' | 'app_change' | 'weekly' | 'manual'
+  /** 主题发布那张改动卡的 id。 */
+  change_id?: string
+  /** 人话：「主题「Dawn 副本」发布」「装了 Judge.me」。 */
+  label?: string
+  at: string
+}
+
+export interface DriftRun {
+  id: string
+  trigger: DriftTrigger
+  started_at: string
+  finished_at?: string
+  /** `baseline` = 第一次，只存基线不比。 */
+  status: 'ok' | 'baseline' | 'partial' | 'failed'
+  pages: number
+  findings: DriftFinding[]
+  notes: string[]
+  /** 严重的交给建站开了一件事。 */
+  dispatched?: { matter_id: string; at: string }
+}
+
+/** 面板 / 告警读的那份改版回归数据。 */
+export interface SeoDriftView {
+  last?: DriftRun
+  /** 上一次有发现的那一轮（最近一次可能是「都没变」）。 */
+  last_with_findings?: DriftRun
 }

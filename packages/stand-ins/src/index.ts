@@ -68,6 +68,7 @@ export * from './runtime/google-alerts.js'
 // WP268（决策 213）：生图 / 改图 / 素材库三个工具
 export * from './runtime/image.js'
 export * from './runtime/kol.js'
+export * from './runtime/message-rule.js'
 export * from './runtime/output-cards.js'
 export * from './runtime/owner.js'
 export * from './runtime/playbook.js'

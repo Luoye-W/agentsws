@@ -37,6 +37,10 @@ export function browserProviderConfig(browser: RunBrowser): BrowserProviderConfi
     // WP92：这一种不走官方 provider（它挂的是腾讯那个插件，见 `browserskill.ts`）。
     throw new Error('browserProviderConfig: browserskill 不用官方 provider')
   }
+  if (browser.mode === 'ego') {
+    // WP463：这一种也不走官方 provider（三个自己的工具，见 `ego.ts`）。
+    throw new Error('browserProviderConfig: ego 不用官方 provider')
+  }
   if (browser.mode === 'attach') return { mode: 'attach', endpoint: browser.endpoint }
   return {
     mode: 'launch',

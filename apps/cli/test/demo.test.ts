@@ -70,7 +70,12 @@ describe('agentsws demo（合成世界当后端）', () => {
     expect(kinds).toContain('outbound_draft')
     expect(kinds).toContain('staged_change')
     // 36 §2.2：回复草稿卡的动词是「发送 / 不发 / 指导」
-    const draft = cards.find((c) => c.kind === 'outbound_draft')
+    // WP442：demo 里还有一张催促卡（也是 outbound_draft）——挑客服回信那一张
+    const draft = cards.find(
+      (c) =>
+        c.kind === 'outbound_draft' &&
+        (c.detail.payload as { form?: unknown } | undefined)?.form !== 'follow_up_nudge',
+    )
     expect(draft?.action_labels?.approve).toBe('发送')
     expect(draft?.customer_label).toBe('Anna Meyer')
     // 退款卡的金额来自结构化字段。

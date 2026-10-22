@@ -18,7 +18,7 @@ export function CalendarLink({ role_id }: { role_id?: string }): React.ReactNode
       to={`/calendar?layers=${layers}${role_id === undefined ? '' : `&role=${encodeURIComponent(role_id)}`}`}
       data-testid="calendar-link"
       data-layers={layers}
-      className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
+      className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-ws-hover"
     >
       <CalendarDays className="size-3.5" aria-hidden />
       {t('calendar.open')}

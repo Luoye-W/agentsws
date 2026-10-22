@@ -5,9 +5,9 @@
  * 与其它三个 Tab 不同，它自己取数——数据只属于这一个 Tab，页面不必替它多拉一次。
  */
 import { useQuery } from '@tanstack/react-query'
+import { SkeletonList } from '@/components/design/kit'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
 import { InProgressList } from '@/components/work/in-progress-list'
 import { type InProgressItem, listInProgress } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -36,7 +36,7 @@ export function InprogressTab(): React.ReactNode {
     queryFn: () => listInProgress('workspace'),
   })
 
-  if (board.isPending) return <Skeleton className="h-40 w-full" />
+  if (board.isPending) return <SkeletonList rows={4} check={false} />
   if (board.error !== null)
     return (
       <p role="alert" className="text-sm text-destructive">

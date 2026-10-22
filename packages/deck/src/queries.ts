@@ -20,7 +20,7 @@ import {
 } from '@agentsws/contracts'
 import { B2B_QUERIES } from './b2b-queries.js'
 import { DeckError } from './errors.js'
-import { SITE_HEALTH_QUERIES } from './site-health-queries.js'
+import { SITE_HEALTH_QUERIES, SITE_TECH_QUERIES } from './site-health-queries.js'
 import { ADS_SOURCE_BY_PLATFORM, SOCIAL_SOURCE_BY_CHANNEL } from './sources.js'
 import type {
   DataSourceId,
@@ -252,7 +252,7 @@ export const PENDING_LANES: readonly { lane: string; label: string; kinds: reado
 /** WP154：最新一张某种搜索报告卡的 payload（没有就是 `undefined`，不编）。 */
 function latestSeoReport(
   ctx: QueryContext,
-  variant: 'daily' | 'weekly_revenue' | 'weekly_geo',
+  variant: 'daily' | 'weekly_revenue' | 'weekly_geo' | 'weekly_cannibalization',
 ): Record<string, unknown> | undefined {
   const hit = ctx.approvals
     .filter((i) => i.kind === 'seo_report' && isRecord(i.payload) && i.payload.variant === variant)
@@ -267,6 +267,8 @@ const SEO_SIGNAL_LABEL: Record<string, string> = {
   untargeted: '没专门页',
   wrong_intent: '意图不对',
   ai_mode: '长问句',
+  // WP448：每周抢词检测（不算六个信号）
+  cannibalization: '抢词',
 }
 
 const SEO_LANE_LABEL: Record<string, string> = {
@@ -274,6 +276,16 @@ const SEO_LANE_LABEL: Record<string, string> = {
   new_page: '写新页（本职责）',
   site_handoff: '交建站',
   pr_handoff: '交公关',
+  // WP448：两页抢同一组词
+  merge: '合并（本职责定）',
+}
+
+/** WP448：`decaying` 那一件的分诊（跟在「谁动」后面一小截）。 */
+const SEO_TRIAGE_LABEL: Record<string, string> = {
+  refresh: '刷新内容',
+  query_shift: '查询变了',
+  merge: '该合并',
+  retire: '该下线',
 }
 
 function seoEvidenceText(e: Record<string, unknown>): string {
@@ -2256,7 +2268,7 @@ const QUERY_LIST: QueryDef[] = [
           evidence: seoEvidenceText(e),
           action: String(p.suggestion ?? ''),
           // WP159：改动卡的文字是模型按品牌口吻写的初稿时标一下（规则版兜底不标）
-          lane: `${SEO_LANE_LABEL[String(p.lane)] ?? String(p.lane)}${isRecord(p.outcome) && p.outcome.draft === 'model' ? ' · 模型初稿' : ''}`,
+          lane: `${SEO_LANE_LABEL[String(p.lane)] ?? String(p.lane)}${isRecord(p.triage) && typeof p.triage.verdict === 'string' ? ` · ${SEO_TRIAGE_LABEL[p.triage.verdict] ?? p.triage.verdict}` : ''}${isRecord(p.outcome) && p.outcome.draft === 'model' ? ' · 模型初稿' : ''}`,
         }
       })
       // 一件都没有时照实说为什么（没响 / 还没读过），不出一张空表
@@ -2283,6 +2295,52 @@ const QUERY_LIST: QueryDef[] = [
           { key: 'lane', label: '谁动' },
         ],
         rows,
+      }
+    },
+  },
+  {
+    // WP448：每周抢词检测（只列有问题的；严重的那几组已经进了「今天值得动的 5 件事」）
+    name: 'seo.cannibalization',
+    source: 'gsc',
+    returns: 'table',
+    run: (ctx) => {
+      const payload = latestSeoReport(ctx, 'weekly_cannibalization')
+      const groups = Array.isArray(payload?.groups) ? payload.groups.filter(isRecord) : []
+      const word: Record<string, string> = { critical: '严重', high: '高', medium: '中' }
+      const path = (u: unknown): string => {
+        try {
+          return new URL(String(u)).pathname
+        } catch {
+          return String(u ?? '')
+        }
+      }
+      const rows: Record<string, string>[] = groups.slice(0, 10).map((g) => {
+        const queries = Array.isArray(g.queries) ? g.queries.map(String) : []
+        const pages = Array.isArray(g.pages) ? g.pages.filter(isRecord) : []
+        const others = pages.filter((p) => p.url !== g.keep).map((p) => path(p.url))
+        // 级别并进「查询」那一格（单列两个字太窄，报表里会竖着折）
+        return {
+          queries: `${word[String(g.severity)] ?? String(g.severity)} · ${queries[0] ?? ''}${queries.length > 1 ? ` 等 ${String(queries.length)} 个` : ''}`,
+          keep: path(g.keep),
+          other: `${others.join('、')} → ${g.action === 'redirect' ? '并过去再跳转' : '改写角度、链到保留页'}`,
+        }
+      })
+      if (rows.length === 0)
+        rows.push({
+          queries: payload === undefined ? '还没查过（每周一次）' : '都没问题',
+          keep: '',
+          other: '',
+        })
+      return {
+        columns: [
+          { key: 'queries', label: '查询' },
+          { key: 'keep', label: '保留' },
+          { key: 'other', label: '另一页' },
+        ],
+        rows,
+        ...(payload === undefined
+          ? {}
+          : { footer: { text: `每周一次 · ${String(payload.week_of ?? '')}` } }),
       }
     },
   },
@@ -2832,6 +2890,8 @@ const QUERY_LIST: QueryDef[] = [
   ...SITE_QUERIES,
   // WP381：网站 / 商品体检四块 + AI 来源流量
   ...SITE_HEALTH_QUERIES,
+  // WP448：技术体检与改版回归
+  ...SITE_TECH_QUERIES,
   ...ADS_QUERIES,
   // WP78（60 §3）：公关五块
   ...PR_QUERIES,

@@ -15,11 +15,11 @@
  * - 「岗位层 / 职责层」切换在面板壳上（`rail-panel.tsx`），五个标签共用，这里不另做一份。
  */
 import { type ComponentType, type LazyExoticComponent, lazy, type ReactNode, Suspense } from 'react'
+import { Segmented } from '@/components/design/segmented'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { useRailState } from '@/components/rail/rail-state'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { useApp } from '@/lib/app-context'
-import { cn } from '@/lib/utils'
 
 /** 顶上那一排的顺序（Fable 定：先"是谁"，再"记得什么 / 知道什么 / 会什么"，最后"能花多少"）。 */
 export const SETTINGS_TABS = ['role', 'memory', 'knowledge', 'skills', 'caps'] as const
@@ -78,33 +78,23 @@ export function SettingsPanel({ scope, sub }: RailPanelBodyProps): ReactNode {
   const Body = BODIES[tab]
   return (
     <div className="flex flex-col gap-3" data-testid="settings-panel" data-tab={tab}>
-      <div
-        role="tablist"
-        aria-label={t('rail.panel.settings')}
-        className="-mx-1 flex flex-wrap items-center gap-1 border-b pb-2"
-      >
-        {tabs.map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            data-testid={`settings-tab-${value}`}
-            className={cn(
-              'rounded-md px-2 py-0.5 text-xs',
-              tab === value
-                ? 'bg-secondary font-medium text-secondary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-            )}
-            onClick={() => {
-              // 标签就是旧 id：交给右栏，别名把它落回这里的这个标签，顺手记进布局
-              if (tab !== value) rail.show(value)
-            }}
-          >
-            {t(`rail.panel.${value}`)}
-          </button>
-        ))}
-      </div>
+      {/* WP456-T2：全站唯一那种分段切换（页签语义） */}
+      <Segmented
+        kind="tabs"
+        size="sm"
+        className="self-start"
+        label={t('rail.panel.settings')}
+        value={tab}
+        options={tabs.map((value) => ({
+          value,
+          label: t(`rail.panel.${value}`),
+          testId: `settings-tab-${value}`,
+        }))}
+        onChange={(value) => {
+          // 标签就是旧 id：交给右栏，别名把它落回这里的这个标签
+          rail.show(value)
+        }}
+      />
       <div role="tabpanel" data-testid={`settings-panel-${tab}`}>
         <Suspense
           fallback={

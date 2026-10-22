@@ -23,9 +23,12 @@ import { isAbsolute, join, resolve } from 'node:path'
 import type {
   ApprovalItem,
   DailyPlanDraft,
+  GscRow,
   InboundEvent,
   Iso8601,
   MessageRecord,
+  MessageRule,
+  MessageRuleHit,
   ObjectRef,
   RangeRef,
   RunEvent,
@@ -132,6 +135,102 @@ const DEMO_SITE_HEALTH_PAGES: Record<string, string> = {
     '<html><body><main><h1>Refund policy</h1><p>We have a 30-day return policy.</p></main></body></html>',
   '/policies/privacy-policy': '<html><body><main><h1>Privacy policy</h1></main></body></html>',
 }
+/*
+ * WP448：技术体检与改版回归在 demo 里多抓的几页（现编）。首页链着一个跳了两次的旧合集、一个已经 404 的旧 FAQ；
+ * 商品页没写规范网址、结构化数据缺图片；站点地图里挂着一件下架的商品；robots.txt 没写站点地图。
+ */
+const DEMO_HOME = `<!doctype html><html><head><title>Rovella — 收纳与整理</title>
+<meta name="description" content="能折起来的收纳箱与衣柜整理件。">
+<link rel="canonical" href="https://nordvolt.example/">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Rovella","url":"https://nordvolt.example/"}</script>
+</head><body><main><h1>收纳，从折起来开始</h1>
+<a href="/products/rovella-storage-box">收纳箱</a>
+<a href="/collections/organizers">整理件</a>
+<a href="/collections/summer-2025">去年夏季特卖</a>
+<a href="/pages/old-faq">常见问题（旧）</a>
+</main></body></html>`
+Object.assign(DEMO_SITE_HEALTH_PAGES, {
+  '/': DEMO_HOME,
+  '/sitemap.xml': `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://nordvolt.example/sitemap_products_1.xml</loc></sitemap><sitemap><loc>https://nordvolt.example/sitemap_collections_1.xml</loc></sitemap><sitemap><loc>https://nordvolt.example/sitemap_blogs_1.xml</loc></sitemap></sitemapindex>`,
+  '/sitemap_products_1.xml': `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://nordvolt.example/products/rovella-storage-box</loc></url><url><loc>https://nordvolt.example/products/rovella-hanger-2024</loc></url></urlset>`,
+  '/sitemap_collections_1.xml': `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://nordvolt.example/collections/organizers</loc></url></urlset>`,
+  '/sitemap_blogs_1.xml': `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://nordvolt.example/blogs/news/folding-box-guide</loc></url></urlset>`,
+  '/collections/organizers': `<!doctype html><html><head><title>整理件 – Rovella</title><link rel="canonical" href="https://nordvolt.example/collections/organizers"></head><body><main><h1>整理件</h1></main></body></html>`,
+  '/blogs/news/folding-box-guide': `<!doctype html><html><head><title>折叠收纳箱怎么选</title><link rel="canonical" href="https://nordvolt.example/blogs/news/folding-box-guide">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"折叠收纳箱怎么选","image":"https://cdn.example/b.jpg","datePublished":"2026-09-01"}</script></head><body><main><h1>折叠收纳箱怎么选</h1></main></body></html>`,
+})
+
+/** WP448：demo 的 Search Console 多两行：两篇导购文抢「magsafe car mount review」（都在前 10、曝光够 → 严重）。 */
+const DEMO_COMPETING_ROWS: GscRow[] = [
+  {
+    query: 'magsafe car mount review',
+    page: 'https://shop.example/blogs/guide/best-magsafe-car-mount',
+    clicks: 30,
+    impressions: 600,
+    ctr: 0.05,
+    position: 2.2,
+    clicks_prev_week: 28,
+  },
+  {
+    query: 'magsafe car mount review',
+    page: 'https://shop.example/blogs/guide/magsafe-mount-buying-guide',
+    clicks: 8,
+    impressions: 420,
+    ctr: 0.019,
+    position: 1.8,
+    clicks_prev_week: 9,
+  },
+]
+
+/** WP448：demo 里「不跟跳转抓一次」的替身（跳转链与死链）；不在表里的按上面那几页给 200 / 404。 */
+const DEMO_SITE_REDIRECTS: Record<string, { status: number; location?: string }> = {
+  '/collections/summer-2025': { status: 301, location: '/collections/sale-2025' },
+  '/collections/sale-2025': { status: 302, location: '/collections/organizers' },
+}
+
+/** WP448：demo 的页面速度替身（首页有真实用户数据、商品页只有实验室数）。 */
+const DEMO_PAGESPEED: Record<string, unknown> = {
+  '/': {
+    loadingExperience: {
+      metrics: {
+        LARGEST_CONTENTFUL_PAINT_MS: { percentile: 3400 },
+        INTERACTION_TO_NEXT_PAINT: { percentile: 160 },
+        CUMULATIVE_LAYOUT_SHIFT_SCORE: { percentile: 4 },
+      },
+    },
+  },
+  '/products/rovella-storage-box': {
+    lighthouseResult: {
+      audits: {
+        'largest-contentful-paint': { numericValue: 2100 },
+        'cumulative-layout-shift': { numericValue: 0.18 },
+        'total-blocking-time': { numericValue: 90 },
+      },
+    },
+  },
+}
+
+/**
+ * WP448：demo 专用——把那家现编的店「换一套主题」：首页被设成 noindex、规范网址指去了 myshopify 域名，
+ * 商品页的结构化数据没了。截图脚本拍「改版回归」用；`restore: true` 换回来。
+ */
+const DEMO_SITE_ORIGINAL: Record<string, string> = { ...DEMO_SITE_HEALTH_PAGES }
+export function demoSiteRedesign(options: { restore?: boolean } = {}): void {
+  if (options.restore === true) {
+    Object.assign(DEMO_SITE_HEALTH_PAGES, DEMO_SITE_ORIGINAL)
+    return
+  }
+  DEMO_SITE_HEALTH_PAGES['/'] = DEMO_HOME.replace(
+    '<link rel="canonical" href="https://nordvolt.example/">',
+    '<meta name="robots" content="noindex"><link rel="canonical" href="https://rovella.myshopify.com/">',
+  ).replace('<title>Rovella — 收纳与整理</title>', '<title>Rovella</title>')
+  const product = DEMO_SITE_ORIGINAL['/products/rovella-storage-box'] ?? ''
+  DEMO_SITE_HEALTH_PAGES['/products/rovella-storage-box'] = product.replace(
+    /<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+    '',
+  )
+}
+
 const DEMO_SITE_HEALTH_RENDERED: Record<string, string> = {
   '/products/rovella-storage-box': `<!doctype html><html><head><title>Rovella 折叠收纳箱</title></head><body><main><h1>Rovella 折叠收纳箱</h1><div data-price><span>$29.90</span><button>Add to cart</button></div><p>一只能折起来的收纳箱，放车里、放衣柜都行。</p><p>30-day returns</p></main></body></html>`,
 }
@@ -1595,7 +1694,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     // WP396：Listing 体检的替身读页（三个演示 ASIN，不连 Amazon）
     amazonListingReader: () => listingReader,
     // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
-    searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
+    // WP448：多两行——两篇文章抢同一个词（演每周抢词与「合并」那条车道）
+    searchConsoleFor: () =>
+      standInSearchConsole({ rows: [...DEMO_GSC_ROWS, ...DEMO_COMPETING_ROWS], pages: DEMO_PAGES }),
     ...(options.searchDataFor === undefined ? {} : { searchDataFor: options.searchDataFor }),
     ...(options.officialPlugins === undefined ? {} : { officialPlugins: options.officialPlugins }),
     ...(options.contentUpdates === undefined ? {} : { contentUpdates: options.contentUpdates }),
@@ -1684,6 +1785,16 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
         ? { ok: false, status: 404, text: async () => '' }
         : { ok: true, status: 200, text: async () => body }
     },
+    // WP448：跳转链与死链、页面速度也是替身（不出网）
+    siteHealthProbe: async (url: string) => {
+      const path = new URL(url).pathname
+      return (
+        DEMO_SITE_REDIRECTS[path] ?? {
+          status: DEMO_SITE_HEALTH_PAGES[path] === undefined ? 404 : 200,
+        }
+      )
+    },
+    siteHealthPageSpeed: async (url: string) => DEMO_PAGESPEED[new URL(url).pathname] ?? {},
     siteHealthRenderer: {
       render: async (urls) =>
         new Map(
@@ -2321,7 +2432,28 @@ async function seedMessages(server: Server, world: World): Promise<void> {
     }),
   ]
 
+  /*
+   * WP442（docs/108 §5.3）：回信跟进——6 天前发给一位买家的样品报价，对方一直没回（过了 3 个工作日）。
+   * 种完立刻巡检一轮：首页 / 消息页有一张「Sophie Laurent 还没回」的催促卡可看。名字、公司都是假的。
+   */
+  rows.push({
+    ...base({
+      id: 'm118',
+      from: { email: DEMO_MAILBOX, name: 'Luminous Lab' },
+      subject: 'Sample order: 3 units of the 600W power station',
+      text: 'Hi Sophie,\n\nThanks for your interest. Attached is the quote for 3 sample units of the 600W power station (EXW Shenzhen, ships in 5 days). Let me know if you would like us to go ahead.\n\nBest,\nLuminous Lab',
+      minutes: 60 * 24 * 6,
+      folder: 'Sent',
+      folder_kind: 'sent',
+      read: true,
+    }),
+    to: [{ email: 'sophie@alpenhaus-retail.example', name: 'Sophie Laurent' }],
+  })
+
   for (const row of rows) await store.put(row)
+  await (await server.brands.forWorkspace(world.workspace_id)).followUp
+    ?.sweep()
+    .catch(() => undefined)
 
   /*
    * WP439：你教过的三个发件人（右栏「规则」那一页有东西可看）——命中账按天摊在最近几天。
@@ -2369,6 +2501,101 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       },
     ]
     for (const rule of taught) await store.putSenderRule(rule)
+  }
+
+  /*
+   * WP441（docs/108 §5.1）：三条消息规则（右栏「规则」里「消息规则」那一组有东西可看）+ 命中过的几封 +
+   * 今天的简报里攒着的几封。只在第一次种：人删过 / 改过的不再种回来。
+   */
+  if (store.putMessageRule !== undefined && ((await store.messageRules?.()) ?? []).length === 0) {
+    const day = (daysAgo: number): string =>
+      new Date(nowMs - daysAgo * 86_400_000).toISOString().slice(0, 10)
+    const ruleBase = {
+      scope: { kind: 'brand' as const },
+      enabled: true,
+      revision: 1,
+      by: world.roleHolder,
+      updated_by: world.roleHolder,
+      created_at: at(60 * 24 * 9),
+      updated_at: at(60 * 24 * 9),
+    }
+    const rules: MessageRule[] = [
+      {
+        ...ruleBase,
+        id: 'mrule_demo_logistics',
+        name: '物流通知',
+        order: 0,
+        when: { match: 'all', conditions: [{ type: 'from', value: '@shipfast.example' }] },
+        actions: [{ type: 'label', label: 'orders' }, { type: 'digest' }],
+        origin_text: 'ShipFast 发来的物流通知都打个标签、进今天的简报',
+        hit_days: { [day(0)]: 2, [day(2)]: 3, [day(5)]: 2 },
+        last_hit_at: at(90),
+      },
+      {
+        ...ruleBase,
+        id: 'mrule_demo_supplier',
+        name: '供应商来信',
+        order: 1,
+        when: { match: 'all', conditions: [{ type: 'from', value: '@kraft-boxes.example' }] },
+        actions: [{ type: 'label', label: 'suppliers' }, { type: 'digest' }],
+        origin_text: '纸箱供应商的信打上「供应商」、进简报',
+        hit_days: { [day(0)]: 1, [day(7)]: 1 },
+        last_hit_at: at(180),
+      },
+      {
+        ...ruleBase,
+        id: 'mrule_demo_pitch',
+        name: '推销',
+        order: 2,
+        when: {
+          match: 'all',
+          conditions: [
+            {
+              type: 'ai',
+              value: '陌生人发来的推销 / 开发信（找你买服务、代运营、推广合作、工厂报价之类）',
+            },
+          ],
+        },
+        actions: [{ type: 'notify' }],
+        origin_text: '推销的都告诉我',
+        hit_days: { [day(1)]: 2, [day(4)]: 1 },
+        last_hit_at: at(60 * 24),
+      },
+    ]
+    for (const rule of rules) await store.putMessageRule(rule)
+    const hits: [string, MessageRuleHit[]][] = [
+      ['m104', [{ rule_id: 'mrule_demo_logistics', by: 'static', name: '物流通知' }]],
+      ['m116', [{ rule_id: 'mrule_demo_logistics', by: 'static', name: '物流通知' }]],
+      [
+        'm103',
+        [
+          { rule_id: 'mrule_demo_supplier', by: 'static', name: '供应商来信' },
+          { rule_id: 'mrule_demo_pitch', by: 'ai', confidence: 0.62, name: '推销' },
+        ],
+      ],
+    ]
+    for (const [id, ruleHits] of hits) {
+      const row = rows.find((r) => r.id === id)
+      if (row?.triage === undefined) continue
+      await store.update(id, {
+        triage: {
+          ...row.triage,
+          rule_hits: ruleHits,
+          reasons: [...row.triage.reasons, `消息规则：${ruleHits[0]?.name ?? ''}`],
+        },
+      })
+      const digest = ruleHits.filter((h) => h.rule_id !== 'mrule_demo_pitch')
+      await store.putDigestEntry?.({
+        message_id: id,
+        thread_id: row.thread_id,
+        rule_ids: digest.map((h) => h.rule_id),
+        rule_names: digest.map((h) => h.name ?? ''),
+        subject: row.subject,
+        from: row.from.name ?? row.from.email,
+        summary: row.triage.summary || row.subject,
+        at: row.date,
+      })
+    }
   }
 
   // WP172：挪进 BtoBAgents 的那封在 B2B 库里落成了一条询盘（真路径见 `b2b-mail.ts`）

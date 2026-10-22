@@ -24,7 +24,7 @@ import { CheckCircle2, ChevronDown, Plus, RefreshCw, Trash2, XCircle } from 'luc
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
-import { BrandMark, InfoTip, testedMs, useFresh } from '@/components/design'
+import { BrandMark, GroupLabel, InfoTip, StatusPill, testedMs, useFresh } from '@/components/design'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { AiSourceOrder } from '@/components/models/ai-source-order'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
@@ -449,7 +449,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
             {t('models.empty')}
           </p>
         ) : (
-          <ul className="divide-y divide-ws-line overflow-hidden rounded-xl border border-ws-line bg-ws-card">
+          <ul className="ws-group divide-y divide-ws-line">
             {subSignedIn && subProvider !== undefined ? (
               <SourceShell
                 testId="model-row-subscription"
@@ -457,13 +457,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                 title={t('models.add.login.openai')}
                 badge={isDefault(subProvider) ? t('models.default_badge') : undefined}
                 status={
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full bg-ws-good-bg px-2 py-0.5 text-xs font-medium text-ws-good"
-                    data-slot="status"
-                  >
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {t('models.subscription.signed_in.short')}
-                  </span>
+                  <StatusPill tone="good">{t('models.subscription.signed_in.short')}</StatusPill>
                 }
               >
                 <SubscriptionPlan
@@ -555,8 +549,8 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         ].map((g) =>
           g.items.length === 0 ? null : (
             <div key={g.id} className="flex flex-col gap-2" data-testid={`models-add-${g.id}`}>
-              <h4 className="text-xs font-medium text-ws-muted-fg">{g.title}</h4>
-              <ul className="divide-y divide-ws-line overflow-hidden rounded-xl border border-ws-line bg-ws-card">
+              <GroupLabel>{g.title}</GroupLabel>
+              <ul className="ws-group divide-y divide-ws-line">
                 {g.items.map((item) => (
                   <AddRow
                     key={item.id}
@@ -1031,10 +1025,7 @@ function DefaultsSection({
   )
   const choices = compactChoices(settings.choices, keep)
   return (
-    <div
-      className="divide-y divide-ws-line rounded-xl border border-ws-line bg-ws-card"
-      data-testid="model-defaults"
-    >
+    <div className="ws-group divide-y divide-ws-line" data-testid="model-defaults">
       <label className="flex items-center justify-between gap-3 px-4 py-3">
         <span className="flex items-center gap-1 text-sm text-ws-ink">
           {t('models.default_model')}

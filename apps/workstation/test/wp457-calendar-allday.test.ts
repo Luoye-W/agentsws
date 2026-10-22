@@ -63,7 +63,9 @@ describe('WP457 图层颜色：红只给出错', () => {
   })
 
   it('黄只给「卡片到期」一层，不和定时任务撞色', () => {
-    const yellow = Object.entries(LAYER_COLOR).filter(([, c]) => /warn|chart-4/.test(c))
+    const yellow = Object.entries(LAYER_COLOR).filter(([, c]) =>
+      /--ws-warn\b|var\(--chart-4\)/.test(c),
+    )
     expect(yellow.map(([k]) => k)).toEqual(['card_due'])
   })
 })

@@ -143,3 +143,38 @@ describe('还在不在跑', () => {
     expect(view.current_host).toBeUndefined()
   })
 })
+
+describe('WP463：ego', () => {
+  it('执行器认 ego_* 三个工具；每段脚本的那一行（退出码 / 耗时 / 摘要）按顺序列出来', () => {
+    const view = summarizeRunBrowser('run_1', [
+      ev('tool.call', { call_id: 'c1', tool: 'ego_guide', input: {} }),
+      ev('tool.call', {
+        call_id: 'c2',
+        tool: 'ego_run',
+        input: {
+          script: 'await (await taskSpace("t")).page("p1").goto("https://example.com/?token=abc")',
+        },
+      }),
+      ev('progress', { step: 'ego_run', note: '退出码 0 · 1.2 秒 · Example Domain' }),
+      ev('tool.call', { call_id: 'c3', tool: 'ego_run', input: { script: 'throw 1' } }),
+      ev('progress', { step: 'ego_run', note: '退出码 1 · 0.3 秒 · Error: 1' }),
+    ])
+    expect(view.executor).toBe('ego')
+    expect(view.ego_runs?.map((r) => r.note)).toEqual([
+      '退出码 0 · 1.2 秒 · Example Domain',
+      '退出码 1 · 0.3 秒 · Error: 1',
+    ])
+    // 脚本里的网址不往外端（它在 tool.call 里，面板只要摘要）
+    expect(JSON.stringify(view)).not.toContain('token')
+    expect(view.navigations).toBe(0)
+  })
+
+  it('最多留最近 20 段', () => {
+    const events = []
+    for (let i = 0; i < 25; i++)
+      events.push(ev('progress', { step: 'ego_run', note: `第 ${i} 段` }))
+    const view = summarizeRunBrowser('run_1', events)
+    expect(view.ego_runs).toHaveLength(20)
+    expect(view.ego_runs?.[0]?.note).toBe('第 5 段')
+  })
+})

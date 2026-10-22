@@ -28,6 +28,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@agentsws/browser-action": "workspace:*",
     "@agentsws/connect-adapter": "workspace:*",
     "@agentsws/core": "workspace:*",
     "@agentsws/server": "workspace:*",

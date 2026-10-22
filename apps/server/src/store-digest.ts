@@ -6,7 +6,7 @@
  * 1. 取店铺管理那一面的面板上下文（`queryContext`，「昨天」那一段）——数只从面板来（29 原则 ③）；
  * 2. 拼日报：用面板上「店铺日报」那一块同一条查询（`store.daily_report`），出一张 `daily_report` 卡
  *    （L3 自动出、看完归档，不进审批队列）；
- * 3. 跑异常检测（`detectAnomalies`：销售骤降 / 断货，阈值读职责 yml 的 `thresholds`）——有异常就在首页告警区
+ * 3. 跑异常检测（`detectAnomalies`：销售骤降 / 断货，阈值读职责 yml 的 `thresholds`）——有异常就在铃铛（WP466，原首页告警区）
  *    出一行（`system_alert`，点进店铺管理），同一天同一种只出一次；没有就不出「一切正常」。
  *
  * 店铺没连 = 不出日报，照实回「店铺没连」（不出一张全是 0 的卡）。
@@ -44,7 +44,7 @@ export interface StoreDigest {
     skipped?: string
     date?: string
   }>
-  /** 首页告警区那几行（只给店铺管理担着的那个人；当天的）。 */
+  /** 系统卡那几张（WP466 起每张在铃铛里一条，原首页告警区；只给店铺管理担着的那个人；当天的）。 */
   alerts(person_id: string): DeckCard[]
 }
 
