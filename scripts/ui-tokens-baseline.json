@@ -28,13 +28,6 @@
     "apps/workstation/src/components/brand-background-badge.tsx": {
       "radius": 1
     },
-    "apps/workstation/src/components/calendar/calendar-link.tsx": {
-      "radius": 1
-    },
-    "apps/workstation/src/components/calendar/unified-calendar.tsx": {
-      "font-size": 1,
-      "radius": 2
-    },
     "apps/workstation/src/components/chat-window/widget-settings.tsx": {
       "radius": 1
     },
@@ -255,9 +248,6 @@
     "apps/workstation/src/components/rail/panels/memory-panel.tsx": {
       "radius": 1
     },
-    "apps/workstation/src/components/rail/panels/message-rules-panel.tsx": {
-      "radius": 1
-    },
     "apps/workstation/src/components/rail/panels/outbound-panel.tsx": {
       "radius": 1
     },
@@ -421,10 +411,6 @@
     },
     "apps/workstation/src/pages/brand-design.tsx": {
       "font-size": 1
-    },
-    "apps/workstation/src/pages/calendar.tsx": {
-      "font-size": 1,
-      "radius": 2
     },
     "apps/workstation/src/pages/duty.tsx": {
       "font-size": 2

@@ -26,6 +26,7 @@ import {
 } from '@schedule-x/calendar'
 import '@schedule-x/theme-default/dist/index.css'
 import { createCalendarControlsPlugin } from '@schedule-x/calendar-controls'
+import { createCurrentTimePlugin } from '@schedule-x/current-time'
 import { createDragAndDropPlugin } from '@schedule-x/drag-and-drop'
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react'
 import { createResizePlugin } from '@schedule-x/resize'
@@ -37,7 +38,13 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getCalendar, rescheduleSocialPost, scheduleTodo } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { foldAllDay, MORE_ID_PREFIX, moreDayOf } from '@/lib/calendar-allday'
+import {
+  ALL_DAY_MAX,
+  foldAllDay,
+  foldMonth,
+  MORE_ID_PREFIX,
+  moreDayOf,
+} from '@/lib/calendar-allday'
 import { dispatchDrag, dragVerdict } from '@/lib/calendar-drag'
 import {
   type CalendarView,
@@ -47,6 +54,7 @@ import {
   LAYERS,
   serializeLayers,
 } from '@/lib/calendar-layers'
+import { displayEnd, eventContent, writeBackEnd } from '@/lib/calendar-view'
 import './unified-calendar.css'
 
 /** 浏览器自己那个时区。日界线在服务端按工作区时区切，这里只管画。 */
@@ -108,8 +116,13 @@ function fromSx(value: Temporal.ZonedDateTime | Temporal.PlainDate, tz: string):
     : value.toInstant().toString()
 }
 
-/** 一条日历项 → Schedule-X 的事件。`calendarId` 就是图层名（颜色从 `calendars` 上来）。 */
-function toEvent(item: CalendarItem, tz: string): CalendarEvent {
+/**
+ * 一条日历项 → Schedule-X 的事件。`calendarId` 就是图层名（底色从 `calendars` 上来）。
+ *
+ * WP456-T5：格子里画什么由我们给（`_customContent`）——图层色细条 + 标题 + 「9:00 · 社媒排期」；
+ * 只有一个时刻的按 1 小时高画（`displayEnd`），否则标题挤成一行只剩三四个字。
+ */
+function toEvent(item: CalendarItem, tz: string, layerName: string): CalendarEvent {
   const base = {
     id: item.id,
     title: item.title,
@@ -117,6 +130,7 @@ function toEvent(item: CalendarItem, tz: string): CalendarEvent {
     ...(item.notes === undefined ? {} : { description: item.notes.join('\n') }),
     // 只读的那几层连"拖起来"这一下都不给：拖起来再回弹比拖不动更让人以为是坏了
     ...(item.drag === 'reschedule' ? {} : { _options: { disableDND: true, disableResize: true } }),
+    _customContent: eventContent(item, { color: LAYER_COLOR[item.source], layerName }),
   }
   if (item.all_day) {
     const d = toPlainDate(item.start, tz)
@@ -125,7 +139,7 @@ function toEvent(item: CalendarItem, tz: string): CalendarEvent {
   return {
     ...base,
     start: toZoned(item.start, tz),
-    end: toZoned(item.end ?? item.start, tz),
+    end: toZoned(displayEnd(item).end, tz),
   }
 }
 
@@ -150,6 +164,11 @@ export interface UnifiedCalendarProps {
   onPickDate?(iso: string): void
   /** 这一屏的高度（职责页里那一块比整页矮） */
   heightClass?: string
+  /**
+   * 库的「窄了就换视图」（默认开着）。日历整页传 false：库认为「议程」只给窄屏用，宽屏下点「议程」
+   * 会被它悄悄换成日视图（WP456-T5 截图时发现）；整页的视图由页头那个分段说了算。
+   */
+  responsive?: boolean
 }
 
 /**
@@ -163,12 +182,14 @@ function layerPalette(layer: CalendarSource): {
   darkColors: { main: string; container: string; onContainer: string }
 } {
   const main = LAYER_COLOR[layer]
-  const colors = {
+  // 底色是同色的淡版：浅 10%、深 16%，和示意稿一致。库把这几个变量写在 <html> 上，
+  // 所以比例只能直接写在这里（写成我们自己的 CSS 变量，在 <html> 那一层取不到）。
+  const tinted = (pct: number) => ({
     main,
-    container: `color-mix(in oklab, ${main} 18%, var(--card))`,
-    onContainer: 'var(--card-foreground)',
-  }
-  return { colorName: layer, lightColors: colors, darkColors: colors }
+    container: `color-mix(in srgb, ${main} ${pct}%, var(--ws-card))`,
+    onContainer: 'var(--ws-ink)',
+  })
+  return { colorName: layer, lightColors: tinted(10), darkColors: tinted(16) }
 }
 
 /** 「还有 N 项」那一条：不是一个图层，没有底色，只是一行灰字（样式在 `unified-calendar.css`）。 */
@@ -178,16 +199,25 @@ const MORE_PALETTE = {
   darkColors: { main: 'transparent', container: 'transparent', onContainer: 'var(--ws-muted-fg)' },
 }
 
-/** 那一天（`YYYY-MM-DD`）→ 「还有 N 项」那一条事件。拖不动、改不了长短。 */
-function moreEvent(day: string, title: string): CalendarEvent {
+/**
+ * 那一天（`YYYY-MM-DD`）→ 「还有 N 项」那一条事件。拖不动、改不了长短。
+ *
+ * 周 / 日视图里它是一条全天项（排在全天区最后一行）；月格里库按开始时刻排，全天项排最前，
+ * 所以月格里它落在那天 23:59——排在最后，字由 `_customContent` 给，不出钟点。
+ */
+function moreEvent(day: string, title: string, inMonth: boolean, tz: string): CalendarEvent {
   const d = Temporal.PlainDate.from(day)
+  const at = inMonth
+    ? d.toZonedDateTime({ timeZone: tz, plainTime: Temporal.PlainTime.from('23:59') })
+    : d
   return {
     id: `${MORE_ID_PREFIX}${day}`,
     title,
     calendarId: 'more',
-    start: d,
-    end: d,
+    start: at,
+    end: at,
     _options: { disableDND: true, disableResize: true },
+    _customContent: { monthGrid: `<span class="ws-ev-title">${title}</span>` },
   }
 }
 
@@ -201,6 +231,7 @@ export function UnifiedCalendar({
   onItems,
   onPickDate,
   heightClass = 'h-[70vh]',
+  responsive = true,
 }: UnifiedCalendarProps): React.ReactNode {
   const { t, theme, lang } = useApp()
   const client = useQueryClient()
@@ -229,15 +260,15 @@ export function UnifiedCalendar({
   }, [calendar.data, channel, layers])
 
   /**
-   * WP457：日 / 周视图的全天区每天最多画 2 条，多的折成「还有 N 项」（月格库自己会折，议程是列表）。
+   * WP457：日 / 周视图的全天区每天最多画 2 条，多的折成「还有 N 项」。
+   * WP456-T5：月格也照这一套（每天 2 条 + 「还有 N 项」，点开同一张小卡）；议程是列表，不折。
    */
-  const fold = useMemo(
-    () =>
-      view === 'day' || view === 'week'
-        ? foldAllDay(items, (iso) => toPlainDate(iso, tz).toString())
-        : { shown: items, hidden: new Map<string, CalendarItem[]>() },
-    [items, view, tz],
-  )
+  const fold = useMemo(() => {
+    const dayOf = (iso: string): string => toPlainDate(iso, tz).toString()
+    if (view === 'day' || view === 'week') return foldAllDay(items, dayOf)
+    if (view === 'month') return foldMonth(items, dayOf)
+    return { shown: items, hidden: new Map<string, CalendarItem[]>() }
+  }, [items, view, tz])
 
   /** 事件 id → 那一条（拖拽回调里只拿得到事件，判据在这一份上）。 */
   const byId = useRef(new Map<string, CalendarItem>())
@@ -315,7 +346,10 @@ export function UnifiedCalendar({
         gridHeight: HOUR_PX * DAY_HOURS,
         timeAxisFormatOptions: { hour: 'numeric', minute: '2-digit', hourCycle: 'h23' },
       },
+      // WP456-T5：月格每天 2 条 + 「还有 N 项」是我们折好的（最多 3 条）；库自己那套「+ 9 场活动」不再出现
+      monthGridOptions: { nEventsPerDay: ALL_DAY_MAX + 1 },
       isDark: theme === 'dark',
+      isResponsive: responsive,
       events: [],
       // 七个图层各一个 shadcn token：深浅色由浏览器在上色那一刻算，不在这里监听主题
       calendars: {
@@ -358,9 +392,11 @@ export function UnifiedCalendar({
         onEventUpdate: (event) => {
           const item = byId.current.get(String(event.id))
           if (item === undefined) return
+          const start = fromSx(event.start, tz)
           dispatchDrag(
             item,
-            { start: fromSx(event.start, tz), end: fromSx(event.end, tz) },
+            // 画的时候补过 1 小时的（只有一个时刻的那种），回写时去掉补的那一截
+            { start, end: writeBackEnd(item, start, fromSx(event.end, tz)) },
             {
               todo: (id, slot) => {
                 handlers.current.moveTodo.mutate({ id, ...slot })
@@ -373,19 +409,26 @@ export function UnifiedCalendar({
         },
       },
     },
-    [createDragAndDropPlugin(15), createResizePlugin(15), controls],
+    [
+      createDragAndDropPlugin(15),
+      createResizePlugin(15),
+      // WP456-T5：当前时间一条红线（只画在今天那一列；颜色在 unified-calendar.css）
+      createCurrentTimePlugin({ fullWeekWidth: false }),
+      controls,
+    ],
   )
 
   // 事件变了：换一份进去（不重建日历，否则滚动位置与正在拖的那一下都没了）
   useEffect(() => {
     app?.events.set([
-      ...fold.shown.map((i) => toEvent(i, tz)),
+      ...fold.shown.map((i) => toEvent(i, tz, t(`calendar.source.${i.source}`))),
       ...[...fold.hidden].map(([day, rest]) =>
-        moreEvent(day, t('calendar.more', { n: rest.length })),
+        moreEvent(day, t('calendar.more', { n: rest.length }), view === 'month', tz),
       ),
     ])
-  }, [app, fold, tz, t])
+  }, [app, fold, tz, t, view])
   const hiddenOfDay = moreDay === undefined ? undefined : fold.hidden.get(moreDay)
+  const todayKey = Temporal.Now.plainDateISO(tz).toString()
 
   // 视图 / 定位日 / 主题变了：走 controls，同样不重建
   useEffect(() => {
@@ -424,7 +467,16 @@ export function UnifiedCalendar({
         data-testid="calendar-host"
         data-view={view}
         data-count={items.length}
+        // 全天区左边那格写「全天」（库不画这个字；CSS 用 content 取这个变量）
+        style={
+          { '--ws-allday-label': JSON.stringify(t('calendar.all_day')) } as React.CSSProperties
+        }
       >
+        {/*
+          WP456-T5：周视图里今天那一列整列一层淡品牌色（示意稿；日视图只有一列，不用标）。库只在表头上标「今天」，
+          时间格那一列没有类名可认，所以按日期点名——日期是我们自己算的，不是外来的字。
+        */}
+        <style>{`.sx-host[data-view="week"] [data-time-grid-date="${todayKey}"]{background-color:var(--ws-cal-today-col)}`}</style>
         <ScheduleXCalendar calendarApp={app} />
       </div>
 
@@ -497,14 +549,14 @@ function MoreCard({
               <button
                 type="button"
                 data-testid="calendar-more-item"
-                className="flex w-full items-center gap-2 rounded-[8px] px-1.5 py-1 text-left hover:bg-ws-surface"
+                className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-ws-hover"
                 onClick={() => {
                   onPick(item)
                 }}
               >
                 <span
                   aria-hidden
-                  className="size-2 shrink-0 rounded-[3px]"
+                  className="ws-cal-swatch"
                   style={{ background: LAYER_COLOR[item.source] }}
                 />
                 <Icon className="size-3.5 shrink-0 text-ws-muted-fg" aria-hidden />
@@ -554,7 +606,7 @@ function EventCard({
           ✕
         </Button>
       </div>
-      <div className="text-[14.5px] leading-5 font-semibold">{item.title}</div>
+      <div className="text-ws-read font-semibold">{item.title}</div>
       {item.notes === undefined ? null : (
         <ul className="list-disc pl-4 text-xs text-ws-bad">
           {item.notes.map((n) => (
@@ -564,10 +616,7 @@ function EventCard({
       )}
       <div className="flex items-center gap-2 border-t border-ws-line pt-2.5">
         {href === undefined ? null : (
-          <Link
-            to={href}
-            className="inline-flex h-8 items-center rounded-[10px] bg-ws-brand px-3 text-xs font-medium text-ws-brand-fg"
-          >
+          <Link to={href} className="ws-btn ws-btn-primary ws-btn-sm">
             {item.matter_id === undefined
               ? t('calendar.open_position')
               : t('calendar.open_in_matter')}

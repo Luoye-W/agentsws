@@ -544,6 +544,9 @@ importers:
       '@schedule-x/calendar-controls':
         specifier: 3.7.3
         version: 3.7.3(@preact/signals@2.11.2(preact@10.29.8))(preact@10.29.8)
+      '@schedule-x/current-time':
+        specifier: 3.7.3
+        version: 3.7.3
       '@schedule-x/drag-and-drop':
         specifier: 3.7.3
         version: 3.7.3(@preact/signals@2.11.2(preact@10.29.8))(preact@10.29.8)
@@ -6908,6 +6911,9 @@ packages:
       '@preact/signals': ^2.0.2
       preact: ^10.19.2
       temporal-polyfill: 0.3.0
+
+  '@schedule-x/current-time@3.7.3':
+    resolution: {integrity: sha512-rv8gEaEad5bHvRhmDEjFwBUiMg6PXHYtdAUyGiHN5SPiqV4hf2hY5x7zusdHtYjjLiVJwF6LQfWjlRxrp82/7g==}
 
   '@schedule-x/drag-and-drop@3.7.3':
     resolution: {integrity: sha512-nHwZKzdIKWNTdT5BEXy4vLlHOmOH3C3M744QUIU0EOXPAFZQR1bBTviGs2NhmvaLiGstnVx2/TZtdhocy60hgg==}
@@ -17914,6 +17920,8 @@ snapshots:
       '@preact/signals': 2.11.2(preact@10.29.8)
       preact: 10.29.8
       temporal-polyfill: 0.3.0
+
+  '@schedule-x/current-time@3.7.3': {}
 
   '@schedule-x/drag-and-drop@3.7.3(@preact/signals@2.11.2(preact@10.29.8))(preact@10.29.8)':
     dependencies:

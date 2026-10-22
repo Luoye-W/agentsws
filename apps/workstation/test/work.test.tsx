@@ -470,6 +470,34 @@ describe('日历（37 C3 + §2.5：一个日历，多图层）', () => {
     expect(on).toEqual(['todo', 'social_post'])
   })
 
+  it('WP456-T5 页头：标题写年月 + 本周 N 项；「安排一件事」在页头右边；图层说明进问号', async () => {
+    renderWithProviders(<CalendarPage />)
+    await host()
+    expect(screen.getByTestId('calendar-title').textContent).toMatch(/^\d{4} 年 \d{1,2} 月$/)
+    const head = screen.getByTestId('calendar-head')
+    expect(within(head).getByTestId('calendar-meet').textContent).toBe('安排一件事')
+    expect(within(head).getByTestId('calendar-views')).toBeTruthy()
+    // 说明不再常驻一行：只在问号里
+    expect(screen.queryByText('勾掉的那一层还在，只是这一屏不画它。')).toBeNull()
+    expect(screen.getByTestId('calendar-layers-help').getAttribute('data-hint')).toBe(
+      '勾掉的那一层还在，只是这一屏不画它。',
+    )
+  })
+
+  it('WP456-T5 图层勾选框：没勾是灰框、勾上是品牌色，颜色只在后面的小方块上', async () => {
+    renderWithProviders(<CalendarPage />, '/calendar?layers=todo')
+    await host()
+    const rows = screen.getAllByTestId('calendar-layer')
+    const off = rows.find((n) => n.dataset.layer === 'card_due') as HTMLElement
+    const on = rows.find((n) => n.dataset.layer === 'todo') as HTMLElement
+    const offBox = within(off).getByTestId('calendar-layer-check')
+    const onBox = within(on).getByTestId('calendar-layer-check')
+    expect(offBox.getAttribute('style')).toBeNull()
+    expect(offBox.className).toContain('border-ws-line-strong')
+    expect(onBox.className).toContain('bg-ws-brand')
+    expect(off.querySelector('.ws-cal-swatch')?.getAttribute('style')).toContain('--ws-warn')
+  })
+
   it('点开一条 = 一张小卡（来源、状态、在事项里打开）', async () => {
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
     renderWithProviders(<CalendarPage />)
