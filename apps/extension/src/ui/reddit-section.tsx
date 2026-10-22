@@ -74,7 +74,7 @@ export function RedditSection(props: { paired: boolean }): React.ReactNode {
       </ul>
       <p
         className="ws-note"
-        title="读：只读收件箱与自家版块，不改已读。写：批过的回复由插件新开标签页填好，你自己点发送。登录你自己在这个 Chrome 里做"
+        title="读：只读收件箱与自家版块，不改已读。写：在你开着的原帖页里填好（没开着就新开一页），你自己点发送；你自己粘贴发的也照样记。登录你自己在这个 Chrome 里做"
       >
         读不改已读 · 写由你点发送
       </p>

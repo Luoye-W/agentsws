@@ -191,9 +191,11 @@ describe('WP445 审与发在插件里一步完成', () => {
     expect(opened.ok, opened.message).toBe(true)
     const job = opened.job as ActionJob
     expect(job.plan.allow.values).toEqual([SIDE])
-    expect(job.plan.steps[0]).toEqual({
+    expect(job.plan.steps[0]).toMatchObject({
       op: 'goto',
       url: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/c1/',
+      // WP467：带上帖子 id（已经开着这个帖子就地填）
+      post: 'abc',
     })
     // 发送按钮不在白名单里（人点）
     expect(JSON.stringify(job.plan.allow.click)).not.toMatch(/submit|save|comment-submit/iu)

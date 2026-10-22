@@ -187,9 +187,11 @@ describe('WP432 Reddit 写：批了不自动开页面，在插件侧边栏里人
     expect(opened.ok, opened.message).toBe(true)
     const job = opened.job as ActionJob
     expect(job.plan.allow.values).toEqual([SIDE])
-    expect(job.plan.steps[0]).toEqual({
+    expect(job.plan.steps[0]).toMatchObject({
       op: 'goto',
       url: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/c1/',
+      // WP467：带上帖子 id（已经开着这个帖子就地填）
+      post: 'abc',
     })
     expect(job.plan.steps.at(-1)).toMatchObject({ op: 'await_sent', author: 'ivra_official' })
     // 再点一次：已经打开了
@@ -281,9 +283,11 @@ describe('WP432 Reddit 写：批了不自动开页面，在插件侧边栏里人
         body: '{}',
       }),
     )
-    expect(opened.job?.plan.steps[0]).toEqual({
+    expect(opened.job?.plan.steps[0]).toMatchObject({
       op: 'goto',
       url: 'https://www.reddit.com/r/ivraxr/comments/abc/slug/c1/',
+      // WP467：带上帖子 id（已经开着这个帖子就地填）
+      post: 'abc',
     })
     // 每一步先按新版找、找不到再按旧版（www 被跳到 old.reddit 时也填得进去）
     const fill = opened.job?.plan.steps.find((x) => x.op === 'fill')

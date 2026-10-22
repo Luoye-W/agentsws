@@ -782,6 +782,47 @@ upstreams:
       - packages/skills/test/bundled.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
+  # WP449（docs/109 §5.1 #5–8）：内容与博客的多市场版本、发布前引用核查、「好不好被 AI 引用」打分、
+  # 竞品对比页——方法借鉴这两家（MIT；10-21 浅克隆读源码）。技能正文是中文改写，规则是我们自己的 TS
+  # （packages/seo-core 的 citations / citability / localize / comparison），Python 脚本与 FLOW 提示词（CC BY 4.0）一行没收。
+  - id: claude-blog
+    kind: ported
+    why: content-localize（多市场版本：译完再本地化）的方法改编自它的 blog-translate / blog-localize / blog-locale-audit（MIT）；发布前引用核查（blog-factcheck）与「好不好被 AI 引用」打分（blog-geo）借了方法、代码自写
+    repo: AgriciDaniel/claude-blog
+    pinned_commit: 354442348815a7f0327077ad89af2c43cf4b4ab4
+    watch: [releases, readme]
+    watch_paths:
+      - skills/blog-translate
+      - skills/blog-localize
+      - skills/blog-locale-audit
+      - skills/blog-factcheck
+      - skills/blog-geo
+    we_depend_on:
+      - 'skills/{blog-translate,blog-localize,blog-locale-audit} 与 blog-translate/references/{translation-rules,cultural-adaptation}.md → packages/skills/bundled/content-localize/SKILL.md'
+      - 'skills/blog-factcheck 的核查方法（逐条抽说法、打开引用页找原数、打不开不算核过、先查网址再抓） → packages/seo-core/src/citations.ts（自己的代码）'
+      - 'skills/blog-geo 的打分维度（可单独引用、说法 + 出处、实体一致、结构可抽取） → packages/seo-core/src/citability.ts（自己的代码，分项与权重是我们定的）'
+      - 'blog-translate/references/translation-rules.md 的各地数字 / 日期 / 货币写法表 → packages/seo-core/src/localize.ts（MARKET_CONVENTIONS 与逐句检查）'
+    covered_by:
+      - packages/skills/test/wp449-content-skills.test.ts
+      - packages/seo-core/test/wp449-content-quality.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
+  - id: claude-seo
+    kind: ported
+    why: seo-judgment 的「对比页：X vs Y、X 的替代品」一节改编自它的 seo-competitor-pages（MIT）、「让 AI 答得出」五条参考了 seo-geo；竞品对比的发布前检查借了方法、代码自写
+    repo: AgriciDaniel/claude-seo
+    pinned_commit: 4b99de2f7de7e7d5247042e5fb5b4ea9368ef734
+    watch: [releases, readme]
+    watch_paths:
+      - skills/seo-competitor-pages
+      - skills/seo-geo
+    we_depend_on:
+      - 'skills/seo-competitor-pages 的公平准则与结构化数据建议（改成只标自己的商品） → packages/skills/bundled/seo-judgment/SKILL.md「对比页」一节；packages/seo-core/src/comparison.ts（自己的代码）'
+      - 'skills/seo-geo 的可引用性维度 → packages/skills/bundled/seo-judgment/SKILL.md「写给人看，也让 AI 答得出」五条；packages/seo-core/src/citability.ts'
+    covered_by:
+      - packages/skills/test/wp449-content-skills.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
   # 两份研究技能改编自这两家（MIT）。**只留方法论与产出，取数层整个换掉**
   # （上游直接抓 Reddit 公开页面 / JSON、用浏览器 cookie 调 X 内部接口、调第三方抓取服务——一条都没进来；
   # 我们只走官方网页工具、接口中台、Reddit 两路、品牌连上的官方接口，见 social-core/src/research/sources.ts）。

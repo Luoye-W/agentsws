@@ -22,7 +22,7 @@ import { SearchHandoverView } from '@/components/rail/panels/search-handover'
 import { parseMatterPath } from '@/components/rail/rail-layout'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getMatter, getRunBrowser } from '@/lib/api'
+import { ensureSession, getMatter, getRunBrowser } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 /** 三种执行器各自的一句人话（55 §3 / §10）。 */
@@ -55,12 +55,27 @@ function RunBrowserStatus({ pathname }: RailPanelBodyProps): ReactNode {
     queryFn: () => getMatter(matter_id as string),
     enabled: matter_id !== undefined,
   })
-  const run_id = matter.data?.timeline.filter((e) => e.run_id !== undefined).at(-1)?.run_id
+  const timeline = matter.data?.timeline ?? []
+  const run_id = timeline.filter((e) => e.run_id !== undefined).at(-1)?.run_id
+  /*
+   * WP468（决策 1478）：这次运行是哪条分配跑的（时间线上 AI 那几条的 `actor.id` 就是分配 id）。
+   * 是我名下的就用它去读——没有「读运行记录」的职责（YouTube 红人这类）也能看自己发起的那次运行；
+   * 不是我的（别人交过来的事）就照旧用当前岗位那一条。
+   */
+  const session = useQuery({ queryKey: ['session'], queryFn: ensureSession, retry: false })
+  // 老数据 / 替身里可能没有 actor：认不出就当不知道是谁跑的
+  const ran_by = timeline.find((e) => e.run_id === run_id && e.actor?.kind === 'agent')?.actor?.id
+  const mine =
+    ran_by !== undefined &&
+    session.data?.assignments.some((a) => a.id === ran_by && a.revoked_at === undefined) === true
+      ? ran_by
+      : undefined
 
   const browser = useQuery({
-    queryKey: ['run-browser', run_id],
-    queryFn: () => getRunBrowser(run_id as string),
-    enabled: run_id !== undefined,
+    queryKey: ['run-browser', run_id, mine],
+    queryFn: () => getRunBrowser(run_id as string, mine),
+    // 等认清是谁跑的再读（不然先用当前岗位读一次、马上又换一次）
+    enabled: run_id !== undefined && !session.isPending,
     // 还在跑的时候这一份每几秒就变一次（它正在点页面）
     refetchInterval: 5_000,
   })

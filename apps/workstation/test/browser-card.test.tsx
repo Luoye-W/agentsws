@@ -262,6 +262,36 @@ describe('WP463：ego 那一项', () => {
     }
   })
 
+  it('WP468：选 ego 时顶上那句换成「ego 不按网站名单拦，只留记录」；已存成 ego 的打开就是这一句', async () => {
+    state.view = EGO_LOCAL
+    state.ego = { allowed: true, installed: true, version: '2.1.0', ego_path: '/x/ego-browser' }
+    const { unmount } = renderWithProviders(<BrowserCard assignment="asg_1" />)
+    const summary = await screen.findByTestId('settings-browser-summary')
+    expect(summary.textContent).toContain('只能打开它职责里写的那几个网站')
+    const row = await screen.findByTestId('browser-mode-ego')
+    await screen.findByTestId('browser-ego-status')
+    await userEvent.click(row.querySelector('input') as HTMLInputElement)
+    expect(screen.getByTestId('settings-browser-summary').textContent).toContain(
+      'ego 不按网站名单拦，只留记录',
+    )
+    expect(screen.getByTestId('settings-browser-scope').getAttribute('data-hint') ?? '').toContain(
+      '运行记录',
+    )
+    // 换回别的方式，那句也换回来
+    await userEvent.click(
+      screen.getByTestId('browser-mode-off').querySelector('input') as HTMLInputElement,
+    )
+    expect(screen.getByTestId('settings-browser-summary').textContent).toContain(
+      '只能打开它职责里写的那几个网站',
+    )
+    unmount()
+    state.view = { ...EGO_LOCAL, mode: 'ego' }
+    renderWithProviders(<BrowserCard assignment="asg_1" />)
+    expect((await screen.findByTestId('settings-browser-summary')).textContent).toContain(
+      'ego 不按网站名单拦',
+    )
+  })
+
   it('老服务进程（没有 ego_allowed 这一格）：不出现', async () => {
     renderWithProviders(<BrowserCard assignment="asg_1" />)
     await screen.findByTestId('browser-mode-browserskill')

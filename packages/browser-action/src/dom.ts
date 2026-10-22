@@ -83,8 +83,26 @@ export function domClick(doc: Document, selector: string): DomOpResult {
   const el = resolveOne(doc, selector)
   if (el === undefined) return MISSING(selector)
   if (!visible(el)) return { ok: false, why: '那个按钮现在点不了（被隐藏或是灰的）。' }
+  // WP467：先聚焦再点（和人按下鼠标一样）——新版 Reddit 的「Join the conversation」只认聚焦才展开评论框
+  try {
+    ;(el as HTMLElement).focus?.()
+  } catch {
+    // 聚焦不了也照样点
+  }
   ;(el as HTMLElement).click()
   return { ok: true }
+}
+
+/** WP467：把这一个滚到眼前（新版 Reddit 的评论按钮滚到看得见才长出来）。只滚，不点。回找没找到。 */
+export function domReveal(doc: Document, selector: string): boolean {
+  const el = resolveAll(doc, selector)[0]
+  if (el === undefined) return false
+  try {
+    ;(el as HTMLElement).scrollIntoView?.({ block: 'center' })
+  } catch {
+    // 老页面不认参数：不滚也行
+  }
+  return true
 }
 
 /** 用原生 setter 写值再发 input / change：React 一类的页面只认这样改的值。 */
@@ -175,6 +193,135 @@ export function domFill(
   return { ok: true }
 }
 
+/** 草稿 → 富文本框认的段落：每一行一段，空行不另起空段（编辑器把每个换行都当一段）。 */
+export function editorParagraphs(value: string): string {
+  return value
+    .replace(/\r\n?/gu, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== '')
+    .join('\n')
+}
+
+const pause = (doc: Document, ms: number): Promise<void> =>
+  new Promise((resolve) => (doc.defaultView ?? globalThis).setTimeout(resolve, ms))
+
+function selectAllIn(doc: Document, el: HTMLElement): void {
+  el.focus()
+  const sel = doc.defaultView?.getSelection?.()
+  if (sel === null || sel === undefined) return
+  const range = doc.createRange()
+  range.selectNodeContents(el)
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+function caretToEnd(doc: Document, el: HTMLElement): void {
+  try {
+    el.focus()
+    const sel = doc.defaultView?.getSelection?.()
+    if (sel === null || sel === undefined) return
+    const range = doc.createRange()
+    range.selectNodeContents(el)
+    range.collapse(false)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  } catch {
+    // 放不了光标也不要紧
+  }
+}
+
+/** 框里的字和要填的一样吗（去掉标点空白比；编辑器把段落渲染成 `<p>`）。 */
+const editorHas = (el: Element, want: string): boolean =>
+  postedKey(el.textContent ?? '') === postedKey(want)
+
+/** 等编辑器把字渲染出来（它在下一拍才改页面）。 */
+async function settled(doc: Document, el: Element, want: string): Promise<boolean> {
+  // 只有编辑器要等它下一拍渲染；普通可编辑块写了就是写了
+  const tries = el.getAttribute('data-lexical-editor') === 'true' ? 12 : 1
+  for (let i = 0; i < tries; i += 1) {
+    if (editorHas(el, want)) return true
+    await pause(doc, 120)
+  }
+  return editorHas(el, want)
+}
+
+/**
+ * WP467：富文本框（新版 Reddit 的评论框是 Lexical 编辑器）——**按「粘贴」交给编辑器**：
+ * 聚焦、全选（等一拍让编辑器同步选区，原来有字就整段换掉）、发一个带纯文字的粘贴事件，编辑器自己拆段落、
+ * 自己更新状态，Reddit 的「Comment」按钮照常可点。编辑器不认粘贴就退回「按行输入文字」；
+ * 普通的 contenteditable（不是编辑器）最后直接写字。都不认就照实说，交给人粘贴。
+ * 真站 10-22 核过（公开帖子，只填不发）：直接 `insertText` 会把换行吃掉，粘贴不会。
+ */
+async function fillEditor(doc: Document, el: HTMLElement, value: string): Promise<boolean> {
+  const text = editorParagraphs(value)
+  const view = doc.defaultView as (Window & typeof globalThis) | null
+  selectAllIn(doc, el)
+  await pause(doc, 60)
+  const DT = view?.DataTransfer
+  const CE = view?.ClipboardEvent
+  if (DT !== undefined && CE !== undefined) {
+    try {
+      const dt = new DT()
+      dt.setData('text/plain', text)
+      el.dispatchEvent(new CE('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+    } catch {
+      // 造不出粘贴事件：下面按行输入
+    }
+    if (await settled(doc, el, text)) return true
+  }
+  // 编辑器不认粘贴：全选、一行一行「输入文字」，行与行之间另起一段
+  selectAllIn(doc, el)
+  await pause(doc, 60)
+  try {
+    if (typeof doc.execCommand === 'function') {
+      const lines = text.split('\n')
+      for (const [i, line] of lines.entries()) {
+        if (i > 0) doc.execCommand('insertParagraph', false)
+        doc.execCommand('insertText', false, line)
+      }
+    }
+  } catch {
+    // 不认：下面再看
+  }
+  if (await settled(doc, el, text)) return true
+  // 不是编辑器的普通可编辑块（本地假页面、老页面）：直接写字。编辑器上不这么做（会和它自己的状态打架）
+  if (el.getAttribute('data-lexical-editor') !== 'true') {
+    el.textContent = value
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    return true
+  }
+  return false
+}
+
+/**
+ * WP467：填一个框（插件页面脚本用这一个）。普通输入框与 {@link domFill} 一样；富文本框走
+ * {@link fillEditor}（要等编辑器一拍，所以是异步的）。
+ */
+export async function domFillAsync(
+  doc: Document,
+  selector: string,
+  value: string,
+  options?: { highlight?: boolean },
+): Promise<DomOpResult> {
+  if (textField(doc, selector) !== undefined) return domFill(doc, selector, value, options)
+  const el = resolveOne(doc, selector)
+  if (el === undefined || el.getAttribute('contenteditable') !== 'true') return MISSING(selector)
+  const ok = await fillEditor(doc, el as HTMLElement, value)
+  if (!ok) return { ok: false, why: 'Reddit 的评论框没认我们填的字，可能改版了。' }
+  // 填完：光标放在框里字的末尾（人接着改、接着点发送），描一圈并滚到眼前
+  caretToEnd(doc, el as HTMLElement)
+  if (options?.highlight === true) highlight(el)
+  // 编辑器展开时页面还会动一下：等一拍再滚一次，保证看得见
+  await pause(doc, 150)
+  try {
+    ;(el as HTMLElement).scrollIntoView?.({ block: 'center' })
+  } catch {
+    // 不滚也行
+  }
+  return { ok: true }
+}
+
 /** 粘贴整段文字（Meta 导入框）。与 fill 一样写值，再补一个 paste 事件给认它的页面。 */
 export function domPaste(doc: Document, selector: string, text: string): DomOpResult {
   const el = textField(doc, selector)
@@ -250,6 +397,19 @@ export interface PostedHit {
   author?: string
   /** WP432：页面上它的正文（读回人真发出去的字；外部文本，只当文字）。 */
   text?: string
+  /** WP467：页面上标的发出时间（毫秒；新版 `created`、旧版 `data-timestamp`）。认「草稿出来之后才发的」用。 */
+  created_ms?: number
+}
+
+/** 一条的发出时间（毫秒）。 */
+function createdOf(item: Element): number | undefined {
+  const iso = item.getAttribute('created')
+  if (iso !== null) {
+    const t = Date.parse(iso)
+    if (Number.isFinite(t)) return t
+  }
+  const ms = Number(item.getAttribute('data-timestamp') ?? Number.NaN)
+  return Number.isFinite(ms) && ms > 0 ? ms : undefined
 }
 
 /**
@@ -273,6 +433,20 @@ export function sentSnippet(draft: string): string {
     .find((line) => line !== '')
   const key = plain ?? postedKey(draft)
   return key.slice(0, 80)
+}
+
+/**
+ * WP467（10-22 真站核过）：用户装的网页翻译插件（如「沉浸式翻译」）会把译文**插进**评论正文里——读回「真发出去的字」
+ * 时把这些插进来的节点去掉，只留页面原文。
+ */
+const TRANSLATION_NODES =
+  '.immersive-translate-target-wrapper, [data-immersive-translate-translation-element-mark]'
+
+function ownText(el: Element): string {
+  if (el.querySelector(TRANSLATION_NODES) === null) return el.textContent ?? ''
+  const copy = el.cloneNode(true) as Element
+  for (const n of Array.from(copy.querySelectorAll(TRANSLATION_NODES))) n.remove()
+  return copy.textContent ?? ''
 }
 
 const THING = /^t[13]_[a-z0-9]+$/u
@@ -325,7 +499,7 @@ export function domFindPosted(
     } catch {
       part = null
     }
-    const said = part === null ? '' : norm(part.textContent)
+    const said = part === null ? '' : norm(ownText(part))
     const by = attrOf(item, ['data-author', 'author'])
     const textHit = part !== null && want !== '' && postedKey(said).includes(want)
     const authorHit =
@@ -333,7 +507,9 @@ export function domFindPosted(
     if (!textHit && !authorHit) continue
     const fullname = fullnameOf(item)
     const permalink = attrOf(item, ['data-permalink', 'permalink'])
+    const created_ms = createdOf(item)
     out.push({
+      ...(created_ms === undefined ? {} : { created_ms }),
       ...(fullname === undefined ? {} : { fullname }),
       ...(permalink === undefined ? {} : { permalink }),
       ...(by === undefined ? {} : { author: by }),

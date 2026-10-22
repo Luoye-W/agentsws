@@ -23,6 +23,7 @@
  */
 
 import type { ActionAccount, ActionJob, ActionPlan, ActionStep } from '../types.js'
+import { redditPostIdOf } from './post-url.js'
 
 /** 旧版 old.reddit（WP445 起只作兜底：www 被跳到这里时白名单里有它）。 */
 export const REDDIT_WRITE_ORIGIN = 'https://old.reddit.com'
@@ -69,26 +70,45 @@ export const REDDIT_WRITE_SELECTORS = {
 } as const
 
 /**
- * WP432：**新版 Reddit**（shreddit 组件）的选择器一张表。按公开页面结构整理、**没对真站核过**；
- * 用到的那几步都是 `soft`（对不上不停，交给人粘贴）。`>>>` = 进到这个组件的 shadow root 里再找。
+ * **新版 Reddit**（shreddit 组件）的选择器一张表——**Reddit 改版会坏的地方都在这里**，真站对不上只改这张表。
+ * `>>>` = 进到这个组件的 shadow root 里再找。
+ *
+ * WP467（10-22 在真站公开帖子上核过，只填不发；见报告）：
+ * - 评论的按钮行 `shreddit-comment-action-row[comment-id]` **滚到看得见才长出来**（之前只是个空 div），
+ *   所以回评论之前先把那条评论滚到眼前（`reveal`）；Reply 按钮在 `[slot="comment-reply"]` 里面；
+ *   点了 Reply，回复框长在那一行里（`shreddit-composer` 里的 Lexical 编辑器 `div[contenteditable]`）；
+ * - 顶层评论框收着时只有「Join the conversation」（`faceplate-textarea-input`），**聚焦它里面的 textarea 才展开**，
+ *   展开后才有编辑器；回评论的框也包在 `comment-composer-host` 里（带 `parent-id`），顶层那个要把它排掉；
+ * - 按钮行刚长出来马上点 Reply 偶尔不理（处理程序还在加载）：两步之间那 1.5 秒够了；
+ * - 评论正文 `div[slot="comment"]` 不是评论的直接孩子（包在 `details` 里），按「第一个」取（自己的正文在楼下之前）；
+ * - 发帖页（标题在 shadow root 里）这一单没再核，沿用 WP432 的写法。
  */
 export const REDDIT_WRITE_SELECTORS_NEW = {
-  /** 某条评论（`<shreddit-comment thingid="t1_…">`）自己的「Reply」按钮。 */
+  /** 某条评论本身（`<shreddit-comment thingid="t1_…">`；滚到眼前用、就地填时看它在不在）。 */
+  comment: (t1: string): string => `shreddit-comment[thingid="${t1}"]`,
+  /** 那条评论自己的「Reply」按钮（按钮行滚到看得见才有）。 */
   replyLink: (t1: string): string =>
-    `shreddit-comment[thingid="${t1}"] > [slot="actionRow"] button[slot="comment-reply"]`,
-  /** 点了 Reply 之后那条评论里冒出来的编辑框（富文本，contenteditable）。 */
+    `shreddit-comment-action-row[comment-id="${t1}"] [slot="comment-reply"] button`,
+  /** 点了 Reply 之后那一行里冒出来的编辑框（富文本，contenteditable）。 */
   replyBox: (t1: string): string =>
-    `shreddit-comment[thingid="${t1}"] shreddit-composer div[contenteditable="true"]`,
+    `shreddit-comment-action-row[comment-id="${t1}"] shreddit-composer div[contenteditable="true"]`,
   /** 那条评论直接的下一层回复。 */
   replyItems: (t1: string): string => `shreddit-comment[parentid="${t1}"]`,
-  /** 帖子页上收起的「Join the conversation」那一条（点一下展开编辑框）。 */
-  commentOpener: 'comment-composer-host faceplate-textarea-input[data-testid="trigger-button"]',
-  /** 展开后的顶层评论编辑框。 */
-  commentBox: 'comment-composer-host shreddit-composer div[contenteditable="true"]',
+  /** 帖子页上收起的「Join the conversation」（聚焦它里面的 textarea 才展开编辑框）。 */
+  commentOpener:
+    'comment-composer-host:not([parent-id]) faceplate-textarea-input[data-testid="trigger-button"] >>> textarea',
+  /** 上面那一条组件本身（shadow root 里没有 textarea 时退回点它）。 */
+  commentOpenerHost:
+    'comment-composer-host:not([parent-id]) faceplate-textarea-input[data-testid="trigger-button"]',
+  /**
+   * 展开后的顶层评论编辑框。回评论的框也长在一个 `comment-composer-host` 里（带 `parent-id`），所以要排掉它。
+   */
+  commentBox:
+    'comment-composer-host:not([parent-id]) shreddit-composer div[contenteditable="true"]',
   /** 帖子下面的顶层评论。 */
   commentItems: 'shreddit-comment[depth="0"]',
-  /** 一条评论自己的正文。 */
-  commentBody: ':scope > div[slot="comment"]',
+  /** 一条评论自己的正文（第一个就是它自己的）。 */
+  commentBody: 'div[slot="comment"]',
   /** 发帖页：标题（在组件的 shadow root 里）、正文。 */
   submitTitle: 'faceplate-textarea-input[name="title"] >>> textarea',
   submitText: 'shreddit-composer[name="body"] div[contenteditable="true"]',
@@ -268,8 +288,17 @@ function authorOf(author: string | undefined): { author?: string } {
   return a !== undefined && /^[A-Za-z0-9_-]{3,20}$/u.test(a) ? { author: a } : {}
 }
 
-/** 计划的外壳（白名单从步骤里收）。 */
+/** 计划的外壳（白名单从步骤里收；WP467：就地填 / 滚到眼前 / 已展开就不点 要看的那几个也收进 `wait`）。 */
 function planOf(w: RedditWrite, o: string, steps: ActionStep[], values: string[]): ActionPlan {
+  const looks = new Set<string>()
+  for (const s of steps) {
+    if (s.op === 'wait') {
+      looks.add(s.selector)
+      if (s.reveal !== undefined) looks.add(s.reveal)
+    }
+    if (s.op === 'goto' && s.need !== undefined) looks.add(s.need)
+    if (s.op === 'click' && s.unless !== undefined) looks.add(s.unless)
+  }
   return {
     kind: `reddit_${w.kind}`,
     platform: 'reddit',
@@ -280,7 +309,7 @@ function planOf(w: RedditWrite, o: string, steps: ActionStep[], values: string[]
       click: steps.flatMap((s) => (s.op === 'click' ? [s.selector] : [])),
       fill: steps.flatMap((s) => (s.op === 'fill' ? [s.selector] : [])),
       values,
-      wait: steps.flatMap((s) => (s.op === 'wait' ? [s.selector] : [])),
+      wait: [...looks],
     },
     verify: { op: 'none' },
     zones: [],
@@ -288,26 +317,22 @@ function planOf(w: RedditWrite, o: string, steps: ActionStep[], values: string[]
   }
 }
 
+/** WP445：新版找不到再按旧版（页面兜底：品牌号设了旧版界面、www 被 Reddit 跳到 old 时）。 */
+const or = (...alts: string[]): string => alts.join(' || ')
+
 /**
- * WP432：新版 Reddit 的步骤表。打开页面（`goto` 不软：打不开 / 被拦照样停）之后，等框、点 Reply、填字都是 `soft`——
- * 对不上就停在「等你粘贴」，不乱点；最后一步照样是等人点发送、读回。
+ * 新版 Reddit 的那几个选择器（旧版接在后面兜底）。插件「自动记录」（WP467：人自己粘贴发出去也认）也用这一份。
  */
-function newRedditPlan(
-  action: RedditWriteAction,
-  text: string,
-  o: string,
-  author: string | undefined,
-): ActionPlan {
+export function redditPageSelectors() {
   const N = REDDIT_WRITE_SELECTORS_NEW
   const O = REDDIT_WRITE_SELECTORS
-  /** WP445：新版找不到再按旧版（页面兜底）。 */
-  const or = (a: string, b: string): string => `${a} || ${b}`
-  const S = {
+  return {
+    comment: (t1: string) => or(N.comment(t1), `#thing_${t1}`),
     replyLink: (t1: string) => or(N.replyLink(t1), O.replyLink(t1)),
     replyBox: (t1: string) => or(N.replyBox(t1), O.replyBox(t1)),
     replyItems: (t1: string) => or(N.replyItems(t1), O.replyItems(t1)),
-    // 旧版没有「Join the conversation」那一条：评论框本来就摊开着，点一下它只是把光标放进去
-    commentOpener: or(N.commentOpener, O.commentBox),
+    // 旧版没有「Join the conversation」：评论框本来就摊开着，点一下它只是把光标放进去
+    commentOpener: or(N.commentOpener, N.commentOpenerHost, O.commentBox),
     commentBox: or(N.commentBox, O.commentBox),
     commentItems: or(N.commentItems, O.commentItems),
     commentBody: or(N.commentBody, O.commentBody),
@@ -316,6 +341,40 @@ function newRedditPlan(
     postItem: or(N.postItem, O.postItem),
     postTitle: or(N.postTitle, O.postTitle),
   }
+}
+
+/**
+ * WP467：认「发出去的那一条」用哪几个选择器（`await_sent` 与插件的自动记录同一份）。
+ * 回评论 = 那条评论下一层；回帖子 = 顶层评论；发新帖 = 帖子本身。
+ */
+export function redditSentSelectors(
+  write: { kind: 'reply'; parent: string } | { kind: 'comment' } | { kind: 'submit' },
+): { selector: string; body: string } {
+  const S = redditPageSelectors()
+  switch (write.kind) {
+    case 'reply':
+      return { selector: S.replyItems(redditThing('t1', write.parent)), body: S.commentBody }
+    case 'comment':
+      return { selector: S.commentItems, body: S.commentBody }
+    case 'submit':
+      return { selector: S.postItem, body: S.postTitle }
+  }
+}
+
+/**
+ * WP432：新版 Reddit 的步骤表。打开页面（`goto` 不软：打不开 / 被拦照样停）之后，等框、点 Reply、填字都是 `soft`——
+ * 对不上就停在「等你粘贴」，不乱点；最后一步照样是等人点发送、读回。
+ *
+ * WP467：`goto` 带上帖子 id——插件挑的标签页**已经在这个帖子上**（用户自己开着的原帖页）就不跳转、就地填；
+ * 回评论时还要那条评论在这一页上（不在就在同一个标签页里打开那条评论的链接）。
+ */
+function newRedditPlan(
+  action: RedditWriteAction,
+  text: string,
+  o: string,
+  author: string | undefined,
+): ActionPlan {
+  const S = redditPageSelectors()
   const w = action.write
   const by = authorOf(author)
   const send = (selector: string, body: string, want: string): ActionStep => ({
@@ -332,13 +391,28 @@ function newRedditPlan(
       if (!T1.test(t1)) throw new RedditPlanError('要回的那条评论编号不对。')
       const path = redditCommentsPath(w.permalink)
       if (path === undefined) throw new RedditPlanError('要回的那条评论没有链接，找不到回复框。')
+      const post = redditPostIdOf(path)
       return planOf(
         w,
         o,
         [
-          { op: 'goto', url: `${o}${path}` },
-          { op: 'wait', selector: S.replyLink(t1), timeout_ms: 20_000, soft: true },
-          { op: 'click', selector: S.replyLink(t1), soft: true },
+          {
+            op: 'goto',
+            url: `${o}${path}`,
+            ...(post === undefined ? {} : { post, need: S.comment(t1) }),
+          },
+          {
+            op: 'wait',
+            selector: S.replyLink(t1),
+            timeout_ms: 20_000,
+            soft: true,
+            reveal: S.comment(t1),
+          },
+          // 用户已经点开了那条评论的回复框：不再点 Reply（再点会把它收起来）
+          { op: 'click', selector: S.replyLink(t1), soft: true, unless: S.replyBox(t1) },
+          // 真站 10-22：刚打开的页面上第一下 Reply 偶尔不理（回复框的代码还在加载）——等一会儿，没出来再点一下
+          { op: 'wait', selector: S.replyBox(t1), timeout_ms: 4_000, optional: true },
+          { op: 'click', selector: S.replyLink(t1), soft: true, unless: S.replyBox(t1) },
           { op: 'wait', selector: S.replyBox(t1), timeout_ms: 10_000, soft: true },
           { op: 'fill', selector: S.replyBox(t1), value: text, soft: true, highlight: true },
           send(S.replyItems(t1), S.commentBody, text),
@@ -355,8 +429,13 @@ function newRedditPlan(
         w,
         o,
         [
-          { op: 'goto', url },
-          { op: 'wait', selector: S.commentOpener, timeout_ms: 20_000, soft: true },
+          { op: 'goto', url, post: t3.slice(3) },
+          {
+            op: 'wait',
+            selector: or(S.commentOpener, S.commentBox),
+            timeout_ms: 20_000,
+            soft: true,
+          },
           { op: 'click', selector: S.commentOpener, soft: true },
           { op: 'wait', selector: S.commentBox, timeout_ms: 10_000, soft: true },
           { op: 'fill', selector: S.commentBox, value: text, soft: true, highlight: true },
@@ -430,4 +509,28 @@ export function buildRedditJob(input: RedditJobInput): ActionJob {
     title: input.title ?? redditWriteTitle(input.action.write),
     created_at: input.created_at,
   }
+}
+
+/**
+ * WP467（Luoye 10-22：「填入」又跳到 old.reddit 去了）：写路径里不开 old.reddit——WP445 之前排进队的老活
+ * 可能还写着 old.reddit 的地址，交给插件之前一律换成 www（路径不变；白名单里本来就有 www）。
+ * 不是 Reddit 的活原样回。
+ */
+export function redditJobOnWww(job: ActionJob): ActionJob {
+  if (job.plan.platform !== 'reddit') return job
+  let changed = false
+  const steps = job.plan.steps.map((s): ActionStep => {
+    if (s.op !== 'goto') return s
+    let u: URL
+    try {
+      u = new URL(s.url)
+    } catch {
+      return s
+    }
+    if (u.hostname !== 'old.reddit.com') return s
+    changed = true
+    u.hostname = 'www.reddit.com'
+    return { ...s, url: u.toString() }
+  })
+  return changed ? { ...job, plan: { ...job.plan, steps } } : job
 }

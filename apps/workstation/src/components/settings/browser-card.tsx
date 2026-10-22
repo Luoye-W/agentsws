@@ -272,9 +272,20 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          {t('settings.browser.summary')}
-          <Hint text={t('settings.browser.summary.hint')} testId="settings-browser-scope" />
+        {/* WP468（决策 1479）：选了 ego 时「只能开职责里写的那几个站」不成立——ego 不过名单、只留记录 */}
+        <p
+          className="flex items-center gap-1 text-xs text-muted-foreground"
+          data-testid="settings-browser-summary"
+        >
+          {t(current === 'ego' ? 'settings.browser.summary.ego' : 'settings.browser.summary')}
+          <Hint
+            text={t(
+              current === 'ego'
+                ? 'settings.browser.summary.ego.hint'
+                : 'settings.browser.summary.hint',
+            )}
+            testId="settings-browser-scope"
+          />
         </p>
         <SafetyNote text={t('settings.browser.safety')} />
 
