@@ -7113,6 +7113,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             modelRef: () => effectiveModels().defaultRef(),
             // WP150：这次运行的模型请求会落到哪条来源（登出 DeepSeek 账号前据此认出在用账号跑的事）
             runModelRef: () => effectiveModels().purposeRef('run'),
+            // WP472：模型目录里写了上下文窗口就按它压历史、带对话原文（没写按 64K）
+            contextWindow: (ref) =>
+              effectiveModels()
+                .chatChoices()
+                .find((c) => c.id === `${ref.provider}/${ref.model}`)?.context_window,
             // WP342（决策 853）：事项自己选的 AI——还在「已接的」里面才认，否则跟品牌默认走
             modelOverride: (id) => chatModelRefOf(effectiveModels(), id),
             // WP370：事项选的思考程度这个模型还有没有

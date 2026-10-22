@@ -45,6 +45,11 @@ export interface ContextItem {
      * 公司档案（工作区）有时区就用它，没有 / 认不出就用本机时区。时间按小时取整（22 §2 缓存纪律）。
      */
     | 'time'
+    /**
+     * WP472（决策 1551，docs/116 §6 C）：这件事之前的对话原文（人的话 + 岗位的回复，按先后，只往后加；
+     * 太长时较早那部分一次折成一段固定的小结放最前）。走用户消息那一层、排在静态系统提示之后。
+     */
+    | 'history'
   source_ref: ObjectRef | string
   sensitivity: Sensitivity
   content: unknown

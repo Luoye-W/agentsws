@@ -336,10 +336,13 @@ export interface PositionLayerContext {
   /** 36 的数字块与告警，摘要级（数在服务端算好，这里只抄结论） */
   panel: { label: string; value: string }[]
   alerts: string[]
-  /** 岗位下进行中的事项（标题 + 阶段，≤ 10 条） */
+  /** 岗位下进行中的事项（标题 + 阶段，≤ 10 条；WP472 起按开的先后，新开的在前） */
   open_matters: { title: string; status: string }[]
-  /** 持有人可用时段 */
-  holders: { person_id: PersonId; available: string }[]
+  /**
+   * 持有人可用时段。WP472（docs/116 §6 A）：「在做事 / 空着」这类瞬时状态几乎每次运行都变，不再进上下文
+   * （要知道就现查）；字段留着只为老调用方，不再填。
+   */
+  holders?: { person_id: PersonId; available: string }[]
 }
 
 /** 岗位下进行中事项摘要最多带几条（54 §3；再多就是噪音，也撑爆上下文）。 */
@@ -602,9 +605,14 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     }
     const assignmentIds = new Set(view.roles.flatMap((r) => r.assignment_ids))
     // WP207：归档的事不进岗位层上下文（它这阵子没人动，喂给模型只是噪音）
+    /*
+     * WP472（docs/116 §6 A）：按**开的先后**取（新开的在前、同一刻按 id），不按最近活动——以前刚说过话的那件
+     * 跳到最前，每次运行这一段都换顺序。
+     */
     const open_matters = work
       .listMatters({ status: ['open', 'waiting'], archived: false, asks: false })
       .filter((m) => matterInPosition(m, position_id, assignmentIds))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id))
       .slice(0, MAX_POSITION_MATTERS)
       .map((m) => ({ title: m.title, status: m.status }))
     const cards = await cardsOf(person_id)
@@ -625,10 +633,6 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         .slice(0, 5)
         .map((i) => i.title),
       open_matters,
-      holders: view.holders.map((id) => ({
-        person_id: id,
-        available: work.listTodos({ owner: id, status: ['doing'] }).length > 0 ? '在做事' : '空着',
-      })),
     }
   }
 

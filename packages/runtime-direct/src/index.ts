@@ -20,6 +20,7 @@ export type { CompactPolicy } from './history.js'
 export {
   CLOSED_TOOL_RESULT,
   COMPACT_PLACEHOLDER,
+  COMPACT_TARGET_RATIO,
   compactHistory,
   compactHistoryFor,
   historyTokens,
@@ -46,7 +47,15 @@ export type {
 } from './providers/scripted.js'
 export { scriptedProvider, turnOf } from './providers/scripted.js'
 export type { DirectRuntimeOptions } from './runtime.js'
-export { createDirectRuntime, RUNTIME_NAME, refsFromEvents } from './runtime.js'
+export {
+  COMPACT_CAP_TOKENS,
+  COMPACT_WINDOW_RATIO,
+  compactLimitFor,
+  createDirectRuntime,
+  DEFAULT_CONTEXT_WINDOW,
+  RUNTIME_NAME,
+  refsFromEvents,
+} from './runtime.js'
 export type { DirectGateway, ForcedCompleteRequest, ToolChoiceGateway } from './tool-choice.js'
 export { supportsToolChoice, withToolChoice } from './tool-choice.js'
 export type { OrderView } from './view.js'

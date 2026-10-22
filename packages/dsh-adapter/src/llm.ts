@@ -21,6 +21,7 @@ import type {
   ReasoningReplay,
   ToolDef,
 } from '@agentsws/contracts'
+import { contextRoleOf } from '@agentsws/stand-ins'
 import type {
   AttachmentStore,
   ImageAttachmentRef,
@@ -151,8 +152,8 @@ function messageText(message: RequestMessage): string {
  * 把 dsh 拼好的一整段文本拆回 17 §1 的分段形状。
  *
  * 前缀（persona / 登记表 / dsh 自己的运行时上下文抬头）保持原来的角色；随后每个
- * `[kind:id]` 标记开一条新消息，`thread` 那一段是 `user`（与 `assemblePrompt` 同一条规则），
- * 其余是 `system`。
+ * `[kind:id]` 标记开一条新消息，角色按 `contextRoleOf`（与 `assemblePrompt` 同一条规则：WP472 起
+ * 政策 / 边界是 `system`，其余都是 `user`——每次都变的东西不混进系统提示）。
  */
 export function splitSystemText(
   text: string,
@@ -170,7 +171,8 @@ export function splitSystemText(
     const marker = CONTEXT_MARKER.exec(line.trim())
     if (marker !== null) {
       flush()
-      role = marker[1] === 'thread' ? 'user' : 'system'
+      // WP472：哪一层与 `assemblePrompt` 同一条规则（政策 / 边界走系统提示，其余走 user）
+      role = contextRoleOf(marker[1] ?? '')
       buffer.push(line.trim())
       continue
     }
