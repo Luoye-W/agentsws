@@ -304,7 +304,7 @@ function NotificationRow({
           >
             {n.text}
           </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-ws-muted-fg">
+          <span className="flex items-center gap-1.5 text-xs text-ws-muted-fg">
             <span>{ago}</span>
             {n.count > 1 ? (
               <span

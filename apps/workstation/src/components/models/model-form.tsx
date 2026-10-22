@@ -427,10 +427,7 @@ export function ModelForm({
           </Button>
         </div>
         {listing === undefined || listing.ok ? null : (
-          <p
-            className="text-[11px] text-amber-600 dark:text-amber-400"
-            data-testid="model-discover-failed"
-          >
+          <p className="text-xs text-ws-warn" data-testid="model-discover-failed">
             {t('models.discover.failed', { reason: listing.reason ?? '' })}
           </p>
         )}
@@ -453,7 +450,7 @@ export function ModelForm({
         note={
           existing?.has_key === true ? (
             <>
-              <p className="text-[11px] text-muted-foreground" data-slot="status">
+              <p className="text-xs text-muted-foreground" data-slot="status">
                 {t('models.field.api_key.keep')}
               </p>
               <SafetyNote text={t('models.field.api_key.hint')} />
@@ -528,7 +525,7 @@ export function ModelForm({
           </div>
           {/* 价的来源是状态，可见；「为什么要填」是规则，进问号 */}
           <p
-            className="flex items-center gap-1 text-[11px] text-muted-foreground"
+            className="flex items-center gap-1 text-xs text-muted-foreground"
             data-testid="model-price-source"
           >
             {priceManual

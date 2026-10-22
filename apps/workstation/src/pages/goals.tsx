@@ -40,7 +40,7 @@ function GoalNodeView({ node, depth }: { node: Node; depth: number }): React.Rea
       <div className="rounded-lg border p-3">
         <div className="flex items-baseline justify-between gap-2">
           <span className="truncate text-sm font-medium">{node.goal.title}</span>
-          <span className="shrink-0 text-[11px] text-muted-foreground">
+          <span className="shrink-0 text-xs text-muted-foreground">
             {t(`goals.level.${node.goal.level}`)}
           </span>
         </div>

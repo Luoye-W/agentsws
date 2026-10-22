@@ -42,7 +42,7 @@ export function CollisionCard({
   const reasonOk = [...reason.trim()].length >= MIN_DISTINCT_REASON
   return (
     <section
-      className="flex flex-col gap-2 rounded-md border border-amber-400/60 bg-amber-50/50 p-3 dark:bg-amber-950/20"
+      className="flex flex-col gap-2 rounded-md border border-ws-warn/60 bg-ws-warn-bg p-3"
       data-testid="collision-card"
       data-candidate={target.id}
       aria-live="polite"

@@ -33,7 +33,7 @@ export function ModelCheckSteps({
   if (steps === undefined || steps.length === 0) return null
   return (
     <ol
-      className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]', className)}
+      className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 text-xs', className)}
       // WP156：这是结果（三个小勾叉），不是"怎么做"的步骤清单——减字守卫按状态算
       data-slot="status"
       data-testid="model-check-steps"
@@ -47,7 +47,7 @@ export function ModelCheckSteps({
           className={cn(
             'flex items-center gap-1',
             s.ok
-              ? 'text-emerald-600 dark:text-emerald-400'
+              ? 'text-ws-good'
               : s.skipped === true
                 ? 'text-muted-foreground'
                 : 'text-destructive',
@@ -210,7 +210,7 @@ export function ModelStatusIcons({
             data-testid="model-status"
             data-kind={kind}
             className={cn(
-              'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] leading-4 font-medium whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs leading-4 font-medium whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring',
               KIND_TONE[kind],
               className,
             )}

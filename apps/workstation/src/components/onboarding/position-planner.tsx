@@ -60,11 +60,7 @@ function DutyChip({
       <DutyIcon role_id={id} size={14} className="text-ws-muted-fg" />
       {name}
       {recommended ? (
-        <Badge
-          variant="secondary"
-          className="ml-0.5 px-1 py-0 text-[10.5px]"
-          data-testid="duty-rec-tag"
-        >
+        <Badge variant="secondary" className="ml-0.5 px-1 py-0 text-xs" data-testid="duty-rec-tag">
           {t('onboarding.plan3.recs.tag')}
         </Badge>
       ) : null}
@@ -230,7 +226,7 @@ export function PositionPlanner({
                     {c.name}
                     {c.factory_name === undefined ? null : (
                       <span
-                        className="text-[11px] text-muted-foreground"
+                        className="text-xs text-muted-foreground"
                         data-testid="onboarding-category-factory"
                       >
                         （{c.factory_name}）
@@ -240,7 +236,7 @@ export function PositionPlanner({
                       {count > 0 ? `${String(count)}/${String(c.roles.length)}` : c.roles.length}
                     </span>
                     {recs > 0 ? (
-                      <Badge variant="secondary" className="px-1 py-0 text-[10.5px]">
+                      <Badge variant="secondary" className="px-1 py-0 text-xs">
                         {t('onboarding.plan3.recs.tag')} {recs}
                       </Badge>
                     ) : null}
@@ -357,7 +353,7 @@ export function PositionPlanner({
                   {tooMany(row) ? (
                     <Badge
                       variant="outline"
-                      className="text-[11px]"
+                      className="text-xs"
                       data-testid="onboarding-board-too-many"
                     >
                       {t('onboarding.plan3.board.too_many', { n: '6' })}
@@ -398,7 +394,7 @@ export function PositionPlanner({
                         <select
                           aria-label={t('onboarding.plan3.board.move')}
                           data-testid="onboarding-board-move"
-                          className="ml-0.5 max-w-5 cursor-pointer appearance-none bg-transparent text-[11px] text-ws-muted-fg"
+                          className="ml-0.5 max-w-5 cursor-pointer appearance-none bg-transparent text-xs text-ws-muted-fg"
                           value=""
                           onChange={(e) => {
                             if (e.target.value !== '') onBoard(moveDuty(board, id, e.target.value))

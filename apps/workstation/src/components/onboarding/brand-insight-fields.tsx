@@ -79,7 +79,7 @@ export function AiTag({ field, title }: { field: string; title?: string }): Reac
   const { t } = useApp()
   return (
     <span
-      className="rounded-sm bg-violet-100 px-1 text-[11px] text-violet-900 dark:bg-violet-900/40 dark:text-violet-200"
+      className="rounded-sm bg-ws-info-bg px-1 text-xs text-ws-info"
       data-testid={`insight-ai-${field}`}
       title={title ?? t('intake.tag.ai.hint')}
     >
@@ -88,7 +88,7 @@ export function AiTag({ field, title }: { field: string; title?: string }): Reac
   )
 }
 
-const chip = 'rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]'
+const chip = 'rounded-sm bg-ws-subtle px-1.5 py-0.5 text-xs'
 
 /** 一格的只读画法。 */
 function ValueView({ field, v }: { field: InsightKey; v: InsightValues }): React.ReactNode {
@@ -125,7 +125,7 @@ function ValueView({ field, v }: { field: InsightKey; v: InsightValues }): React
             .filter((g) => k[g].length > 0)
             .map((g) => (
               <span key={g} className="flex flex-wrap items-center gap-1">
-                <span className="text-[11px] text-ws-muted-fg">{t(`intake.keywords.${g}`)}</span>
+                <span className="text-xs text-ws-muted-fg">{t(`intake.keywords.${g}`)}</span>
                 {k[g].map((w) => (
                   <span key={w} className={chip}>
                     {w}
@@ -197,7 +197,7 @@ export function SourceLinks({
     <span className="inline-flex flex-col gap-0.5">
       <button
         type="button"
-        className="inline-flex items-center gap-0.5 text-[11px] text-ws-muted-fg hover:text-foreground"
+        className="inline-flex items-center gap-0.5 text-xs text-ws-muted-fg hover:text-foreground"
         aria-label={t('intake.sources', { n: items.length })}
         aria-expanded={open}
         title={t('intake.sources', { n: items.length })}
@@ -218,7 +218,7 @@ export function SourceLinks({
                 <span key={s.url} className="flex items-baseline gap-1 text-xs">
                   <SourceLink source={s} label={s.title ?? hostOf(s.url)} />
                   {s.title === undefined ? null : (
-                    <span className="text-[11px] text-ws-muted-fg">{hostOf(s.url)}</span>
+                    <span className="text-xs text-ws-muted-fg">{hostOf(s.url)}</span>
                   )}
                 </span>
               ))
@@ -488,7 +488,7 @@ function InsightRow({
           {ai && !empty ? <AiTag field={field} /> : null}
           {empty ? null : <SourceLinks field={field} items={sources} />}
           {edited && !ai ? (
-            <span className="text-[11px] text-ws-muted-fg" data-testid={`insight-edited-${field}`}>
+            <span className="text-xs text-ws-muted-fg" data-testid={`insight-edited-${field}`}>
               {t('intake.tag.edited')}
             </span>
           ) : null}

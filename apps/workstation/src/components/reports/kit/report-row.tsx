@@ -50,7 +50,7 @@ export function ReportRow({
           <span className="truncate">{report.title}</span>
           {report.origin === 'ai' ? <AiTag /> : null}
         </button>
-        <div className="col-start-1 mt-0.5 flex min-w-0 items-baseline gap-1.5 text-[11.5px] text-ws-muted-fg">
+        <div className="col-start-1 mt-0.5 flex min-w-0 items-baseline gap-1.5 text-xs text-ws-muted-fg">
           {m.status === 'ok' ? (
             <>
               <span className="truncate">{report.headline_label}</span>

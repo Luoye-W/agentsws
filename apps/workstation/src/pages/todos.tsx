@@ -99,7 +99,7 @@ function TodoRow({
       )}
       {todo.delegate === undefined ? null : (
         <span
-          className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground"
+          className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
           data-testid="todo-delegated"
         >
           <Bot className="size-3" aria-hidden />
@@ -107,13 +107,13 @@ function TodoRow({
         </span>
       )}
       {waiting === undefined ? null : (
-        <span className="shrink-0 text-[11px] text-muted-foreground" data-testid="todo-waiting">
+        <span className="shrink-0 text-xs text-muted-foreground" data-testid="todo-waiting">
           {waiting}
         </span>
       )}
       {todo.cards.length === 0 ? null : (
         <span
-          className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[11px]"
+          className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-xs"
           data-testid="todo-cards"
         >
           {t('todos.cards', { count: todo.cards.length })}
@@ -444,7 +444,7 @@ function SentList({ items }: { items: HandoffView[] }): React.ReactNode {
               {h.title}
             </Link>
           )}
-          <span className="shrink-0 text-[11.5px] text-muted-foreground">
+          <span className="shrink-0 text-xs text-muted-foreground">
             {t(`handoff.state.${h.handoff.state}`, { name: h.to_label })}
           </span>
           {h.handoff.state !== 'offered' ? null : (

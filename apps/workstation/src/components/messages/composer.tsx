@@ -253,7 +253,7 @@ export function Composer({
           <Paperclip aria-hidden className="size-3.5" />
           {t('messages.compose.attach_soon')}
         </span>
-        <span className="ml-auto text-[11px] text-ws-muted-fg" data-testid="composer-autosave">
+        <span className="ml-auto text-xs text-ws-muted-fg" data-testid="composer-autosave">
           {t('messages.compose.autosave')}
         </span>
       </div>

@@ -57,7 +57,7 @@ export function DeckNotePanel({
       {/* WP84：示例任务在最顶上，点一条填进下面的框（选择题优先，不加第二个输入口） */}
       {showExamples ? (
         <div className="flex flex-col gap-1" data-testid="task-examples">
-          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
             {t('card.examples.title')}
             <Hint text={t('card.examples.hint')} />
           </p>

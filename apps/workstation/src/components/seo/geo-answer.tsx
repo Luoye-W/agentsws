@@ -124,7 +124,7 @@ export function GeoAnswerView({ detail }: { detail: GeoAnswerDetail }): ReactNod
         <span>· {detail.week}</span>
         {ours?.sentiment === undefined ? null : (
           <span className="inline-flex items-center gap-0.5" data-testid="geo-answer-sentiment">
-            <WsTag data-slot="badge" className="h-[18px] px-1.5 text-[11px]">
+            <WsTag data-slot="badge" className="h-[18px] px-1.5 text-xs">
               {t(`geo.sentiment.${ours.sentiment}`)}
             </WsTag>
             <Hint text={t('geo.sentiment.hint', { quote: ours.sentiment_quote ?? '' })} />
@@ -223,7 +223,7 @@ export function GeoAnswerView({ detail }: { detail: GeoAnswerDetail }): ReactNod
                   <KindTag kind={c.site_kind} />
                   {compare && prev !== undefined && !prevDomains.has(c.domain) ? (
                     <span
-                      className="shrink-0 text-[11px] font-medium text-ws-info"
+                      className="shrink-0 text-xs font-medium text-ws-info"
                       data-testid="geo-source-new"
                     >
                       {t('geo.sites.new')}

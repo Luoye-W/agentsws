@@ -55,7 +55,7 @@ function Num({
       className="flex flex-col gap-0.5 rounded-[10px] bg-ws-surface px-2.5 py-2"
       data-testid={testId}
     >
-      <span className="text-[11.5px] text-ws-muted-fg">{label}</span>
+      <span className="text-xs text-ws-muted-fg">{label}</span>
       <span className="ws-num text-base font-medium text-ws-ink">{value}</span>
     </div>
   )
@@ -113,7 +113,7 @@ export function AdsOverview({ assignment }: { assignment: string }): ReactNode {
         <p className="text-xs text-ws-muted-fg">{t('adsov.empty')}</p>
       ) : (
         <table className="w-full text-left text-[12.5px]" data-testid="ads-overview-campaigns">
-          <thead className="text-[11px] text-ws-muted-fg">
+          <thead className="text-xs text-ws-muted-fg">
             <tr>
               <th className="py-1 font-normal">{t('adsov.col.name')}</th>
               <th className="py-1 text-right font-normal">{t('adsov.col.budget')}</th>
@@ -127,7 +127,7 @@ export function AdsOverview({ assignment }: { assignment: string }): ReactNode {
                 <td className="max-w-0 truncate py-1 pr-2">
                   {c.name}
                   {c.status === 'paused' ? (
-                    <span className="ml-1 text-[11px] text-ws-muted-fg">{t('adsov.paused')}</span>
+                    <span className="ml-1 text-xs text-ws-muted-fg">{t('adsov.paused')}</span>
                   ) : null}
                 </td>
                 <td className="ws-num py-1 text-right">

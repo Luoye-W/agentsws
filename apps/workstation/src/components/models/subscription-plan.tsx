@@ -226,7 +226,7 @@ export function SubscriptionPlan({
           {data.notice?.url === undefined ? null : (
             <button
               type="button"
-              className="inline-flex w-fit items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline"
+              className="inline-flex w-fit items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
               data-testid="subscription-open"
               onClick={() => {
                 if (data.notice?.url !== undefined) openExternal(data.notice.url)

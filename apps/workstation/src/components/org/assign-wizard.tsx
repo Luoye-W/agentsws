@@ -331,7 +331,7 @@ export function AssignWizard({
 
       {warn ? (
         <p
-          className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2"
+          className="rounded-md border border-ws-warn/40 bg-ws-warn-bg p-2"
           data-testid="assign-cross-cut"
         >
           {t('org.assign.cross_cut')}

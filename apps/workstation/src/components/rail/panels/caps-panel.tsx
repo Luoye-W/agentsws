@@ -55,16 +55,16 @@ function ActionRow({
   return (
     <div className="rounded-md border p-2" data-testid="caps-action" data-action={action.id}>
       <p className="text-sm font-medium">{action.id}</p>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {t('rail.caps.kind', { kind: action.kind, target: action.target })}
       </p>
       {action.caps.length === 0 ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">{t('rail.caps.none')}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t('rail.caps.none')}</p>
       ) : (
         <ul className="mt-1 flex flex-col gap-1">
           {action.caps.map((cap) => (
             <li key={cap.key} className="flex items-center gap-1" data-testid="caps-row">
-              <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                 {cap.key}
               </span>
               {editable ? (
@@ -86,7 +86,7 @@ function ActionRow({
         </ul>
       )}
       {action.window === undefined ? null : (
-        <p className="mt-1 text-[11px] text-muted-foreground" data-testid="caps-window">
+        <p className="mt-1 text-xs text-muted-foreground" data-testid="caps-window">
           {t('rail.caps.window', {
             count: action.window.max_count,
             per: action.window.per,
@@ -157,7 +157,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
         {/* WP421（真机 #12 / 自查 general）：版本号与「内置只读」不上屏；只有本公司的副本标一下 */}
         {view.source === 'bundled' ? null : (
           <span
-            className="rounded border px-1 py-0.5 text-[11px] text-muted-foreground"
+            className="rounded border px-1 py-0.5 text-xs text-muted-foreground"
             data-testid="caps-source"
           >
             {t('rail.caps.custom')}
@@ -167,7 +167,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
       {view.editable ? null : (
         <div className="flex flex-col gap-1">
           {/* 05 §0：内置模板不给改，只能复制一份再改——所以这里给的是复制，不是一个会 403 的输入框 */}
-          <p className="text-[11px] text-muted-foreground" data-testid="caps-readonly">
+          <p className="text-xs text-muted-foreground" data-testid="caps-readonly">
             {t('rail.caps.readonly')}
           </p>
           <div>
@@ -185,7 +185,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
             </Button>
           </div>
           {copy.data === undefined ? null : (
-            <p className="text-[11px] text-muted-foreground" data-testid="caps-copy-result">
+            <p className="text-xs text-muted-foreground" data-testid="caps-copy-result">
               {t('rail.caps.copied', { name: copy.data.name })}
             </p>
           )}
@@ -205,7 +205,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
       {view.automation.length === 0 ? null : (
         <div className="rounded-md border p-2" data-testid="caps-automation">
           <p className="text-xs font-medium">{t('rail.caps.automation')}</p>
-          <ul className="mt-1 flex flex-col gap-0.5 text-[11px] text-muted-foreground">
+          <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
             {view.automation.map((a) => (
               <li key={a.action_id}>
                 {t('rail.caps.automation.row', {
@@ -238,7 +238,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
             <Hint text={t('rail.caps.approval_hint')} testId="caps-approval-hint" />
           </div>
           {propose.data === undefined ? null : (
-            <p className="text-[11px] text-muted-foreground" data-testid="caps-submitted">
+            <p className="text-xs text-muted-foreground" data-testid="caps-submitted">
               {propose.data.status === 'pending_approval' || propose.data.status === 'applied'
                 ? t('rail.caps.submitted')
                 : propose.data.summary}
@@ -247,7 +247,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
         </div>
       ) : null}
       {error === null ? null : (
-        <p role="alert" className="text-[11px] text-destructive" data-testid="caps-error">
+        <p role="alert" className="text-xs text-destructive" data-testid="caps-error">
           {error}
         </p>
       )}

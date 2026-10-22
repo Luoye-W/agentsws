@@ -169,7 +169,7 @@ export function CloudPlanActions({ assignment }: { assignment?: string }): React
           {/* 快用完是「会扣钱的提示」（36 §7）：一句常显，依据进问号 */}
           {low ? (
             <p
-              className="order-last flex basis-full items-center gap-1 text-[11px] text-ws-warn"
+              className="order-last flex basis-full items-center gap-1 text-xs text-ws-warn"
               data-slot="status"
               data-testid="model-cloud-low"
             >
@@ -181,7 +181,7 @@ export function CloudPlanActions({ assignment }: { assignment?: string }): React
       ) : null}
 
       {failed === null || failed === undefined ? null : (
-        <p className="order-last basis-full text-[11px] text-destructive">{failed.message}</p>
+        <p className="order-last basis-full text-xs text-destructive">{failed.message}</p>
       )}
 
       <div className="flex items-center gap-1">

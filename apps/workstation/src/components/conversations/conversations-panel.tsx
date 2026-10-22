@@ -148,10 +148,7 @@ export function ConversationsPanel({ scope }: RailPanelBodyProps): ReactNode {
 
 function Heading({ children, testId }: { children: ReactNode; testId: string }): ReactNode {
   return (
-    <h3
-      className="px-1.5 text-[11px] tracking-wider text-ws-muted-fg uppercase"
-      data-testid={testId}
-    >
+    <h3 className="px-1.5 text-xs tracking-wider text-ws-muted-fg uppercase" data-testid={testId}>
       {children}
     </h3>
   )

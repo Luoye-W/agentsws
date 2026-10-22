@@ -465,7 +465,7 @@ export function ModelPicker({
                   data-group={g.group}
                   className="m-0 min-w-0 border-0 p-0"
                 >
-                  <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-[11.5px] font-medium text-muted-foreground">
+                  <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">
                     {g.group === 'workshop' ? (
                       <BrandMark size={14} />
                     ) : g.group === 'subscription' ? (
@@ -483,7 +483,7 @@ export function ModelPicker({
                     {g.group === 'workshop' && balance !== undefined ? (
                       <span
                         data-testid={`${testId}-balance`}
-                        className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-[11px] font-normal tabular-nums"
+                        className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-xs font-normal tabular-nums"
                       >
                         {t(
                           balance.kind === 'member_left'
@@ -602,11 +602,9 @@ function PickerRow({
       <ChoiceIcon choice={{ id: choice.id, official: false, vendor: choice.vendor }} size={16} />
       <span className="min-w-0 truncate">{displayNameOf(choice)}</span>
       {isDefault ? (
-        <span className="shrink-0 text-[11px] text-muted-foreground">
-          {t('model.pick.is_default')}
-        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">{t('model.pick.is_default')}</span>
       ) : null}
-      <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
+      <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
         {/*
           WP370 → WP426：能力小标只标例外，而且是看得懂的小字（悬停一句为什么）：
           看不了图的那几行写「不能看图」；自带联网、长上下文只在少数有的时候标出来。
@@ -638,7 +636,7 @@ function PickerRow({
         {price?.discount === undefined ? null : (
           <span
             data-testid={`${testId}-discount`}
-            className="rounded bg-ws-warn-bg px-1 text-[10.5px] text-ws-warn"
+            className="rounded bg-ws-warn-bg px-1 text-xs text-ws-warn"
             title={price.discount.tip}
           >
             {price.discount.text}
@@ -679,7 +677,7 @@ function CapTag({
       title={tip}
       data-hint={tip}
       className={cn(
-        'rounded px-1 text-[10.5px] leading-4',
+        'rounded px-1 text-xs leading-4',
         warn ? 'bg-ws-warn-bg text-ws-warn' : 'bg-muted text-muted-foreground',
       )}
     >

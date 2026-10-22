@@ -59,7 +59,7 @@ export function ConnectorDiagnostics({ assignment }: { assignment: string }): Re
             : t('diagnostics.connector.version', { v: local.installed })}
         </span>
         {local.status === 'ready' ? (
-          <span className="text-emerald-700 dark:text-emerald-400" data-slot="status">
+          <span className="text-ws-good" data-slot="status">
             {t('connections.runtime.ready')}
           </span>
         ) : null}

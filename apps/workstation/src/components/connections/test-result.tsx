@@ -44,11 +44,7 @@ export function TestResultLine({ result }: { result: ConnectTestResult }): React
       data-reason={result.reason ?? ''}
       className={cn(
         'flex items-start gap-1.5 text-xs',
-        result.ok
-          ? 'text-emerald-700 dark:text-emerald-400'
-          : neutral
-            ? 'text-muted-foreground'
-            : 'text-destructive',
+        result.ok ? 'text-ws-good' : neutral ? 'text-muted-foreground' : 'text-destructive',
       )}
     >
       <Icon className="mt-px size-3.5 shrink-0" aria-hidden />

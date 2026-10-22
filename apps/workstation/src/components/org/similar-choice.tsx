@@ -41,7 +41,7 @@ export function SimilarChoiceCard({
   const enough = reason.trim().length >= MIN_DUPLICATE_REASON
 
   return (
-    <Card className="border-amber-400/60" data-testid="similar-choice">
+    <Card className="border-ws-warn/60" data-testid="similar-choice">
       <CardHeader>
         <CardTitle className="text-sm">{t('similar.title')}</CardTitle>
       </CardHeader>

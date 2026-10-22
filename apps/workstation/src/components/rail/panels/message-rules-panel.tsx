@@ -257,7 +257,7 @@ function RuleRow({
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ws-muted-fg">
           {rule.kind === undefined ? null : (
             <span
-              className="rounded-full bg-ws-surface px-2 py-px text-[11px] text-foreground"
+              className="rounded-full bg-ws-surface px-2 py-px text-xs text-foreground"
               data-testid="message-rule-kind"
             >
               {t(`messages.kind.${rule.kind}`)}

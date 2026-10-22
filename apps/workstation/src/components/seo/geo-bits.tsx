@@ -30,7 +30,7 @@ export function KindTag({ kind }: { kind: CitedSiteKind }): ReactNode {
     <WsTag
       data-slot="badge"
       className={cn(
-        'h-[18px] shrink-0 whitespace-nowrap px-1.5 text-[11px]',
+        'h-[18px] shrink-0 whitespace-nowrap px-1.5 text-xs',
         kind === 'ours' && 'bg-ws-good-bg font-medium text-ws-good',
         kind === 'competitor' && 'bg-ws-warn-bg text-ws-warn',
       )}

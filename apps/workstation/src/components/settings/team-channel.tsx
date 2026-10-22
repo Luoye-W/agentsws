@@ -292,7 +292,7 @@ export function TeamChannelCard({
             <Hint text={teamSubHint(t, view)} />
           </h4>
           {view === undefined ? null : (
-            <p className="text-[11px] text-muted-foreground" data-slot="status">
+            <p className="text-xs text-muted-foreground" data-slot="status">
               {teamSubPrice(t, view)}
             </p>
           )}
@@ -303,8 +303,8 @@ export function TeamChannelCard({
           data-state={state}
           className={
             state === 'grace' || state === 'suspended'
-              ? 'rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-400'
-              : 'rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground'
+              ? 'rounded bg-ws-warn-bg px-1.5 py-0.5 text-xs text-ws-warn'
+              : 'rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground'
           }
         >
           {view === undefined ? t('team.sub.state.none') : teamSubState(t, view)}

@@ -41,7 +41,7 @@ export function DayDivider({ at }: { at: string }): React.ReactNode {
   const date = useDate()
   return (
     <div className="flex items-center justify-center py-1" data-testid="thread-day">
-      <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground">
+      <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
         {date(at, true)}
       </span>
     </div>
@@ -59,7 +59,7 @@ export function TopicDivider({
   const title = previous?.title
   return (
     <div
-      className="flex items-center gap-3 py-1 text-[11px] text-muted-foreground"
+      className="flex items-center gap-3 py-1 text-xs text-muted-foreground"
       data-testid="thread-topic"
       {...(previous === undefined ? {} : { 'data-segment': previous.id })}
       {...(previous?.summary === undefined ? {} : { title: previous.summary })}
@@ -177,7 +177,7 @@ export function HistorySearch({
                   close()
                 }}
               >
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {date(h.at)}
                   {h.title === undefined ? '' : ` · ${h.title}`}
                 </span>
@@ -208,7 +208,7 @@ export function RecalledRefs({
         <button
           key={`${h.segment_id}:${h.message_id ?? 'sum'}`}
           type="button"
-          className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+          className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
           data-testid="assistant-recalled-ref"
           title={h.snippet}
           onClick={() => onJump(h)}
@@ -268,7 +268,7 @@ export function ModelSwitchDivider({
       data-from={from.id}
       data-to={to.id}
     >
-      <span className="text-[11px] text-muted-foreground">
+      <span className="text-xs text-muted-foreground">
         {t('chat.model_switch', { from: name(from), to: name(to) })}
       </span>
     </div>

@@ -87,7 +87,7 @@ export function KnowledgePanel({ scope }: { scope: RailScope }): React.ReactNode
                 </div>
                 {c.provenance?.[0]?.locator === undefined ? null : (
                   <p
-                    className="truncate text-[11px] text-muted-foreground"
+                    className="truncate text-xs text-muted-foreground"
                     title={c.provenance[0].quote}
                   >
                     {t('fanout.batch', { title: c.provenance[0].locator })}
@@ -102,10 +102,10 @@ export function KnowledgePanel({ scope }: { scope: RailScope }): React.ReactNode
       {duties.data.map((role) => (
         <section key={role.id} className="rounded-md border p-2" data-testid="rail-knowledge-role">
           <p className="text-sm font-medium">{role.name}</p>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t('rail.knowledge.domain', { domain: role.domain })}
           </p>
-          <ul className="mt-1 flex flex-col gap-0.5 text-[11px] text-muted-foreground">
+          <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
             {role.scopes.map((s) => (
               <li key={`${s.domain}:${s.range}`} data-testid="rail-knowledge-scope">
                 {t('rail.knowledge.scope', {
