@@ -63,7 +63,14 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { REDDIT_WRITE_FORM } from '@agentsws/contracts'
-import { checkOutbound, resolveVoice, stripUngrounded, voicePrompt } from '@agentsws/social-core'
+import {
+  checkOutbound,
+  redditPlainText,
+  redditPlainTitle,
+  resolveVoice,
+  stripUngrounded,
+  voicePrompt,
+} from '@agentsws/social-core'
 import { finalPayload } from '@agentsws/txn'
 import type { AdsActionEvent, AdsActionsService } from '../ads-actions/service.js'
 import { replyBlockedReason } from '../social-reply-draft.js'
@@ -692,8 +699,9 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     },
 
     async stage(actor, input) {
-      const text = input.text.trim()
-      const title = input.title?.trim()
+      // WP468（决策 1510）：出卡前兜一道——残留的 Markdown 记号转纯文字（新版评论框是富文本）
+      const text = redditPlainText(input.text)
+      const title = input.title === undefined ? undefined : redditPlainTitle(input.title)
       const target = input.target
       const shape = writeOfTarget(target, title)
       if ('why' in shape) return { staged: false, message: shape.why }
