@@ -26,6 +26,36 @@ export type ModelPurpose =
    */
   | 'classify'
 /**
+ * WP473（docs/116 §6 D，只加）：这一次模型调用是**哪个功能**在用——用量页把「运行」按它拆开看
+ * （岗位运行 / 客服聊天窗 / 邮件自动回 / SEO·GEO / B2B / 广告 / 社媒 / 助理 / 其它）。
+ *
+ * 只是记账维度：不参与选模型、预算、积分。调用方可以在 {@link ModelMeta.feature} 里显式给；
+ * 不给，网关按 `purpose` 与 `run_id` 的前缀认（`@agentsws/model-gateway` 的 `featureOf`）。
+ */
+export type ModelFeature =
+  | 'position_run'
+  | 'support_chat'
+  | 'email_auto_reply'
+  | 'seo'
+  | 'b2b'
+  | 'ads'
+  | 'social'
+  | 'assistant'
+  | 'other'
+
+/** {@link ModelFeature} 的全部取值（用量页按这个顺序排同花费的行）。 */
+export const MODEL_FEATURES: readonly ModelFeature[] = [
+  'position_run',
+  'support_chat',
+  'email_auto_reply',
+  'seo',
+  'b2b',
+  'ads',
+  'social',
+  'assistant',
+  'other',
+]
+/**
  * 一条消息的 content 可以是纯文本（**既有调用方原样传 string**），或
  * 文本 + 图片部件的数组（WP122b 交付 ⑤：视觉档，图进模型这一格）。
  *
@@ -114,12 +144,28 @@ export interface ModelMeta {
    * 只给 provider 看，网关不把它写进用量事件。
    */
   person_id?: PersonId
+  /**
+   * WP473（只加）：哪个功能在用（见 {@link ModelFeature}）。不给 = 网关按 `purpose` / `run_id` 认。
+   * 记进用量（`model.usage`），不影响选模型、预算与积分。
+   */
+  feature?: ModelFeature
+  /**
+   * WP473（只加）：缓存分组——同一组的请求开头大段相同（OpenAI 系据此带 `prompt_cache_key`、
+   * 订阅带会话标识）。不给 = 「工作区 + 职责」。网关只发它的哈希，**不要放人名、邮箱这类个人信息**
+   * （放了也只出哈希）。助理按段给（同一段每轮开头一样）。
+   */
+  cache_scope?: string
 }
 export interface CompletionUsage {
   input_tokens: number
   output_tokens: number
   cached_tokens: number
   cost_base: number
+  /**
+   * WP473（只加）：`input_tokens` 里**写进缓存**的那部分（Anthropic 系按输入价的 1.25 倍收）。
+   * 只有报得出的 provider 才给；不给 = 0。和 `cached_tokens`（命中）互不重叠。
+   */
+  cache_write_tokens?: number
 }
 export interface Completion {
   text: string

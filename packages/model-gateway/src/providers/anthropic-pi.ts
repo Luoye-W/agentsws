@@ -277,6 +277,8 @@ export function readPiAssistant(
       input_tokens: (message.usage?.input ?? 0) + cacheRead + cacheWrite,
       output_tokens: message.usage?.output ?? 0,
       cached_tokens: cacheRead,
+      // WP473：写缓存另报一格——网关按输入价的 1.25 倍算（以前按普通输入价，成本略低估）
+      ...(cacheWrite > 0 ? { cache_write_tokens: cacheWrite } : {}),
     },
   }
 }

@@ -8,6 +8,7 @@ import type {
   ErrorCode,
   EventEnvelope,
   Iso8601,
+  ModelFeature,
   ModelMeta,
   ModelPurpose,
   ModelRef,
@@ -84,6 +85,10 @@ export interface ModelUsagePayload {
   cost_base: number
   static_prefix_hash: string
   duration_ms: number
+  /** WP473（只加）：哪个功能在用（`featureOf`：显式给的，或按 purpose / run_id 认）。老事件没有。 */
+  feature?: ModelFeature
+  /** WP473（只加）：写进缓存的 token（Anthropic 系才报）；没有就不出现。 */
+  cache_write_tokens?: number
   /** ASR 调用才有：音频摘要（哈希 / 时长 / 字节数）。**字节与转写正文永不进事件日志。** */
   audio?: TranscriptionAudioDigest
   /**
@@ -212,4 +217,6 @@ export interface UsageRecord {
   output_tokens: number
   cached_tokens: number
   cost_base: number
+  /** WP473（只加）：哪个功能在用（用量页把「运行」按它拆开）。 */
+  feature?: ModelFeature
 }
