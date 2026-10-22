@@ -1,54 +1,15 @@
 /*
- * WP413 侧边栏的样式。与设置页同一套 `--ws-*` 令牌（工作台 index.css 的同名值），浅 / 深两套跟着系统走。
+ * WP413 侧边栏的样式。WP456-T7（§3.12）：和工作台**同一套视觉档位**——
+ *
+ * - 令牌（颜色、阴影、卡边、字体栈、字号 / 圆角档位）不写在这里：`@/ui/tokens.css` 由
+ *   `scripts/gen-extension-tokens.mjs` 从工作台 `index.css` 生成，浅 / 深两套跟着系统走；
+ * - 这里的数字只用档位：字号 16 / 14 / 13 / 12（11 只给数字），圆角 6 / 8 / 12 / 16 / 全圆，
+ *   间距 4 / 8 / 12 / 16 / 20 / 24（`check-ui-tokens.mjs` 查插件 CSS 的字号 / 圆角 / 写死的颜色）；
+ * - 件的长相照工作台 `.ws-*` 那一组（按钮四级、分段切换、列表组、状态药丸 / 分类标签 / 数字徽章、一行提醒、空状态、
+ *   决定卡），类名是插件自己的（BEM 写法，测试与真浏览器走法认这些名字）。
+ *
  * 侧边栏宽度由 Chrome 定（大约 320–500px），所以只排一列。
  */
-
-:root {
-  --ws-paper: #f3f5f2;
-  --ws-card: #ffffff;
-  --ws-line: #ecefea;
-  --ws-ink: #263331;
-  --ws-body: #4b5550;
-  --ws-muted-fg: #6b746f;
-  --ws-brand: #007b67;
-  --ws-brand-ink: #045246;
-  --ws-brand-fg: #ffffff;
-  --ws-tint: #e8f3f0;
-  --ws-good: #158a4b;
-  --ws-good-bg: #e3f5ea;
-  --ws-warn: #b26e0b;
-  --ws-warn-bg: #fff4db;
-  --ws-bad: #c93b30;
-  --ws-bad-bg: #fde9e7;
-  --ws-surface: #f7f9f6;
-  --ws-radius-card: 16px;
-  --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ws-paper: #0e100f;
-    --ws-card: #171a18;
-    --ws-line: #242825;
-    --ws-ink: #f1f4f0;
-    --ws-body: #c9d2cc;
-    --ws-muted-fg: #98a29b;
-    --ws-brand: #76fb91;
-    --ws-brand-ink: #b9ffc9;
-    --ws-brand-fg: #0e100f;
-    --ws-tint: #173c24;
-    --ws-good: #76fb91;
-    --ws-good-bg: #173c24;
-    --ws-warn: #f5c451;
-    --ws-warn-bg: #3a2e10;
-    --ws-bad: #ff7a6b;
-    --ws-bad-bg: #3d1d19;
-    --ws-surface: #1c201d;
-    --ws-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
-    color-scheme: dark;
-  }
-}
 
 * {
   box-sizing: border-box;
@@ -58,24 +19,42 @@ body {
   margin: 0;
   background: var(--ws-paper);
   color: var(--ws-body);
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
-  font-size: 13px;
-  line-height: 1.55;
+  font-family: var(--font-stack-sans);
+  font-size: var(--ws-text-ui);
+  line-height: var(--ws-lh-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Windows 上系统默认那条滚动条太粗：细的、颜色走 line-strong（Mac 的浮动滚动条照旧）。`data-os` 由 main.tsx 挂。 */
+:where(html[data-os="windows"]) * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ws-line-strong) transparent;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ws-brand);
+  outline-offset: 2px;
 }
 
 .ws-side {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   padding: 12px 12px 32px;
   min-height: 100vh;
 }
+
+/* ── 头部：品牌标 + 「Agents 工坊」+ 一行「品牌名 · 人名」，右边设置 ─────────────── */
 
 .ws-top {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 4px 0 0 4px;
 }
 
 .ws-top-text {
@@ -83,17 +62,24 @@ body {
   flex-direction: column;
   min-width: 0;
   flex: 1;
-  line-height: 1.3;
 }
 
 .ws-top-text b {
   color: var(--ws-ink);
-  font-size: 14px;
+  font-size: var(--ws-text-read);
+  line-height: var(--ws-lh-read);
+  font-weight: 600;
+}
+
+.ws-who {
+  color: var(--ws-faint);
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
 }
 
 .ws-mark {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   color: var(--ws-brand);
   flex: none;
 }
@@ -104,6 +90,7 @@ body {
   display: block;
 }
 
+/* 图标：默认 16，小字里 14（规范 §2.6 第 12 条） */
 .ws-ico {
   width: 16px;
   height: 16px;
@@ -111,13 +98,14 @@ body {
 }
 
 .ws-ico--sm {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .ws-muted {
   color: var(--ws-muted-fg);
-  font-size: 12px;
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
 }
 
 .ws-clamp-1,
@@ -140,149 +128,306 @@ body {
   -webkit-line-clamp: 4;
 }
 
-/* ── 提示条 / 小标签 / 按钮 ───────────────────────────────────────── */
+/* ── 顶上一行：今天发了 N 条 · 等你发 N 条（灰字，数字加粗；点不了就不画成药丸） ── */
 
-.ws-note {
-  font-size: 12px;
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: var(--ws-tint);
-  color: var(--ws-brand-ink);
-  margin: 0;
+.ws-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 0 4px;
+  color: var(--ws-muted-fg);
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
 }
 
-.ws-note--warn {
-  background: var(--ws-warn-bg);
+.ws-strip b,
+.ws-stat b {
+  color: var(--ws-ink);
+  font-family: var(--ws-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-strip-warn {
   color: var(--ws-warn);
 }
 
-.ws-note--bad {
-  background: var(--ws-bad-bg);
+/* ── 一行提醒：浅底、图标上色、右边一个链接（规范 §2.6 第 8 条） ─────────────────── */
+
+.ws-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--ws-radius-block);
+  background: var(--ws-surface);
+  color: var(--ws-body);
+  font-size: var(--ws-text-ui);
+  line-height: var(--ws-lh-ui);
+}
+
+.ws-note > .ws-ico {
+  color: var(--ws-info);
+}
+
+.ws-note--warn > .ws-ico {
+  color: var(--ws-warn);
+}
+
+.ws-note--bad > .ws-ico {
   color: var(--ws-bad);
 }
 
-/* WP419：起草卡在哪一步（一行字 + 要你动手时一个按钮） */
-.ws-stage {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* 出错的那句没有图标时，字用红（红只表示出错） */
+.ws-note--bad {
+  color: var(--ws-bad);
 }
 
+.ws-note-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-note-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--ws-text-note);
+}
+
+/* WP419：起草卡在哪一步（一行字 + 要你动手时一个链接） */
 .ws-stage > span {
   flex: 1;
   min-width: 0;
 }
 
 .ws-banner {
-  display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  justify-content: space-between;
 }
+
+/* ── 标签三种：状态药丸（点 + 字）/ 分类标签（灰底没有点）/ 数字徽章 ───────────── */
 
 .ws-pill {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  line-height: 1.6;
-  padding: 0 7px;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
   border-radius: 999px;
-  background: var(--ws-surface);
+  background: var(--ws-secondary);
   color: var(--ws-muted-fg);
-  border: 1px solid var(--ws-line);
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
+  font-weight: 500;
   white-space: nowrap;
+}
+
+.ws-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .ws-pill--good {
   background: var(--ws-good-bg);
   color: var(--ws-good);
-  border-color: transparent;
 }
 
 .ws-pill--warn,
 .ws-pill--wait {
   background: var(--ws-warn-bg);
   color: var(--ws-warn);
-  border-color: transparent;
 }
 
 .ws-pill--bad {
   background: var(--ws-bad-bg);
   color: var(--ws-bad);
-  border-color: transparent;
 }
 
-.ws-btn {
-  border: 0;
-  border-radius: 10px;
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
+.ws-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--ws-radius-tag);
+  background: var(--ws-secondary);
+  color: var(--ws-body);
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
   white-space: nowrap;
 }
 
+.ws-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--ws-brand);
+  color: var(--ws-brand-fg);
+  font-size: var(--ws-text-tiny);
+  line-height: var(--ws-lh-tiny);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 按钮四级：主（品牌实底，一块最多一个）/ 次（灰底，默认）/ 弱（没有底）/ 链接 ──── */
+
+.ws-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--ws-radius-ctl);
+  background: var(--ws-secondary);
+  color: var(--ws-ink);
+  font-size: var(--ws-text-ui);
+  line-height: var(--ws-lh-ui);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out,
+    filter 120ms ease-out;
+}
+
+.ws-btn:hover:not(:disabled) {
+  background: var(--ws-line-strong);
+}
+
 .ws-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .ws-btn--primary {
   background: var(--ws-brand);
   color: var(--ws-brand-fg);
+  font-weight: 600;
+}
+
+.ws-btn--primary:hover:not(:disabled) {
+  background: var(--ws-brand);
+  filter: brightness(0.95);
 }
 
 .ws-btn--ghost {
-  background: var(--ws-surface);
+  background: transparent;
+  color: var(--ws-body);
+}
+
+.ws-btn--ghost:hover:not(:disabled) {
+  background: var(--ws-hover);
   color: var(--ws-ink);
-  border: 1px solid var(--ws-line);
 }
 
 .ws-btn--sm {
-  padding: 4px 10px;
-  font-size: 12px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
+}
+
+.ws-link,
+.ws-link-muted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  font-size: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.ws-link {
+  color: var(--ws-brand-ink);
+  text-decoration-color: color-mix(in oklab, var(--ws-brand-ink) 40%, transparent);
+}
+
+.ws-link-muted {
+  color: var(--ws-muted-fg);
+  text-decoration-color: color-mix(in oklab, var(--ws-muted-fg) 45%, transparent);
+}
+
+.ws-link:hover,
+.ws-link-muted:hover {
+  color: var(--ws-ink);
+  text-decoration-color: currentColor;
 }
 
 .ws-iconbtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
+  border-radius: var(--ws-radius-ctl);
   background: transparent;
   color: var(--ws-muted-fg);
-  padding: 4px;
-  border-radius: 8px;
   cursor: pointer;
 }
 
 .ws-iconbtn:hover {
-  background: var(--ws-surface);
+  background: var(--ws-hover);
   color: var(--ws-ink);
 }
 
+/* ── 输入框 ──────────────────────────────────────────────────────── */
+
 .ws-input {
-  border: 1px solid var(--ws-line);
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 13px;
-  font-family: inherit;
-  color: var(--ws-ink);
-  background: var(--ws-card);
   width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--ws-radius-ctl);
+  box-shadow: inset 0 0 0 1px var(--ws-line-strong);
+  background: var(--ws-card);
+  color: var(--ws-ink);
+  font-family: inherit;
+  font-size: var(--ws-text-ui);
+  line-height: var(--ws-lh-ui);
+}
+
+.ws-input::placeholder {
+  color: var(--ws-faint);
 }
 
 .ws-input:focus {
-  outline: 2px solid var(--ws-brand);
-  outline-offset: -1px;
+  outline: 0;
+  box-shadow: inset 0 0 0 2px var(--ws-brand);
 }
 
+/* 草稿：读的正文 14 / 22 */
 .ws-draft {
+  display: block;
+  min-height: 118px;
+  padding: 8px 12px;
+  border-radius: var(--ws-radius-block);
+  font-size: var(--ws-text-read);
+  line-height: var(--ws-lh-read);
   resize: vertical;
-  min-height: 110px;
-  line-height: 1.5;
 }
 
 .ws-code {
@@ -293,97 +438,134 @@ body {
 
 .ws-row {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-/* ── 三块的切换 ───────────────────────────────────────────────────── */
+.ws-wrap {
+  flex-wrap: wrap;
+}
+
+/* ── 三块的切换：分段切换只有一种（灰底，选中那格白底加一点小阴影） ─────────────── */
 
 .ws-tabs {
   display: flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 12px;
-  background: var(--ws-surface);
-  border: 1px solid var(--ws-line);
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--ws-radius-ctl);
+  background: var(--ws-secondary);
 }
 
 .ws-tab {
   flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--ws-muted-fg);
-  font: inherit;
-  font-size: 13px;
-  padding: 6px 4px;
-  border-radius: 9px;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--ws-radius-tag);
+  background: transparent;
+  color: var(--ws-muted-fg);
+  font-size: var(--ws-text-ui);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.ws-tab:hover {
+  color: var(--ws-ink);
 }
 
 .ws-tab--on {
-  background: var(--ws-card);
+  background: var(--ws-seg-on);
   color: var(--ws-ink);
   font-weight: 600;
-  box-shadow: var(--ws-shadow);
+  box-shadow: var(--ws-seg-on-shadow);
 }
 
-.ws-badge {
-  min-width: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--ws-brand);
-  color: var(--ws-brand-fg);
-  font-size: 11px;
-  line-height: 18px;
-  font-weight: 600;
-}
-
-/* ── 一块的卡片 ───────────────────────────────────────────────────── */
+/* ── 卡：圆角 16、无边框、两层浅阴影（深色多一圈细边）；插件里的小卡内边距 16 ─────── */
 
 .ws-sec {
-  background: var(--ws-card);
-  border-radius: var(--ws-radius-card);
-  box-shadow: var(--ws-shadow);
-  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-card);
+  box-shadow: var(--ws-card-edge), var(--ws-shadow);
 }
 
 .ws-sec > b {
   color: var(--ws-ink);
+  font-size: var(--ws-text-read);
+  line-height: var(--ws-lh-read);
 }
 
 .ws-sec p {
   margin: 0;
 }
 
+/* 节标题 14 / 600 + 灰色计数；右边一行灰字 */
 .ws-sec-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 24px;
 }
 
 .ws-sec-head b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--ws-ink);
-  font-size: 14px;
+  font-size: var(--ws-text-read);
+  line-height: var(--ws-lh-read);
+  font-weight: 600;
 }
 
+.ws-sec-count {
+  color: var(--ws-faint);
+  font-size: var(--ws-text-ui);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 列表组：一张卡里多行，行间一条细线 */
+.ws-group {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-card);
+  box-shadow: var(--ws-card-edge), var(--ws-shadow);
+}
+
+.ws-group > li + li {
+  box-shadow: inset 0 1px 0 var(--ws-line);
+}
+
+/* 空状态：灰图标 + 一句话 */
 .ws-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  color: var(--ws-muted-fg);
-  padding: 18px 0;
+  gap: 8px;
   margin: 0;
+  padding: 24px 0;
+  color: var(--ws-muted-fg);
+  font-size: var(--ws-text-ui);
 }
 
-/* ① 进度 */
+.ws-empty .ws-ico {
+  color: var(--ws-faint);
+}
+
+/* ── ① 进度 ──────────────────────────────────────────────────────── */
 
 .ws-account {
   display: flex;
@@ -406,15 +588,15 @@ body {
 
 .ws-part {
   display: grid;
-  grid-template-columns: 18px 1fr auto;
+  grid-template-columns: 16px 1fr auto;
   align-items: center;
-  column-gap: 6px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--ws-line);
+  column-gap: 8px;
+  min-height: 40px;
+  padding: 8px 0;
 }
 
-.ws-part:last-child {
-  border-bottom: 0;
+.ws-part + .ws-part {
+  box-shadow: inset 0 1px 0 var(--ws-line);
 }
 
 .ws-part-name {
@@ -422,14 +604,15 @@ body {
 }
 
 .ws-part-line {
+  color: var(--ws-body);
   font-variant-numeric: tabular-nums;
-  color: var(--ws-ink);
 }
 
 .ws-part-msg {
   grid-column: 2 / 4;
   color: var(--ws-muted-fg);
-  font-size: 11px;
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
 }
 
 .ws-part--good .ws-part-ico {
@@ -451,119 +634,174 @@ body {
   color: var(--ws-muted-fg);
 }
 
-.ws-now {
+/* 起草中 / 待回 / 已回过：一行灰字、数字加粗（不画成像按钮的灰块） */
+.ws-stat {
   display: flex;
-  gap: 6px;
-}
-
-.ws-chip {
-  flex: 1;
-  background: var(--ws-surface);
-  border-radius: 10px;
-  padding: 6px 10px;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding-top: 12px;
+  box-shadow: inset 0 1px 0 var(--ws-line);
   color: var(--ws-muted-fg);
-  font-size: 12px;
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
 }
 
-.ws-chip b {
-  color: var(--ws-ink);
-  font-size: 15px;
+.ws-stat b {
   margin-left: 4px;
-  font-variant-numeric: tabular-nums;
 }
 
-/* ② 要你处理 */
+/* ── ② 要你处理 ─────────────────────────────────────────────────── */
 
+.ws-todo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 交给插件之后做到哪了：列表组里的一行（状态是药丸，颜色只表示状态；失败那条也是这一行） */
 .ws-write {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: var(--ws-surface);
-  margin-bottom: 6px;
+  padding: 12px 16px;
 }
 
-.ws-write--good {
-  background: var(--ws-good-bg);
-  color: var(--ws-good);
+.ws-write-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
-.ws-write--bad {
-  background: var(--ws-bad-bg);
+.ws-write-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ws-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-write-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-write-msg {
+  color: var(--ws-body);
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
+}
+
+.ws-write-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-bad-text {
   color: var(--ws-bad);
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
 }
 
-.ws-write--wait {
-  background: var(--ws-warn-bg);
-  color: var(--ws-warn);
+/* 「等你发」：节标题在外面；展开的那一条是一张卡，收起的几条是一张列表组 */
+.ws-desk-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.ws-write-body {
+.ws-desk-sec > .ws-sec-head {
+  padding: 0 4px;
+}
+
+.ws-desk-one {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-desk-card {
+  padding: 16px;
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-card);
+  box-shadow: var(--ws-card-edge), var(--ws-shadow);
+}
+
+/* 卡头 / 收起的那一行：整行可点 */
+.ws-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ws-muted-fg);
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ws-card-head-text {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
 }
 
-.ws-write-label {
-  color: var(--ws-ink);
-  font-size: 12px;
+.ws-card-head-snip {
   overflow: hidden;
+  color: var(--ws-ink);
+  font-size: var(--ws-text-ui);
+  line-height: var(--ws-lh-ui);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ws-write-state {
-  font-weight: 600;
+.ws-chev {
+  flex: none;
+  color: var(--ws-faint);
 }
 
-.ws-bad-text {
-  color: var(--ws-bad);
-  font-size: 11px;
+.ws-group .ws-card-head {
+  min-height: 56px;
+  padding: 8px 16px;
+  border-radius: 0;
+  transition: background-color 120ms ease-out;
 }
 
-.ws-card-item {
-  border-bottom: 1px solid var(--ws-line);
-  padding: 8px 0;
-}
-
-.ws-card-item:last-child {
-  border-bottom: 0;
-}
-
-.ws-card-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  color: var(--ws-ink);
-  text-align: left;
-  cursor: pointer;
+.ws-group .ws-card-head:hover {
+  background: var(--ws-hover);
 }
 
 .ws-card-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 12px;
+  margin-top: 4px;
 }
 
 .ws-post-title {
+  margin: 0;
   color: var(--ws-ink);
+  font-size: var(--ws-text-read);
+  line-height: var(--ws-lh-read);
   font-weight: 600;
 }
 
+/* 被回的那一句：内块（浅底、圆角 12），正体 */
 .ws-quote {
   margin: 0;
-  padding: 6px 10px;
-  border-left: 3px solid var(--ws-line);
+  padding: 8px 12px;
+  border-radius: var(--ws-radius-block);
   background: var(--ws-surface);
-  border-radius: 0 8px 8px 0;
   color: var(--ws-body);
   white-space: pre-wrap;
 }
@@ -572,16 +810,10 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-}
-
-.ws-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--ws-brand);
-  text-decoration: none;
-  font-size: 12px;
+  gap: 8px;
+  color: var(--ws-muted-fg);
+  font-size: var(--ws-text-note);
+  line-height: var(--ws-lh-note);
 }
 
 .ws-actions {
@@ -593,14 +825,42 @@ body {
   flex: 1;
 }
 
-/* ③ 记录 */
+/* 底下那一排弱按钮（稍后 · 不发 · 我发了，帮我记一下） */
+.ws-actions--minor {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: -4px;
+}
+
+/* WP445：「不发」下面那一排理由（可不选）；WP467「我发了，帮我记一下」也用这个内块 */
+.ws-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--ws-radius-block);
+  background: var(--ws-surface);
+}
+
+/* ── ③ 记录 ──────────────────────────────────────────────────────── */
+
+.ws-records {
+  gap: 0;
+  padding: 0;
+}
+
+.ws-records > .ws-empty {
+  padding: 24px 16px;
+}
 
 .ws-sink {
   display: grid;
-  grid-template-columns: 18px 1fr;
-  column-gap: 6px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--ws-line);
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 12px 16px;
 }
 
 .ws-sink > :nth-child(n + 3) {
@@ -611,7 +871,10 @@ body {
   color: var(--ws-good);
 }
 
-.ws-sink--broken .ws-ico,
+.ws-sink--broken .ws-ico {
+  color: var(--ws-bad);
+}
+
 .ws-sink--paused .ws-ico,
 .ws-sink--pending_confirm .ws-ico {
   color: var(--ws-warn);
@@ -622,25 +885,27 @@ body {
 }
 
 .ws-rec {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--ws-line);
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.ws-rec:last-child {
-  border-bottom: 0;
+  padding: 12px 16px;
 }
 
 .ws-rec-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.ws-rec-head .ws-iconbtn {
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
 }
 
 .ws-rec p {
+  margin: 0;
   color: var(--ws-ink);
 }
 
@@ -648,60 +913,29 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  margin-top: 4px;
+}
+
+/* 记录卡里行与行之间一条细线 */
+.ws-sinks + .ws-recs,
+.ws-sink + .ws-sink,
+.ws-rec + .ws-rec {
+  box-shadow: inset 0 1px 0 var(--ws-line);
 }
 
 /* WP419：等你发的社媒帖子——头一行不是按钮（不折叠） */
 .ws-card-head--static {
   cursor: default;
-  display: flex;
   justify-content: space-between;
-  gap: 8px;
 }
 
-/* ── WP432：发帖台 ─────────────────────────────────────────────── */
-
-/* 顶上一行实时状况（巡查到第几块 / 今天发了几条 / 等你发几条 / 卡在哪） */
-.ws-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.ws-card-head--static b {
+  color: var(--ws-ink);
+  font-size: var(--ws-text-read);
+  line-height: var(--ws-lh-read);
+  font-weight: 600;
 }
 
-.ws-strip .ws-chip {
-  flex: 0 1 auto;
-  padding: 4px 10px;
-}
-
-.ws-chip--warn {
-  background: var(--ws-warn-bg);
-  color: var(--ws-warn);
-}
-
-/* 「等你发」那一块 */
-.ws-desk-sec {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: var(--ws-card);
-  border-radius: 14px;
-  padding: 12px;
-  box-shadow: inset 0 0 0 1px var(--ws-warn-bg);
-}
-
-.ws-actions--minor {
-  justify-content: flex-end;
-}
-
-/* WP445：「不发」下面那一排理由（可不选） */
-.ws-reasons {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border: 1px dashed var(--ws-line);
-  border-radius: 10px;
-}
-
-.ws-wrap {
-  flex-wrap: wrap;
+.ws-posts {
+  gap: 12px;
 }

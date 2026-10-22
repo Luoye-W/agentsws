@@ -26,7 +26,7 @@ import {
   PanelStatusStrip,
   VersionBanner,
 } from './panel-desk'
-import { IconGear } from './panel-icons'
+import { IconAlert, IconGear, IconInfo } from './panel-icons'
 import type { PostActions } from './panel-posts'
 import { PanelProgressView } from './panel-progress'
 import { PanelRecords } from './panel-records'
@@ -233,7 +233,7 @@ export function SidePanel(props: {
           <b>Agents 工坊</b>
           {/* WP457：「品牌名 · 人名」，两样都没有就整行不画（服务端已经不发占位的 default / owner） */}
           {who === '' ? null : (
-            <span className="ws-muted ws-clamp-1" data-testid="ws-who">
+            <span className="ws-who ws-clamp-1" data-testid="ws-who">
               {who}
             </span>
           )}
@@ -255,7 +255,12 @@ export function SidePanel(props: {
           className={state.kind === 'offline' ? 'ws-note' : 'ws-note ws-note--warn'}
           data-testid="ws-state"
         >
-          {state.message}
+          {state.kind === 'offline' ? (
+            <IconInfo className="ws-ico" />
+          ) : (
+            <IconAlert className="ws-ico" />
+          )}
+          <span className="ws-note-text">{state.message}</span>
         </p>
       ) : null}
       {state?.kind === 'ok' && snap !== undefined ? (
@@ -402,10 +407,11 @@ function ConnectReddit(props: {
   const [msg, setMsg] = useState<string | undefined>(undefined)
   return (
     <div className="ws-note ws-note--warn ws-banner" data-testid="ws-connect-reddit">
-      <span>这个 Chrome 还没连 Reddit，填不进页面</span>
+      <IconAlert className="ws-ico" />
+      <span className="ws-note-text">这个 Chrome 还没连 Reddit，填不进页面</span>
       <button
         type="button"
-        className="ws-btn ws-btn--primary ws-btn--sm"
+        className="ws-link ws-note-end"
         onClick={() => {
           // 申请权限必须在点击这一拍里调（浏览器只认用户手势）
           void props.connect().then(async (granted) => {
@@ -418,7 +424,7 @@ function ConnectReddit(props: {
       >
         连接
       </button>
-      {msg === undefined ? null : <small>{msg}</small>}
+      {msg === undefined ? null : <small className="ws-bad-text">{msg}</small>}
     </div>
   )
 }

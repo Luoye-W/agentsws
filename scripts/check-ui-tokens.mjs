@@ -19,6 +19,12 @@
  * 一个文件某一类的个数**超过**清单上的数才报错；没改过的文件永远不会红。T2–T8 逐步清，清完一处跑一次
  * `--update` 把清单收紧（`--update` 只会往小里改、不会加新文件——清单只减不增）。
  *
+ * **插件（WP456-T7）**：另外两道，都不走豁免清单（插件的 CSS 一次清干净了，新写的直接按档位来）：
+ * - `apps/extension/src/ui/tokens.css` 必须和工作台 `index.css` 生成出来的一字不差（`gen-extension-tokens.mjs`）——
+ *   工作台 token 改了、插件没重出就红；
+ * - `apps/extension/src/**\/*.css`（生成的 tokens.css 除外）里的 `font-size` / `border-radius` 只用档位上的数或
+ *   `var(--ws-*)`，不写死 `#xxxxxx` 颜色（颜色走 token，深浅色才跟着切）。
+ *
  * 用法：node scripts/check-ui-tokens.mjs [--update] [--strict] [--summary]
  *   --update   把豁免清单收紧到现在的数（只减不增）
  *   --strict   清单比现在松（有文件清掉了却没收紧）也算失败
@@ -28,6 +34,7 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { checkExtensionTokens, DRIFT_MESSAGE, TARGET } from './gen-extension-tokens.mjs'
 
 export const CATEGORIES = ['font-size', 'radius', 'color']
 export const CATEGORY_LABEL = { 'font-size': '字号', radius: '圆角', color: '原色' }
@@ -224,6 +231,76 @@ export function writeBaseline(path, files) {
   writeFileSync(path, `${JSON.stringify({ $comment: HEADER, files }, null, 2)}\n`)
 }
 
+/** 插件 CSS 里字号能写的数（px）：七档。11 那一档只给数字和英文，写的时候自己确认。 */
+const CSS_FONT_PX_OK = new Set([11, 12, 13, 14, 16, 22, 28])
+/** 插件 CSS 里圆角能写的数（px）：五档 + 0 + 全圆。 */
+const CSS_RADIUS_PX_OK = new Set([0, 6, 8, 12, 16, 20, 999, 9999])
+
+/**
+ * 一段插件 CSS 里不在档位里的写法：`[{ line, kind, token }]`（kind = font-size / radius / color）。
+ * 只看 `font-size`、`border-radius`（含四个角）和写死的 `#xxxxxx`；`var(…)`、`inherit`、百分比全圆照认。
+ */
+export function scanCss(text) {
+  const out = []
+  const lines = text.replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, ' ')).split('\n')
+  lines.forEach((line, i) => {
+    const at = i + 1
+    const font = /(?<![\w-])font-size\s*:\s*([^;]+)/u.exec(line)
+    if (font !== null) {
+      const v = font[1].trim()
+      const px = /^(\d+(?:\.\d+)?)px$/u.exec(v)
+      const ok =
+        v.startsWith('var(') ||
+        v === 'inherit' ||
+        (px !== null && CSS_FONT_PX_OK.has(Number(px[1])))
+      if (!ok) out.push({ line: at, kind: 'font-size', token: `font-size: ${v}` })
+    }
+    const radius = /(?<![\w-])border(?:-(?:top|bottom)-(?:left|right))?-radius\s*:\s*([^;]+)/u.exec(
+      line,
+    )
+    if (radius !== null) {
+      const v = radius[1].trim()
+      const ok =
+        v.startsWith('var(') ||
+        v === 'inherit' ||
+        v === '50%' ||
+        v.split(/\s+/u).every((part) => {
+          const px = /^(\d+)(?:px)?$/u.exec(part)
+          return px !== null && CSS_RADIUS_PX_OK.has(Number(px[1]))
+        })
+      if (!ok) out.push({ line: at, kind: 'radius', token: `border-radius: ${v}` })
+    }
+    for (const m of line.matchAll(/#[0-9a-fA-F]{3,8}(?![\w-])/gu))
+      out.push({ line: at, kind: 'color', token: m[0] })
+  })
+  return out
+}
+
+/** 插件里要查的 CSS（仓库相对路径；生成的 tokens.css 不查）。 */
+export function listExtensionCss(root) {
+  const out = []
+  const walk = (d) => {
+    for (const name of readdirSync(d)) {
+      const p = join(d, name)
+      if (statSync(p).isDirectory()) walk(p)
+      else if (name.endsWith('.css')) out.push(relative(root, p).split('\\').join('/'))
+    }
+  }
+  walk(join(root, 'apps/extension/src'))
+  return out.filter((f) => f !== TARGET).sort()
+}
+
+/** 插件那两道：令牌没重出、CSS 不在档位里。返回要报的错（空 = 过）。 */
+export function checkExtension(root) {
+  const errors = []
+  if (!checkExtensionTokens(root).ok) errors.push(DRIFT_MESSAGE)
+  for (const file of listExtensionCss(root)) {
+    for (const h of scanCss(readFileSync(join(root, file), 'utf8')))
+      errors.push(`${file} 第 ${h.line} 行：${CATEGORY_LABEL[h.kind]}不在档位里  ${h.token}`)
+  }
+  return errors
+}
+
 function main() {
   const args = process.argv.slice(2)
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -275,7 +352,10 @@ function main() {
   const strictFail = args.includes('--strict') && under.length > 0 && !args.includes('--update')
   if (over.length === 0 && !strictFail)
     console.log('✓ 视觉档位守卫：没有新出现的不在档位里的字号 / 圆角 / 原色')
-  return over.length > 0 || strictFail ? 1 : 0
+  const ext = checkExtension(root)
+  for (const e of ext) console.error(`✗ 插件：${e}`)
+  if (ext.length === 0) console.log('✓ 插件：令牌与工作台一致，CSS 的字号 / 圆角 / 颜色都在档位上')
+  return over.length > 0 || strictFail || ext.length > 0 ? 1 : 0
 }
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

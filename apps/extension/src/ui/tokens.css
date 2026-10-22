@@ -1,17 +1,37 @@
 /*
- * 插件自己那一份 `--ws-*` 令牌（36 §界面规范）。
+ * ⚠️ 生成文件，别手改。真源：apps/workstation/src/index.css（工作台的 --ws-* 令牌、字体栈、字号 / 圆角档位）。
+ * 重出：node scripts/gen-extension-tokens.mjs（插件构建前会自动跑）；
+ * 守卫：node scripts/gen-extension-tokens.mjs --check（工作台改了、这里没重出就红）。
  *
- * 为什么不直接 import 工作台那份 `index.css`：那一份是 Tailwind v4 的
- * `@theme`，带着一整套 shadcn 的层，装进一个注入到 YouTube 页面里的
- * shadow root 里既太沉、也会把 Tailwind 的 preflight 一起带进去。
- * 这里抄的是**令牌本身**（同样的十几个颜色、同样的圆角与阴影），
- * 于是插件和工作台在用户眼里是同一个产品，而不是同一套 class 名。
- *
- * 全部挂在 `:host` 上：这块面板活在 shadow root 里，页面的样式进不来，
- * 这里的样式也出不去。YouTube 换一次皮肤，这张卡不会跟着花。
+ * 浅色挂在 :root（侧边栏、设置页）和 :host（红人面板的 shadow root）上；深色跟系统走。
  */
 
+:root,
 :host {
+  --font-stack-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-stack-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Mono CJK SC", monospace;
+
+  /* 档位：字号（含行高）、圆角（WP456 §2.3 / §2.5） */
+  --ws-radius-tag: 6px;
+  --ws-radius-ctl: 8px;
+  --ws-radius-block: 12px;
+  --ws-radius-dialog: 20px;
+  --ws-text-page: 22px;
+  --ws-lh-page: 30px;
+  --ws-text-title: 16px;
+  --ws-lh-title: 24px;
+  --ws-text-read: 14px;
+  --ws-lh-read: 22px;
+  --ws-text-ui: 13px;
+  --ws-lh-ui: 20px;
+  --ws-text-note: 12px;
+  --ws-lh-note: 18px;
+  --ws-text-tiny: 11px;
+  --ws-lh-tiny: 16px;
+  --ws-text-big: 28px;
+  --ws-lh-big: 34px;
+
+  /* 浅色 */
   --ws-paper: #f3f5f2;
   --ws-card: #ffffff;
   --ws-line: #ecefea;
@@ -30,274 +50,114 @@
   --ws-bad-bg: #fde9e7;
   --ws-info: #2f63c8;
   --ws-info-bg: #e9f0fb;
+  --ws-brand-soft: #cfebdd;
+  --ws-surface: #f7f9f6;
+  --ws-faint: #9aa29d;
+  --ws-secondary: #edf0eb;
+  --ws-chart-1: #008a6c;
+  --ws-chart-2: #2a78d6;
+  --ws-chart-3: #eb6834;
+  --ws-chart-4: #6250d6;
+  --ws-chart-single: #007b67;
+  --ws-chart-grid: #eef1ed;
+  --ws-chart-axis: #8d958f;
+  --ws-line-strong: #e1e6df;
+  --ws-hover: color-mix(in srgb, var(--ws-ink) 5%, transparent);
+  --ws-pop: #ffffff;
+  --ws-card-edge: 0 0 #0000;
+  --ws-seg-on: var(--ws-card);
+  --ws-seg-on-shadow: 0 1px 2px rgba(20, 40, 30, 0.08), 0 0 0 0.5px rgba(20, 40, 30, 0.04);
   --ws-radius-card: 16px;
   --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
+  --ws-shadow-pop: 0 12px 32px rgba(20, 40, 30, 0.14), 0 1px 3px rgba(20, 40, 30, 0.08);
+  --ws-shadow-dialog: 0 24px 64px rgba(20, 40, 30, 0.2), 0 2px 6px rgba(20, 40, 30, 0.08);
   --ws-shadow-hover: 0 16px 34px rgba(20, 40, 30, 0.14), 0 2px 6px rgba(20, 40, 30, 0.06);
-
-  all: initial;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
-  color: var(--ws-ink);
-  line-height: 1.55;
+  --ws-glow: 0 0 0 1px rgba(0, 123, 103, 0.32), 0 0 12px 2px rgba(0, 123, 103, 0.14);
+  --ws-display: "Outfit", "Noto Sans SC", var(--font-stack-sans);
+  --ws-brand-mark-0: #2e86d8;
+  --ws-brand-mark-1: #1fb8a4;
+  --ws-brand-mark-2: #d9a82e;
+  --ws-brand-mark-b1-from: #2a92cc;
+  --ws-brand-mark-b1-to: #23abb2;
+  --ws-brand-mark-b2-from: #279ebf;
+  --ws-brand-mark-b2-to: #1fb7a5;
+  --ws-brand-mark-b3-from: #22afad;
+  --ws-brand-mark-b3-to: #62b27a;
+  --ws-brand-mark-b4-from: #23aab3;
+  --ws-brand-mark-b4-to: #4ab489;
+  --ws-brand-mark-b5-from: #2cb79c;
+  --ws-brand-mark-b5-to: #91ae5b;
+  --ws-brand-mark-b6-from: #74b16e;
+  --ws-brand-mark-b6-to: #d9a82e;
+  --ws-brand-sheen: #e0faf4;
+  --ws-brand-sheen-strength: 0.55;
+  --ws-badge-plate: #ffffff;
+  --ws-badge-ring: rgba(38, 51, 49, 0.14);
+  color-scheme: light;
 }
 
-.ws-root {
-  position: fixed;
-  top: 88px;
-  right: 24px;
-  z-index: 2147483000;
-  width: 340px;
-  max-height: calc(100vh - 120px);
-  overflow-y: auto;
-  background: var(--ws-card);
-  border-radius: var(--ws-radius-card);
-  box-shadow: var(--ws-shadow-hover);
-  padding: 16px;
-  font-size: 13px;
-  color: var(--ws-body);
-}
-
-.ws-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.ws-mark {
-  width: 20px;
-  height: 20px;
-  color: var(--ws-brand);
-  flex: none;
-}
-
-.ws-mark svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.ws-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ws-ink);
-  flex: 1;
-}
-
-.ws-close {
-  border: 0;
-  background: transparent;
-  color: var(--ws-muted-fg);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 2px 4px;
-}
-
-/* 「收进哪儿」那一行。**这是披露文案的落点**：登录态时它明说会共享到公共库。 */
-.ws-destination {
-  font-size: 12px;
-  color: var(--ws-muted-fg);
-  margin-bottom: 12px;
-}
-
-.ws-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ws-ink);
-  margin: 0 0 2px;
-  word-break: break-word;
-}
-
-.ws-handle {
-  font-size: 12px;
-  color: var(--ws-muted-fg);
-  margin: 0 0 12px;
-}
-
-.ws-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.ws-stat {
-  background: var(--ws-paper);
-  border-radius: 10px;
-  padding: 8px;
-}
-
-.ws-stat-label {
-  font-size: 11px;
-  color: var(--ws-muted-fg);
-}
-
-.ws-stat-value {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ws-ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.ws-verdict {
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 12px;
-  margin-bottom: 12px;
-}
-
-.ws-verdict--excellent,
-.ws-verdict--viral,
-.ws-verdict--good {
-  background: var(--ws-good-bg);
-  color: var(--ws-good);
-}
-
-.ws-verdict--normal {
-  background: var(--ws-info-bg);
-  color: var(--ws-info);
-}
-
-.ws-verdict--weak,
-.ws-verdict--below {
-  background: var(--ws-warn-bg);
-  color: var(--ws-warn);
-}
-
-.ws-verdict--suspicious {
-  background: var(--ws-bad-bg);
-  color: var(--ws-bad);
-}
-
-.ws-verdict--unknown {
-  background: var(--ws-paper);
-  color: var(--ws-muted-fg);
-}
-
-.ws-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ws-btn {
-  border: 0;
-  border-radius: 10px;
-  padding: 9px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: center;
-}
-
-.ws-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.ws-btn--primary {
-  background: var(--ws-brand);
-  color: var(--ws-brand-fg);
-}
-
-.ws-btn--ghost {
-  background: var(--ws-paper);
-  color: var(--ws-ink);
-}
-
-.ws-note {
-  font-size: 12px;
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--ws-tint);
-  color: var(--ws-brand-ink);
-}
-
-.ws-note--warn {
-  background: var(--ws-warn-bg);
-  color: var(--ws-warn);
-}
-
-.ws-list {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.ws-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--ws-line);
-}
-
-.ws-row-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.ws-row-name {
-  font-size: 12px;
-  color: var(--ws-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ws-row-meta {
-  font-size: 11px;
-  color: var(--ws-muted-fg);
-}
-
-.ws-filters {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.ws-field {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.ws-label {
-  font-size: 11px;
-  color: var(--ws-muted-fg);
-}
-
-.ws-input {
-  border: 1px solid var(--ws-line);
-  border-radius: 8px;
-  padding: 6px 8px;
-  font-size: 12px;
-  font-family: inherit;
-  color: var(--ws-ink);
-  background: var(--ws-card);
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.ws-fab {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 2147483000;
-  border: 0;
-  border-radius: 999px;
-  padding: 10px 16px;
-  background: var(--ws-brand);
-  color: var(--ws-brand-fg);
-  font-size: 13px;
-  font-weight: 500;
-  font-family: inherit;
-  box-shadow: var(--ws-shadow-hover);
-  cursor: pointer;
+@media (prefers-color-scheme: dark) {
+  :root,
+  :host {
+    --ws-paper: #0e100f;
+    --ws-card: #171a18;
+    --ws-line: #242825;
+    --ws-ink: #f1f4f0;
+    --ws-body: #c9d2cc;
+    --ws-muted-fg: #98a29b;
+    --ws-brand: #76fb91;
+    --ws-brand-ink: #b9ffc9;
+    --ws-brand-fg: #0e100f;
+    --ws-tint: #173c24;
+    --ws-good: #76fb91;
+    --ws-good-bg: #173c24;
+    --ws-warn: #f5c451;
+    --ws-warn-bg: #3a2e10;
+    --ws-bad: #ff7a6b;
+    --ws-bad-bg: #3d1d19;
+    --ws-info: #8bb8ff;
+    --ws-info-bg: #1a2436;
+    --ws-brand-soft: #2c5c3b;
+    --ws-surface: #1c201d;
+    --ws-faint: #6c756f;
+    --ws-secondary: #1f2320;
+    --ws-chart-1: #34a96a;
+    --ws-chart-2: #3987e5;
+    --ws-chart-3: #d95926;
+    --ws-chart-4: #9085e9;
+    --ws-chart-single: #76fb91;
+    --ws-chart-grid: #222624;
+    --ws-chart-axis: #7c857f;
+    --ws-line-strong: #2e332f;
+    --ws-hover: color-mix(in srgb, var(--ws-ink) 6%, transparent);
+    --ws-pop: #1d211e;
+    --ws-card-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+    --ws-seg-on: color-mix(in srgb, var(--ws-ink) 10%, var(--ws-card));
+    --ws-seg-on-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --ws-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
+    --ws-shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    --ws-shadow-dialog: 0 24px 72px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    --ws-shadow-hover: 0 16px 34px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.36);
+    --ws-glow: 0 0 0 1px rgba(118, 251, 145, 0.32), 0 0 12px 2px rgba(118, 251, 145, 0.14);
+    --ws-brand-mark-0: #4ea8ff;
+    --ws-brand-mark-1: #2fe0c8;
+    --ws-brand-mark-2: #ffd84d;
+    --ws-brand-mark-b1-from: #47b5f2;
+    --ws-brand-mark-b1-to: #37d1d6;
+    --ws-brand-mark-b2-from: #3fc3e5;
+    --ws-brand-mark-b2-to: #30dfc9;
+    --ws-brand-mark-b3-from: #34d6d1;
+    --ws-brand-mark-b3-to: #7add9c;
+    --ws-brand-mark-b4-from: #38d0d8;
+    --ws-brand-mark-b4-to: #5fdeac;
+    --ws-brand-mark-b5-from: #3edfbf;
+    --ws-brand-mark-b5-to: #afdb7c;
+    --ws-brand-mark-b6-from: #8edc90;
+    --ws-brand-mark-b6-to: #ffd84d;
+    --ws-brand-sheen: #ffffff;
+    --ws-brand-sheen-strength: 1;
+    --ws-badge-plate: #f1f4f0;
+    --ws-badge-ring: transparent;
+    color-scheme: dark;
+  }
 }
