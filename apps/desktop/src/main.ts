@@ -86,6 +86,7 @@ import { type HealthSnapshot, probeHealth } from './health.js'
 import { strings } from './i18n.js'
 import { createLaunchAtLogin, loginItemSettings, wasLaunchedAtLogin } from './launch-at-login.js'
 import { nodeLayoutFs } from './layout-fs.js'
+import { isSupersededLoad } from './load-superseded.js'
 import { createLogger } from './logging.js'
 import {
   buildTrayMenu,
@@ -1152,7 +1153,13 @@ async function bootstrap(): Promise<void> {
         window?.show()
       })
     }
-    await window.loadURL(url)
+    try {
+      await window.loadURL(url)
+    } catch (error) {
+      // 被更新的一次加载顶掉（-3）不算失败：窗口最后照样在要去的页面上
+      if (!isSupersededLoad(error)) throw error
+      logger.info('窗口加载被更新的一次顶掉（ERR_ABORTED），照常', { path })
+    }
     window.show()
     window.focus()
     return url
