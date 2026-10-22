@@ -150,11 +150,12 @@ describe('WP448 抢词（每周）与合并车道', () => {
     expect(Object.keys(daily.signal_counts)).not.toContain('cannibalization')
     expect(out.picks).toBe(daily.picks.length)
     expect(events.some((e) => e.type === 'seo.weekly_cannibalization')).toBe(true)
-    // 报告卡看完归档（L3 自动出），和每日那张一样
+    // 报告卡同每日那张一样：L3、进简报不进队列
     const card = created.find(
       (i) => i.kind === 'seo_report' && i.payload.variant === 'weekly_cannibalization',
-    ) as unknown as { state: string; gates?: unknown; automation: unknown }
-    expect(card.state, JSON.stringify(card)).toBe('auto_approved')
+    ) as unknown as { priority: string; automation: { level_at_creation: string } }
+    expect(card.priority).toBe('digest')
+    expect(card.automation.level_at_creation).toBe('L3')
   })
 
   it('合并后跳转 → 交建站带改跳转清单；改写角度 → 内链改动卡（从要改写的那页链到保留页）', async () => {
