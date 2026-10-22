@@ -10,6 +10,8 @@
  * | 用独立的 Chrome | 指一个 Chrome 的可执行文件，每次起一个干净的 | 服务不在你这台电脑上，或者你不想让 AI 碰你的登录态 |
  * | 我正在用的浏览器（WP92 / 55 §10） | 腾讯 BrowserSkill：浏览器扩展 + 本机 `bsk`，附到你日常那个浏览器上 | 要看"登录之后才看得到"的东西，而且不想另开一个浏览器 |
  *
+ * | ego（WP463 / docs/111 §3） | 用户自己装的 ego 浏览器；AI 原样调它的命令行 | 只在 ① 个人用法里出现；没探到时显示「没装」+ 官网链接 |
+ *
  * 第三种多一步向导（装扩展 → 装 `bsk` → `bsk doctor` 检查），因为它有两个**我们装不了**
  * 的前提：扩展只能用户自己在浏览器里装，`bsk` 是一个本机小程序。向导把这两步摆出来，
  * 第三步按钮跑一次上游自己的体检，把它那几条原样端出来（含"怎么修"那一句）。
@@ -41,11 +43,19 @@ import {
   type BrowserSkillStatus,
   getBrowserSettings,
   getBrowserSkillStatus,
+  getEgoBrowserStatus,
   installBrowserSkill,
   probeBrowser,
   setBrowserSettings,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
+
+/**
+ * WP463：ego 的官网（不给安装包直链：那条链接带版本参数、会变；官网自己按平台给）。
+ * 我们不打包、不分发、不代下载 ego（docs/111 §3）。
+ */
+const EGO_SITE = 'https://lite.ego.app/'
 
 /** 桌面壳托盘里那条"打开工作用的浏览器"挑的端口（`apps/desktop`）。 */
 const DEFAULT_ENDPOINT = 'http://127.0.0.1:9333'
@@ -92,6 +102,19 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
   const settings = useQuery({
     queryKey: ['browser-settings', assignment],
     queryFn: () => getBrowserSettings(assignment),
+    retry: false,
+  })
+  /*
+   * WP463：ego 那一项只在 ① 个人用法里出现（② 同事互联、③ 公司集体不出现），而且要服务端
+   * 说这一档允许（个人档）。出现时现探一次装没装（服务端跑一次 `ego-browser skill`，零点几秒），
+   * 探到了显示版本号。
+   */
+  const { solo } = useMode()
+  const egoShown = solo && settings.data?.ego_allowed !== undefined
+  const ego = useQuery({
+    queryKey: ['browser-ego', assignment],
+    queryFn: () => getEgoBrowserStatus(assignment),
+    enabled: egoShown && settings.data?.ego_allowed === true,
     retry: false,
   })
 
@@ -159,6 +182,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
     else if (current === 'launch')
       save.mutate({ mode: 'launch', executable_path: path.trim(), headless: true })
     else if (current === 'browserskill') save.mutate({ mode: 'browserskill' })
+    else if (current === 'ego') save.mutate({ mode: 'ego' })
     else save.mutate({ mode: 'off' })
   }
 
@@ -171,10 +195,14 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
     label: string,
     note: string,
     blocked?: string,
+    /** WP463：名字下面那一行状态（ego 的「已装好 · 版本」/「没装 + 官网」）。 */
+    status?: React.ReactNode,
+    /** WP463：能看见但选不了（ego 没装时）。 */
+    disabled?: boolean,
   ) => (
     <label
       className={`flex items-start gap-2 rounded-md border p-2.5 ${
-        blocked === undefined ? 'cursor-pointer' : 'opacity-50'
+        blocked === undefined && disabled !== true ? 'cursor-pointer' : 'opacity-50'
       } ${current === value ? 'border-primary' : ''}`}
       data-testid={`browser-mode-${value}`}
     >
@@ -183,7 +211,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
         name="browser-mode"
         className="mt-0.5"
         checked={current === value}
-        disabled={blocked !== undefined}
+        disabled={blocked !== undefined || (disabled === true && current !== value)}
         onChange={() => {
           setMode(value)
           setProbe(undefined)
@@ -199,8 +227,38 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
             {blocked}
           </span>
         )}
+        {blocked === undefined ? status : null}
       </span>
     </label>
+  )
+
+  /** WP463：ego 那一项名字下面的那一行——探到了给版本号，没探到给「没装」+ 官网。 */
+  const egoInstalled = ego.data?.installed === true
+  const egoStatus = ego.isPending ? null : egoInstalled ? (
+    <span
+      className="text-xs text-muted-foreground"
+      data-slot="status"
+      data-testid="browser-ego-status"
+    >
+      {t('settings.browser.ego.version', { version: ego.data?.version ?? '?' })}
+    </span>
+  ) : (
+    <span
+      className="flex items-center gap-2 text-xs text-muted-foreground"
+      data-slot="status"
+      data-testid="browser-ego-status"
+    >
+      {t('settings.browser.ego.missing')}
+      <a
+        href={EGO_SITE}
+        target="_blank"
+        rel="noreferrer"
+        className="underline"
+        data-testid="browser-ego-site"
+      >
+        {t('settings.browser.ego.site')}
+      </a>
+    </span>
   )
 
   return (
@@ -427,6 +485,19 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
             </Step>
           </div>
         ) : null}
+
+        {egoShown
+          ? option(
+              'ego',
+              t('settings.browser.ego'),
+              t('settings.browser.ego.note'),
+              view?.ego_allowed === true
+                ? undefined
+                : (view?.ego_blocked_reason ?? t('settings.browser.ego.blocked')),
+              egoStatus,
+              !egoInstalled,
+            )
+          : null}
 
         {probe === undefined ? null : (
           <p

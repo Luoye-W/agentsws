@@ -2466,12 +2466,15 @@ export const setCapabilitySources = (
 /** 这台机器上的浏览器怎么配（`GET`/`PUT /v1/settings/browser` 的形状）。 */
 export interface BrowserSettings {
   /** WP92：`browserskill` = 用你正在用的那个浏览器（腾讯 BrowserSkill，55 §10）。 */
-  mode: 'off' | 'attach' | 'launch' | 'browserskill'
+  /** WP463：`ego` = 用户自己装的 ego 浏览器（docs/111 §3，只有个人用法）。 */
+  mode: 'off' | 'attach' | 'launch' | 'browserskill' | 'ego'
   endpoint?: string
   executable_path?: string
   headless?: boolean
   /** WP92：`bsk` 的路径；不给就用我们自己装的那一份。 */
   bsk_path?: string
+  /** WP463：`ego-browser` 的路径；一般不填，服务端自己找。 */
+  ego_path?: string
 }
 
 export interface BrowserSettingsView extends BrowserSettings {
@@ -2481,7 +2484,23 @@ export interface BrowserSettingsView extends BrowserSettings {
   /** WP92：同一条理由——bsk 与浏览器扩展都在你那台电脑上。 */
   browserskill_allowed: boolean
   browserskill_blocked_reason?: string
+  /** WP463：同一条理由——ego 装在你那台电脑上。老服务进程没有这一格（当不允许）。 */
+  ego_allowed?: boolean
+  ego_blocked_reason?: string
 }
+
+/** WP463：这台机器上 ego 装没装、能不能跑（`GET /v1/settings/browser/ego`）。 */
+export interface EgoBrowserStatus {
+  allowed: boolean
+  installed: boolean
+  ego_path?: string
+  version?: string
+  detail?: string
+}
+
+/** 现探一次 ego（服务端跑一次 `ego-browser skill`，零点几秒）。 */
+export const getEgoBrowserStatus = (assignment?: string): Promise<EgoBrowserStatus> =>
+  api('/v1/settings/browser/ego', withAssignment(assignment))
 
 export interface BrowserProbeResult {
   ok: boolean

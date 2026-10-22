@@ -29,6 +29,7 @@ import { useApp } from '@/lib/app-context'
 const EXECUTOR_KEY = {
   'playwright-mcp': 'rail.browser.executor.playwright',
   browserskill: 'rail.browser.executor.browserskill',
+  ego: 'rail.browser.executor.ego',
   none: 'rail.browser.executor.none',
 } as const
 
@@ -114,7 +115,32 @@ function RunBrowserStatus({ pathname }: RailPanelBodyProps): ReactNode {
         </p>
       )}
 
-      {view.current_host === undefined ? (
+      {/*
+        WP463：ego 那一种——不做实时画面（ego 自己的窗口里看得到），只列每段脚本跑完的那一行
+        （退出码 · 耗时 · 输出摘要）。脚本原文在运行记录里。网址在脚本里，下面那几格不适用。
+      */}
+      {view.executor === 'ego' ? (
+        <div className="space-y-1" data-testid="rail-browser-ego">
+          {(view.ego_runs ?? []).length === 0 ? (
+            <p className="text-muted-foreground">{t('rail.browser.ego.none')}</p>
+          ) : (
+            <ol className="space-y-1">
+              {(view.ego_runs ?? []).map((r, i) => (
+                <li
+                  key={`${r.at}-${i}`}
+                  className="break-words font-mono text-xs"
+                  data-testid="rail-browser-ego-run"
+                >
+                  {r.note}
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="text-xs text-muted-foreground">{t('rail.browser.ego.live')}</p>
+        </div>
+      ) : null}
+
+      {view.executor === 'ego' ? null : view.current_host === undefined ? (
         <p className="text-muted-foreground" data-testid="rail-browser-nowhere">
           {t('rail.browser.nowhere')}
         </p>
@@ -142,12 +168,16 @@ function RunBrowserStatus({ pathname }: RailPanelBodyProps): ReactNode {
         </p>
       )}
 
-      <p className="text-xs text-muted-foreground" data-testid="rail-browser-counts">
-        {t('rail.browser.counts', { navigations: view.navigations, blocked: view.blocked })}
-      </p>
+      {view.executor === 'ego' ? null : (
+        <>
+          <p className="text-xs text-muted-foreground" data-testid="rail-browser-counts">
+            {t('rail.browser.counts', { navigations: view.navigations, blocked: view.blocked })}
+          </p>
 
-      {/* 只给域名不给整条 URL：路径里常带订单号、邮箱、一次性 token（21 敏感级） */}
-      <p className="text-xs text-muted-foreground">{t('rail.browser.host_only')}</p>
+          {/* 只给域名不给整条 URL：路径里常带订单号、邮箱、一次性 token（21 敏感级） */}
+          <p className="text-xs text-muted-foreground">{t('rail.browser.host_only')}</p>
+        </>
+      )}
     </div>
   )
 }

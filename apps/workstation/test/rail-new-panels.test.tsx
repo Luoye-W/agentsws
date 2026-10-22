@@ -101,6 +101,24 @@ describe('运行中的浏览器（#12 / #15）', () => {
     expect(screen.getByTestId('rail-browser-handoff')).toBeDefined()
   })
 
+  it('WP463 ego 那一种：说是 ego，列每段脚本跑完的那一行；不画实时画面、不列域名计数', async () => {
+    getRunBrowser.mockResolvedValue({
+      ...BASE,
+      executor: 'ego',
+      ego_runs: [
+        { at: '2026-10-22T02:01:00.000Z', note: '退出码 0 · 1.2 秒 · Example Domain' },
+        { at: '2026-10-22T02:02:00.000Z', note: '退出码 1 · 0.3 秒 · Error: boom' },
+      ],
+    })
+    renderBrowser()
+    expect((await screen.findByTestId('rail-browser-executor')).textContent).toContain('ego')
+    const runs = screen.getAllByTestId('rail-browser-ego-run').map((el) => el.textContent)
+    expect(runs).toEqual(['退出码 0 · 1.2 秒 · Example Domain', '退出码 1 · 0.3 秒 · Error: boom'])
+    expect(screen.getByTestId('rail-browser-ego').textContent).toContain('ego 自己的窗口')
+    expect(screen.queryByTestId('rail-browser-nowhere')).toBeNull()
+    expect(screen.queryByTestId('rail-browser-counts')).toBeNull()
+  })
+
   it('一个浏览器工具都没调过：照实说，不画一个空壳浏览器', async () => {
     getRunBrowser.mockResolvedValue({ ...BASE, executor: 'none', running: false })
     renderBrowser()

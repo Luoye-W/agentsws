@@ -741,6 +741,9 @@ const zh: Table = {
   'rail.browser.handover.dismiss': '先不管了',
   'rail.browser.executor.playwright': '独立浏览器（官方 provider）',
   'rail.browser.executor.browserskill': '你正在用的浏览器（BrowserSkill）',
+  'rail.browser.executor.ego': 'ego 浏览器',
+  'rail.browser.ego.live': '实时画面在 ego 自己的窗口里',
+  'rail.browser.ego.none': '还没跑过脚本。',
   'rail.browser.executor.none': '这次运行没有开过浏览器',
   'rail.browser.running': '还在跑',
   'rail.browser.finished': '已结束',
@@ -3265,6 +3268,13 @@ const zh: Table = {
 
   // WP92（55 §10）：设置 → 浏览器 → 「我正在用的浏览器」（腾讯 BrowserSkill）
   'settings.browser.bsk': '我正在用的浏览器',
+  'settings.browser.ego': 'ego',
+  'settings.browser.ego.note':
+    'ego 是一个给 AI 用的浏览器，需要你自己安装。AI 会在 ego 里单独的空间干活，不动你开着的标签。',
+  'settings.browser.ego.version': '已装好 · {version}',
+  'settings.browser.ego.missing': '没装',
+  'settings.browser.ego.site': '去官网',
+  'settings.browser.ego.blocked': '这一档用不了（ego 装在你自己那台电脑上）。',
   'settings.browser.bsk.note':
     '用你日常那个浏览器（Chrome / Edge）。你登录过的东西它直接就看得到，不用再登一次；AI 在一个单独的窗口里操作，要用你已经开着的标签会先问你。',
   'settings.browser.bsk.blocked': '这一档用不了（扩展和 bsk 都在你自己那台电脑上）。',
@@ -5105,6 +5115,9 @@ const en: Table = {
   'rail.browser.handover.dismiss': 'Not now',
   'rail.browser.executor.playwright': 'Standalone browser (official provider)',
   'rail.browser.executor.browserskill': 'The browser you already use (BrowserSkill)',
+  'rail.browser.executor.ego': 'ego browser',
+  'rail.browser.ego.live': 'Watch it live in the ego window',
+  'rail.browser.ego.none': 'No script has run yet.',
   'rail.browser.executor.none': 'This run never opened a browser',
   'rail.browser.running': 'running',
   'rail.browser.finished': 'finished',
@@ -7694,6 +7707,13 @@ const en: Table = {
 
   // WP92 (55 §10): Settings → Browser → "The browser I already use" (Tencent BrowserSkill)
   'settings.browser.bsk': 'The browser I already use',
+  'settings.browser.ego': 'ego',
+  'settings.browser.ego.note':
+    'ego is a browser made for AI that you install yourself. The AI works in its own space inside ego and leaves your open tabs alone.',
+  'settings.browser.ego.version': 'Installed · {version}',
+  'settings.browser.ego.missing': 'Not installed',
+  'settings.browser.ego.site': 'Website',
+  'settings.browser.ego.blocked': 'Not available here (ego lives on your own computer).',
   'settings.browser.bsk.note':
     'Uses your everyday browser (Chrome or Edge). Anything you are signed in to is visible right away; the AI works in a separate window and asks before touching a tab you already have open.',
   'settings.browser.bsk.blocked':
