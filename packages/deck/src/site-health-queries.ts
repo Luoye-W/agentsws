@@ -322,7 +322,7 @@ const DRIFT_PAGE_WORD: Record<DriftFinding['kind'], string> = {
 const DRIFT_TRIGGER_WORD = {
   theme_publish: '主题发布后',
   app_change: 'App 装卸后',
-  weekly: '每周例行',
+  weekly: '例行检查',
   manual: '手动',
 } as const
 
@@ -380,8 +380,8 @@ export const SITE_TECH_QUERIES: QueryDef[] = [
     source: 'site',
     returns: 'table',
     run: (ctx) => {
+      // 级别并进「哪一页」那一格（单列两个字太窄，报表里会竖着折）
       const columns = [
-        { key: 'level', label: '级别' },
         { key: 'page', label: '哪一页' },
         { key: 'change', label: '变了什么' },
       ]
@@ -404,7 +404,7 @@ export const SITE_TECH_QUERIES: QueryDef[] = [
             : last
       const rows =
         show.findings.length === 0
-          ? [{ level: '都没问题', page: '', change: '' }]
+          ? [{ page: '都没问题', change: '' }]
           : show.findings.slice(0, 20).map((f) => {
               let path = f.url
               try {
@@ -413,8 +413,7 @@ export const SITE_TECH_QUERIES: QueryDef[] = [
                 // 原样
               }
               return {
-                level: DRIFT_SEVERITY_WORD[f.severity],
-                page: `${DRIFT_PAGE_WORD[f.kind]} ${path}`,
+                page: `${DRIFT_SEVERITY_WORD[f.severity]} · ${DRIFT_PAGE_WORD[f.kind]} ${path}`,
                 change: `${f.detail}${f.before !== undefined && f.after !== undefined ? `：${f.before} → ${f.after}` : ''}`,
               }
             })

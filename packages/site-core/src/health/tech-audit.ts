@@ -409,9 +409,10 @@ export async function runTechAudit(input: TechAuditInput): Promise<TechAuditResu
       )
       continue
     }
-    if (t.hops.some((h) => h.status === 302 || h.status === 307))
-      push('redirect.temporary', `${at} 用的是临时跳转（${String(t.hops[0]?.status ?? '')}）`, {
-        url: t.url,
+    const temp = t.hops.find((h) => h.status === 302 || h.status === 307)
+    if (temp !== undefined)
+      push('redirect.temporary', `${pathOf(temp.url)} 用的是临时跳转（${String(temp.status)}）`, {
+        url: temp.url,
       })
     if (t.hops.length >= 2) {
       const finalOk = t.final.status === 200 && sameSite(t.final.url)
@@ -640,7 +641,7 @@ export function techHandoffText(
   const lines = mine.slice(0, 30).map((i, n) => `${String(n + 1)}. ${techIssueLine(i)}`)
   const redirects = mine.filter((i) => i.redirect !== undefined).slice(0, 20)
   const text = [
-    `网站技术体检发现 ${String(mine.length)} 处要改（SEO 与 GEO 每周体检转来，只看不改）。请逐条核对后用你的工具出改动卡：`,
+    `网站技术体检发现 ${String(mine.length)} 处要改（SEO 与 GEO 技术体检转来，体检只看不改）。请逐条核对后用你的工具出改动卡：`,
     ...lines,
     ...(redirects.length === 0
       ? []

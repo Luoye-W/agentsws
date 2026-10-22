@@ -234,6 +234,19 @@ const hostOf = (u: string): string | undefined => {
   }
 }
 
+/**
+ * WP448：店铺给的商品网址可能是 myshopify 域名或旧域名——技术体检与改版回归一律按我们自己的站去抓
+ * （同一页不会因为两个域名被当成两页）。
+ */
+function onSite(origin: string, u: string): string {
+  try {
+    const x = new URL(u)
+    return `${origin}${x.pathname}`
+  } catch {
+    return u
+  }
+}
+
 /** 页面文字里的政策事实（退货天数、包邮门槛）。 */
 async function storePolicies(
   get: (url: string) => Promise<string | undefined>,
@@ -648,8 +661,10 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
     const live =
       typeof shop === 'string'
         ? []
-        : shop.products.map((p) => p.url ?? `${origin}/products/${p.handle}`)
-    const products = [...new Set([...live, ...pick(PRODUCT, 2)])].slice(0, 2)
+        : shop.products.map((p) => onSite(origin, p.url ?? `${origin}/products/${p.handle}`))
+    const products = [
+      ...new Set([...live, ...pick(PRODUCT, 2).map((u) => onSite(origin, u))]),
+    ].slice(0, 2)
     const next: { url: string; kind: DriftPageKind }[] = [
       { url: `${origin}/`, kind: 'home' },
       ...products.map((url) => ({ url, kind: 'product' as const })),
@@ -915,7 +930,13 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
     if (products.length > 0) out.chatgpt_shopping = assessChatGptShopping(products, store)
 
     // WP448：技术体检（同一轮）
-    await techAudit(out, origin, host, robots, products.map(urlOf))
+    await techAudit(
+      out,
+      origin,
+      host,
+      robots,
+      products.map((p) => onSite(origin, urlOf(p))),
+    )
 
     if (out.notes.length > 0) out.status = 'partial'
     await dispatchIfNew(out)
@@ -1082,7 +1103,7 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
 const DRIFT_TRIGGER_WORDS: Record<DriftTrigger['kind'], string> = {
   theme_publish: '主题发布',
   app_change: 'App 装卸',
-  weekly: '每周例行',
+  weekly: '例行检查',
   manual: '手动',
 }
 

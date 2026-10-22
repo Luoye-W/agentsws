@@ -2318,23 +2318,21 @@ const QUERY_LIST: QueryDef[] = [
         const queries = Array.isArray(g.queries) ? g.queries.map(String) : []
         const pages = Array.isArray(g.pages) ? g.pages.filter(isRecord) : []
         const others = pages.filter((p) => p.url !== g.keep).map((p) => path(p.url))
+        // 级别并进「查询」那一格（单列两个字太窄，报表里会竖着折）
         return {
-          level: word[String(g.severity)] ?? String(g.severity),
-          queries: `${queries[0] ?? ''}${queries.length > 1 ? ` 等 ${String(queries.length)} 个` : ''}`,
+          queries: `${word[String(g.severity)] ?? String(g.severity)} · ${queries[0] ?? ''}${queries.length > 1 ? ` 等 ${String(queries.length)} 个` : ''}`,
           keep: path(g.keep),
           other: `${others.join('、')} → ${g.action === 'redirect' ? '并过去再跳转' : '改写角度、链到保留页'}`,
         }
       })
       if (rows.length === 0)
         rows.push({
-          level: payload === undefined ? '还没查过（每周一次）' : '都没问题',
-          queries: '',
+          queries: payload === undefined ? '还没查过（每周一次）' : '都没问题',
           keep: '',
           other: '',
         })
       return {
         columns: [
-          { key: 'level', label: '级别' },
           { key: 'queries', label: '查询' },
           { key: 'keep', label: '保留' },
           { key: 'other', label: '另一页' },

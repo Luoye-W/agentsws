@@ -4,7 +4,7 @@
  */
 import type { ApprovalItem, DriftRun, SiteHealthRun } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import { blocksForRole, runQuery } from '../src/index.js'
+import { blocksForRole, computeReport, DEFAULT_REPORTS, runQuery } from '../src/index.js'
 import type { TableResult } from '../src/types.js'
 import { queryContext, SOURCES } from './fixtures.js'
 
@@ -144,8 +144,8 @@ describe('WP448 面板块', () => {
 
   it('没体检过一行「还没体检」；没比过一行「还没比过」；抢词没查过说每周一次', () => {
     expect(table('site.tech_audit').rows).toEqual([{ issue: '还没体检' }])
-    expect(table('site.drift').rows).toEqual([{ level: '还没比过' }])
-    expect(table('seo.cannibalization').rows[0]?.level).toBe('还没查过（每周一次）')
+    expect(table('site.drift').rows).toEqual([{ page: '还没比过' }])
+    expect(table('seo.cannibalization').rows[0]?.queries).toBe('还没查过（每周一次）')
   })
 
   it('技术体检：只列有问题的，交给谁写明；收录要接 Search Console；已交建站带「看那件事」', () => {
@@ -174,13 +174,11 @@ describe('WP448 面板块', () => {
     })
     expect(t.rows).toEqual([
       {
-        level: '严重',
-        page: '首页 /',
+        page: '严重 · 首页 /',
         change: '被设成了不让收录（noindex）：index, follow → noindex',
       },
       {
-        level: '注意',
-        page: '商品页 /products/pb',
+        page: '注意 · 商品页 /products/pb',
         change: '标题改了：Power Bank → Power Bank – NordVolt',
       },
     ])
@@ -191,7 +189,7 @@ describe('WP448 面板块', () => {
     const base = table('site.drift', {
       site_health: { drift: { last: { ...DRIFT, status: 'baseline', findings: [] } } },
     })
-    expect(base.rows).toEqual([{ level: '第一次：存好了基线，下次改版后比' }])
+    expect(base.rows).toEqual([{ page: '第一次：存好了基线，下次改版后比' }])
     const later: DriftRun = {
       ...DRIFT,
       id: 'drift_2',
@@ -205,7 +203,7 @@ describe('WP448 面板块', () => {
         .rows,
     ).toHaveLength(2)
     expect(table('site.drift', { site_health: { drift: { last: later } } }).rows).toEqual([
-      { level: '都没问题', page: '', change: '' },
+      { page: '都没问题', change: '' },
     ])
   })
 
@@ -274,8 +272,7 @@ describe('WP448 面板块', () => {
     const c = table('seo.cannibalization', { approvals })
     expect(c.rows).toEqual([
       {
-        level: '严重',
-        queries: 'best power bank for iphone 等 2 个',
+        queries: '严重 · best power bank for iphone 等 2 个',
         keep: '/blogs/news/a',
         other: '/blogs/news/b → 并过去再跳转',
       },
@@ -286,5 +283,27 @@ describe('WP448 面板块', () => {
       '合并（本职责定）',
     ])
     expect(today.rows[1]?.what).toBe('抢词 · best power bank for iphone')
+  })
+
+  it('报表「SEO 与 AI 搜索」里多三块（WP438 起看数都在报表里）：数据集读的就是上面这三张表', () => {
+    const spec = DEFAULT_REPORTS.find((r) => r.id === 'web-ops.seo')
+    if (spec === undefined) throw new Error('没有 web-ops.seo')
+    const data = computeReport(
+      spec,
+      queryContext({
+        role_id: 'dtc.seo',
+        sources: [
+          { id: 'site', label: '建站', connected: true },
+          { id: 'gsc', label: 'Search Console', connected: true },
+          ...SOURCES,
+        ],
+        site_health: { run: TECH_RUN, drift: { last: DRIFT, last_with_findings: DRIFT } },
+      }),
+    )
+    const by = (id: string) => data.blocks.find((b) => b.id === id)
+    expect(by('tech')).toMatchObject({ status: 'ok' })
+    expect(JSON.stringify(by('tech'))).toContain('跳转与死链')
+    expect(JSON.stringify(by('drift'))).toContain('被设成了不让收录')
+    expect(by('cannibalization')).toMatchObject({ status: 'ok' })
   })
 })

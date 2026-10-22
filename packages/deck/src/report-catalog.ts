@@ -186,6 +186,31 @@ export const DEFAULT_REPORTS: readonly ReportSpec[] = [
         dataset: 'seo.geo_visibility',
         wide: true,
       },
+      // WP448（docs/109 §4.4、§5.1）：技术体检、改版回归、抢词——只列有问题的
+      {
+        id: 'tech',
+        kind: 'table',
+        title: '技术体检',
+        subtitle: '只列有问题的 · 要改的交给建站',
+        dataset: 'site.tech_audit',
+        wide: true,
+      },
+      {
+        id: 'drift',
+        kind: 'table',
+        title: '改版回归',
+        subtitle: '主题发布、装卸 App 之后和上一次比',
+        dataset: 'site.drift',
+        wide: true,
+      },
+      {
+        id: 'cannibalization',
+        kind: 'table',
+        title: '两页抢同一组词',
+        subtitle: '每周一次 · 严重的进今天值得动的 5 件事',
+        dataset: 'seo.cannibalization',
+        wide: true,
+      },
     ],
   }),
   daily({

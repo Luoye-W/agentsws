@@ -16,7 +16,7 @@ export const DRIFT_ALERT_DAYS = 7
 const TRIGGER_WORDS: Record<DriftRun['trigger']['kind'], string> = {
   theme_publish: '主题发布',
   app_change: 'App 装卸',
-  weekly: '每周例行检查',
+  weekly: '例行检查',
   manual: '手动检查',
 }
 

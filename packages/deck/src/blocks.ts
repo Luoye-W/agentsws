@@ -710,7 +710,9 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
     block('seo.ai_traffic', 'table', 'AI 带来的访问与成交', 'seo.ai_traffic'),
     // WP448：技术体检、改版回归、每周抢词
     SITE_TECH_AUDIT_BLOCK('seo.tech_audit'),
-    block('seo.drift', 'table', '改版回归', 'site.drift'),
+    block('seo.drift', 'table', '改版回归', 'site.drift', {
+      rerun: { path: '/v1/site-health/drift', label: '现在比一次' },
+    }),
     block('seo.cannibalization', 'table', '两页抢同一组词', 'seo.cannibalization'),
   ],
   // WP67（48 §5.1）：五条渠道职责，面板骨架相同（找人 / 建联 / 合作 / 审核 / 归因）。

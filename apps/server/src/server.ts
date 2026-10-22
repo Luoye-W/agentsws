@@ -14737,10 +14737,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const siteHealthViewOf = (svc: SiteHealthService): SiteHealthView => {
     const run = svc.latest()
     const traffic = svc.lastTraffic()
+    const drift = svc.driftView()
     return {
       ...(run === undefined ? {} : { run }),
       ...(traffic === undefined ? {} : { ai_traffic: traffic }),
       settings: svc.settings(),
+      ...(drift.last === undefined ? {} : { drift }),
     }
   }
   const siteHealthPort: SiteHealthPort = {
@@ -14759,6 +14761,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     saveSettings: async (actor, input) => {
       const svc = await siteHealthOf(actor.workspace_id)
       svc.saveSettings(input)
+      return siteHealthViewOf(svc)
+    },
+    // WP448：面板「改版回归」块头的「现在比一次」
+    drift: async (actor) => {
+      const svc = await siteHealthOf(actor.workspace_id)
+      await svc.drift({ kind: 'manual' })
       return siteHealthViewOf(svc)
     },
   }
