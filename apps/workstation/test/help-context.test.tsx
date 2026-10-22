@@ -6,7 +6,7 @@
  * 钉住的几条：
  *
  * 1. 哪篇归谁的**真源是文章自己的 frontmatter**（`docs/help/<slug>.md` 的 `positions` / `roles`），
- *    `lib/help.ts` 的 `HELP_SCOPES` 是镜像——两份一个字都不许对不上；写到的岗位 / 职责都真有；
+ *    构建时读进随包目录（私有 docs/113 起不再手抄镜像）；写到的岗位 / 职责都真有；
  * 2. 排法：职责上 = 这条职责的 → 所属岗位的 → 通用；岗位上 = 岗位的 → 通用；哪儿都不在 = 通用；
  * 3. 面板里照这个排；搜索仍然搜全部；「全部 N 篇」一下全摊开；
  * 4. frontmatter 不上页面（工作台正文、官网文档页都拿掉）。
@@ -14,6 +14,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readHelpArticle } from '@agentsws/contracts'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
@@ -21,13 +22,7 @@ import { RailStateProvider } from '@/components/rail/rail-state'
 import { resetPanelRegistry } from '@/components/rail/registry'
 import { RightRail } from '@/components/rail/right-rail'
 import type { PositionInstanceData } from '@/lib/api'
-import {
-  HELP_SCOPES,
-  HELP_SLUGS,
-  helpForContext,
-  loadHelpArticle,
-  splitHelpFrontmatter,
-} from '@/lib/help'
+import { BUNDLED_HELP, BUNDLED_HELP_SLUGS, helpForContext, loadHelpArticle } from '@/lib/help'
 import { openRailPanel, renderWithProviders } from './helpers'
 
 vi.mock('@/lib/api', async () => ({
@@ -50,24 +45,33 @@ function bundledPositions(): Map<string, Set<string>> {
   return out
 }
 
-describe('哪篇归谁：frontmatter 是真源，HELP_SCOPES 是镜像', () => {
-  it('每一篇中文的开头都写了 positions / roles，而且与 HELP_SCOPES 逐字相同', () => {
-    for (const slug of HELP_SLUGS) {
+const scopeOf = (slug: string) => {
+  const h = BUNDLED_HELP.find((x) => x.slug === slug)
+  if (h === undefined) throw new Error(`随包目录里没有 ${slug}`)
+  return { positions: [...h.positions], roles: [...h.roles] }
+}
+
+describe('哪篇归谁：frontmatter 是真源，随包目录从它读', () => {
+  it('docs/help 里每一篇都在随包目录里，归属与文章头上逐字相同', () => {
+    const onDisk = readdirSync(join(ROOT, 'docs/help'))
+      .filter((f) => f.endsWith('.md') && !f.endsWith('.en.md'))
+      .map((f) => f.slice(0, -3))
+    expect([...BUNDLED_HELP_SLUGS].sort()).toEqual(onDisk.sort())
+    for (const slug of BUNDLED_HELP_SLUGS) {
       const raw = readFileSync(join(ROOT, 'docs/help', `${slug}.md`), 'utf8')
       expect(raw.startsWith('---\n'), `${slug}.md 开头没有 frontmatter`).toBe(true)
-      const { meta } = splitHelpFrontmatter(raw)
-      expect(meta, `${slug}.md 的 frontmatter 与 HELP_SCOPES 对不上`).toEqual(HELP_SCOPES[slug])
+      const { meta } = readHelpArticle(raw)
+      expect({ positions: meta.positions, roles: meta.roles }, slug).toEqual(scopeOf(slug))
     }
   })
 
   it('写到的岗位都在包里；写到的职责都挂在某个岗位下', () => {
     const positions = bundledPositions()
     const roles = new Set([...positions.values()].flatMap((s) => [...s]))
-    for (const slug of HELP_SLUGS) {
-      for (const p of HELP_SCOPES[slug].positions)
+    for (const slug of BUNDLED_HELP_SLUGS) {
+      for (const p of scopeOf(slug).positions)
         expect(positions.has(p), `${slug}：没有岗位 ${p}`).toBe(true)
-      for (const r of HELP_SCOPES[slug].roles)
-        expect(roles.has(r), `${slug}：没有职责 ${r}`).toBe(true)
+      for (const r of scopeOf(slug).roles) expect(roles.has(r), `${slug}：没有职责 ${r}`).toBe(true)
     }
   })
 
@@ -101,8 +105,8 @@ describe('排法', () => {
     expect(g.role).toEqual([])
     expect(g.position).toEqual([])
     for (const slug of g.general) {
-      expect(HELP_SCOPES[slug].positions).toEqual([])
-      expect(HELP_SCOPES[slug].roles).toEqual([])
+      expect(scopeOf(slug).positions).toEqual([])
+      expect(scopeOf(slug).roles).toEqual([])
     }
   })
 })
@@ -173,11 +177,12 @@ describe('右栏「教程」面板按上下文排', () => {
     expect(screen.queryByText('LinkedIn：公司主页与老板本人号')).toBeNull()
     fireEvent.change(screen.getByTestId('help-search'), { target: { value: 'linkedin' } })
     const hits = within(screen.getByTestId('help-search-hits')).getAllByTestId('help-index-item')
-    expect(hits.map((i) => i.dataset.slug)).toEqual(['conn-linkedin'])
+    // 标题里有的排前面；摘要里提到的（广告报表导出也说到 LinkedIn）跟在后面
+    expect(hits.map((i) => i.dataset.slug)[0]).toBe('conn-linkedin')
     fireEvent.change(screen.getByTestId('help-search'), { target: { value: '没有这一篇' } })
     expect(screen.getByTestId('help-search-empty')).toBeDefined()
     fireEvent.change(screen.getByTestId('help-search'), { target: { value: '' } })
     fireEvent.click(screen.getByTestId('help-show-all'))
-    expect(screen.getAllByTestId('help-index-item')).toHaveLength(HELP_SLUGS.length)
+    expect(screen.getAllByTestId('help-index-item')).toHaveLength(BUNDLED_HELP_SLUGS.length)
   })
 })

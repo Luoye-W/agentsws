@@ -30,6 +30,9 @@ import type {
   GenuiToolOutcome,
   Goal,
   GoalProgress,
+  HelpArticleView,
+  HelpCatalogView,
+  HelpKind,
   MarketsSource,
   Matter,
   MatterEvent,
@@ -8746,3 +8749,17 @@ export const getServerVersion = async (): Promise<string | undefined> => {
   const data = await api<{ version?: unknown }>('/v1/health')
   return typeof data.version === 'string' && data.version !== '' ? data.version : undefined
 }
+
+// ── 教程上官网（私有 docs/113）：右栏「教程」的目录与正文（本机服务挑好官网的 / 随包的）────────
+
+export const getHelpCatalog = (lang: 'zh' | 'en'): Promise<HelpCatalogView> =>
+  api<HelpCatalogView>(`/v1/help/catalog?lang=${lang}`)
+
+export const getHelpArticle = (
+  slug: string,
+  lang: 'zh' | 'en',
+  kind: HelpKind = 'guide',
+): Promise<HelpArticleView> =>
+  api<HelpArticleView>(
+    `/v1/help/articles/${encodeURIComponent(slug)}?lang=${lang}${kind === 'guide' ? '' : `&kind=${kind}`}`,
+  )

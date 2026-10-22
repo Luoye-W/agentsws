@@ -3,12 +3,18 @@
  * 以及 `/v1/help/*` 两条路由（真服务进程 + HTTP，官网用替身，不打真网）。
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HelpIndexItem } from '@agentsws/contracts'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createHelpLibrary, type HelpFetch, localizeHelpLinks } from '../src/help-library.js'
+import {
+  createHelpLibrary,
+  HELP_SNAPSHOT_FILE,
+  type HelpFetch,
+  loadBundledHelpFiles,
+  localizeHelpLinks,
+} from '../src/help-library.js'
 import { createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 
@@ -86,6 +92,15 @@ function fakeSite(pages: { item: Partial<HelpIndexItem> & { slug: string }; text
 }
 
 describe('随包那份', () => {
+  it('安装包里：读工作台产物旁边的 help-snapshot.json；开发时读仓库的 docs/help', () => {
+    const dir = tmp()
+    writeFileSync(join(dir, HELP_SNAPSHOT_FILE), JSON.stringify({ schema: 1, files: BUNDLED }))
+    expect(Object.keys(loadBundledHelpFiles(dir))).toEqual(Object.keys(BUNDLED))
+    const dev = loadBundledHelpFiles(tmp())
+    expect(dev['conn-shopify.md']).toContain('# 连 Shopify 店铺')
+    expect(dev['conn-shopify.en.md']).toBeDefined()
+  })
+
   it('没联网：目录与正文全是随包的；英文用英文那份、归属跟中文走；没写英文的退回中文', async () => {
     const lib = createHelpLibrary({ appVersion: '0.2.1-beta.8', online: false, bundled: BUNDLED })
     const zh = lib.catalog('zh')

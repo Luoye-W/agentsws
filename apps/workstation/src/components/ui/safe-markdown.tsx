@@ -23,7 +23,7 @@ import { type ReactNode, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { GenuiBlockView } from '@/components/answer/genui/genui-block'
 import { useRailState } from '@/components/rail/rail-state'
-import { helpAddress, isHelpSlug } from '@/lib/help'
+import { helpAddress, isKnownHelp } from '@/lib/help'
 import { cn } from '@/lib/utils'
 
 export type MarkdownBlock =
@@ -128,7 +128,7 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
 /** 这个地址能不能做成链接、做成哪种；`undefined` = 原样当字。 */
 export function linkKind(href: string): 'external' | 'help' | 'internal' | undefined {
   if (/^https?:\/\/[^\s]+$/i.test(href)) return 'external'
-  if (href.startsWith('help:') && isHelpSlug(href.slice(5))) return 'help'
+  if (href.startsWith('help:') && isKnownHelp(href.slice(5))) return 'help'
   if (href.startsWith('/') && !href.startsWith('//')) return 'internal'
   return undefined
 }
@@ -184,7 +184,7 @@ export function MarkdownInline({ text }: { text: string }): ReactNode {
             data-slug={href.slice(5)}
             onClick={() => {
               const slug = href.slice(5)
-              if (isHelpSlug(slug)) rail.openAddress(helpAddress(slug))
+              if (isKnownHelp(slug)) rail.openAddress(helpAddress(slug))
             }}
           >
             {linkText}

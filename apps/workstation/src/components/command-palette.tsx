@@ -41,6 +41,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
+import { useHelpCatalog } from '@/components/help/use-help'
 import {
   SITE_CHAT_HREF,
   SITE_CHAT_SETTINGS_HREF,
@@ -75,8 +76,7 @@ import {
 import { useApp } from '@/lib/app-context'
 import type { ReasoningEffort } from '@/lib/free-chat'
 import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
-import { HELP_SLUGS, helpAddress } from '@/lib/help'
-import { translate } from '@/lib/i18n'
+import { helpAddress } from '@/lib/help'
 import { useMode } from '@/lib/mode'
 import { myAssignments } from '@/lib/positions'
 import { cn } from '@/lib/utils'
@@ -141,6 +141,8 @@ export function CommandPalette({
   onAddTile: (position_id: string, tile_id: string) => void
 }): React.ReactNode {
   const { t, lang, position } = useApp()
+  // 教程上官网（私有 docs/113）：教程目录从本机服务来（官网新加的也在），没回来用随包的
+  const helpItems = useHelpCatalog()
   const holdsSiteChat = useHoldsSiteChat()
   // WP356：设置弹窗的目录（每一节每一项），⌘K 里搜得到
   const { sections: settingSections } = useSettingsCatalog()
@@ -758,10 +760,10 @@ export function CommandPalette({
             </CommandGroup>
           )}
           <CommandGroup heading={t('command.group.help')}>
-            {HELP_SLUGS.map((slug) => (
+            {helpItems.map(({ slug, title }) => (
               <CommandItem
                 key={slug}
-                value={`${translate('zh', `help.${slug}.title`)} ${translate('en', `help.${slug}.title`)} ${slug}`}
+                value={`${title} ${slug}`}
                 data-testid="command-help"
                 data-slug={slug}
                 className={ROW}
@@ -772,7 +774,7 @@ export function CommandPalette({
                 }}
               >
                 <BookOpen aria-hidden className={ROW_ICON} />
-                {t(`help.${slug}.title`)}
+                {title}
               </CommandItem>
             ))}
           </CommandGroup>

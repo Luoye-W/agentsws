@@ -135,7 +135,6 @@ export const SERVICES_ZH: Record<string, string> = {
   'work.kind.service_order': '工坊服务',
   'pos2.kind.service_order': '工坊服务订单',
   'menu.workshop_services': '工坊服务',
-  'help.workshop-services.title': '工坊服务：让人替你把事做成',
 }
 
 export const SERVICES_EN: Record<string, string> = {
@@ -278,5 +277,4 @@ export const SERVICES_EN: Record<string, string> = {
   'work.kind.service_order': 'Workshop service',
   'pos2.kind.service_order': 'Workshop service order',
   'menu.workshop_services': 'Workshop services',
-  'help.workshop-services.title': 'Workshop services: have people get it done',
 }

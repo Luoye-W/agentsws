@@ -13,7 +13,7 @@ import { lazy, type ReactNode, Suspense, useState } from 'react'
 import { useRailState } from '@/components/rail/rail-state'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useApp } from '@/lib/app-context'
-import { type HelpSlug, helpAddress } from '@/lib/help'
+import { type HelpSlug, helpAddress, helpTitle } from '@/lib/help'
 import { cn } from '@/lib/utils'
 
 const HelpArticleLazy = lazy(async () => {
@@ -36,7 +36,7 @@ export function TutorialLink({
   /** 默认「看教程」；个别地方要说得更具体（"三个方案怎么选"）。 */
   label?: string
 }): ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const rail = useRailState()
   const [fallback, setFallback] = useState(false)
   return (
@@ -61,7 +61,7 @@ export function TutorialLink({
         <Dialog open onOpenChange={setFallback}>
           <DialogContent className="max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{t(`help.${slug}.title`)}</DialogTitle>
+              <DialogTitle>{helpTitle(slug, lang)}</DialogTitle>
             </DialogHeader>
             <Suspense fallback={null}>
               <HelpBody slug={slug} />
