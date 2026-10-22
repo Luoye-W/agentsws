@@ -92,6 +92,8 @@ describe('WP442 催促卡', () => {
     renderWithProviders(
       <DeckCardView card={nudgeCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
+    // 没归属的：头一行写「消息 · 催一下」（不写挂名那个岗位）
+    expect(screen.getByTestId('deck-band').textContent).toBe('消息 · 催一下')
     expect(screen.getByTestId('follow-up-meta').textContent).toBe('你 10-23 发的')
     expect(screen.getByTestId('follow-up-quote').textContent).toContain('sample order attached')
     expect(screen.getByTestId('follow-up-draft').textContent).toContain('Just following up')

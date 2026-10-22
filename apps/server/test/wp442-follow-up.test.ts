@@ -573,6 +573,27 @@ describe('WP442：对方回了、别的跟进、再等等、不用跟了、最�
     expect(viaPort?.enabled).toBe(true)
   })
 
+  it('卡放到过期（没人管）：当成再等等，顺延 3 个工作日再出一张，不当场又冒一张', async () => {
+    const h = harness()
+    h.send('q1', '2026-10-23 15:00')
+    await h.poll()
+    h.at(sh('2026-10-28 15:05'))
+    await h.followUp.sweep()
+    const first = h.cards()[0] as ApprovalItem
+    await h.txn.approvals.expireNow?.(first.id, 'housekeeping')
+    h.at(sh('2026-10-28 16:10'))
+    await h.followUp.sweep()
+    expect(h.open()).toHaveLength(0)
+    expect((await h.summary(THREAD))?.follow_up).toMatchObject({
+      state: 'waiting',
+      basis: 'waited',
+    })
+    h.at(sh('2026-11-02 16:20'))
+    await h.followUp.sweep()
+    expect(h.open()).toHaveLength(1)
+    expect(h.open()[0]?.id).not.toBe(first.id)
+  })
+
   it('没人可给卡（品牌里还没有持岗位的人）就不出，下一拍再看', async () => {
     const h = harness({ noRecipient: true })
     h.send('q1', '2026-10-23 15:00')

@@ -4,6 +4,8 @@
  */
 export const FOLLOW_UP_ZH: Record<string, string> = {
   // 卡
+  'follow_up.category': '催一下',
+  'follow_up.surface.messages': '消息',
   'follow_up.card.sent_on': '你 {day} 发的',
   'follow_up.card.promised': '对方说过 {day} 答复',
   'follow_up.card.second': '第二次提醒（之后不再提醒）',
@@ -36,6 +38,8 @@ export const FOLLOW_UP_ZH: Record<string, string> = {
 }
 
 export const FOLLOW_UP_EN: Record<string, string> = {
+  'follow_up.category': 'Follow-up',
+  'follow_up.surface.messages': 'Messages',
   'follow_up.card.sent_on': 'You sent on {day}',
   'follow_up.card.promised': 'They said they’d reply by {day}',
   'follow_up.card.second': 'Second reminder (the last one)',

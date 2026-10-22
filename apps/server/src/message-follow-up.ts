@@ -74,6 +74,17 @@ export const FOLLOW_UP_SWEEP_EVERY_MS = 60 * 60_000
 const SENT_SCAN_LIMIT = 1000
 /** 草稿最长多少字（模型偶尔写长，截一下）。 */
 const DRAFT_LIMIT = 1200
+/** 卡上「你上次发的」那一段最长多少字。 */
+const QUOTE_LIMIT = 280
+
+/** 压成一行、截到 `limit`（不在词中间截断；截了加省略号）。 */
+function excerpt(text: string, limit: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  if (flat.length <= limit) return flat
+  const cut = flat.slice(0, limit)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > limit * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`
+}
 
 /** 卡给谁。 */
 export interface FollowUpPosition {
@@ -291,7 +302,13 @@ export function createMessageFollowUp(options: MessageFollowUpOptions): MessageF
         ...(v.enabled === undefined ? {} : { enabled: v.enabled }),
         ...(v.business_days === undefined ? {} : { business_days: clampDays(v.business_days) }),
       })),
-      mailboxes: [...options.accounts()],
+      // 连着的邮箱 + 账上在跟的会话用到的邮箱（演示 / 刚断开的那只也能单独设）
+      mailboxes: [
+        ...new Set([
+          ...options.accounts().map((a) => a.trim().toLowerCase()),
+          ...Object.values(file.threads).map((r) => r.account.trim().toLowerCase()),
+        ]),
+      ],
       ...(s.updated_at === undefined ? {} : { updated_at: s.updated_at }),
       ...(s.updated_by === undefined ? {} : { updated_by: s.updated_by }),
     }
@@ -460,7 +477,7 @@ export function createMessageFollowUp(options: MessageFollowUpOptions): MessageF
       ...(references.length === 0 ? {} : { references }),
       body: { subject: nudgeSubject(row.subject), text },
       lang,
-      ...(ourLast === '' ? {} : { quote: ourLast.replace(/\s+/g, ' ').slice(0, 200) }),
+      ...(ourLast === '' ? {} : { quote: excerpt(ourLast, QUOTE_LIMIT) }),
       follow_up: {
         thread_id: row.thread_id,
         waiting_on: row.waiting_on,
@@ -496,8 +513,8 @@ export function createMessageFollowUp(options: MessageFollowUpOptions): MessageF
       kind: 'outbound_draft',
       role_id: position.role_id as RoleId,
       subject: { object: threadRef },
-      // 同一轮、同一个到期点只一张（巡检重进不会出第二张）
-      dedupe_key: `${workspace_id}:follow_up:${hashOf(row.thread_id)}:${hashOf(row.anchor_id)}:${row.nudges}:${row.due_at}`,
+      // 每张卡一个键（「一个会话同一时刻只一张」由账上的 card_id 管：出过卡的会话巡检不再出）
+      dedupe_key: `${workspace_id}:follow_up:${hashOf(row.thread_id)}:${hashOf(row.anchor_id)}:${row.nudges}:${now}:${seq}`,
       title,
       summary: `「${row.subject}」`,
       payload,
@@ -641,9 +658,9 @@ export function createMessageFollowUp(options: MessageFollowUpOptions): MessageF
         // 发出去了、但 deliver 那一拍没记上（进程在中间重启）：照「催过一次」记
         if (item !== undefined) noteNudged(row, item.updated_at, undefined)
       } else {
-        // 卡没了（过期 / 撤回）：回到等
-        row.state = 'waiting'
-        delete row.card_id
+        // 卡没了（放到过期 / 被撤回）：当成「再等等」——顺延 3 个工作日再出，不当场又冒一张
+        await waitOn(row, 'card_gone')
+        return 'none'
       }
     }
     if (row.state === 'stopped') return 'none'
