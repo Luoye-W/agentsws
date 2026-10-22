@@ -35,6 +35,16 @@ export interface AssistantContextStats {
   memory: number
   memory_tokens: number
   system_tokens: number
+  /** WP470：这一段里新记、放在末尾附加里的记忆条数。 */
+  new_memory?: number
+  /** WP470：末尾附加那一段（时间 / 联网 / 公司资料 / 段内新记的记忆）的 token 估算。 */
+  tail_tokens?: number
+  /** WP470：这一轮回答的所有模型调用合计的输入 token（模型报的，含命中缓存的）。 */
+  input_tokens?: number
+  /** WP470：其中命中缓存的 token。 */
+  cached_tokens?: number
+  /** WP470：命中率（cached / input，三位小数；没有输入记 0）。 */
+  cache_ratio?: number
 }
 
 export interface SegmentDeps {

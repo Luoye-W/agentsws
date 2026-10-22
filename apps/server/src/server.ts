@@ -14181,6 +14181,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       store,
       assistant,
+      // WP470：每轮末尾那句「现在时间」按公司时区写（与岗位运行同一份，按小时取整）
+      timeZone: async () => (await identity.getWorkspace(ws))?.tz,
       // WP357（决策 902）：助理记进知识库的口径，知识库与岗位第三栏里能改能删
       notes: { edit: assistantNotes.edit, remove: assistantNotes.retire },
       // WP352：一条长对话——每一轮拼进了多少、段收起 / 压缩，记进事件日志（不带正文）
