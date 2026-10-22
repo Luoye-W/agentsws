@@ -10,7 +10,7 @@
  *   标题挂 `data-slot="title"`——和以前各页手搓的那几份口径一样。
  */
 import { ChevronRight, TriangleAlert } from 'lucide-react'
-import type { ComponentProps, ElementType, HTMLAttributes, ReactNode } from 'react'
+import type { ComponentProps, ComponentType, ElementType, HTMLAttributes, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
@@ -255,7 +255,7 @@ export function NoticeLine({
   children,
   ...rest
 }: Omit<ComponentProps<'div'>, 'children'> & {
-  icon?: (props: { className?: string; 'aria-hidden'?: boolean }) => ReactNode
+  icon?: ComponentType<{ className?: string }>
   tone?: 'warn' | 'bad' | 'info'
   wrap?: boolean
   /** 右边那个链接（`ws-link`）；要别的（小按钮、关掉）用 `end`。 */
@@ -328,7 +328,7 @@ export function EmptyState({
   className,
   ...rest
 }: Omit<ComponentProps<'div'>, 'children'> & {
-  icon?: (props: { className?: string; 'aria-hidden'?: boolean }) => ReactNode
+  icon?: ComponentType<{ className?: string }>
   text: ReactNode
   action?: NoticeAction
 }): ReactNode {

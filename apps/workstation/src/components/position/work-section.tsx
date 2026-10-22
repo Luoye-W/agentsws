@@ -24,9 +24,9 @@ import {
   Table2,
 } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
+import { SkeletonList } from '@/components/design/kit'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Hint } from '@/components/ui/hint'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { PositionWorkData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import {
@@ -330,7 +330,7 @@ export function WorkSection({
       {quick !== undefined ? (
         <QuickViewPanel view={quick} />
       ) : pending ? (
-        <Skeleton className="h-48 w-full" />
+        <SkeletonList rows={4} />
       ) : error !== null || data === undefined ? (
         <p role="alert" className="text-sm text-muted-foreground" data-testid="work-error">
           {t('pos2.work.error', { message: error?.message ?? '—' })}

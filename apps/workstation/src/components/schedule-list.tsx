@@ -6,9 +6,9 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pause, Play } from 'lucide-react'
+import { SkeletonList } from '@/components/design/kit'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { getSchedules, patchSchedule, type ScheduledTaskRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
@@ -47,7 +47,7 @@ export function ScheduleList({ positionId }: { positionId: string }): React.Reac
     },
   })
 
-  if (list.isPending) return <Skeleton className="h-24 w-full" />
+  if (list.isPending) return <SkeletonList rows={2} check={false} />
   const rows = list.data ?? []
 
   return (

@@ -3,10 +3,12 @@
  *
  * 「还没登记号」「群发没有去处」这类话是这一块唯一的引导，必须一眼可见（36 §7 可见档 ③），
  * 但它不值得一张带标题、带边框的卡——那会让人以为这里有一件事要处理。
+ *
+ * WP456-T2（WP456 §2.6 第 7 条）：样子并进共用的空状态（`.ws-empty`：灰图标 + 一句话 + 最多一个**链接**），
+ * 去处从描边小按钮换成 `ws-link`。新写的地方用 `components/design` 的 `EmptyState`；这一个留着老接口。
  */
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
 
 export function EmptyLine({
   icon,
@@ -32,31 +34,30 @@ export function EmptyLine({
 }): ReactNode {
   return (
     <div
-      className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+      className="ws-empty [&>svg]:size-5 [&>svg]:shrink-0 [&>svg]:text-ws-faint"
       data-slot="status"
       {...(testId === undefined ? {} : { 'data-testid': testId })}
     >
       {icon}
       <span>{text}</span>
       {action === undefined ? null : action.onClick !== undefined || action.to === undefined ? (
-        <Button
-          size="xs"
-          variant="outline"
+        <button
+          type="button"
+          className="ws-link"
           onClick={action.onClick}
           {...(action.testId === undefined ? {} : { 'data-testid': action.testId })}
           {...(action.connect === undefined ? {} : { 'data-connect': action.connect })}
         >
           {action.label}
-        </Button>
+        </button>
       ) : (
-        <Button size="xs" variant="outline" asChild>
-          <Link
-            to={action.to}
-            {...(action.testId === undefined ? {} : { 'data-testid': action.testId })}
-          >
-            {action.label}
-          </Link>
-        </Button>
+        <Link
+          to={action.to}
+          className="ws-link"
+          {...(action.testId === undefined ? {} : { 'data-testid': action.testId })}
+        >
+          {action.label}
+        </Link>
       )}
     </div>
   )
