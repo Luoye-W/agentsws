@@ -17,8 +17,10 @@ import { CWV_THRESHOLDS, TECH_AUDIT_RULES, type TechAuditRuleId } from './tech-r
 
 /* ── 跳转跟踪 ─────────────────────────────────────────────────────────── */
 
-/** 不自动跟跳转地抓一次：状态码 + `Location`（服务端注入真请求，测试注入替身）。 */
-export type RedirectProbe = (url: string) => Promise<{ status: number; location?: string }>
+/** 不自动跟跳转地抓一次：状态码 + `Location`（+ `X-Robots-Tag`）。服务端注入真请求，测试注入替身。 */
+export type RedirectProbe = (
+  url: string,
+) => Promise<{ status: number; location?: string; x_robots?: string }>
 
 export interface RedirectTrace {
   url: string

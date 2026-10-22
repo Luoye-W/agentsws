@@ -577,7 +577,8 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
           const c = p.facts.canonicals[0]
           if (c !== undefined && hostOf(c) === host && c !== p.facts.url) await trace(c)
         }
-      } else run.notes.push('这次没查跳转与死链')
+      }
+      // 没给「不跟跳转」那一口（配置如此，不是读失败）：跳转与死链这次不查，不记成「没读到」
       // 速度：首页与第一件商品
       let speed: SpeedReading[] | undefined
       if (options.pageSpeed !== undefined) {
@@ -642,17 +643,13 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
           }
         })
         .slice(0, n)
-    let products = pick(PRODUCT, 2)
-    if (products.length < 2) {
-      const shop = await readProducts(2)
-      if (typeof shop !== 'string')
-        products = [
-          ...new Set([
-            ...products,
-            ...shop.products.map((p) => p.url ?? `${origin}/products/${p.handle}`),
-          ]),
-        ].slice(0, 2)
-    }
+    // 商品先用店里在卖的（站点地图里可能还挂着下架的），不够再从站点地图补
+    const shop = await readProducts(2)
+    const live =
+      typeof shop === 'string'
+        ? []
+        : shop.products.map((p) => p.url ?? `${origin}/products/${p.handle}`)
+    const products = [...new Set([...live, ...pick(PRODUCT, 2)])].slice(0, 2)
     const next: { url: string; kind: DriftPageKind }[] = [
       { url: `${origin}/`, kind: 'home' },
       ...products.map((url) => ({ url, kind: 'product' as const })),
