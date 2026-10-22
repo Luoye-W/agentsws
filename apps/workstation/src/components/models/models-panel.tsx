@@ -20,11 +20,20 @@
  */
 import { VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ChevronDown, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Plus, RefreshCw, Sparkles, Trash2, XCircle } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
-import { BrandMark, GroupLabel, InfoTip, StatusPill, testedMs, useFresh } from '@/components/design'
+import {
+  BrandMark,
+  EmptyState,
+  GroupLabel,
+  InfoTip,
+  ListGroup,
+  StatusPill,
+  testedMs,
+  useFresh,
+} from '@/components/design'
 import { TutorialHint } from '@/components/help/tutorial-link'
 import { AiSourceOrder } from '@/components/models/ai-source-order'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
@@ -442,12 +451,12 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         )}
 
         {inUseCount === 0 ? (
-          <p
-            className="rounded-xl border border-dashed border-ws-line px-4 py-6 text-center text-xs text-ws-muted-fg"
-            data-testid="models-empty"
-          >
-            {t('models.empty')}
-          </p>
+          // WP456-T6：空状态走共用件（灰图标 + 一句话），放在列表组里，不再是虚线框
+          <ListGroup>
+            <div className="ws-row">
+              <EmptyState icon={Sparkles} text={t('models.empty')} data-testid="models-empty" />
+            </div>
+          </ListGroup>
         ) : (
           <ul className="ws-group divide-y divide-ws-line">
             {subSignedIn && subProvider !== undefined ? (
