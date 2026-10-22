@@ -485,11 +485,61 @@ export interface ContentQualityIssue {
    * - `banned_claim`：命中违规宣称规则；
    * - `fact_mismatch`：说法与知识库里那一条对不上（价格、保修月数……）。
    */
-  rule: 'unsourced_figure' | 'banned_claim' | 'fact_mismatch'
+  rule:
+    | 'unsourced_figure'
+    | 'banned_claim'
+    | 'fact_mismatch'
+    /** WP449：引用页打开了，但页面上找不到那个数 / 那句原话。 */
+    | 'citation_not_found'
+    /** WP449：引用页打不开（404、被挡、超时、不是公网地址）。 */
+    | 'citation_unreachable'
+    /** WP449：给某个市场的版本里，货币 / 单位 / 数字写法 / 日期 / 称呼不对。 */
+    | 'locale_mismatch'
+    /** WP449：对比竞品的那句没有出处（指不回事实卡，也没链到公开可核的页面）。 */
+    | 'comparison_unsourced'
+    /** WP449：对比竞品时用了贬低的词。 */
+    | 'comparison_disparaging'
   /** 有问题的那一句原文。 */
   sentence: string
   /** 一句人话：哪里不对。 */
   detail: string
+  /** WP449：引用核查那两条——查的是哪个网址。 */
+  url?: string
+}
+
+/** WP449：引用核查这一轮的小结（每篇有上限，超了只查前几个并注明）。 */
+export interface ContentCitationSummary {
+  /** 正文里带外链的说法，一共链到几个不同的网址。 */
+  links: number
+  /** 这次真打开查了几个。 */
+  checked: number
+  /** 超过上限没查的几个（卡上注明）。 */
+  skipped: number
+  /** 查了、数 / 原话都在页面上的几个。 */
+  verified: number
+  /** 每篇最多查几个（职责阈值 `citation_check_max_links`）。 */
+  max: number
+  /** 没查成的原因（例如「这个进程不能抓网页」）；查了就没有这一格。 */
+  note?: string
+}
+
+/** WP449：「好不好被 AI 引用」的一项（规则算的，不经模型）。 */
+export interface AiCitabilityCheck {
+  id: 'answer_first' | 'self_contained' | 'entity_clear' | 'figures_sourced' | 'extractable'
+  /** 这一项的中文名（卡与面板上）。 */
+  label: string
+  points: number
+  max: number
+  /** 一句人话：怎么得的这个分（数了几段、几段合格）。 */
+  detail: string
+  /** 没拿满时，下一步怎么改（一句）。 */
+  hint?: string
+}
+
+/** WP449：「好不好被 AI 引用」打分（0–100；只给建议，**不挡发布**）。 */
+export interface AiCitabilityScore {
+  score: number
+  checks: AiCitabilityCheck[]
 }
 
 export interface ContentQualityResult {
@@ -498,6 +548,14 @@ export interface ContentQualityResult {
   checked_at: Iso8601
   /** 规则从哪来：知识库里的那一份，还是知识库里还没有时的默认表。 */
   rules_from: 'knowledge' | 'default'
+  /** WP449：引用核查小结（这篇没有带外链的说法就没有这一格）。 */
+  citations?: ContentCitationSummary
+  /** WP449：「好不好被 AI 引用」——只是建议，不影响 `passed`。 */
+  ai_citability?: AiCitabilityScore
+  /** WP449：认出来这篇是给哪个市场的版本（语言 + 品牌档案里说这种语言的市场）。 */
+  locale?: { language: string; markets: string[] }
+  /** WP449：不挡发布的建议（卡上「建议」那几行）。 */
+  advice?: string[]
 }
 
 /* ------------------------------------------------------------------ */

@@ -16,6 +16,7 @@
  * | `geo-grid` | WP335：看板的 Prompt × AI 方格、一格的时间线、简报那一行 |
  * | `geo-facts` / `geo-quality` / `geo-consistency` / `geo-recheck` | WP380：官方事实表、比较胜率与描述准确度、数字标来路、站外来源地图、缺位主因与先后、对外说法一致性、改完复查 |
  * | `quality` | 发布前质检：事实对得上知识库、数字有出处、没有违规宣称 |
+ * | `review` / `citations` / `localize` / `comparison` / `citability` / `content-text` | WP449：质检整套——引用核查、市场版本（货币 / 单位 / 称呼）、竞品对比、「好不好被 AI 引用」打分（只给建议） |
  * | `ports` | Search Console 口与搜索数据口的替身（不联网） |
  * | `google` | WP158：GSC / GA4 真读数的纯逻辑（请求体、返回怎么认、日期窗口、错误的人话） |
  *
@@ -28,7 +29,11 @@ export * from './amazon-keywords.js'
 // WP396（docs/106 §13）：自家 Amazon Listing 体检的规则表与判法
 export * from './amazon-listing-check.js'
 export * from './attribution.js'
+export * from './citability.js'
+export * from './citations.js'
 export * from './claim-rules.js'
+export * from './comparison.js'
+export * from './content-text.js'
 export * from './daily.js'
 export * from './demo.js'
 export * from './drafts.js'
@@ -45,8 +50,10 @@ export * from './geo-quality-samples.js'
 export * from './geo-recheck.js'
 export * from './geo-strategy.js'
 export * from './google.js'
+export * from './localize.js'
 export * from './picks.js'
 export * from './ports.js'
 export * from './quality.js'
+export * from './review.js'
 export * from './serp.js'
 export * from './signals.js'
