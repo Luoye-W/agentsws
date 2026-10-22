@@ -60,6 +60,7 @@ export async function executeJob(job: ActionJob, deps: ExecutorDeps): Promise<Ac
   }
   const page = new TabPage({
     driver: deps.driver,
+    platform: job.plan.platform,
     hosts: job.plan.allow.hosts,
     bannerState: () => banner,
     stopped: () => deps.control.stop,

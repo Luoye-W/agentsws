@@ -32,12 +32,18 @@ export default defineContentScript({
     chrome.runtime.onMessage.addListener(
       (message: AdsDomRequest | AdsBannerRequest, _sender, reply: (r: unknown) => void) => {
         if (message.type === 'ads-dom') {
-          try {
-            reply(handleDomRequest(document, location.href, message))
-          } catch (err) {
+          // WP467：填框要等编辑器一拍——异步回（return true 让通道等着）
+          const fail = (err: unknown) =>
             reply({ ok: false, why: err instanceof Error ? err.message : String(err) })
+          try {
+            void Promise.resolve(handleDomRequest(document, location.href, message)).then(
+              reply,
+              fail,
+            )
+          } catch (err) {
+            fail(err)
           }
-          return false
+          return true
         }
         if (message.type === 'ads-banner') {
           renderBanner(document, message.state, {

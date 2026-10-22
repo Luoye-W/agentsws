@@ -136,8 +136,16 @@ describe('WP432 新版 Reddit 的计划', () => {
 
   it('新版：等框 / 点 Reply / 填字都是软步骤；打开页面不是（被拦照样停）', () => {
     const plan = redditWritePlan(reply, NEW)
-    expect(plan.steps[0]).toEqual({ op: 'goto', url: `${NEW}/r/ivraxr/comments/abc/slug/c1/` })
-    for (const s of plan.steps.slice(1, -1)) expect('soft' in s && s.soft).toBe(true)
+    expect(plan.steps[0]).toEqual({
+      op: 'goto',
+      url: `${NEW}/r/ivraxr/comments/abc/slug/c1/`,
+      // WP467：已经开着这个帖子、那条评论也在页面上 → 就地填
+      post: 'abc',
+      need: 'shreddit-comment[thingid="t1_c1"] || #thing_t1_c1',
+    })
+    // WP467：中间那一步「等回复框、等不到也往下走」是 optional（不算对不上）；别的照旧是软步骤
+    for (const s of plan.steps.slice(1, -1))
+      expect(('soft' in s && s.soft) || ('optional' in s && s.optional)).toBe(true)
     expect(plan.steps.find((s) => s.op === 'fill')).toMatchObject({ highlight: true })
   })
 })

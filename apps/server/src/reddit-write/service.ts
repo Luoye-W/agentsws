@@ -31,11 +31,16 @@ import { join } from 'node:path'
 import type { SocialActor } from '@agentsws/api'
 import {
   type ActionJob,
+  bareRedditId,
   buildRedditJob,
+  looksLikeSent,
+  type PanelSentInput,
   postedKey,
   REDDIT_WRITE_ORIGIN_NEW,
   RedditPlanError,
   type RedditWrite,
+  redditCommentIdOf,
+  redditPostIdOf,
   redditWritePlan,
   SOFT_MISS_LABEL,
 } from '@agentsws/browser-action'
@@ -110,7 +115,17 @@ export interface RedditWriteEntry extends RedditWriteView {
   previous_jobs?: string[]
   /** WP432：批的那一版（批了之后人在侧边栏里改过字才记；`text` 是改过的）。 */
   draft_text?: string
+  /**
+   * WP467：交给插件的那一件是按哪一版写法拼的（老进度没有）。不是现在这一版（可能还写着 old.reddit、老选择器），
+   * 人点「填入」时按现在的写法重新拼一件，字不变。
+   */
+  plan_v?: number
+  /** WP467：人自己发出去、怎么记上的（插件在原帖页认出来的 / 贴的链接 / 认最近一条）。 */
+  recorded_via?: PanelSentInput['how']
 }
+
+/** WP467：Reddit 写的步骤表现在是第几版（就地填、www、新选择器）。 */
+export const WRITE_PLAN_VERSION = 467
 
 export interface RedditWriteServiceOptions {
   workspace_id: WorkspaceId
@@ -226,6 +241,14 @@ export interface RedditWriteService {
     job_id: string,
     edit?: { text?: string; title?: string },
   ): Promise<{ ok: true; job: ActionJob; view: RedditWriteView } | { ok: false; message: string }>
+  /**
+   * WP467：人在 Reddit 上自己发出去了（插件在原帖页认出来的 / 贴链接 / 认最近一条）——核一遍再记「已记录」：
+   * 链接要在**这个帖子**里（错帖不记）；插件认出来的要和草稿文本相近；同一条不记两次。
+   */
+  recordSent(
+    job_id: string,
+    input: PanelSentInput,
+  ): { ok: true; view: RedditWriteView } | { ok: false; message: string }
   /** WP432：侧边栏里点「不发了」（批过的这一条不发；不再提醒）。 */
   drop(
     job_id: string,
@@ -325,7 +348,7 @@ export function sameSentText(a: string, b: string): boolean {
 export const OPEN_IN_PLUGIN_OFFLINE = '插件不在线：打开 Chrome，在插件侧边栏里点开这一条。'
 
 /** WP432：认不出框、等人自己粘贴时，进度里那一句。 */
-export const PASTE_YOURSELF = '页面对不上：在插件侧边栏里点「复制草稿」，自己粘贴、点发送'
+export const PASTE_YOURSELF = SOFT_MISS_LABEL
 
 /** WP332：能不能「再填一次」：走插件的、记着草稿的（直发那条路不再填：761 默认关）。 */
 const canRefill = (e: RedditWriteEntry): boolean =>
@@ -533,6 +556,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       text: input.text,
       ...(input.title === undefined ? {} : { title: input.title }),
       ...(input.label === undefined ? {} : { label: input.label }),
+      plan_v: WRITE_PLAN_VERSION,
     }
     entries.push(entry)
     save()
@@ -993,6 +1017,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       if (!queued.ok) return { ok: false, message: queued.why }
       entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
       entry.job_id = queued.job.id
+      entry.plan_v = WRITE_PLAN_VERSION
       // WP432：再填一次也是「等你在插件里打开」
       entry.state = 'awaiting'
       entry.queued_at = now()
@@ -1071,7 +1096,20 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         }
         entry.record = { ...entry.record, content: nextText }
         entry.edited = true
+      } else if (entry.plan_v !== WRITE_PLAN_VERSION && entry.state === 'awaiting') {
+        // WP467：老的那一件可能还写着 old.reddit / 老选择器——按现在的写法重新拼一件（字不变），老的作废
+        const queued = await toPlugin({
+          write: entry.write,
+          text: entry.text,
+          approval_item_id: entry.approval_item_id,
+          ...(entry.label === undefined ? {} : { label: entry.label }),
+        })
+        if (!queued.ok) return { ok: false, message: queued.why }
+        actions.stop?.(entry.job_id)
+        entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
+        entry.job_id = queued.job.id
       }
+      entry.plan_v = WRITE_PLAN_VERSION
       const got = actions.open(entry.job_id)
       if (!got.ok) {
         save()
@@ -1090,6 +1128,84 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       return view === undefined
         ? { ok: false, message: '找不到这一条。' }
         : { ok: true, job: got.job, view }
+    },
+
+    recordSent(job_id, input) {
+      const entry = entries.find((e) => e.job_id === job_id)
+      if (entry === undefined) return { ok: false, message: '找不到这一条。' }
+      const viewOf = () => service.writes().find((w) => w.job_id === entry.job_id)
+      if (entry.state === 'sent') {
+        const v = viewOf()
+        // 已经记上了（插件填好那一路先认出来了）：再记一次不算错
+        return v === undefined ? { ok: false, message: '找不到这一条。' } : { ok: true, view: v }
+      }
+      const w = entry.write
+      if (w === undefined) return { ok: false, message: '这一条没记下写到哪，认不了。' }
+      const raw = input.permalink?.trim()
+      const link = raw === undefined || raw === '' ? undefined : (raw.split(/[?#]/u)[0] ?? raw)
+      const linkPost = link === undefined ? undefined : redditPostIdOf(link)
+      if (link !== undefined && linkPost === undefined)
+        return { ok: false, message: '这不像 Reddit 上那一条的链接。' }
+      // 错帖不记：链接要在这个帖子里（发新帖要在这个版块里）
+      const want =
+        w.kind === 'comment'
+          ? bareRedditId(w.post, 't3')
+          : w.kind === 'reply'
+            ? redditPostIdOf(w.permalink)
+            : undefined
+      if (want !== undefined && linkPost !== undefined && linkPost !== want)
+        return { ok: false, message: '这一条不是这个帖子里的，没记。' }
+      if (w.kind === 'submit' && link !== undefined) {
+        const sub = /\/r\/([A-Za-z0-9_]+)\//u.exec(link)?.[1]?.toLowerCase()
+        if (sub !== undefined && sub !== subOf(w.subreddit).toLowerCase())
+          return { ok: false, message: `这一条不是 r/${subOf(w.subreddit)} 里的，没记。` }
+      }
+      let fullname = input.fullname?.trim().toLowerCase()
+      if (fullname === undefined && link !== undefined) {
+        if (w.kind === 'submit') fullname = linkPost === undefined ? undefined : `t3_${linkPost}`
+        else {
+          const cid = redditCommentIdOf(link)
+          if (cid !== undefined) fullname = `t1_${cid}`
+        }
+      }
+      if (w.kind !== 'submit' && (fullname === undefined || !fullname.startsWith('t1_')))
+        return {
+          ok: false,
+          message: '要那一条评论自己的链接（评论下面「分享 → 复制链接」），不是帖子的。',
+        }
+      if (fullname === undefined) return { ok: false, message: '没给那一条的链接，记不了。' }
+      // 插件在页面上认出来的：要和草稿相近（贴链接 / 认最近一条是人亲口说的，不再比字）
+      if (input.how === 'seen') {
+        const draft = entry.text ?? entry.record.content
+        if (
+          !looksLikeSent({
+            draft,
+            said: input.text ?? '',
+            me: options.account?.(),
+            author: input.author,
+          })
+        )
+          return { ok: false, message: '页面上那一条和草稿差太多，不像是这一条，没记。' }
+      }
+      // 同一条不记两次
+      const fn = fullname
+      if (entries.some((e) => e !== entry && e.state === 'sent' && e.fullname === fn))
+        return { ok: false, message: '这一条已经记在另一条草稿上了。' }
+      // 插件那边还开着这一件（填好了在等你点发送）：收掉，免得两边都记
+      if (entry.state === 'queued') options.actions?.stop?.(entry.job_id)
+      entry.recorded_via = input.how
+      markSent(entry, fn, link, {
+        ...(input.text === undefined ? {} : { sent_text: input.text }),
+        pasted: true,
+      })
+      options.emit('reddit.write_recorded', 'system', {
+        approval_item_id: entry.approval_item_id,
+        job_id: entry.job_id,
+        kind: entry.kind,
+        how: input.how,
+      })
+      const v = viewOf()
+      return v === undefined ? { ok: false, message: '找不到这一条。' } : { ok: true, view: v }
     },
 
     drop(job_id, reason) {

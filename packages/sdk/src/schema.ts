@@ -10691,6 +10691,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/extension/panel/writes/{job}/sent': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** WP467：人在 Reddit 上自己发出去了（插件在原帖页认出来的 / 贴的链接 / 认最近一条）——核过（这个帖子里、文本相近、同一条不记两次）记「已记录」 */
+    post: operations['extensionPanelSent']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/extension/panel/writes/{job}/drop': {
     parameters: {
       query?: never
@@ -79452,6 +79469,79 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  extensionPanelSent: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description 插件动作的那一件 id */
+        job: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          /** @enum {string} */
+          how: 'seen' | 'link' | 'latest'
+          permalink?: string
+          fullname?: string
+          text?: string
+          author?: string
+        }
+      }
+    }
+    responses: {
+      /** @description PanelFillResult */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
         headers: {
           [name: string]: unknown
         }

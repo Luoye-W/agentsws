@@ -11,10 +11,11 @@ import {
   type DomOpResult,
   domClick,
   domCount,
-  domFill,
+  domFillAsync,
   domFindPosted,
   domLook,
   domPaste,
+  domReveal,
   domSetFile,
   domText,
   type PageLook,
@@ -24,6 +25,8 @@ import {
 export type AdsDomRequest =
   | { type: 'ads-dom'; op: 'look' }
   | { type: 'ads-dom'; op: 'count' | 'text' | 'click'; selector: string }
+  /** WP467：把这一个滚到眼前（新版 Reddit 的评论按钮行滚到看得见才长出来）。只滚不点。 */
+  | { type: 'ads-dom'; op: 'reveal'; selector: string }
   | {
       type: 'ads-dom'
       op: 'fill' | 'paste'
@@ -44,7 +47,7 @@ export type AdsDomRequest =
       author?: string
     }
 
-export type AdsDomResponse = PageLook | DomOpResult | number | string | PostedHit[]
+export type AdsDomResponse = PageLook | DomOpResult | number | string | boolean | PostedHit[]
 
 /** 横条上显示什么（`null` = 收起来）。 */
 export interface BannerState {
@@ -68,8 +71,15 @@ export type AdsBannerRequest = { type: 'ads-banner'; state: BannerState | null }
 /** 页面脚本 → service worker：横条上点了什么。 */
 export type AdsBannerEvent = { type: 'ads-stop' } | { type: 'ads-confirm'; answer: 'yes' | 'no' }
 
-/** 页面脚本里真正干活的那一个（测试在 jsdom 里直接调）。 */
-export function handleDomRequest(doc: Document, url: string, req: AdsDomRequest): AdsDomResponse {
+/**
+ * 页面脚本里真正干活的那一个（测试在 jsdom 里直接调）。WP467：填框要等编辑器一拍（新版 Reddit 的 Lexical），
+ * 所以回的可能是 Promise。
+ */
+export function handleDomRequest(
+  doc: Document,
+  url: string,
+  req: AdsDomRequest,
+): AdsDomResponse | Promise<AdsDomResponse> {
   switch (req.op) {
     case 'look':
       return domLook(doc, url)
@@ -79,8 +89,10 @@ export function handleDomRequest(doc: Document, url: string, req: AdsDomRequest)
       return domText(doc, req.selector)
     case 'click':
       return domClick(doc, req.selector)
+    case 'reveal':
+      return domReveal(doc, req.selector)
     case 'fill':
-      return domFill(
+      return domFillAsync(
         doc,
         req.selector,
         req.value,

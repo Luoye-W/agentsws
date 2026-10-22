@@ -15,6 +15,7 @@ import type {
   PanelPost,
   PanelProgress,
   PanelRecord,
+  PanelSentInput,
   PanelSinkResult,
   PanelSinkView,
   PanelStage,
@@ -83,6 +84,11 @@ export interface PanelWrites {
   ): { ok: true; view: RedditWriteView } | { ok: false; message: string }
   /** WP445：插件里等你发的几条（看板与侧边栏顶上那一行同一个数）。 */
   inPlugin?(): number
+  /** WP467：人自己发出去了，核过记「已记录」。 */
+  recordSent?(
+    job_id: string,
+    input: PanelSentInput,
+  ): { ok: true; view: RedditWriteView } | { ok: false; message: string }
 }
 
 /** 发出记录那一份里侧边栏用得到的（`OutboundLog` 的子集）。 */
@@ -521,6 +527,13 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
       if (writes?.open === undefined) return { ok: false, message: '这个品牌没有装 Reddit 写。' }
       const out = await writes.open(job_id, edit)
       return out.ok ? { ok: true, job: out.job, write: panelWriteOf(out.view) } : out
+    },
+    async sentWrite(session, job_id, input) {
+      const writes = await options.writes(session.workspace_id)
+      if (writes?.recordSent === undefined)
+        return { ok: false, message: '这个品牌没有装 Reddit 写。' }
+      const out = writes.recordSent(job_id, input)
+      return out.ok ? { ok: true, write: panelWriteOf(out.view) } : out
     },
     async dropWrite(session, job_id, reason) {
       const writes = await options.writes(session.workspace_id)

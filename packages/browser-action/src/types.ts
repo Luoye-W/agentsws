@@ -28,16 +28,42 @@ export type ActionPace = 'read' | 'write'
  * 因为后台的按钮多半只有文字靠得住。解析在 {@link resolveSelector}（`selector.ts`）。
  */
 export type ActionStep =
-  | { op: 'goto'; url: string }
+  | {
+      op: 'goto'
+      url: string
+      /**
+       * WP467：这一页是哪个 Reddit 帖子（不带 `t3_`）。当前标签页**已经在这个帖子上**（用户自己开着的原帖页）
+       * 就不再跳转、就地填（`need` 给了还要它在页面上：回某条评论时那一条要在）。不在就照常打开 `url`。
+       */
+      post?: string
+      need?: string
+    }
   /**
    * WP432：`soft` = 对不上不停（Reddit 新版页面的选择器没对真站核过）：执行器记一笔「没填上」、跳过后面的
    * 软步骤，直接去等人自己粘贴、点发送（侧边栏里有「复制草稿」）。**软步骤照样过白名单**。
    */
-  | { op: 'click'; selector: string; soft?: boolean }
+  | {
+      op: 'click'
+      selector: string
+      soft?: boolean
+      /** WP467：页面上已经有这个了就不点（框已经展开着：用户先点过 Reply / 评论框）。 */
+      unless?: string
+    }
   /** WP432：`highlight` = 填完把那个框描一圈、滚到眼前（人一眼看到填在哪）。 */
   | { op: 'fill'; selector: string; value: string; soft?: boolean; highlight?: boolean }
   /** 等某个元素出现（平台生成预览要时间）。等不到 = 页面对不上，停（`soft` 的不停）。 */
-  | { op: 'wait'; selector: string; timeout_ms?: number; soft?: boolean }
+  | {
+      op: 'wait'
+      selector: string
+      timeout_ms?: number
+      soft?: boolean
+      /**
+       * WP467：等之前先把这一个滚到眼前（新版 Reddit 的评论按钮要滚到看得见才长出来）。只滚，不点。
+       */
+      reveal?: string
+      /** WP467：等不到也往下走（下一步自己会再看；不算「对不上页面」）。 */
+      optional?: boolean
+    }
   /** 把审批绑定的那张上传表放进文件框（浏览器标准的 DataTransfer 做法）。 */
   | { op: 'upload'; selector: string }
   /** 把审批绑定的那张上传表的**文字**粘进文本框（Meta 导入框本来就支持粘贴）。 */

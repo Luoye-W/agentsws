@@ -60,7 +60,7 @@ function writeLater(v: Record<string, number>): void {
   }
 }
 
-/** 侧边栏所在的窗口（「打开这一条」在这个窗口里开新标签页）。 */
+/** 侧边栏所在的窗口（「填入」先找这个窗口里开着的原帖页，没有就在这里开新标签页）。 */
 async function currentWindowId(): Promise<number | undefined> {
   try {
     return (await chrome.windows.getCurrent()).id
@@ -147,6 +147,8 @@ export function SidePanel(props: {
   const winOf = props.windowId ?? currentWindowId
   const actions: CardActions = {
     refill: (job) => act({ type: 'panel-refill', job }),
+    sent: (job, how, link) =>
+      act({ type: 'panel-sent', job, how, ...(link === undefined ? {} : { link }) }),
   }
 
   // WP432 / WP445：发帖台——等你发的那几条（插件里审的卡 + 主管批过的）
@@ -159,6 +161,16 @@ export function SidePanel(props: {
         return act({ type: 'panel-fill', id: e.card.id, version: e.card.version, ...edit, ...win })
       return act({ type: 'panel-open', job: e.write.job_id, ...edit, ...win })
     },
+    // WP467：「我发了，帮我记一下」（还没批的卡记下 = 在插件里批 + 记已发）
+    sent: (e, how, link) =>
+      act({
+        type: 'panel-sent',
+        ...(e.from === 'card'
+          ? { card: { id: e.card.id, version: e.card.version } }
+          : { job: e.write.job_id }),
+        how,
+        ...(link === undefined ? {} : { link }),
+      }),
     skip: (e, reason) => {
       const why = reason === undefined ? {} : { reason }
       if (e.from === 'card')
