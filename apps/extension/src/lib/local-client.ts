@@ -30,6 +30,7 @@ import type {
   PanelFillResult,
   PanelOpenInput,
   PanelOpenResult,
+  PanelSentInput,
   PanelSkipInput,
   PanelSkipResult,
   PanelSnapshot,
@@ -385,4 +386,20 @@ export function panelDrop(
     method: 'POST',
     body: reason === undefined ? {} : { reason },
   })
+}
+
+/**
+ * WP467：人在 Reddit 上自己发出去了（插件在原帖页认出来的 / 贴的链接 / 认最近一条）——记成「已记录」。
+ * 本机服务再核一遍（这个帖子里、文本相近、同一条不记两次）。
+ */
+export function panelSent(
+  options: LocalClientOptions,
+  job: string,
+  input: PanelSentInput,
+): Promise<LocalCallResult<PanelFillResult>> {
+  return call<PanelFillResult>(
+    options,
+    `/v1/extension/panel/writes/${encodeURIComponent(job)}/sent`,
+    { method: 'POST', body: input },
+  )
 }
