@@ -5,16 +5,14 @@
  * 这里挪回成页面。看板本身还是原来那个件（按主人分列、自己取数）。老地址 `/org?tab=inprogress` 跳到这里。
  */
 import { InprogressTab } from '@/components/org/inprogress-tab'
+import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 
 export function InProgressPage(): React.ReactNode {
   const { t } = useApp()
   return (
     <div className="flex max-w-5xl flex-col gap-4" data-testid="inprogress-page">
-      <div>
-        <h1 className="text-base font-semibold">{t('org.tab.inprogress')}</h1>
-        <p className="mt-0.5 text-[12.5px] text-ws-muted-fg">{t('sp.inprogress.desc')}</p>
-      </div>
+      <PageHeader title={t('org.tab.inprogress')} sub={t('sp.inprogress.desc')} />
       <InprogressTab />
     </div>
   )

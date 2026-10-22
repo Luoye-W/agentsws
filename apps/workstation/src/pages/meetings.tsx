@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createMeeting, getMeetings } from '@/lib/api'
+import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 
 function localInput(date: Date): string {
@@ -106,18 +107,20 @@ export function MeetingsPage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-sm font-semibold">{t('meetings.title')}</h1>
-        <Button
-          size="sm"
-          onClick={() => {
-            setOpen((v) => !v)
-          }}
-        >
-          <Plus aria-hidden />
-          {t('meetings.new')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('meetings.title')}
+        actions={
+          <Button
+            size="sm"
+            onClick={() => {
+              setOpen((v) => !v)
+            }}
+          >
+            <Plus aria-hidden />
+            {t('meetings.new')}
+          </Button>
+        }
+      />
 
       {open ? (
         <Card>

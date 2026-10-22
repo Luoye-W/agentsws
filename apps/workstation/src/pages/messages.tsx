@@ -58,7 +58,7 @@ import {
 } from 'lucide-react'
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Segmented, StatusPill, WsAvatar, WsTag } from '@/components/design'
+import { PageHeader, Segmented, StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
 import {
@@ -566,7 +566,7 @@ export function MessagesPage(): ReactNode {
   if (list.length === 0)
     return source === 'chat' ? (
       <div className="flex flex-col gap-3" data-testid="messages-page" data-view="all">
-        <h1 className="text-[22px] font-semibold">{t('nav.messages')}</h1>
+        <PageHeader title={t('nav.messages')} />
         <div className="flex h-[calc(100vh-10rem)] gap-3">
           <SiteChatView
             initial={threadParam}
@@ -625,18 +625,23 @@ export function MessagesPage(): ReactNode {
     )
 
   const header = (
-    <header className="flex flex-wrap items-center gap-3">
-      <h1 className="text-[22px] font-semibold">{t('nav.messages')}</h1>
-      {/* WP439：顶栏右边「规则」（右栏规则清单） */}
-      <MessageRulesButton />
-      <ViewToggle
-        view={view}
-        unclaimed={overview.data?.unclaimed}
-        onChange={(next) => {
-          switchView(next)
-        }}
-      />
-    </header>
+    // WP456-T2：页头一种写法——标题在左，操作（规则 + 分段切换）在右
+    <PageHeader
+      title={t('nav.messages')}
+      actions={
+        <>
+          {/* WP439：顶栏右边「规则」（右栏规则清单） */}
+          <MessageRulesButton />
+          <ViewToggle
+            view={view}
+            unclaimed={overview.data?.unclaimed}
+            onChange={(next) => {
+              switchView(next)
+            }}
+          />
+        </>
+      }
+    />
   )
 
   // WP212：默认视图「没人接的」（方向 A）
@@ -1255,7 +1260,6 @@ function ViewToggle({
   return (
     <Segmented
       kind="tabs"
-      className="ml-auto"
       label={t('nav.messages')}
       testId="messages-view-toggle"
       value={view}
@@ -1642,7 +1646,7 @@ function NoMailbox({ onSiteChat }: { onSiteChat?: () => void }): ReactNode {
   const openConnect = useOpenConnect()
   return (
     <div className="flex max-w-lg flex-col gap-3" data-testid="messages-no-mailbox">
-      <h1 className="text-base font-semibold">{t('nav.messages')}</h1>
+      <PageHeader title={t('nav.messages')} />
       <p className="flex items-center gap-1 text-sm text-ws-muted-fg">
         {t('messages.no_mailbox')}
         <Hint text={t('messages.no_mailbox.hint')} />

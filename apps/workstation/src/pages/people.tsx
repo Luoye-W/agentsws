@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DutyBadges } from '@/components/work/duty-badges'
 import { getPersonProfile, listPeople, type ProfileFieldName } from '@/lib/api'
+import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 
 export function PeoplePage(): React.ReactNode {
@@ -30,7 +31,7 @@ export function PeoplePage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4" data-testid="people-page">
-      <h1 className="font-semibold text-base">{t('people.title')}</h1>
+      <PageHeader title={t('people.title')} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {people.data.map((p) => (
           <Card key={p.person_id} data-testid="person-card" data-person={p.person_id}>

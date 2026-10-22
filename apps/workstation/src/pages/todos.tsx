@@ -31,6 +31,7 @@ import {
   updateTodo,
 } from '@/lib/api'
 import { type HandoffView, listHandoffs, withdrawHandoff } from '@/lib/api-peers'
+import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
 import { DAY_MS, groupByHorizon, HORIZONS, todoUrl } from '@/lib/work'
@@ -310,10 +311,14 @@ export function TodosPage(): React.ReactNode {
   return (
     <div className="flex max-w-3xl flex-col gap-6" data-testid="todos">
       {tabs}
-      <h1 className="flex items-center gap-1 text-base font-semibold">
-        {t('todos.title')}
-        <Hint text={t('todos.drag_hint')} />
-      </h1>
+      <PageHeader
+        title={
+          <>
+            {t('todos.title')}
+            <Hint text={t('todos.drag_hint')} />
+          </>
+        }
+      />
 
       <form
         className="flex gap-2"

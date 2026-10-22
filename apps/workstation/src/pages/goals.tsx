@@ -7,6 +7,7 @@ import type { Goal, GoalProgress } from '@agentsws/contracts'
 import { useQuery } from '@tanstack/react-query'
 import { Skeleton } from '@/components/ui/skeleton'
 import { listGoals } from '@/lib/api'
+import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 import { daysLeftLabel } from '@/lib/work'
 
@@ -96,7 +97,7 @@ export function GoalsPage(): React.ReactNode {
 
   return (
     <div className="flex max-w-3xl flex-col gap-4" data-testid="goals-page">
-      <h1 className="text-base font-semibold">{t('goals.title')}</h1>
+      <PageHeader title={t('goals.title')} />
       {tree.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('goals.empty')}</p>
       ) : (

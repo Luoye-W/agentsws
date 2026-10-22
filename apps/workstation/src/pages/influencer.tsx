@@ -22,6 +22,7 @@ import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getKolCreators, getPositions } from '@/lib/api'
+import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 
 export function InfluencerPage({ setup = false }: { setup?: boolean }): React.ReactNode {
@@ -66,9 +67,7 @@ export function InfluencerPage({ setup = false }: { setup?: boolean }): React.Re
   return (
     <div className="flex flex-col gap-3">
       {/* WP416（自查 kol U9）：页面有标题，一上来知道自己在哪 */}
-      <h1 className="text-lg font-semibold" data-testid="influencer-title">
-        {t('influencer.title')}
-      </h1>
+      <PageHeader title={t('influencer.title')} titleTestId="influencer-title" />
       <KolPanelLoader
         assignment={kol.position_id}
         channel={channel}
