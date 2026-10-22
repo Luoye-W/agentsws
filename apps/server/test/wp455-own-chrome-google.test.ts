@@ -139,7 +139,17 @@ describe('读页：BrowserSkill 四个读动作；过渡页隔 1 秒重读、最
     expect(serpOfHtml(ok.html, ok.final_url).items).toHaveLength(3)
     expect(slept).toEqual([1_000, 1_000])
     expect(calls[0]).toEqual(['session', 'request', 'r1', '--prepare'])
-    expect(calls[1]).toEqual(['session', 'start', '--request-id', 'r1', '--no-focus'])
+    expect(calls[1]).toEqual([
+      'session',
+      'start',
+      '--request-id',
+      'r1',
+      '--no-focus',
+      '--width',
+      '400',
+      '--height',
+      '300',
+    ])
     expect(calls[2]?.slice(0, 5)).toEqual([
       'navigate',
       '--session',
@@ -521,7 +531,17 @@ describe('bsk 0.3.3 的请求编号（真机 10-22 撞到）', () => {
     const expiry = Number(id.split(':')[0])
     expect(expiry).toBeGreaterThan(before)
     expect(expiry - before).toBeLessThanOrEqual(10 * 60_000)
-    expect(calls[1]).toEqual(['session', 'start', '--request-id', id, '--no-focus'])
+    expect(calls[1]).toEqual([
+      'session',
+      'start',
+      '--request-id',
+      id,
+      '--no-focus',
+      '--width',
+      '400',
+      '--height',
+      '300',
+    ])
     await reader.close()
   })
 })

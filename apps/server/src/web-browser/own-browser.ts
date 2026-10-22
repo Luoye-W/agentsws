@@ -171,11 +171,12 @@ export function createOwnBrowserReader(options: OwnBrowserReaderOptions): OwnBro
   /** 还没开窗口就开一个（后台、不抢焦点）；开不出来回 `undefined`。 */
   const ensureSession = async (): Promise<string | undefined> => {
     if (session === undefined) {
-      // bsk 0.3.3：先登记请求（--prepare）再拿同一个 id 开窗口，否则报「request is not prepared」
+      // bsk 0.3.3：先登记请求（--prepare）再拿同一个 id 开窗口，否则报「request is not prepared」。
+      // 决策 1496：Mac 上 --no-focus 的窗口照样会出现在屏幕上，开小一点（400×300）不显眼
       const id = newId()
       await options.bsk(['session', 'request', id, '--prepare'], OWN_BROWSER_PAGE_TIMEOUT_MS)
       const started = await options.bsk(
-        ['session', 'start', '--request-id', id, '--no-focus'],
+        ['session', 'start', '--request-id', id, '--no-focus', '--width', '400', '--height', '300'],
         OWN_BROWSER_PAGE_TIMEOUT_MS,
       )
       session = str(started.session_id)
