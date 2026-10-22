@@ -299,34 +299,45 @@ describe('连接页：目录与状态条', () => {
     expect(screen.getByTestId('runtime-bar').getAttribute('data-state')).toBe('ready')
   })
 
-  it('卡上只有图标 + 名字 + 问号 + 按钮 +「看教程」（WP210：那一句介绍也进问号）', async () => {
+  it('WP456-T6：一行一个服务——图标 + 名字 + 一行很短的说明 + 一个问号（介绍 + 教程）+「连接」次按钮', async () => {
     renderWithProviders(<ConnectionsPage />, '/connections')
     const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    // 列表组里的一行，不是一张卡
+    expect(card.classList.contains('ws-row')).toBe(true)
+    expect(card.closest('[data-slot="list-group"]')).not.toBeNull()
     expect(within(card).queryByTestId('setup-steps')).toBeNull()
     expect(within(card).queryAllByRole('link')).toHaveLength(0)
-    // WP210：卡面上不再有那一句；它和服务端那段介绍原话都在标题旁的问号里
-    expect(within(card).queryByTestId('provider-line')).toBeNull()
-    const note = within(card).getByTestId('provider-note').getAttribute('data-hint') ?? ''
+    // 名字下面一行很短的说明（是什么），长的那一句和服务端介绍原话都在问号里
+    expect(within(card).getByTestId('provider-line').textContent).toBe('IMAP / SMTP')
+    const help = within(card).getByTestId('tutorial-link')
+    const note = help.getAttribute('data-hint') ?? ''
     expect(note).toContain('最省事：填邮箱地址和一个授权码，不用向谁申请。')
     expect(note).toContain('开一个应用专用密码就能收发信')
-    // 安全说明卡上一句不留，统一在「可以连接」标题旁的问号里说一次
+    // 同一个问号点开就是教程；「看教程」那颗绿字链接没有了
+    expect(help.getAttribute('data-slug')).toBe('conn-email')
+    expect(within(card).queryByText('看教程')).toBeNull()
+    expect(within(card).queryByTestId('provider-note')).toBeNull()
+    // 「连接」是次按钮（灰底），不是主按钮
+    expect(within(card).getByTestId('provider-start').getAttribute('data-variant')).toBe(
+      'secondary',
+    )
+    // 安全说明行上一句不留，统一在列表标题旁的问号里说一次
     expect(card.querySelector('[data-slot="safety-note"]')).toBeNull()
     expect(
       screen.getByTestId('connections-available-hint').getAttribute('data-hint') ?? '',
     ).toContain('密码只输在对方网站上')
-    expect(within(card).getByTestId('tutorial-link').getAttribute('data-slug')).toBe('conn-email')
   })
 
   it('没有教程的新连接：步骤与外链在「看教程」的对话框里现拼，一条不丢', async () => {
-    const user = userEvent.setup()
     state.providers = [{ ...MAIL_PROVIDER, service: 'brand_new_mail', label: '新邮箱' }]
     renderWithProviders(<ConnectionsPage />, '/connections')
     const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
-    // 没有词条：问号里打头的是服务端介绍的第一句
-    expect(within(card).getByTestId('provider-note').getAttribute('data-hint') ?? '').toMatch(
+    // 没有词条：问号里打头的是服务端介绍的第一句（WP456-T6：介绍和教程是同一个问号）
+    expect(within(card).getByTestId('tutorial-link').getAttribute('data-hint') ?? '').toMatch(
       /^开一个应用专用密码就能收发信。/,
     )
-    await user.click(within(card).getByTestId('tutorial-link'))
+    // 问号外面套着 tooltip：jsdom 里 userEvent 的指针模拟在它上面很慢，直接点（同模型页那条）
+    fireEvent.click(within(card).getByTestId('tutorial-link'))
     const dialog = await screen.findByRole('dialog')
     const article = await within(dialog).findByTestId('help-article')
     expect(article.querySelectorAll('ol > li')).toHaveLength(3)
@@ -487,7 +498,7 @@ describe('连接页：OAuth 向导', () => {
       .getAllByTestId('provider-card')
       .find((c) => c.getAttribute('data-service') === 'ga4') as HTMLElement
     // WP43 ③：这段说明从卡面挪进了标题旁的问号（jsdom 打不开 tooltip，读属性）
-    expect(within(ga4).getByTestId('provider-note').getAttribute('data-hint')).toContain('下一版')
+    expect(within(ga4).getByTestId('tutorial-link').getAttribute('data-hint')).toContain('下一版')
   })
 })
 
@@ -884,5 +895,68 @@ describe('WP252 多品牌共用连接名留下的提醒', () => {
     renderWithProviders(<ConnectionsPage />)
     await screen.findByTestId('connection-row')
     expect(screen.queryByTestId('connection-brand-conflict')).toBeNull()
+  })
+})
+
+describe('WP456-T6：账号连接是一张列表（搜索 / 已连接 / 常用 / 看全部）', () => {
+  const KLAVIYO: ProviderView = {
+    service: 'klaviyo',
+    label: 'Klaviyo（邮件营销）',
+    auth: 'api_key',
+    fields: [],
+    available: true,
+    data_sources: [],
+    setup_guide: { summary: '只读分群与活动。', steps: [], links: [] },
+  }
+
+  it('默认只列「常用」那几样；底下「看全部 N 个」才是全部，再点收起', async () => {
+    state.providers = [MAIL_PROVIDER, GA4_PROVIDER, SHOP_PROVIDER, KLAVIYO]
+    renderWithProviders(<ConnectionsPage embedded />, '/connections')
+    const services = async (): Promise<(string | null)[]> =>
+      (await screen.findAllByTestId('provider-card')).map((c) => c.getAttribute('data-service'))
+    expect(await services()).toEqual(['imap_smtp', 'ga4', 'shopify_admin'])
+    // 只有一个标题说「能连什么」：「添加连接」「可以连接」合成了一张列表
+    expect(screen.queryByTestId('directory-toggle')).toBeNull()
+    expect(screen.getByTestId('connections-available').textContent).toContain('常用')
+    const all = screen.getByTestId('connections-show-all')
+    expect(all.textContent).toBe('看全部 4 个')
+    expect(all.className).toContain('ws-link-muted')
+    fireEvent.click(all)
+    expect(await services()).toEqual(['imap_smtp', 'ga4', 'shopify_admin', 'klaviyo'])
+    fireEvent.click(screen.getByTestId('connections-show-all'))
+    expect(await services()).toHaveLength(3)
+  })
+
+  it('顶上的搜索框搜整张表（名字、那一行说明都算）；搜不到说一句', async () => {
+    state.providers = [MAIL_PROVIDER, GA4_PROVIDER, SHOP_PROVIDER, KLAVIYO]
+    renderWithProviders(<ConnectionsPage embedded />, '/connections')
+    await screen.findAllByTestId('provider-card')
+    const search = screen.getByTestId('connections-search')
+    fireEvent.change(search, { target: { value: 'klaviyo' } })
+    const rows = await screen.findAllByTestId('provider-card')
+    expect(rows.map((c) => c.getAttribute('data-service'))).toEqual(['klaviyo'])
+    // 名字里那段括号和下面那一行说的是一件事：有那一行时只写括号前面
+    expect(within(rows[0] as HTMLElement).getByText('Klaviyo')).toBeTruthy()
+    // 搜的时候「已连接」那节不出
+    expect(screen.queryByTestId('connections-connected')).toBeNull()
+    fireEvent.change(search, { target: { value: '访客' } })
+    expect(
+      (await screen.findAllByTestId('provider-card')).map((c) => c.getAttribute('data-service')),
+    ).toEqual(['ga4'])
+    fireEvent.change(search, { target: { value: '没有这种东西' } })
+    expect(await screen.findByTestId('connections-no-match')).toBeTruthy()
+  })
+
+  it('已连接：节标题后面一个灰色计数，连上的是同一张列表组里的一行', async () => {
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage embedded />, '/connections')
+    const row = await screen.findByTestId('connection-row')
+    expect(row.classList.contains('ws-row')).toBe(true)
+    const section = screen.getByTestId('connections-connected')
+    expect(section.querySelector('.ws-sec-count')?.textContent).toBe('1')
+    // 断开是红字弱按钮（不是红底）
+    const off = within(row).getByRole('button', { name: '断开' })
+    expect(off.getAttribute('data-variant')).toBe('ghost')
+    expect(off.className).toContain('text-ws-bad')
   })
 })

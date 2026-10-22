@@ -168,10 +168,6 @@
       "font-size": 1,
       "radius": 2
     },
-    "apps/workstation/src/components/messages/unclaimed-view.tsx": {
-      "font-size": 4,
-      "radius": 1
-    },
     "apps/workstation/src/components/models/ai-source-order.tsx": {
       "radius": 1
     },
@@ -188,9 +184,6 @@
       "font-size": 1
     },
     "apps/workstation/src/components/onboarding/step-progress.tsx": {
-      "font-size": 1
-    },
-    "apps/workstation/src/components/org/brand-assets-card.tsx": {
       "font-size": 1
     },
     "apps/workstation/src/components/org/roles-tab.tsx": {
@@ -210,9 +203,6 @@
     },
     "apps/workstation/src/components/position/data-board.tsx": {
       "font-size": 4
-    },
-    "apps/workstation/src/components/position/position-handoff.tsx": {
-      "font-size": 1
     },
     "apps/workstation/src/components/position/quick-answer.tsx": {
       "font-size": 1
@@ -308,21 +298,8 @@
     "apps/workstation/src/components/seo/geo-watch-settings.tsx": {
       "radius": 1
     },
-    "apps/workstation/src/components/settings-panel/setting-row.tsx": {
-      "font-size": 1
-    },
-    "apps/workstation/src/components/settings-panel/settings-dialog.tsx": {
-      "font-size": 2
-    },
     "apps/workstation/src/components/settings/credits-panel.tsx": {
-      "font-size": 2,
-      "radius": 2
-    },
-    "apps/workstation/src/components/settings/kol-cloud-card.tsx": {
-      "radius": 3
-    },
-    "apps/workstation/src/components/settings/team-channel.tsx": {
-      "radius": 2
+      "font-size": 2
     },
     "apps/workstation/src/components/setup/connect-card.tsx": {
       "radius": 1
@@ -423,7 +400,7 @@
       "radius": 1
     },
     "apps/workstation/src/pages/home.tsx": {
-      "font-size": 12,
+      "font-size": 10,
       "radius": 4
     },
     "apps/workstation/src/pages/im-channels.tsx": {
@@ -442,9 +419,6 @@
     },
     "apps/workstation/src/pages/onboarding.tsx": {
       "font-size": 1
-    },
-    "apps/workstation/src/pages/org.tsx": {
-      "font-size": 2
     },
     "apps/workstation/src/pages/position.tsx": {
       "font-size": 2

@@ -114,8 +114,9 @@ async function main() {
         await page.getByTestId('home').waitFor({ timeout: 30_000 })
         await page.getByTestId('home-key-card').first().waitFor({ timeout: 30_000 })
         if (theme === 'light') {
-          check((await page.getByTestId('home-decide').count()) === 1, '首页：要你定')
-          check((await page.getByTestId('home-decide-row').count()) <= 3, '首页：要你定最多 3 条')
+          // WP459（决策 1497）：「要你定」换成一行「收件箱里 N 件等你 →」
+          check((await page.getByTestId('home-inbox-line').count()) === 1, '首页：收件箱那一行')
+          check((await page.getByTestId('home-decide').count()) === 0, '首页：不再列决策卡')
           const keys = await page.getByTestId('home-key-card').count()
           check(keys >= 1 && keys <= 4, `首页：关键数字 ${keys} 个（最多 4 个）`)
           check((await page.getByTestId('battle-report').count()) === 0, '首页：复盘四格去掉了')

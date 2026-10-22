@@ -6,7 +6,7 @@
  */
 import type { PanelPost } from '@agentsws/browser-action'
 import { useState } from 'react'
-import { IconExternal } from './panel-icons'
+import { IconAlert, IconExternal } from './panel-icons'
 
 export interface PostActions {
   open(post: PanelPost): void
@@ -41,7 +41,7 @@ export function PostItem(props: {
     })
   }
   return (
-    <li className="ws-card-item" data-testid="ws-post" data-channel={p.channel}>
+    <li className="ws-card-item ws-desk-card" data-testid="ws-post" data-channel={p.channel}>
       <div className="ws-card-head ws-card-head--static">
         <b>
           {p.channel_label}
@@ -58,7 +58,7 @@ export function PostItem(props: {
           {p.body}
         </blockquote>
         <div className="ws-meta">
-          <span className="ws-pill" title="正文已经填进发帖页；没填的点「复制文案」再粘贴">
+          <span className="ws-tag" title="正文已经填进发帖页；没填的点「复制文案」再粘贴">
             {p.prefilled ? '正文已预填' : '要粘贴正文'}
           </span>
           {p.media === 0 ? null : (
@@ -67,7 +67,7 @@ export function PostItem(props: {
             </span>
           )}
         </div>
-        <div className="ws-row">
+        <div className="ws-actions">
           <button
             type="button"
             className="ws-btn ws-btn--primary"
@@ -78,7 +78,7 @@ export function PostItem(props: {
           </button>
           <button
             type="button"
-            className="ws-btn ws-btn--ghost"
+            className="ws-btn"
             data-testid="ws-post-copy"
             onClick={() => {
               void navigator.clipboard
@@ -103,7 +103,7 @@ export function PostItem(props: {
             <div className="ws-row">
               <button
                 type="button"
-                className="ws-btn ws-btn--primary"
+                className="ws-btn ws-btn--sm"
                 disabled={busy}
                 data-testid="ws-post-done"
                 title="贴了链接 = 工坊记下那一条；不贴只记「你说发了」"
@@ -115,7 +115,7 @@ export function PostItem(props: {
               </button>
               <button
                 type="button"
-                className="ws-btn ws-btn--ghost"
+                className="ws-btn ws-btn--ghost ws-btn--sm"
                 disabled={busy}
                 data-testid="ws-post-skip"
                 onClick={() => act(() => props.actions.skip(p))}
@@ -125,7 +125,10 @@ export function PostItem(props: {
             </div>
           </>
         ) : (
-          <p className="ws-note ws-note--warn">这把配对还不能回发帖结果，去设置页重新配对一次。</p>
+          <p className="ws-note ws-note--warn">
+            <IconAlert className="ws-ico" />
+            <span className="ws-note-text">这把配对还不能回发帖结果，去设置页重新配对一次。</span>
+          </p>
         )}
         {msg === undefined ? null : <small className="ws-bad-text">{msg}</small>}
       </div>
@@ -140,7 +143,7 @@ export function PanelPosts(props: {
 }): React.ReactNode {
   if (props.posts.length === 0) return null
   return (
-    <ul className="ws-cards" data-testid="ws-posts">
+    <ul className="ws-cards ws-posts" data-testid="ws-posts">
       {props.posts.map((p) => (
         <PostItem key={p.id} post={p} actions={props.actions} canAct={props.canAct} />
       ))}

@@ -22,6 +22,7 @@ import { parseYouTubeChannel, parseYouTubeWatch } from '@/lib/parse/youtube'
 import type { ContentSnapshot, CreatorSnapshot } from '@/lib/snapshot'
 import { Panel } from '@/ui/panel'
 import '@/ui/tokens.css'
+import '@/ui/kol-panel.css'
 
 /** 当前这一页解析成什么。解析不出来就三个都没有，面板会老实说看不懂。 */
 function readPage(href: string): {

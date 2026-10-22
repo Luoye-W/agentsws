@@ -7,7 +7,7 @@ import type { PanelPost, PanelStage, PanelWrite } from '@agentsws/browser-action
 import { useState } from 'react'
 import { stageTone, writeLine, writeTone } from '@/lib/panel/format'
 import { SentBox } from './panel-desk'
-import { IconCheck, IconClock, IconExternal, IconX } from './panel-icons'
+import { IconAlert, IconCheck, IconExternal } from './panel-icons'
 import { PanelPosts, type PostActions } from './panel-posts'
 import { StageLine } from './panel-progress'
 
@@ -17,6 +17,26 @@ export interface CardActions {
   sent?(job: string, how: 'link' | 'latest', link?: string): Promise<string | undefined>
 }
 
+/** WP456-T7：一条写现在怎样 → 状态药丸上那几个字（细的那句另起一行）。 */
+export function writePill(w: PanelWrite): string {
+  switch (w.state) {
+    case 'awaiting':
+      return '等你填入'
+    case 'queued':
+      return '正在打开'
+    case 'filling':
+      return '等你点发送'
+    case 'sent':
+      return w.record_id === undefined ? '已发' : '已发 · 已记录'
+    case 'failed':
+      return '没发出去'
+  }
+}
+
+/**
+ * 交给插件之后做到哪了（列表组里的一行）。WP456-T7：状态是「点 + 字」的药丸，颜色只表示状态（好 / 要留意 / 出错）；
+ * 细的那句（为什么没发出去、要你做什么）另起一行灰字；动作是小号次按钮 / 弱按钮。
+ */
 export function WriteRow(props: {
   write: PanelWrite
   actions: CardActions
@@ -28,66 +48,77 @@ export function WriteRow(props: {
   const tone = writeTone(w)
   const [msg, setMsg] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
-  const Icon = tone === 'good' ? IconCheck : tone === 'bad' ? IconX : IconClock
+  const pill = writePill(w)
+  const line = writeLine(w)
+  const canCopy = w.state === 'filling' && w.text !== undefined && props.copy !== undefined
+  // WP467：正在等你点发送 / 没发出去的：你自己发了、插件没认出来，就在这里记一下
+  const canSent =
+    (w.state === 'filling' || w.state === 'queued' || w.state === 'failed') &&
+    w.record_id === undefined &&
+    props.canAct &&
+    props.actions.sent !== undefined
+  const canRefill = w.state === 'failed' && w.can_refill === true && props.canAct
   return (
     <li className={`ws-write ws-write--${tone}`} data-testid="ws-write" data-state={w.state}>
-      <Icon className="ws-ico" />
-      <div className="ws-write-body">
+      <div className="ws-write-top">
         <span className="ws-write-label">{w.label ?? `r/${w.subreddit}`}</span>
-        <span className="ws-write-state">{writeLine(w)}</span>
-        {msg === undefined ? null : <small className="ws-bad-text">{msg}</small>}
+        {w.link === undefined ? null : (
+          <a
+            className="ws-iconbtn"
+            href={w.link}
+            target="_blank"
+            rel="noreferrer"
+            title="打开发出去的那一条"
+          >
+            <IconExternal />
+          </a>
+        )}
       </div>
-      {w.link === undefined ? null : (
-        <a
-          className="ws-iconbtn"
-          href={w.link}
-          target="_blank"
-          rel="noreferrer"
-          title="打开发出去的那一条"
-        >
-          <IconExternal />
-        </a>
-      )}
-      {w.state === 'filling' && w.text !== undefined && props.copy !== undefined ? (
-        <button
-          type="button"
-          className="ws-btn ws-btn--ghost ws-btn--sm"
-          data-testid="ws-write-copy"
-          onClick={() => {
-            void props.copy?.(w.text ?? '').then((ok) => setMsg(ok ? '草稿已复制' : '没复制上'))
-          }}
-        >
-          复制
-        </button>
-      ) : null}
-      {/* WP467：正在等你点发送 / 没发出去的：你自己发了、插件没认出来，就在这里记一下 */}
-      {(w.state === 'filling' || w.state === 'queued' || w.state === 'failed') &&
-      w.record_id === undefined &&
-      props.canAct &&
-      props.actions.sent !== undefined ? (
-        <SentBox
-          canLatest={w.kind !== 'submit'}
-          sent={(how, link) =>
-            props.actions.sent?.(w.job_id, how, link) ?? Promise.resolve(undefined)
-          }
-        />
-      ) : null}
-      {w.state === 'failed' && w.can_refill === true && props.canAct ? (
-        <button
-          type="button"
-          className="ws-btn ws-btn--ghost ws-btn--sm"
-          disabled={busy}
-          data-testid="ws-refill"
-          onClick={() => {
-            setBusy(true)
-            void props.actions.refill(w.job_id).then((m) => {
-              setMsg(m)
-              setBusy(false)
-            })
-          }}
-        >
-          再填一次
-        </button>
+      <div className="ws-write-state">
+        <span className={`ws-pill ws-pill--${tone}`}>{pill}</span>
+        {line === pill ? null : <span className="ws-write-msg">{line}</span>}
+      </div>
+      {msg === undefined ? null : <small className="ws-bad-text">{msg}</small>}
+      {canCopy || canSent || canRefill ? (
+        <div className="ws-write-acts">
+          {canRefill ? (
+            <button
+              type="button"
+              className="ws-btn ws-btn--sm"
+              disabled={busy}
+              data-testid="ws-refill"
+              onClick={() => {
+                setBusy(true)
+                void props.actions.refill(w.job_id).then((m) => {
+                  setMsg(m)
+                  setBusy(false)
+                })
+              }}
+            >
+              再填一次
+            </button>
+          ) : null}
+          {canCopy ? (
+            <button
+              type="button"
+              className="ws-btn ws-btn--sm"
+              data-testid="ws-write-copy"
+              onClick={() => {
+                void props.copy?.(w.text ?? '').then((ok) => setMsg(ok ? '草稿已复制' : '没复制上'))
+              }}
+            >
+              复制
+            </button>
+          ) : null}
+          {canSent ? (
+            <SentBox
+              canLatest={w.kind !== 'submit'}
+              sent={(how, link) =>
+                props.actions.sent?.(w.job_id, how, link) ?? Promise.resolve(undefined)
+              }
+            />
+          ) : null}
+        </div>
       ) : null}
     </li>
   )
@@ -116,7 +147,7 @@ export function PanelCards(props: {
   if (!empty && !stageWarn && props.writes.length === 0 && posts.length === 0 && props.canAct)
     return null
   return (
-    <section className="ws-sec" data-testid="ws-todo">
+    <section className="ws-todo" data-testid="ws-todo">
       {props.stage === undefined || stageTone(props.stage.kind) !== 'warn' ? null : (
         <StageLine
           stage={props.stage}
@@ -124,7 +155,7 @@ export function PanelCards(props: {
         />
       )}
       {props.writes.length === 0 ? null : (
-        <ul className="ws-writes" data-testid="ws-writes">
+        <ul className="ws-writes ws-group" data-testid="ws-writes">
           {props.writes.map((w) => (
             <WriteRow
               key={w.job_id}
@@ -138,7 +169,10 @@ export function PanelCards(props: {
       )}
       {props.canAct ? null : (
         <p className="ws-note ws-note--warn">
-          这把配对只能看。去设置页重新配对一次，就能在这里处理。
+          <IconAlert className="ws-ico" />
+          <span className="ws-note-text">
+            这把配对只能看。去设置页重新配对一次，就能在这里处理。
+          </span>
         </p>
       )}
       {props.postActions === undefined ? null : (

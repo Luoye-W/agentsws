@@ -372,6 +372,8 @@ export class MailboxSync {
      * `KOLAgents` 之间被两轮分拣挪来挪去。人要改归属走「移到…」（纠错那条路）。
      */
     if (isAgentFolderKind(kind)) return true
+    // WP459（决策 1498）：AI 猜着交的（把握不够）只在工坊里交，邮箱里不挪——改判时不用再挪回来
+    if (triage.ai_hand?.guessed === true) return true
     // WP161：挪进这只邮箱上**已有**的那只（大小写变体照认），没有才用规范名新建
     const to = folderPathFor(triage.route, account.known_folders ?? account.folders)
     const switches = supportMailboxSwitches(this.opts.support_mailbox?.(account.address))

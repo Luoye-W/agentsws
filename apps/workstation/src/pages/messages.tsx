@@ -19,7 +19,9 @@
  * - **WP204：点了就有回音**。每个按钮要么立刻看得见变化，要么底下冒一句话（好消息几秒后
  *   自己消失，错误留着）；归档 / 删除挪的是整条会话、挪完离开这条、带「撤销」；删除先问一句；
  *   影子模式（只看不动）下归档 / 删除置灰、问号里说为什么；「显示图片」由本机代取、只对这一封。
- * - **WP212（docs/88）：默认视图是「没人接的」**（`components/messages/unclaimed-view.tsx`）——
+ * - **WP459（决策 1497）：默认视图换成「收件箱」**（`pages/inbox.tsx`，所有岗位的决策卡 + 要你判断的信一条队列）；
+ *   左栏改名「收件箱」，`/inbox` 同一页。下面这套是「全部信」（`?view=all`）。以下 WP212 那段是老的说法：
+ * - **WP212（docs/88）：默认视图是「没人接的」**（原 `components/messages/unclaimed-view.tsx`，WP459 换掉）——
  *   一件要你决定的事只在卡片流里出现，消息页只管兜底（没人接的）与原件档案（「全部」）。
  *   「全部」就是下面这套文件夹 + 会话 + 阅读区（完整的原件档案是第 3 步），岗位在办的会话挂
  *   「X 在办 · 有 N 张卡等你 →」链到卡片；卡片那头的「看原件 →」落在这里（`?view=all&thread=`）。
@@ -61,11 +63,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, Segmented, StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
-import {
-  type HandNotice,
-  positionName,
-  useMessageOverview,
-} from '@/components/messages/hand-actions'
+import { positionName, useMessageOverview } from '@/components/messages/hand-actions'
 import { MailAiAssistant } from '@/components/messages/mail-ai-assistant'
 import {
   isMarketing,
@@ -77,7 +75,6 @@ import { MessageBody } from '@/components/messages/message-body'
 import { PendingActions, PendingNavItem } from '@/components/messages/pending-confirm'
 import { MessageRulesButton } from '@/components/messages/rules-button'
 import { SiteChatSourceItem, SiteChatView, useHoldsSiteChat } from '@/components/messages/site-chat'
-import { UnclaimedView } from '@/components/messages/unclaimed-view'
 import { focusMessage, USE_SUGGESTION_EVENT } from '@/components/rail/panels/mail-assistant-panel'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
@@ -105,6 +102,7 @@ import { useApp } from '@/lib/app-context'
 import { apiErrorText } from '@/lib/error-text'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { InboxPage } from './inbox'
 
 /**
  * 左边那一列的文件夹（按**语义**画，真名各家不一样）。
@@ -171,7 +169,10 @@ export function MessagesPage(): ReactNode {
   const holdsSiteChat = useHoldsSiteChat()
   const overview = useMessageOverview()
   /** 「我自己回」：切到「全部」打开这条会话，信到了就开写信框。 */
-  const [replyOnOpen, setReplyOnOpen] = useState<string | undefined>()
+  // WP459：收件箱里「我自己回」带 `?reply=1` 过来——信到了就开写信框
+  const [replyOnOpen, setReplyOnOpen] = useState<string | undefined>(
+    params.get('reply') === '1' ? threadParam : undefined,
+  )
   const [filters, setFilters] = useState<Filters>({ folder_kind: 'inbox', q: '' })
   const [selected, setSelected] = useState<string | undefined>(threadParam)
   // -1 = 还没选过：`j` 打开第一条（以前从 0 起，第一条永远被跳过）
@@ -644,30 +645,8 @@ export function MessagesPage(): ReactNode {
     />
   )
 
-  // WP212：默认视图「没人接的」（方向 A）
-  if (view === 'unclaimed')
-    return (
-      <div
-        className="relative flex flex-col gap-4 pb-16"
-        data-testid="messages-page"
-        data-view="unclaimed"
-      >
-        {header}
-        <UnclaimedView
-          onOpenOriginal={(thread) => {
-            switchView('all', thread)
-          }}
-          onReplySelf={(thread) => {
-            setReplyOnOpen(thread)
-            switchView('all', thread)
-          }}
-          onNotice={(n: HandNotice) => {
-            setNotice(n)
-          }}
-        />
-        {noticeBar}
-      </div>
-    )
+  // WP459（决策 1497）：默认视图是收件箱（所有岗位的决策卡 + 要你判断的信）；「全部信」是下面这套
+  if (view === 'unclaimed') return <InboxPage />
 
   return (
     <div className="relative flex flex-col gap-3" data-testid="messages-page" data-view="all">
@@ -1677,4 +1656,14 @@ function NoMailbox({ onSiteChat }: { onSiteChat?: () => void }): ReactNode {
       )}
     </div>
   )
+}
+
+/**
+ * WP459（决策 1499）：`/messages`、`/inbox` 两个地址同一页——默认收件箱；「全部信」（`?view=all`）与网站聊天
+ * （`?source=chat`）还是原来那一页。收件箱不靠邮箱（没连邮箱也有各岗位的卡），所以先挑再进。
+ */
+export function MessagesRoute(): ReactNode {
+  const [params] = useSearchParams()
+  if (params.get('view') === 'all' || params.get('source') === 'chat') return <MessagesPage />
+  return <InboxPage />
 }

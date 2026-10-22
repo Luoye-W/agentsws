@@ -288,7 +288,8 @@ describe('连接页', () => {
     check('连接 · 页头', page.querySelector('header') as Element)
     check('连接 · 状态条（没装 + fake-IP）', screen.getByTestId('runtime-bar'))
     check('连接 · 已连接一行', await screen.findByTestId('connection-row'))
-    fireEvent.click(screen.getByTestId('directory-toggle'))
+    // WP456-T6：目录嵌在列表下面，底下「看全部」展开（只列列表里没有的几条）
+    fireEvent.click(screen.getByTestId('connections-show-all'))
     const rows = await screen.findAllByTestId('directory-entry')
     for (const row of rows) check(`连接 · 目录 · ${row.getAttribute('data-kind') ?? ''}`, row)
     check('连接 · 自定义 MCP', await screen.findByTestId('mcp-servers'))
@@ -307,6 +308,9 @@ describe('连接页', () => {
 
   it('provider 卡：29 张每张都不超、不铺步骤与外链；认得的都有一句词条和「看教程」', async () => {
     renderWithProviders(<ConnectionsPage />, '/connections')
+    await screen.findAllByTestId('provider-card')
+    // WP456-T6：默认只列「常用」几行，「看全部」才是全部
+    fireEvent.click(screen.getByTestId('connections-show-all'))
     const cards = await screen.findAllByTestId('provider-card')
     expect(cards).toHaveLength(PROVIDERS.length)
     for (const card of cards) {

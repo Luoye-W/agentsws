@@ -10,12 +10,17 @@
  * 4. **数据后端**（WP40 / 41 §2.4）——本地 / 接我的云 / 托管三个按钮 + 迁移向导。
  * 5. **搜索数据**（WP155 / docs/81）——官方（用积分）/ 自带 key / 不接。
  *
+ * WP456-T6（WP456 §3.8，示意稿 6）：设置 → 账号连接改成**列表**——顶上一个搜索框；「已连接 N」
+ * 一张列表组；「常用」一张列表组（店铺、邮箱、Google 三件、Meta 广告这几样，一行一个服务）；最底下一行
+ * 「看全部 N 个」展开成全部（连同目录里列表没有的那几条：还没做的、去别的页接的、自定义 MCP）。
+ * 原来「添加连接」「可以连接」两个标题说的是同一件事，合成这一张列表；「看全部」从右上角挪到底下。
+ *
  * 凭据这条线：值从 `SecureForm` 的 FormData 出来 → `submitConnection` 发出去 → 结束。
  * 这个文件里没有一处把它放进 state、query 缓存、URL 或日志。
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link2 } from 'lucide-react'
+import { Link2, Plug, Search } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BrandScopeNote } from '@/components/brand-scope-note'
@@ -24,8 +29,12 @@ import { openExternal } from '@/components/connections/bridge'
 import { BrowserExtensionSection } from '@/components/connections/browser-extension'
 import { ConnectedRow } from '@/components/connections/connected-row'
 import { DataBackend } from '@/components/connections/data-backend'
-// WP83（54（将改号 55）§4 第一层）：按分类 + 搜索的「添加连接」，默认收起
-import { ConnectionDirectorySection } from '@/components/connections/directory'
+// WP83（54（将改号 55）§4 第一层）：按分类的目录；WP456-T6 起嵌在列表下面（「看全部」之后）
+import {
+  ConnectionDirectorySection,
+  matches as directoryMatches,
+  inCatalog,
+} from '@/components/connections/directory'
 // WP247：本机连接器按需下载（点了要连接器的卡先问一句；下好、起来之后接着连）
 import {
   DownloadConfirm,
@@ -34,7 +43,7 @@ import {
 } from '@/components/connections/local-connector'
 // WP216：建站平台的官方 CLI 卡（平台没有 CLI 就不出）
 import { PlatformCliCard } from '@/components/connections/platform-cli-card'
-import { ProviderCard, type WizardPhase } from '@/components/connections/provider-card'
+import { ProviderCard, providerSub, type WizardPhase } from '@/components/connections/provider-card'
 // WP155（docs/81）：「搜索数据」一行（官方用积分 / 自带 key / 不接）
 import { ReadRoutesSection } from '@/components/connections/read-routes'
 import { RuntimeBar } from '@/components/connections/runtime-bar'
@@ -42,12 +51,14 @@ import { SearchDataSection } from '@/components/connections/search-data'
 // WP265：Shopify 卡的「连接 Shopify」一键授权（老的客户端 ID 表单收进卡内「高级」）
 import { ShopifyConnect } from '@/components/connections/shopify-connect'
 import { useConnectAs } from '@/components/connections/use-connect-as'
+import { EmptyState, ListGroup, SectionHeader, SkeletonList } from '@/components/design'
 import { PrWatchSources, useMonitorAssignment } from '@/components/pr/pr-watch-sources'
 import { Hint } from '@/components/ui/hint'
-import { Skeleton } from '@/components/ui/skeleton'
-import type { ConnectTestResult, ProviderFieldSpec } from '@/lib/api'
+import { Input } from '@/components/ui/input'
+import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
 import {
   beginConnect,
+  getConnectionDirectory,
   getConnectRuntime,
   listConnections,
   listProviders,
@@ -59,6 +70,22 @@ import {
 import { setConnectionOwnership } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
+
+/**
+ * WP456-T6：「常用」那几样（示意稿 6 的顺序）——店铺、邮箱、Google 三件、Meta 广告。
+ * 目录里一个都不认得（第三方装的、测试夹具）时退回目录的前六个。
+ */
+export const COMMON_SERVICES = ['shopify_admin', 'imap_smtp', 'gmail', 'ga4', 'gsc', 'meta_ads']
+const COMMON_FALLBACK = 6
+
+/** 搜索：名字、service id、那一行说明、问号里那一句，空格隔开的每个词都要有。 */
+function providerMatches(p: ProviderView, q: string, t: (key: string) => string): boolean {
+  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return true
+  const line = t(`connections.line.${p.service}`)
+  const hay = [p.label, p.service, providerSub(p.service, t) ?? '', line].join(' ').toLowerCase()
+  return terms.every((term) => hay.includes(term))
+}
 
 /** OAuth 轮询：2 秒一次，最多 5 分钟。 */
 const POLL_MS = 2000
@@ -87,6 +114,9 @@ export function ConnectionsPage({
   const client = useQueryClient()
   const [params, setParams] = useSearchParams()
   const highlight = params.get('service')
+  /** WP456-T6：顶上那一个搜索框、底下「看全部」展没展开。 */
+  const [query, setQuery] = useState('')
+  const [showAll, setShowAll] = useState(false)
 
   const [wizard, setWizard] = useState<Wizard | null>(null)
   const [results, setResults] = useState<Record<string, ConnectTestResult>>({})
@@ -121,6 +151,12 @@ export function ConnectionsPage({
     queryKey: ['connections', asId],
     enabled: ready,
     queryFn: () => listConnections(asId),
+  })
+  // WP456-T6：「看全部 N 个」要数目录里列表没有的那几条（同一份缓存，展开后目录那块直接用）
+  const directory = useQuery({
+    queryKey: ['connection-directory', asId],
+    enabled: ready,
+    queryFn: () => getConnectionDirectory(asId),
   })
 
   const refresh = useCallback((): void => {
@@ -298,7 +334,7 @@ export function ConnectionsPage({
     },
   })
 
-  if (pending) return <Skeleton className="h-96 w-full" />
+  if (pending) return <SkeletonList rows={6} check={false} />
   if (!ready) {
     // 不是所有者：老实说清楚，而不是给一页 403
     return (
@@ -308,27 +344,67 @@ export function ConnectionsPage({
     )
   }
   if (runtime.isPending || providers.isPending || connections.isPending) {
-    return <Skeleton className="h-96 w-full" />
+    return <SkeletonList rows={6} check={false} />
   }
 
   const rows = connections.data?.connections ?? []
   const catalog = providers.data?.providers ?? []
+  const catalogServices = new Set(catalog.map((p) => p.service))
+  const searching = query.trim() !== ''
+  /** 目录里列表没有的那几条（还没做的、去别的页接的、自定义 MCP）。 */
+  const extras = (directory.data?.entries ?? []).filter((e) => !inCatalog(e, catalogServices))
+  const known = catalog.filter((p) => COMMON_SERVICES.includes(p.service))
+  const common = new Set(
+    (known.length > 0 ? known : catalog.slice(0, COMMON_FALLBACK)).map((p) => p.service),
+  )
+  /** 「常用」之外也要露出来的：跳过来要高亮的、正在填表 / 等授权的、刚出了试连结果的。 */
+  const pinned = new Set([
+    ...(highlight === null ? [] : [highlight]),
+    ...(wizard === null ? [] : [wizard.service]),
+    ...Object.keys(results),
+  ])
+  const listed = searching
+    ? catalog.filter((p) => providerMatches(p, query, t))
+    : showAll
+      ? catalog
+      : catalog.filter((p) => common.has(p.service) || pinned.has(p.service))
+  const total = catalog.length + extras.length
+  const extraHits = searching ? extras.filter((e) => directoryMatches(e, query)).length : 0
 
   return (
     <div className="flex flex-col gap-6" data-testid="connections-page">
-      <header className="flex flex-col gap-1">
-        {embedded ? null : (
-          <>
-            <h2 className="flex items-center gap-2 text-base font-semibold">
-              <Link2 className="size-4" aria-hidden />
-              {t('connections.title')}
-            </h2>
-            <p className="text-sm text-muted-foreground">{t('connections.subtitle')}</p>
-          </>
-        )}
-        {/* WP66（52 O1）：连接按品牌各一份——多品牌时说一句这一页管的是谁 */}
+      {embedded ? (
+        // WP66（52 O1）：连接按品牌各一份——多品牌时说一句这一页管的是谁
         <BrandScopeNote testId="connections-brand-scope" />
-      </header>
+      ) : (
+        <header className="flex flex-col gap-1">
+          <h2 className="flex items-center gap-2 text-ws-title font-semibold">
+            <Link2 className="size-4" aria-hidden />
+            {t('connections.title')}
+          </h2>
+          <p className="text-ws-ui text-ws-muted-fg">{t('connections.subtitle')}</p>
+          <BrandScopeNote testId="connections-brand-scope" />
+        </header>
+      )}
+
+      {/* WP456-T6：顶上一个搜索框——搜的是下面整张列表（连同「看全部」里的目录） */}
+      <div className="relative">
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ws-faint"
+        />
+        <Input
+          type="search"
+          value={query}
+          className="pl-9"
+          data-testid="connections-search"
+          aria-label={t('connections.search')}
+          placeholder={t('connections.search')}
+          onChange={(e) => {
+            setQuery(e.target.value)
+          }}
+        />
+      </div>
 
       {/* WP416（自查 kol U18）：「开发替身」只在 demo / 开发时出现，对用户没有意义——不出这一行 */}
       {runtime.data === undefined || runtime.data.state === 'stand_in' ? null : (
@@ -345,137 +421,193 @@ export function ConnectionsPage({
         }}
       />
 
-      <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium">{t('connections.connected')}</h3>
-        {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground" data-testid="connections-empty">
-            {t('connections.empty')}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {rows.map((c) => (
-              <ConnectedRow
-                key={c.id}
-                connection={c}
-                busy={busyId?.id === c.id ? busyId.kind : undefined}
-                onTest={() => {
-                  setBusyId({ id: c.id, kind: 'test' })
-                  runTest.mutate(c.id)
-                }}
-                onDisconnect={() => {
-                  // WP252：「请重新连接」那一行只是提醒，收起它什么都不删，不用确认
-                  if (
-                    c.brand_conflict?.kind !== 'reconnect' &&
-                    !globalThis.confirm(t('connections.disconnect.confirm'))
-                  )
-                    return
-                  setBusyId({ id: c.id, kind: 'remove' })
-                  disconnect.mutate(c.id)
-                }}
-                assignment={asId}
-                {...(mode === 'peers'
-                  ? {
-                      onPersonal: (personal: boolean) => {
-                        ownership.mutate({ id: c.id, personal })
-                      },
-                    }
-                  : {})}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+      {searching ? null : (
+        <section className="flex flex-col gap-2" data-testid="connections-connected">
+          <SectionHeader as="h3" title={t('connections.connected')} count={rows.length} />
+          <ListGroup as="ul">
+            {rows.length === 0 ? (
+              <li className="ws-row">
+                <EmptyState
+                  icon={Plug}
+                  text={t('connections.empty')}
+                  data-testid="connections-empty"
+                />
+              </li>
+            ) : (
+              rows.map((c) => (
+                <ConnectedRow
+                  key={c.id}
+                  connection={c}
+                  busy={busyId?.id === c.id ? busyId.kind : undefined}
+                  onTest={() => {
+                    setBusyId({ id: c.id, kind: 'test' })
+                    runTest.mutate(c.id)
+                  }}
+                  onDisconnect={() => {
+                    // WP252：「请重新连接」那一行只是提醒，收起它什么都不删，不用确认
+                    if (
+                      c.brand_conflict?.kind !== 'reconnect' &&
+                      !globalThis.confirm(t('connections.disconnect.confirm'))
+                    )
+                      return
+                    setBusyId({ id: c.id, kind: 'remove' })
+                    disconnect.mutate(c.id)
+                  }}
+                  assignment={asId}
+                  {...(mode === 'peers'
+                    ? {
+                        onPersonal: (personal: boolean) => {
+                          ownership.mutate({ id: c.id, personal })
+                        },
+                      }
+                    : {})}
+                />
+              ))
+            )}
+          </ListGroup>
+        </section>
+      )}
 
       {/*
         WP216：建站平台的官方 CLI（Shopify 品牌才有；别的平台服务端回 kit: null，这里什么都不画）。
         排在已连接下面：它和「已连接」是同一类问题——这台电脑上的工具接好了没有。
       */}
-      {ownerId === undefined ? null : <PlatformCliCard assignment={asId} />}
+      {ownerId === undefined || searching ? null : <PlatformCliCard assignment={asId} />}
+
+      <section className="flex flex-col gap-2" data-testid="connections-available">
+        {/* WP210：安全承诺（密码只输在对方网站上 / 表单不经 AI）在这里说一次，行上一句不留 */}
+        <SectionHeader
+          as="h3"
+          title={
+            <>
+              {searching
+                ? t('connections.found')
+                : showAll
+                  ? t('connections.all.title')
+                  : t('connections.common')}
+              <Hint text={t('connections.available.hint')} testId="connections-available-hint" />
+            </>
+          }
+          {...(searching ? { count: listed.length + extraHits } : {})}
+        />
+        {listed.length === 0 ? (
+          extraHits > 0 ? null : (
+            <ListGroup>
+              <div className="ws-row">
+                <EmptyState
+                  icon={Search}
+                  text={t('connections.directory.no_match')}
+                  data-testid="connections-no-match"
+                />
+              </div>
+            </ListGroup>
+          )
+        ) : (
+          <ListGroup data-testid="connections-list">
+            {listed.map((p) => (
+              <ProviderCard
+                key={p.service}
+                provider={p}
+                highlighted={highlight === p.service}
+                connected={rows.some((c) => c.service === p.service)}
+                phase={wizard?.service === p.service ? wizard.phase : 'idle'}
+                fields={wizard?.service === p.service ? wizard.fields : undefined}
+                result={results[p.service]}
+                assignment={asId}
+                oauthUrl={wizard?.service === p.service ? wizard.authorization_url : undefined}
+                {...(p.service === 'shopify_admin'
+                  ? {
+                      oneClick: (
+                        <ShopifyConnect
+                          {...(asId === undefined ? {} : { assignment: asId })}
+                          onChanged={refresh}
+                        />
+                      ),
+                      advancedLabel: t('shopconnect.advanced'),
+                      advancedNote: t('shopconnect.advanced.note'),
+                    }
+                  : p.service === 'google_alerts'
+                    ? // WP386：Google Alerts 能放很多条（信息监控）：汇总一句 + 每条状态 + 贴 RSS
+                      { oneClick: <PrWatchCard /> }
+                    : {})}
+                onStart={(auth_option) => {
+                  setResults((prev) => {
+                    const { [p.service]: _dropped, ...rest } = prev
+                    return rest
+                  })
+                  // 开始向导就把高亮撤掉，免得跳转来的高亮一直挂着
+                  if (highlight !== null) setParams({}, { replace: true })
+                  // WP247：要连接器、它还没就绪——没下载（或下载失败）先问一句；在下 / 在起就排个队
+                  const local = runtime.data?.local
+                  if (
+                    p.needs_download === true &&
+                    local !== undefined &&
+                    local.status !== 'ready'
+                  ) {
+                    const idle =
+                      local.status === 'not_installed' ||
+                      (local.status === 'error' && local.installed === undefined)
+                    setPendingConnect({
+                      service: p.service,
+                      label: p.label,
+                      ...(auth_option === undefined ? {} : { auth_option }),
+                      confirm: idle,
+                    })
+                    if (!idle && (local.status === 'stopped' || local.status === 'error'))
+                      localConnector.mutate('restart')
+                    return
+                  }
+                  begin.mutate({
+                    service: p.service,
+                    ...(auth_option === undefined ? {} : { auth_option }),
+                  })
+                }}
+                onCancel={() => {
+                  stopPolling()
+                  setWizard(null)
+                }}
+                onSubmit={(values) => {
+                  setWizard((w) => (w === null ? w : { ...w, phase: 'saving' }))
+                  submit.mutate({
+                    service: p.service,
+                    ...(wizard?.request_id === undefined ? {} : { request_id: wizard.request_id }),
+                    ...(wizard?.auth_option === undefined
+                      ? {}
+                      : { auth_option: wizard.auth_option }),
+                    values,
+                  })
+                }}
+              />
+            ))}
+          </ListGroup>
+        )}
+      </section>
 
       {/*
-        WP83（54 §4）：目录二十多条，多数人一辈子只连三四个——所以它默认收起、
-        带搜索、按分类分组，而不是铺在首屏把已连的那几条挤下去。
+        WP83（54 §4）：目录二十多条，多数人一辈子只连三四个——默认不铺。WP456-T6：搜索时、「看全部」之后
+        才出，只列上面那张列表里没有的几条（同一个搜索框管着）。
       */}
-      <ConnectionDirectorySection {...(asId === undefined ? {} : { assignment: asId })} />
-
-      <section className="flex flex-col gap-2">
-        {/* WP210：安全承诺（密码只输在对方网站上 / 表单不经 AI）在这里说一次，卡上一句不留 */}
-        <h3 className="flex items-center gap-1.5 text-sm font-medium">
-          {t('connections.available')}
-          <Hint text={t('connections.available.hint')} testId="connections-available-hint" />
-        </h3>
-        <div className="grid gap-3 lg:grid-cols-2">
-          {catalog.map((p) => (
-            <ProviderCard
-              key={p.service}
-              provider={p}
-              highlighted={highlight === p.service}
-              connected={rows.some((c) => c.service === p.service)}
-              phase={wizard?.service === p.service ? wizard.phase : 'idle'}
-              fields={wizard?.service === p.service ? wizard.fields : undefined}
-              result={results[p.service]}
-              assignment={asId}
-              oauthUrl={wizard?.service === p.service ? wizard.authorization_url : undefined}
-              {...(p.service === 'shopify_admin'
-                ? {
-                    oneClick: (
-                      <ShopifyConnect
-                        {...(asId === undefined ? {} : { assignment: asId })}
-                        onChanged={refresh}
-                      />
-                    ),
-                    advancedLabel: t('shopconnect.advanced'),
-                    advancedNote: t('shopconnect.advanced.note'),
-                  }
-                : p.service === 'google_alerts'
-                  ? // WP386：Google Alerts 能放很多条（信息监控）：汇总一句 + 每条状态 + 贴 RSS
-                    { oneClick: <PrWatchCard /> }
-                  : {})}
-              onStart={(auth_option) => {
-                setResults((prev) => {
-                  const { [p.service]: _dropped, ...rest } = prev
-                  return rest
-                })
-                // 开始向导就把高亮撤掉，免得跳转来的高亮一直挂着
-                if (highlight !== null) setParams({}, { replace: true })
-                // WP247：要连接器、它还没就绪——没下载（或下载失败）先问一句；在下 / 在起就排个队
-                const local = runtime.data?.local
-                if (p.needs_download === true && local !== undefined && local.status !== 'ready') {
-                  const idle =
-                    local.status === 'not_installed' ||
-                    (local.status === 'error' && local.installed === undefined)
-                  setPendingConnect({
-                    service: p.service,
-                    label: p.label,
-                    ...(auth_option === undefined ? {} : { auth_option }),
-                    confirm: idle,
-                  })
-                  if (!idle && (local.status === 'stopped' || local.status === 'error'))
-                    localConnector.mutate('restart')
-                  return
-                }
-                begin.mutate({
-                  service: p.service,
-                  ...(auth_option === undefined ? {} : { auth_option }),
-                })
-              }}
-              onCancel={() => {
-                stopPolling()
-                setWizard(null)
-              }}
-              onSubmit={(values) => {
-                setWizard((w) => (w === null ? w : { ...w, phase: 'saving' }))
-                submit.mutate({
-                  service: p.service,
-                  ...(wizard?.request_id === undefined ? {} : { request_id: wizard.request_id }),
-                  ...(wizard?.auth_option === undefined ? {} : { auth_option: wizard.auth_option }),
-                  values,
-                })
-              }}
-            />
-          ))}
+      {searching || showAll ? (
+        <ConnectionDirectorySection
+          {...(asId === undefined ? {} : { assignment: asId })}
+          embedded={{ query, catalog: catalogServices }}
+        />
+      ) : null}
+      {searching || (!showAll && total <= listed.length) ? null : (
+        <div>
+          <button
+            type="button"
+            className="ws-link-muted text-ws-ui"
+            aria-expanded={showAll}
+            data-testid="connections-show-all"
+            onClick={() => {
+              setShowAll((v) => !v)
+            }}
+          >
+            {showAll ? t('connections.all.less') : t('connections.all', { n: total })}
+          </button>
         </div>
-      </section>
+      )}
 
       {/* WP155（docs/81）：SEO / GEO 用的搜索数据从哪来 */}
       {ownerId === undefined || embedded ? null : <SearchDataSection assignment={asId} />}

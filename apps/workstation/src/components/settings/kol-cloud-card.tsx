@@ -163,8 +163,8 @@ export function KolCloudCard({
           // 欠费与暂停是"要用户做点什么"，所以给颜色；生效中不用喊
           className={
             state === 'grace' || state === 'suspended'
-              ? 'rounded bg-ws-warn-bg px-1.5 py-0.5 text-xs text-ws-warn'
-              : 'rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground'
+              ? 'rounded-sm bg-ws-warn-bg px-1.5 py-0.5 text-xs text-ws-warn'
+              : 'rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground'
           }
         >
           {t(`kol_cloud.state.${state}`)}
@@ -368,7 +368,7 @@ export function KolCloudCard({
                     {conflicts.map((c) => (
                       <li
                         key={`${c.kind}:${c.id}:${c.at}`}
-                        className="flex flex-wrap items-center gap-1.5 rounded border p-1.5 text-xs"
+                        className="flex flex-wrap items-center gap-1.5 rounded-sm border p-1.5 text-xs"
                         data-testid="kol-cloud-conflict"
                         data-kind={c.kind}
                       >
