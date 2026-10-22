@@ -61,9 +61,12 @@
 | `app_version` | 工坊版本 | `0.2.1-beta.5` |
 | `shell` | 在哪儿跑：桌面版 / 浏览器 / 本机服务 | `desktop` · `web` · `server` |
 | `lang` | 界面语言 | `zh` · `en` |
+| `market_region` | 市场地区：界面是中文就带 `CN`，以它为准；不是中文就不带，地区交给 PostHog 按 IP 算（IP 本身不存） | `CN` |
 | `mode` | 使用模式 | `solo` · `peers` · `company` |
 | `install_id` | 匿名设备号 | `ins_3f9a…` |
 | `account_id` | 工坊云账号编号（登录了才有） | `org_…` |
+
+本机服务自己发的事件（任务收尾、卡片决定）不知道界面语言，用的是工作台最近一次转过来的 `lang`，`market_region` 同样按它算。
 
 另外留着 SDK 自带的几样：操作系统、浏览器大类、设备类型、屏幕 / 窗口尺寸、会话编号、SDK 版本。
 

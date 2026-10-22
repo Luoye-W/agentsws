@@ -564,3 +564,59 @@ describe('WP476 服务进程里装好了', () => {
     assertClean(batches.map((b) => b.body))
   })
 })
+
+describe('决策 1600：market_region 只按界面语言算', () => {
+  type Batch = { batch: { event: string; properties: Record<string, unknown> }[] }
+  const parse = (body: string | undefined): Batch => JSON.parse(body ?? '{}') as Batch
+
+  it('工作台转来的：中文 → CN；英文 → 不带（自己带了 CN 也拿掉）', async () => {
+    const f = fakeFetch()
+    const t = make(f.fn)
+    const body = JSON.stringify([
+      sdkEvent('app_opened', { lang: 'zh' }),
+      sdkEvent('app_opened', { lang: 'en', market_region: 'CN' }),
+      sdkEvent('app_opened', { lang: 'zh', market_region: 'US' }),
+    ])
+    await t.ingest({ kind: 'e', query: '', body: bytes(body) })
+    const [batch] = f.batches()
+    assertClean([batch?.body])
+    expect(
+      parse(batch?.body).batch.map((e) => [e.properties.lang, e.properties.market_region]),
+    ).toEqual([
+      ['zh', 'CN'],
+      ['en', undefined],
+      ['zh', 'CN'],
+    ])
+  })
+
+  it('服务进程自己的事件：跟着工作台最近一次的语言；还没收到过就两样都不带', async () => {
+    const f = fakeFetch()
+    const t = make(f.fn)
+    t.onCardDecided({ kind: 'outbound_draft', state: 'approved' })
+    await t.flush()
+    await t.ingest({
+      kind: 'e',
+      query: '',
+      body: bytes(JSON.stringify([sdkEvent('app_opened', { lang: 'zh' })])),
+    })
+    t.onCardDecided({ kind: 'outbound_draft', state: 'approved' })
+    await t.flush()
+    await t.ingest({
+      kind: 'e',
+      query: '',
+      body: bytes(JSON.stringify([sdkEvent('app_opened', { lang: 'en' })])),
+    })
+    t.onCardDecided({ kind: 'outbound_draft', state: 'approved' })
+    await t.flush()
+    const cards = f
+      .batches()
+      .flatMap((b) => parse(b.body).batch)
+      .filter((e) => e.event === 'card_decided')
+      .map((e) => [e.properties.lang, e.properties.market_region])
+    expect(cards).toEqual([
+      [undefined, undefined],
+      ['zh', 'CN'],
+      ['en', undefined],
+    ])
+  })
+})

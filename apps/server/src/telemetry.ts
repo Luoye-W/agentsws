@@ -34,6 +34,7 @@ import {
   type TelemetryView,
   telemetryCacheTier,
   telemetryCostTier,
+  telemetryMarketRegion,
 } from '@agentsws/contracts'
 
 export type { TelemetryIngest, TelemetryIngestReply, TelemetryPatch, TelemetryView }
@@ -232,12 +233,23 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
     uuid?: string
   }
   let queue: Queued[] = []
+  /**
+   * 决策 1600：服务进程自己不知道界面语言，用工作台最近一次转过来的 `lang`（只在内存里）；
+   * `market_region` 照同一条规矩由它算（中文 → CN，别的不带）。
+   */
+  let lastLang: string | undefined
+  const regionProps = (lang: unknown): Record<string, string> => {
+    if (typeof lang !== 'string') return {}
+    const region = telemetryMarketRegion(lang)
+    return region === undefined ? { lang } : { lang, market_region: region }
+  }
 
   const capture = (event: TelemetryEventName, props: Record<string, unknown>): void => {
     if (!configured || !stored.enabled) return
     const account = options.accountId?.()
     const clean = sanitizeTelemetryProps(event, {
       ...props,
+      ...regionProps(lastLang),
       shell: 'server',
       install_id: stored.install_id,
       ...(options.appVersion === undefined ? {} : { app_version: options.appVersion }),
@@ -397,9 +409,12 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
           snapshots.push({ event: item.event, properties: { ...clean, token: cfg.key } })
           continue
         }
+        // 决策 1600：market_region 只按 lang 算（中文 → CN，别的拿掉），不信工作台自己带的
+        const { market_region: _given, ...rest } = clean
+        if (typeof clean.lang === 'string') lastLang = clean.lang
         events.push({
           event: item.event,
-          properties: clean,
+          properties: { ...rest, ...regionProps(clean.lang) },
           timestamp: item.timestamp ?? options.now(),
           ...(item.uuid === undefined ? {} : { uuid: item.uuid }),
         })

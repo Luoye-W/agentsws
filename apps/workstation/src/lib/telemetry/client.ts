@@ -18,7 +18,9 @@
 import {
   sanitizeTelemetryProps,
   type TelemetryEventName,
+  type TelemetryMarketRegion,
   type TelemetryView,
+  telemetryMarketRegion,
 } from '@agentsws/contracts'
 import type { CaptureResult, PostHog, PostHogConfig } from 'posthog-js/dist/module.no-external'
 import { routeTemplate } from './routes'
@@ -31,6 +33,8 @@ export interface TelemetrySuper {
   app_version?: string
   shell: 'desktop' | 'web'
   lang: 'zh' | 'en'
+  /** 决策 1600：界面中文 → `CN`（以它为准）；不是中文不带，地区交给 PostHog 按 IP 算。由 `lang` 推出，不用传。 */
+  market_region?: TelemetryMarketRegion
   mode?: 'solo' | 'peers' | 'company'
   install_id: string
   account_id?: string
@@ -145,7 +149,7 @@ function superProps(sup: TelemetrySuper): Record<string, string> {
  */
 export async function applyTelemetry(
   view: TelemetryView | undefined,
-  sup: Omit<TelemetrySuper, 'install_id' | 'account_id'>,
+  sup: Omit<TelemetrySuper, 'install_id' | 'account_id' | 'market_region'>,
   load: () => Promise<PostHogModule> = () => import('posthog-js/dist/module.no-external'),
 ): Promise<void> {
   const client = view?.active === true ? view.client : undefined
@@ -153,8 +157,10 @@ export async function applyTelemetry(
     stopTelemetry()
     return
   }
+  const region = telemetryMarketRegion(sup.lang)
   const full: TelemetrySuper = {
     ...sup,
+    ...(region === undefined ? {} : { market_region: region }),
     install_id: view.install_id,
     ...(view.account_id === undefined ? {} : { account_id: view.account_id }),
   }
@@ -162,6 +168,8 @@ export async function applyTelemetry(
     // 已经加载过（可能中途关过又开了）：接着发，更新公共属性（换了语言 / 关联了账号）
     state = true
     ph.register(superProps(full))
+    // 中文换成别的语言：之前注册的 market_region 要拿掉（register 只加不减）
+    if (region === undefined) ph.unregister('market_region')
     return
   }
   starting ??= (async () => {

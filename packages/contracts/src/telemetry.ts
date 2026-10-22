@@ -187,11 +187,27 @@ export const TELEMETRY_EVENTS = {
 
 export type TelemetryEventName = keyof typeof TELEMETRY_EVENTS
 
+export const TELEMETRY_MARKET_REGIONS = ['CN'] as const
+export type TelemetryMarketRegion = (typeof TELEMETRY_MARKET_REGIONS)[number]
+
+/**
+ * 决策 1600：界面语言 → `market_region`。中文（`zh`、`zh-CN`、`zh-Hans`…）→ `'CN'`；别的 → `undefined`（不带，
+ * 让 PostHog 按 IP 定地区）。工作台注册公共属性、服务进程发自己的事件，都用这一处。
+ */
+export function telemetryMarketRegion(lang: string | undefined): TelemetryMarketRegion | undefined {
+  return lang !== undefined && /^zh(?:[-_]|$)/i.test(lang) ? 'CN' : undefined
+}
+
 /** 每个事件都能带的公共属性（工作台注册成 super property；服务进程每条都带）。 */
 export const TELEMETRY_COMMON_PROPS = {
   app_version: { kind: 'version' },
   shell: { kind: 'enum', values: ['desktop', 'web', 'server'] },
   lang: { kind: 'enum', values: ['zh', 'en'] },
+  /**
+   * 决策 1600：界面是中文（`zh*`）就当中国用户，带 `market_region: 'CN'`，以它为准；
+   * 不是中文就**不带**，地区交给 PostHog 按 IP 算（PostHog 里开着 Discard client IP data）。只有 `CN` 一个值。
+   */
+  market_region: { kind: 'enum', values: TELEMETRY_MARKET_REGIONS },
   mode: { kind: 'enum', values: ['solo', 'peers', 'company'] },
   /** 这台机器上工坊的匿名设备号（服务进程生成，与任何账号无关）。 */
   install_id: { kind: 'opaque_id' },

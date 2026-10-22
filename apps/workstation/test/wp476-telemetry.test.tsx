@@ -338,6 +338,50 @@ describe('WP476 没配置就不加载', () => {
   })
 })
 
+describe('决策 1600：界面中文 → market_region CN', () => {
+  it('中文：公共属性里带 CN；英文：不带；中文换成英文：拿掉', async () => {
+    _resetTelemetry()
+    const registered: Record<string, unknown>[] = []
+    const fake = {
+      init: vi.fn((_key: string, cfg: { loaded?: (i: unknown) => void }) => {
+        cfg.loaded?.(fake)
+      }),
+      register: vi.fn((p: Record<string, unknown>) => {
+        registered.push(p)
+      }),
+      unregister: vi.fn(),
+      capture: vi.fn(),
+    }
+    const load = vi.fn(async () => ({ posthog: fake }) as never)
+    await applyTelemetry(ACTIVE, SUPER, load)
+    expect(registered.at(-1)).toMatchObject({ lang: 'zh', market_region: 'CN' })
+    expect(fake.unregister).not.toHaveBeenCalled()
+    await applyTelemetry(ACTIVE, { ...SUPER, lang: 'en' }, load)
+    expect(registered.at(-1)).toMatchObject({ lang: 'en' })
+    expect(registered.at(-1)).not.toHaveProperty('market_region')
+    expect(fake.unregister).toHaveBeenCalledWith('market_region')
+
+    _resetTelemetry()
+    registered.length = 0
+    await applyTelemetry(ACTIVE, { ...SUPER, lang: 'en' }, load)
+    expect(registered.at(-1)).toMatchObject({ lang: 'en' })
+    expect(registered.at(-1)).not.toHaveProperty('market_region')
+    _resetTelemetry()
+  })
+
+  it('出门那一关放 CN 过去', () => {
+    const out = beforeSend(
+      {
+        uuid: 'u',
+        event: 'app_opened',
+        properties: { lang: 'zh', market_region: 'CN', token: KEY },
+      } as never,
+      { replay: false },
+    )
+    expect(out?.properties).toMatchObject({ lang: 'zh', market_region: 'CN' })
+  })
+})
+
 describe('WP476 真 SDK：出门的只剩白名单（拦在 before_send 之后，一个请求都不发）', () => {
   it('posthog-js 自己加的属性、业务文字、地址里的参数都出不了门', async () => {
     const storeWrites: string[] = []
