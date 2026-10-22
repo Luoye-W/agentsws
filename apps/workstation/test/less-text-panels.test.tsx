@@ -217,7 +217,7 @@ describe('岗位页', () => {
 })
 
 describe('职责页', () => {
-  it('WP412：页头只有名字，整段 description 在问号里（不露星号）；「⋯」那一页认粗体', async () => {
+  it('WP412 / WP456-T3：页头只有名字，整段 description 在下拉第一行（不露星号）；「⋯」那一页认粗体', async () => {
     renderWithProviders(
       <Routes>
         <Route path="/positions/:assignment/duties/:role_id" element={<DutyPage />} />
@@ -225,11 +225,14 @@ describe('职责页', () => {
       '/positions/asg_site/duties/site.shopify-build',
       'asg_site',
     )
+    // WP456-T3（§3.2）：介绍进了顶栏下拉的第一行（不再是名字旁的问号）；整段在悬停里
+    check('职责页 · 页头', await screen.findByTestId('duty-header'))
+    fireEvent.click(screen.getByTestId('duty-title-menu'))
     const hint = await screen.findByTestId('duty-description')
-    expect(hint.getAttribute('data-hint')).toContain('从零搭一家 Shopify 店')
-    expect(hint.getAttribute('data-hint')).toContain('上线前跑一遍检查单')
-    expect(hint.getAttribute('data-hint')).not.toContain('**')
-    check('职责页 · 页头', screen.getByTestId('duty-header'))
+    expect(hint.getAttribute('title')).toContain('从零搭一家 Shopify 店')
+    expect(hint.getAttribute('title')).toContain('上线前跑一遍检查单')
+    expect(hint.textContent).not.toContain('**')
+    fireEvent.click(screen.getByTestId('duty-title-menu'))
     fireEvent.click(screen.getByTestId('duty-about-link'))
     const line = await screen.findByTestId('duty-line')
     expect(line.textContent).toContain('从零搭一家 Shopify 店')
