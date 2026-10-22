@@ -984,12 +984,15 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
 
   // ── `systemPrompt.context`：每个 ContextItem 一段 + `context.injected` ───
   // WP472（docs/116 §6 A）：与 stub / direct 同一份先后（`orderContextItems`）——每次都变的排在后面；
-  // 哪一层在网关那条边界上按 kind 分（`splitSystemText` → `contextRoleOf`）
-  orderContextItems(request.context).forEach((item, i) => {
+  // 哪一层在网关那条边界上按 kind 分（`splitSystemText` → `contextRoleOf`）。
+  // 先后只由段的 `order` 定；`context.injected` 仍按请求里的先后逐条发（与 stub / direct 一致，
+  // 回放不变量 `prompt_replayable` 按 RunRequest.context 的先后逐条比 item_id）。
+  const orderOf = new Map(orderContextItems(request.context).map((item, i) => [item, i]))
+  request.context.forEach((item) => {
     const name = `${CONTEXT_PREFIX}${item.id}`
     ctx.systemPrompt.context({
       name,
-      order: CONTEXT_ORDER_BASE + i,
+      order: CONTEXT_ORDER_BASE + (orderOf.get(item) ?? 0),
       text: `[${item.kind}:${item.id}]\n${plainText(item.content)}`,
     })
     api.contextNames.push(name)
