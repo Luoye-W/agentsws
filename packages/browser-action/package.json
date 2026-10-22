@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./serp": {
+      "types": "./dist/serp.d.ts",
+      "import": "./dist/serp.js"
     }
   },
   "scripts": {
