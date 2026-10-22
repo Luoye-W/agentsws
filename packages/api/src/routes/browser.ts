@@ -30,7 +30,7 @@ import type {
 } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import { body, ok, param, principalOf } from '../helpers.js'
+import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
@@ -92,7 +92,24 @@ export interface BrowserPort {
    * 服务端不为它多存一张表。没装配时那条路由回 `not_implemented`。
    */
   runBrowser?(actor: BrowserActor, run_id: string): MaybePromise<RunBrowserView>
+  /**
+   * WP468（决策 1478）：**这次运行是哪条分配发起的**（`run.started` 那一条的 `actor.id`）；
+   * 认不出 / 不是这个工作区的 = `undefined`。
+   *
+   * 给上面那条路由的窄放行用：分配上没有 `event_log.read` 的（YouTube 红人这类职责），
+   * 也能看**自己这条分配发起的那次运行**的浏览器汇总——只读、只限自己，别的分配的运行照旧 403。
+   * 不装配 = 不放行（老行为）。
+   */
+  runAssignment?(actor: BrowserActor, run_id: string): MaybePromise<string | undefined>
 }
+
+/** `GET /v1/runs/:id/browser` 的鉴权元组：跟着事件日志走（见路由上的注释）。 */
+const RUN_READ = {
+  domain: 'event_log',
+  op: 'read',
+  range: 'own',
+  sensitivity: 'internal',
+} as const
 
 const SettingsBody = z.object({
   mode: z.enum(['off', 'attach', 'launch', 'browserskill', 'ego']),
@@ -131,7 +148,10 @@ export function browserRoutes(): Route[] {
         assignment: true,
         // 每一格都是从事件日志里算出来的，所以鉴权跟着日志走，不跟着"浏览器设置"走
         // （设置是所有者的事，这一条是干活的人的事）
-        authz: { domain: 'event_log', op: 'read', range: 'own', sensitivity: 'internal' },
+        authz: RUN_READ,
+        // WP468（决策 1478）：判定挪进处理器——没有 `event_log.read` 的分配，**只有这次运行是它自己
+        // 发起的**才放行；要查运行是谁发起的（读事件日志，异步），中间件那一层同步判不了
+        authzBypass: () => true,
         params: [{ name: 'id', in: 'path', required: true, description: 'run_id' }],
         returns: 'RunBrowserView',
       },
@@ -139,7 +159,19 @@ export function browserRoutes(): Route[] {
         const port = portOf(deps)
         if (port.runBrowser === undefined)
           throw new ApiError('not_implemented', '这个服务进程没有装配运行浏览器汇总')
-        return ok(c, await port.runBrowser(actorOf(c), param(c, 'id')))
+        const actor = actorOf(c)
+        const run_id = param(c, 'id')
+        const assignment = assignmentOf(c)
+        const { domain, op, range, sensitivity } = RUN_READ
+        if (!deps.roles.can(assignment.id, domain, op, { range, sensitivity })) {
+          // 只看自己这条分配发起的那次运行（不放宽到别的分配 / 整个工作区）
+          const owner = await port.runAssignment?.(actor, run_id)
+          if (owner === undefined || owner !== assignment.id)
+            throw new ApiError('forbidden', `无权限：${domain}.${op}（range=${range}）`, {
+              details: { assignment_id: assignment.id, domain, op, range, sensitivity },
+            })
+        }
+        return ok(c, await port.runBrowser(actor, run_id))
       },
     ),
     route(

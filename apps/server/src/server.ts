@@ -800,7 +800,7 @@ import {
   roleRulesFileIn,
 } from './role-rules.js'
 import { DEEPSEEK_ACCOUNT_NEED } from './run-blocked.js'
-import { readRunBrowser } from './run-browser.js'
+import { readRunAssignment, readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
 import { repairStuckRuns } from './run-repair.js'
 import {
@@ -15858,6 +15858,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 等不等人接管"，服务端不为它多存一张表（`run-browser.ts`）。
        */
       runBrowser: (actor, run_id) => readRunBrowser(eventLogPort, actor.workspace_id, run_id),
+      // WP468（决策 1478）：这次运行是哪条分配发起的——没有 event_log.read 的分配只能看自己发起的那次
+      runAssignment: (actor, run_id) => readRunAssignment(eventLogPort, actor.workspace_id, run_id),
     },
     /*
      * WP95（36 §11，`sidebar-compare` #11）：一条变更改了哪几个文件、哪几行。
