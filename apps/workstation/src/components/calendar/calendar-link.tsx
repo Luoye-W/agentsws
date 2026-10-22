@@ -15,7 +15,7 @@ export function CalendarLink({ role_id }: { role_id?: string }): React.ReactNode
   const layers = serializeLayers(defaultLayersFor(role_id))
   return (
     <Link
-      to={`/calendar?layers=${layers}${role_id === undefined ? '' : `&role=${encodeURIComponent(role_id)}`}`}
+      to={`/planner?view=calendar&layers=${layers}${role_id === undefined ? '' : `&role=${encodeURIComponent(role_id)}`}`}
       data-testid="calendar-link"
       data-layers={layers}
       className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-ws-hover"

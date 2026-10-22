@@ -36,7 +36,6 @@ import {
   ChevronRight,
   Home,
   Inbox,
-  ListTodo,
   type LucideIcon,
   MessageCircle,
   PanelLeft,
@@ -46,6 +45,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
+import { useOpenTodos } from '@/components/cal-todo/use-todos'
 import { CommandPalette } from '@/components/command-palette'
 import {
   type ConversationActions,
@@ -314,6 +314,14 @@ function InboxCount({ corner = false }: { corner?: boolean }): ReactNode {
   )
 }
 
+/** WP469：「日历与待办」右边那个灰色数字——今天还没做完的待办；没有就不显示。 */
+function TodayTodoCount(): ReactNode {
+  const open = useOpenTodos()
+  const n = (open.data?.todos ?? []).filter((x) => x.horizon === 'today').length
+  if (n === 0) return null
+  return <CountBadge n={n} className="ml-auto" data-testid="nav-cal-todo-count" />
+}
+
 /**
  * WP437：量 `shell-body`（窗口 − 左栏）有多宽，连同窗口宽度一起给看板 / 第三栏算三栏怎么摆（`board-fit.ts`）。
  * 量不到（jsdom 里宽度是 0）时给 0，那边当作放得下。
@@ -422,8 +430,13 @@ function pageNameKey(pathname: string): string | undefined {
   if (pathname === '/') return 'nav.home'
   if (pathname.startsWith('/assistant')) return 'nav.free_chat'
   if (pathname.startsWith('/messages') || pathname.startsWith('/inbox')) return 'nav.messages'
-  if (pathname.startsWith('/todos')) return 'nav.todos'
-  if (pathname.startsWith('/calendar')) return 'nav.calendar'
+  // WP469：待办与日历合成「日历与待办」（老地址转过来，顶栏也写新名字）
+  if (
+    pathname.startsWith('/planner') ||
+    pathname.startsWith('/todos') ||
+    pathname.startsWith('/calendar')
+  )
+    return 'nav.cal_todo'
   return SHELL_PAGES.find((p) => pathname === p.to || pathname.startsWith(`${p.to}/`))?.key
 }
 
@@ -660,10 +673,7 @@ export function AppShell({
                         <InboxCount corner />
                       </span>
                     </IconNavLink>
-                    <IconNavLink to="/todos" label={t('nav.todos')}>
-                      <NavIcon icon={ListTodo} />
-                    </IconNavLink>
-                    <IconNavLink to="/calendar" label={t('nav.calendar')}>
+                    <IconNavLink to="/planner" label={t('nav.cal_todo')} testId="nav-cal-todo">
                       <NavIcon icon={CalendarDays} />
                     </IconNavLink>
                     <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-ws-line" />
@@ -730,14 +740,14 @@ export function AppShell({
               WP351（Luoye 10-16）：左栏不再有「聊天窗」。访客的对话并进「消息」（来源「网站聊天」），
               挂件设置在账号菜单「设置」组的「消息渠道」页（渠道「网站聊天窗」）；老地址跳到消息里，⌘K 两处都搜得到。
             */}
-                    {/* 37 工作模型：待办 / 日历 */}
-                    <NavLink to="/todos" className={navClass}>
-                      <NavIcon icon={ListTodo} />
-                      {t('nav.todos')}
-                    </NavLink>
-                    <NavLink to="/calendar" className={navClass}>
+                    {/*
+              37 工作模型：待办 / 日历。WP469（决策 1521）合成一格「日历与待办」，右边灰色数字是今天没做完的待办
+              （不催，所以不用品牌色——品牌色数字只给收件箱「等你处理」）。
+            */}
+                    <NavLink to="/planner" className={navClass} data-testid="nav-cal-todo">
                       <NavIcon icon={CalendarDays} />
-                      {t('nav.calendar')}
+                      {t('nav.cal_todo')}
+                      <TodayTodoCount />
                     </NavLink>
                     {/* WP207：标题右边一个常显的「+」= 新建岗位（照 Claude 的做法；只有所有者有） */}
                     <div className="flex items-center justify-between px-2 pt-3 pb-1">

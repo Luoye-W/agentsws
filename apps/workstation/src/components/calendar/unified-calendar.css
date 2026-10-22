@@ -369,3 +369,128 @@
   color: var(--ws-brand-ink);
   border-radius: 8px;
 }
+
+/* ── WP469：待办的勾选框、做完的划掉变淡、整块能拖、「帮我排进空档」的虚线块 ── */
+
+/* 标题前那个勾（和清单里同一种：灰框，勾上是品牌色实心带勾） */
+.sx-host .ws-ev-check {
+  display: inline-flex;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  border: 1.5px solid var(--ws-line-strong);
+  border-radius: 3px;
+  background: var(--ws-card);
+  cursor: pointer;
+}
+.sx-host .ws-ev-check:hover {
+  border-color: var(--ws-brand);
+}
+.sx-host .ws-ev-check:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+.sx-host .sx__date-grid-event .ws-ev-check,
+.sx-host .sx__month-grid-event .ws-ev-check {
+  align-self: center;
+  margin-right: 0;
+}
+.sx-host .ws-ev-check[data-done="true"] {
+  border-color: var(--ws-brand);
+  background:
+    var(--ws-brand)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 10px no-repeat;
+}
+
+/* 做完的待办（决策 1524）：划掉、整块变淡，不抢眼 */
+.sx-host .sx__event.ws-ev-is-done {
+  opacity: 0.55;
+}
+.sx-host .ws-ev-done {
+  text-decoration: line-through;
+  color: var(--ws-muted-fg);
+}
+
+/* 能拖的那一块：整块就是把手 */
+.sx-host .ws-ev-drag {
+  display: block;
+  height: 100%;
+  cursor: grab;
+}
+.sx-host .sx__date-grid-event .ws-ev-drag,
+.sx-host .sx__month-grid-event .ws-ev-drag {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+  align-items: center;
+}
+
+/* 「帮我排进空档」的候选：虚线框、淡品牌底，「采用 / 换一个」两颗小钮 */
+.sx-host .sx__event.ws-ghost-ev {
+  border: 1.5px dashed var(--ws-brand);
+  /* biome-ignore lint/complexity/noImportantStyles: 库把底色写在行内样式上 */
+  border-inline-start: 1.5px dashed var(--ws-brand) !important;
+  border-radius: 8px;
+  z-index: 3;
+}
+.sx-host .ws-ghost {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 2px;
+}
+.sx-host .ws-ghost-title {
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sx-host .ws-ghost-time {
+  color: var(--ws-muted-fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* 一小时的块放不下三行：钟点收起来（标题 + 两颗钮），钟点在块的位置上看得出 */
+@container (max-height: 70px) {
+  .sx-host .ws-ghost-time {
+    display: none;
+  }
+}
+.sx-host .ws-ghost-acts {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+.sx-host .ws-ghost-btn {
+  flex: none;
+  height: 22px;
+  padding: 0 7px;
+  white-space: nowrap;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--ws-card);
+  color: var(--ws-ink);
+  cursor: pointer;
+}
+.sx-host .ws-ghost-btn:hover {
+  background: var(--ws-hover);
+}
+.sx-host .ws-ghost-take {
+  background: var(--ws-brand);
+  color: var(--ws-brand-fg);
+  font-weight: 600;
+}
+.sx-host .ws-ghost-take:hover {
+  background: var(--ws-brand);
+  filter: brightness(0.95);
+}
+
+/* 日历在一张卡里、顶上有一条（WP469）：外壳不再自己画卡 */
+.sx-host[data-framed="true"] .sx__calendar-wrapper {
+  border-radius: 0;
+  box-shadow: none;
+}

@@ -1,199 +1,100 @@
 /**
- * 待办箱（37 §2.2 / §2.2b）：backlog / 本周 / 今天三段。
+ * WP469（决策 1521）：「日历与待办」的**清单**那一面（示意稿 `list`）。原来的待办箱改成这一面，
+ * 地址 `/planner?view=list`（老地址 `/todos` 自动转过来，决策 1526）。
  *
- * 每条待办上能做的事，就是 37 §2.2b 那一行：
- * - **打勾 = 完成**（不进事项现场，不导航）
- * - **⋯ = 关闭 / 改期 / 委托**
- * - **点标题 = 进入事项并定位到锚点**（没有事项的待办不给链接，只能打勾）
- * - **拖到日历某天 = 排期**（拖出去的 payload 就是 todo id，日历页接住）
+ * - 页头：左边「清单 / 日历」分段（两面来回切位置不动）+ 今天的日期 + 灰字「今天 3 件 · 本周 5 件」；
+ * - 「记一条待办」认「周五下午」这类说法（`parseQuickTodo`），没写日子就进「本周」、没日子；按 N 跳到这一格；
+ * - 今天 / 本周 / 以后 / 做完的；今天做完的那几行留到当天结束（划掉）；每行右边写清在哪一档；
+ * - 右边三张小卡：今天的安排、还没排期的、目标（1525 甲）。
  *
- * 委托之后这条待办上会显示「N 张卡等你定」——那是 AI 回头问人的卡片回填过来的。
+ * 目标页还在 `?tab=goals`（「全部目标」进这里），同事模式的「我交出去的」在 `?tab=sent`。
+ * 37 §2.2b 那几条照旧：打勾 = 完成不导航；点标题进事项并定位到锚点；能拖到日历上。
  */
 import type { Todo } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, MoreHorizontal } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeft, Plus, Search } from 'lucide-react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { PageHeader } from '@/components/design/kit'
+import { CalTodoHead } from '@/components/cal-todo/cal-todo-head'
+import { GoalsCard, TodaySchedule, UndatedCard } from '@/components/cal-todo/list-side'
+import { TodoRow } from '@/components/cal-todo/todo-row'
+import {
+  useDoneTodos,
+  useOpenTodos,
+  usePositionName,
+  useTodoAct,
+  useTodoRefresh,
+} from '@/components/cal-todo/use-todos'
+import { GroupLabel, ListGroup, NoticeLine, SkeletonList } from '@/components/design'
 import { HandoffDialog } from '@/components/peers/handoff-dialog'
 import { Button } from '@/components/ui/button'
-import { Hint } from '@/components/ui/hint'
-import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
 import { CollisionCard } from '@/components/work/collision-card'
-import {
-  ApiClientError,
-  completeTodo,
-  createTodo,
-  delegateTodo,
-  dropTodo,
-  listTodos,
-  type SimilarCandidate,
-  updateTodo,
-} from '@/lib/api'
+import { ApiClientError, createTodo, type SimilarCandidate } from '@/lib/api'
 import { type HandoffView, listHandoffs, withdrawHandoff } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
+import { groupForList, listCounts, parseQuickTodo, todayTitle } from '@/lib/cal-todo'
+import { apiErrorText } from '@/lib/error-text'
 import { useMode } from '@/lib/mode'
-import { DAY_MS, groupByHorizon, HORIZONS, todoUrl } from '@/lib/work'
-// WP113（63 §1）：目标入口从左栏收进这一页的 tab（`/goals` 路由仍然留着）
 import { GoalsPage } from '@/pages/goals'
 
-export const TODO_DRAG_TYPE = 'application/x-agentsws-todo'
+export { TODO_DRAG_TYPE } from '@/components/cal-todo/todo-row'
 
-function TodoRow({
-  todo,
-  onDone,
-  onDrop,
-  onPostpone,
-  onDelegate,
-  onHandOff,
-  waiting,
-  busy,
-}: {
-  todo: Todo
-  onDone(): void
-  onDrop(): void
-  onPostpone(): void
-  onDelegate(): void
-  /** WP276：「交给同事」（② 里才给）。 */
-  onHandOff?: (() => void) | undefined
-  /** WP276：交出去了、等谁接（「等 林峰 接」）。 */
-  waiting?: string | undefined
-  busy: boolean
-}): React.ReactNode {
-  const { t } = useApp()
-  const [menuOpen, setMenuOpen] = useState(false)
-  const href = todoUrl(todo)
-  return (
-    <li
-      className="flex items-center gap-2 rounded-md border px-2 py-1.5"
-      data-testid="todo-row"
-      data-todo={todo.id}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData(TODO_DRAG_TYPE, todo.id)
-        e.dataTransfer.setData('text/plain', todo.id)
-        e.dataTransfer.effectAllowed = 'move'
-      }}
-    >
-      <input
-        type="checkbox"
-        aria-label={t('todos.done')}
-        data-testid="todo-check"
-        className="size-4 shrink-0 accent-primary"
-        checked={todo.status === 'done'}
-        disabled={busy}
-        onChange={onDone}
-      />
-      {href === undefined ? (
-        <span className="min-w-0 flex-1 truncate text-sm" data-testid="todo-title">
-          {todo.title}
-        </span>
-      ) : (
-        <Link
-          to={href}
-          className="min-w-0 flex-1 truncate text-sm hover:underline"
-          data-testid="todo-title"
-        >
-          {todo.title}
-        </Link>
-      )}
-      {todo.delegate === undefined ? null : (
-        <span
-          className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
-          data-testid="todo-delegated"
-        >
-          <Bot className="size-3" aria-hidden />
-          {t('todos.delegating')}
-        </span>
-      )}
-      {waiting === undefined ? null : (
-        <span className="shrink-0 text-xs text-muted-foreground" data-testid="todo-waiting">
-          {waiting}
-        </span>
-      )}
-      {todo.cards.length === 0 ? null : (
-        <span
-          className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-xs"
-          data-testid="todo-cards"
-        >
-          {t('todos.cards', { count: todo.cards.length })}
-        </span>
-      )}
-      {/*
-        这里用一枚按钮 + 一小段行内菜单，不上 Radix 的浮层：
-        菜单只有三条固定动作，浮层的定位 / 焦点陷阱都用不上，少一层反而更稳。
-      */}
-      <div className="relative shrink-0">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t('todos.menu')}
-          aria-expanded={menuOpen}
-          onClick={() => {
-            setMenuOpen((v) => !v)
-          }}
-        >
-          <MoreHorizontal aria-hidden />
-        </Button>
-        {menuOpen ? (
-          <div
-            role="menu"
-            data-testid="todo-menu"
-            className="absolute right-0 z-10 mt-1 flex min-w-32 flex-col rounded-md border bg-popover p-1 shadow-md"
-          >
-            {(
-              [
-                ['todos.postpone', onPostpone],
-                ['todos.delegate', onDelegate],
-                ...(onHandOff === undefined ? [] : [['handoff.give', onHandOff] as const]),
-                ['todos.close', onDrop],
-              ] as const
-            ).map(([key, action]) => (
-              <button
-                key={key}
-                type="button"
-                role="menuitem"
-                className="rounded px-2 py-1 text-left text-sm hover:bg-accent"
-                onClick={() => {
-                  setMenuOpen(false)
-                  action()
-                }}
-              >
-                {t(key)}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </li>
-  )
+/** 按 N 跳到「记一条待办」（打字时不响应）。 */
+function useKeyToFocus(key: string, target: React.RefObject<HTMLInputElement | null>): void {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() !== key) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      if (el !== null && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/u.test(el.tagName)))
+        return
+      e.preventDefault()
+      target.current?.focus()
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => {
+      globalThis.removeEventListener('keydown', onKey)
+    }
+  }, [key, target])
 }
 
-/**
- * WP113（63 §1）：**目标收进这一页的一个 tab**。
- *
- * 左栏那一格换成「消息」之后，目标需要一个去处。放这儿而不是别处的理由：
- * 待办与目标本来就是同一件事的两端（37 §2.3「目标 → 待办」那条链），
- * 人看完"这周还剩什么"顺手想看一眼"这个月定的数走到哪了"，中间不该隔一次导航。
- *
- * **目标模型一个字没删**：`/goals` 路由留着，⌘K 搜得到，首页那一行也还跳它。
- * 这里只是多开一扇门。tab 记在 URL 的 `?tab=goals` 上——刷新之后还在那一格。
- */
-export function TodosPage(): React.ReactNode {
-  const { t } = useApp()
+export function TodosPage({ switcher }: { switcher?: ReactNode } = {}): ReactNode {
+  const { t, lang } = useApp()
   const { mode } = useMode()
-  const client = useQueryClient()
-  const [title, setTitle] = useState('')
   const [params, setParams] = useSearchParams()
-  // WP276：② 里多一个「我交出去的」
   const tab =
     params.get('tab') === 'goals'
       ? 'goals'
       : params.get('tab') === 'sent' && mode !== 'solo'
         ? 'sent'
         : 'todos'
+  const fresh = params.get('fresh') ?? undefined
+  const open = useOpenTodos()
+  const done = useDoneTodos()
+  const positionName = usePositionName()
+  const refresh = useTodoRefresh()
+  const [error, setError] = useState<string | undefined>()
+  const act = useTodoAct((e) => {
+    setError(apiErrorText(e, t))
+  })
+  const [now, setNow] = useState(() => new Date())
+  // 跨过零点：「今天」那组换一天（做完的那几行收进「做完的」）
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date())
+    }, 60_000)
+    return () => {
+      clearInterval(timer)
+    }
+  }, [])
+  const [title, setTitle] = useState('')
+  const [candidates, setCandidates] = useState<SimilarCandidate[]>([])
+  const [showDone, setShowDone] = useState(false)
+  const [search, setSearch] = useState<string | undefined>()
   const [handing, setHanding] = useState<Todo | undefined>(undefined)
+  const input = useRef<HTMLInputElement>(null)
+  useKeyToFocus('n', input)
+
   const sent = useQuery({
     queryKey: ['handoffs', 'all'],
     queryFn: () => listHandoffs(true),
@@ -206,40 +107,25 @@ export function TodosPage(): React.ReactNode {
     return hit === undefined ? undefined : t('handoff.waiting', { name: hit.to_label })
   }
 
-  const todos = useQuery({
-    queryKey: ['todos'],
-    queryFn: () => listTodos('?status=open,doing,blocked'),
-  })
-
-  const refresh = (): void => {
-    void client.invalidateQueries({ queryKey: ['todos'] })
-    void client.invalidateQueries({ queryKey: ['home'] })
-    void client.invalidateQueries({ queryKey: ['calendar'] })
-  }
-
-  const act = useMutation({
-    mutationFn: async (input: { id: string; op: 'done' | 'drop' | 'postpone' | 'delegate' }) => {
-      if (input.op === 'done') return completeTodo(input.id)
-      if (input.op === 'drop') return dropTodo(input.id)
-      if (input.op === 'delegate') return delegateTodo(input.id)
-      return updateTodo(input.id, { due: new Date(Date.now() + DAY_MS).toISOString() })
-    },
-    onSettled: refresh,
-  })
-
   /**
-   * 建之前先查（40 §3.1）：服务端撞上进行中的相似项就回 409，
-   * 这里把候选接住、出一张选择题卡，而不是把「建不成」丢给用户。
+   * 建之前先查（40 §3.1）：撞上进行中的相似项就回 409，这里把候选接住、出一张选择题卡。
+   * 标题里的「周五下午」先认出来：有钟点就排上，只有日子就给日子，什么都没写就进「本周」。
    */
-  const [candidates, setCandidates] = useState<SimilarCandidate[]>([])
-
   const add = useMutation({
-    mutationFn: (input: {
-      title: string
+    mutationFn: (extra: {
       collision?: 'join' | 'handoff' | 'force'
       collision_target?: string
       distinct_reason?: string
-    }) => createTodo(input),
+    }) => {
+      const quick = parseQuickTodo(title, new Date())
+      return createTodo({
+        title: quick.title,
+        ...(quick.due === undefined ? {} : { due: quick.due }),
+        ...(quick.scheduled === undefined ? {} : { scheduled: quick.scheduled }),
+        ...(quick.horizon === undefined ? {} : { horizon: quick.horizon }),
+        ...extra,
+      })
+    },
     onSuccess: () => {
       setTitle('')
       setCandidates([])
@@ -250,167 +136,271 @@ export function TodosPage(): React.ReactNode {
           ? ((err.details.candidates ?? []) as SimilarCandidate[])
           : []
       setCandidates(hit)
+      if (hit.length === 0) setError(apiErrorText(err, t))
     },
     onSettled: refresh,
   })
 
-  if (todos.isPending) return <Skeleton className="h-64 w-full" />
-  if (todos.error !== null)
-    return (
-      <p role="alert" className="text-sm text-destructive">
-        {t('error.generic')}：{todos.error.message}
-      </p>
+  const openTodos = useMemo(() => open.data?.todos ?? [], [open.data])
+  const doneTodos = useMemo(() => done.data?.todos ?? [], [done.data])
+  const groups = useMemo(() => {
+    const q = search?.trim().toLowerCase() ?? ''
+    const match = (x: Todo): boolean => q === '' || x.title.toLowerCase().includes(q)
+    return groupForList(openTodos.filter(match), doneTodos.filter(match), now)
+  }, [openTodos, doneTodos, now, search])
+  const counts = listCounts(openTodos)
+
+  const back =
+    tab === 'todos' ? null : (
+      <button
+        type="button"
+        className="ws-btn ws-btn-ghost ws-btn-sm"
+        data-testid="todos-tab-todos"
+        onClick={() => {
+          setParams(
+            (prev) => {
+              const p = new URLSearchParams(prev)
+              p.delete('tab')
+              return p
+            },
+            { replace: true },
+          )
+        }}
+      >
+        <ArrowLeft className="size-3.5" aria-hidden />
+        {t('caltodo.back_to_list')}
+      </button>
     )
-
-  const groups = groupByHorizon(todos.data.todos)
-
-  const tabs = (
-    <div className="flex gap-1" role="tablist" data-testid="todos-tabs">
-      {(mode === 'solo'
-        ? (['todos', 'goals'] as const)
-        : (['todos', 'goals', 'sent'] as const)
-      ).map((id) => (
-        <button
-          key={id}
-          type="button"
-          role="tab"
-          aria-selected={tab === id}
-          data-testid={`todos-tab-${id}`}
-          className={
-            tab === id
-              ? 'rounded-[10px] bg-sidebar-accent px-3 py-1.5 text-[13px] font-medium text-sidebar-accent-foreground'
-              : 'rounded-[10px] px-3 py-1.5 text-[13px] text-ws-muted-fg hover:bg-sidebar-accent/60'
-          }
-          onClick={() => {
-            setParams(id === 'todos' ? {} : { tab: id }, { replace: true })
-          }}
-        >
-          {t(id === 'goals' ? 'goals.title' : id === 'sent' ? 'todos.filter.sent' : 'todos.title')}
-        </button>
-      ))}
-    </div>
-  )
 
   if (tab === 'goals')
     return (
       <div className="flex max-w-3xl flex-col gap-4" data-testid="todos">
-        {tabs}
+        <CalTodoHead switcher={switcher} title={t('goals.title')} actions={back} />
         <GoalsPage />
       </div>
     )
 
-  // WP276（docs/95 §4.3 第 5 步）：我交出去的——事项和待办都在，带现在的结果
   if (tab === 'sent')
     return (
       <div className="flex max-w-3xl flex-col gap-4" data-testid="todos">
-        {tabs}
+        <CalTodoHead switcher={switcher} title={t('todos.filter.sent')} actions={back} />
         <SentList items={sent.data?.from_me ?? []} />
       </div>
     )
 
-  return (
-    <div className="flex max-w-3xl flex-col gap-6" data-testid="todos">
-      {tabs}
-      <PageHeader
-        title={
-          <>
-            {t('todos.title')}
-            <Hint text={t('todos.drag_hint')} />
-          </>
-        }
-      />
-
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (title.trim() === '') return
-          add.mutate({ title: title.trim() })
-        }}
-      >
-        <Input
-          value={title}
-          aria-label={t('todos.new')}
-          placeholder={t('todos.new.placeholder')}
-          onChange={(e) => {
-            setTitle(e.target.value)
-          }}
-        />
-        <Button type="submit" size="sm" disabled={title.trim() === ''}>
-          {t('todos.new')}
-        </Button>
-      </form>
-
-      {candidates.length === 0 ? null : (
-        <CollisionCard
-          candidates={candidates}
-          busy={add.isPending}
-          onJoin={(target) => {
-            add.mutate({ title: title.trim(), collision: 'join', collision_target: target.id })
-          }}
-          onHandoff={(target) => {
-            add.mutate({ title: title.trim(), collision: 'handoff', collision_target: target.id })
-          }}
-          onForce={(target, reason) => {
-            add.mutate({
-              title: title.trim(),
-              collision: 'force',
-              collision_target: target.id,
-              distinct_reason: reason,
-            })
-          }}
-          onCancel={() => {
-            setCandidates([])
-          }}
-        />
-      )}
-
-      {HORIZONS.map((horizon) => (
-        <section key={horizon} data-testid={`horizon-${horizon}`}>
-          <h2 className="mb-2 text-sm font-medium">{t(`todos.horizon.${horizon}`)}</h2>
-          {groups[horizon].length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('todos.empty')}</p>
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {groups[horizon].map((todo) => (
-                <TodoRow
-                  key={todo.id}
-                  todo={todo}
-                  busy={act.isPending && act.variables?.id === todo.id}
-                  onDone={() => {
-                    act.mutate({ id: todo.id, op: 'done' })
-                  }}
-                  onDrop={() => {
-                    act.mutate({ id: todo.id, op: 'drop' })
-                  }}
-                  onPostpone={() => {
-                    act.mutate({ id: todo.id, op: 'postpone' })
-                  }}
-                  onDelegate={() => {
-                    act.mutate({ id: todo.id, op: 'delegate' })
-                  }}
-                  {...(mode === 'solo' || todo.handoff?.state === 'offered'
-                    ? {}
-                    : {
-                        onHandOff: () => {
-                          setHanding(todo)
-                        },
-                      })}
-                  waiting={waitingOf(todo)}
-                />
-              ))}
-            </ul>
+  const head = (
+    <CalTodoHead
+      switcher={switcher}
+      testId="todos-head"
+      title={todayTitle(now, lang)}
+      titleTestId="todos-title"
+      sub={t('caltodo.list.sub', counts)}
+      actions={
+        <>
+          {mode === 'solo' ? null : (
+            <Link
+              to="/planner?view=list&tab=sent"
+              className="ws-link-muted text-[13px]"
+              data-testid="todos-tab-sent"
+            >
+              {t('todos.filter.sent')}
+            </Link>
           )}
-        </section>
+          {search === undefined ? (
+            <button
+              type="button"
+              aria-label={t('caltodo.search')}
+              title={t('caltodo.search')}
+              data-testid="todos-search-open"
+              className="grid size-8 place-items-center rounded-md text-ws-muted-fg hover:bg-ws-hover hover:text-ws-ink"
+              onClick={() => {
+                setSearch('')
+              }}
+            >
+              <Search className="size-4" aria-hidden />
+            </button>
+          ) : (
+            <input
+              // biome-ignore lint/a11y/noAutofocus: 点了放大镜就是要找
+              autoFocus
+              value={search}
+              aria-label={t('caltodo.search')}
+              placeholder={t('caltodo.search')}
+              data-testid="todos-search"
+              className="h-8 w-48 rounded-md border border-ws-line bg-ws-card px-2.5 text-[13px]"
+              onChange={(e) => {
+                setSearch(e.target.value)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setSearch(undefined)
+              }}
+              onBlur={() => {
+                if (search === '') setSearch(undefined)
+              }}
+            />
+          )}
+        </>
+      }
+    />
+  )
+
+  const rowsOf = (list: readonly Todo[]): ReactNode => (
+    <ListGroup as="ul">
+      {list.map((todo) => (
+        <TodoRow
+          key={todo.id}
+          todo={todo}
+          now={now}
+          position={positionName(todo.position_id)}
+          busy={act.isPending && act.variables?.id === todo.id}
+          fresh={fresh === todo.id}
+          waiting={waitingOf(todo)}
+          onAct={(op) => {
+            setError(undefined)
+            act.mutate({ id: todo.id, ...op })
+          }}
+          {...(mode === 'solo' || todo.handoff?.state === 'offered'
+            ? {}
+            : {
+                onHandOff: () => {
+                  setHanding(todo)
+                },
+              })}
+        />
       ))}
+    </ListGroup>
+  )
+
+  const section = (key: 'today' | 'week' | 'later', list: readonly Todo[]): ReactNode => (
+    <section
+      key={key}
+      data-testid={`horizon-${key === 'later' ? 'backlog' : key}`}
+      className="flex flex-col gap-2"
+    >
+      <GroupLabel count={list.filter((x) => x.status !== 'done').length}>
+        {t(`caltodo.group.${key}`)}
+      </GroupLabel>
+      {list.length === 0 ? (
+        <p className="px-1 text-[13px] text-ws-faint">{t('caltodo.group.empty')}</p>
+      ) : (
+        rowsOf(list)
+      )}
+    </section>
+  )
+
+  return (
+    <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 pb-16" data-testid="todos">
+      {head}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex min-w-0 flex-col gap-5">
+          <form
+            className="ws-card flex items-center gap-3 px-4 py-2.5"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (title.trim() === '') return
+              setError(undefined)
+              add.mutate({})
+            }}
+          >
+            <Plus className="size-4 shrink-0 text-ws-muted-fg" aria-hidden />
+            <input
+              ref={input}
+              value={title}
+              aria-label={t('todos.new')}
+              placeholder={t('caltodo.new.placeholder')}
+              data-testid="todos-new"
+              className="h-8 min-w-0 flex-1 bg-transparent text-[14px] text-ws-ink outline-none placeholder:text-ws-faint"
+              onChange={(e) => {
+                setTitle(e.target.value)
+              }}
+            />
+            {title.trim() === '' ? (
+              <kbd className="ws-num rounded-md bg-ws-surface px-1.5 text-xs text-ws-muted-fg">
+                N
+              </kbd>
+            ) : (
+              <Button type="submit" size="sm" disabled={add.isPending}>
+                {t('todos.new')}
+              </Button>
+            )}
+          </form>
+
+          {candidates.length === 0 ? null : (
+            <CollisionCard
+              candidates={candidates}
+              busy={add.isPending}
+              onJoin={(target) => {
+                add.mutate({ collision: 'join', collision_target: target.id })
+              }}
+              onHandoff={(target) => {
+                add.mutate({ collision: 'handoff', collision_target: target.id })
+              }}
+              onForce={(target, reason) => {
+                add.mutate({
+                  collision: 'force',
+                  collision_target: target.id,
+                  distinct_reason: reason,
+                })
+              }}
+              onCancel={() => {
+                setCandidates([])
+              }}
+            />
+          )}
+
+          {error === undefined ? null : (
+            <NoticeLine tone="bad" role="alert">
+              {error}
+            </NoticeLine>
+          )}
+
+          {open.isPending ? (
+            <SkeletonList rows={5} />
+          ) : open.error !== null ? (
+            <NoticeLine tone="bad" role="alert">
+              {apiErrorText(open.error, t)}
+            </NoticeLine>
+          ) : (
+            <>
+              {section('today', groups.today)}
+              {section('week', groups.week)}
+              {section('later', groups.later)}
+              <section data-testid="horizon-done" className="flex flex-col gap-2">
+                <GroupLabel count={groups.done.length}>
+                  {t('caltodo.group.done')}
+                  {groups.done.length === 0 ? null : (
+                    <button
+                      type="button"
+                      className="ws-link-muted ml-1 font-normal"
+                      data-testid="todos-done-toggle"
+                      aria-expanded={showDone}
+                      onClick={() => {
+                        setShowDone((v) => !v)
+                      }}
+                    >
+                      {showDone ? t('caltodo.done.hide') : t('caltodo.done.show')}
+                    </button>
+                  )}
+                </GroupLabel>
+                {showDone && groups.done.length > 0 ? rowsOf(groups.done.slice(0, 50)) : null}
+              </section>
+            </>
+          )}
+        </div>
+        <aside className="flex flex-col gap-4" data-testid="todos-side">
+          <TodaySchedule now={now} />
+          <UndatedCard open={openTodos} />
+          <GoalsCard />
+        </aside>
+      </div>
       {handing === undefined ? null : (
         <HandoffDialog
           kind="todo"
           id={handing.id}
           title={handing.title}
           open
-          onOpenChange={(open) => {
-            if (!open) setHanding(undefined)
+          onOpenChange={(o) => {
+            if (!o) setHanding(undefined)
           }}
         />
       )}
@@ -419,7 +409,7 @@ export function TodosPage(): React.ReactNode {
 }
 
 /** WP276：「我交出去的」那一栏——标题 + 现在的结果（等谁接 / 谁接下了 / 退回了），还在等的能撤回。 */
-function SentList({ items }: { items: HandoffView[] }): React.ReactNode {
+function SentList({ items }: { items: HandoffView[] }): ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
   const withdraw = useMutation({
@@ -432,13 +422,9 @@ function SentList({ items }: { items: HandoffView[] }): React.ReactNode {
   if (items.length === 0)
     return <p className="text-sm text-muted-foreground">{t('handoff.sent.empty')}</p>
   return (
-    <ul className="flex flex-col gap-1.5" data-testid="handoff-sent">
+    <ListGroup as="ul" data-testid="handoff-sent">
       {items.map((h) => (
-        <li
-          key={`${h.kind}:${h.id}`}
-          className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm"
-          data-state={h.handoff.state}
-        >
+        <li key={`${h.kind}:${h.id}`} className="ws-row" data-state={h.handoff.state}>
           {h.matter_id === undefined ? (
             <span className="min-w-0 flex-1 truncate">{h.title}</span>
           ) : (
@@ -449,7 +435,7 @@ function SentList({ items }: { items: HandoffView[] }): React.ReactNode {
               {h.title}
             </Link>
           )}
-          <span className="shrink-0 text-xs text-muted-foreground">
+          <span className="shrink-0 text-xs text-ws-muted-fg">
             {t(`handoff.state.${h.handoff.state}`, { name: h.to_label })}
           </span>
           {h.handoff.state !== 'offered' ? null : (
@@ -466,6 +452,6 @@ function SentList({ items }: { items: HandoffView[] }): React.ReactNode {
           )}
         </li>
       ))}
-    </ul>
+    </ListGroup>
   )
 }

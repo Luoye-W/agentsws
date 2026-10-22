@@ -13,6 +13,7 @@ import { AMAZON_LISTING_EN, AMAZON_LISTING_ZH } from './i18n-amazon-listing'
 import { AMAZON_OPS_EN, AMAZON_OPS_ZH } from './i18n-amazon-ops'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
+import { CAL_TODO_EN, CAL_TODO_ZH } from './i18n-cal-todo'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
@@ -9039,6 +9040,8 @@ const TABLES: Record<Lang, Table> = {
     ...MESSAGE_RULES_ZH,
     ...FOLLOW_UP_ZH,
     ...INBOX_ZH,
+    // WP469：日历与待办（待办 + 日历合成一页）
+    ...CAL_TODO_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
@@ -9114,6 +9117,7 @@ const TABLES: Record<Lang, Table> = {
     ...MESSAGE_RULES_EN,
     ...FOLLOW_UP_EN,
     ...INBOX_EN,
+    ...CAL_TODO_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...GOOGLE_ALERTS_EN,

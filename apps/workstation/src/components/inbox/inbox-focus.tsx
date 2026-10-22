@@ -38,12 +38,15 @@ export function InboxFocus({
   items,
   onNotice,
   onList,
+  onTodo,
 }: {
   view: InboxView
   /** 筛过的这一轮（同列表那一份）。 */
   items: readonly InboxItem[]
   onNotice(n: InboxNotice): void
   onList(): void
+  /** WP469：按 T 把这一张记成待办（记完翻到下一张） */
+  onTodo?: (item: InboxItem) => void
 }): ReactNode {
   const { t, lang } = useApp()
   const box = useRef<HTMLElement | null>(null)
@@ -99,6 +102,12 @@ export function InboxFocus({
       skip()
       return
     }
+    if ((e.key === 't' || e.key === 'T') && onTodo !== undefined && item !== undefined) {
+      e.preventDefault()
+      onTodo(item)
+      skip()
+      return
+    }
     const targets = KEY_TARGETS[e.key.toLowerCase()]
     if (targets === undefined) return
     const card = box.current?.querySelector('[data-testid="inbox-focus-card"]')
@@ -127,7 +136,7 @@ export function InboxFocus({
       tabIndex={0}
       data-testid="inbox-focus"
       aria-label={t('inbox.mode.focus')}
-      aria-keyshortcuts="A E D ArrowRight"
+      aria-keyshortcuts="A E D T ArrowRight"
       onKeyDown={onKeyDown}
       className="flex min-w-0 flex-col gap-3 rounded-[16px] outline-none"
     >
@@ -245,6 +254,12 @@ export function InboxFocus({
                 <kbd className="ws-num rounded-[6px] bg-ws-surface px-1.5 py-0.5">D</kbd>{' '}
                 {t('inbox.menu.reject')}
               </span>
+              {onTodo === undefined ? null : (
+                <span>
+                  <kbd className="ws-num rounded-[6px] bg-ws-surface px-1.5 py-0.5">T</kbd>{' '}
+                  {t('inbox.menu.todo')}
+                </span>
+              )}
               <span>
                 <kbd className="ws-num rounded-[6px] bg-ws-surface px-1.5 py-0.5">→</kbd>{' '}
                 {t('inbox.focus.skip')}

@@ -10,11 +10,13 @@
  * 「全部信」是原来的原件档案（`?view=all`），网站聊天是 `?source=chat`，都还是 `MessagesPage`
  * （`MessagesRoute` 在 `messages.tsx` 里按地址挑）。
  */
+import type { Todo } from '@agentsws/contracts'
 import type { InboxFilter, InboxItem, InboxUrgency } from '@agentsws/deck'
 import { filterInbox, INBOX_URGENCY_ORDER } from '@agentsws/deck'
 import { Mail } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { isTypingTarget } from '@/components/deck/deck-gestures'
 import { NoticeLine, PageHeader, Segmented, SkeletonList } from '@/components/design'
 import { type InboxNotice, InboxToast, useInboxActions } from '@/components/inbox/inbox-actions'
 import { InboxFocus } from '@/components/inbox/inbox-focus'
@@ -26,8 +28,9 @@ import {
   useInboxOpen,
 } from '@/components/inbox/inbox-model'
 import { InboxPane } from '@/components/inbox/inbox-pane'
-import { InboxRow } from '@/components/inbox/inbox-row'
+import { InboxRow, type RowAct } from '@/components/inbox/inbox-row'
 import { InboxBrief, InboxEmpty, InboxFilterBar, InboxSide } from '@/components/inbox/inbox-side'
+import { RecordedRow, useInboxTodo } from '@/components/inbox/inbox-todo'
 import { MessageRulesButton } from '@/components/messages/rules-button'
 import { closeRightPane, currentPane, openRightPane } from '@/components/rail/right-pane'
 import { useApp } from '@/lib/app-context'
@@ -64,7 +67,13 @@ export function InboxPage(): ReactNode {
     setLocal(undefined)
     pushInboxNotice(undefined)
   }, [])
-  const { act, busy } = useInboxActions(say)
+  const { act: rowAct, busy } = useInboxActions(say)
+  // WP469（决策 1521）：「记成待办」——记完那一行收成一行，底部提示条能去看、能撤销
+  const todo = useInboxTodo(say)
+  const act = (item: InboxItem, what: RowAct): void => {
+    if (what === 'todo') todo.record(item)
+    else rowAct(item, what)
+  }
   /** 外壳第三栏开不出来（单独渲染这一页）：在页里画一栏。 */
   const [inline, setInline] = useState(false)
 
@@ -112,6 +121,25 @@ export function InboxPage(): ReactNode {
 
   const view = inbox.data
   const items = view === undefined ? [] : filterInbox(view.items, filter)
+  const openId = open?.kind === 'item' ? open.id : undefined
+  const openItem = items.find((i) => i.id === openId)
+  // 列表里按 T：把打开的那一行记成待办（打字时不响应；一张一张那一面自己接）
+  const recordRef = useRef(todo.record)
+  recordRef.current = todo.record
+  useEffect(() => {
+    if (mode !== 'list' || openItem === undefined) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 't' && e.key !== 'T') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (isTypingTarget(e.target as HTMLElement | null)) return
+      e.preventDefault()
+      recordRef.current(openItem)
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => {
+      globalThis.removeEventListener('keydown', onKey)
+    }
+  }, [mode, openItem])
   const filtered = filter.type !== undefined || filter.position !== undefined
   const total = view?.counts.all ?? 0
   const selected = open?.kind === 'item' ? open.id : undefined
@@ -175,6 +203,7 @@ export function InboxPage(): ReactNode {
               view={view}
               items={items}
               onNotice={say}
+              onTodo={todo.record}
               onList={() => {
                 setParam('mode', undefined)
               }}
@@ -191,7 +220,15 @@ export function InboxPage(): ReactNode {
       items.length === 0 ? (
         <InboxEmpty filtered={filtered} />
       ) : (
-        <InboxList items={items} view={view} selected={selected} busy={busy} onAct={act} />
+        <InboxList
+          items={items}
+          view={view}
+          selected={selected}
+          busy={busy}
+          onAct={act}
+          recorded={todo.recorded}
+          onUndoTodo={todo.undo}
+        />
       )
     return (
       <>
@@ -248,12 +285,17 @@ function InboxList({
   selected,
   busy,
   onAct,
+  recorded,
+  onUndoTodo,
 }: {
   items: readonly InboxItem[]
   view: NonNullable<ReturnType<typeof useInbox>['data']>
   selected: string | undefined
   busy: string | undefined
   onAct: Parameters<typeof InboxRow>[0]['onAct']
+  /** WP469：记成待办了的那几行（收成一行） */
+  recorded: ReadonlyMap<string, Todo>
+  onUndoTodo(todo: Todo): void
 }): ReactNode {
   const { t } = useApp()
   return (
@@ -267,16 +309,27 @@ function InboxList({
               {t(GROUP_KEY[u])}
               <span className="ws-num font-normal text-ws-faint">{rows.length}</span>
             </div>
-            {rows.map((item) => (
-              <InboxRow
-                key={item.id}
-                item={item}
-                positions={view.positions}
-                selected={item.id === selected}
-                busy={busy === item.id}
-                onAct={onAct}
-              />
-            ))}
+            {rows.map((item) => {
+              const todo = recorded.get(item.id)
+              return todo === undefined ? (
+                <InboxRow
+                  key={item.id}
+                  item={item}
+                  positions={view.positions}
+                  selected={item.id === selected}
+                  busy={busy === item.id}
+                  onAct={onAct}
+                />
+              ) : (
+                <RecordedRow
+                  key={item.id}
+                  todo={todo}
+                  onUndo={() => {
+                    onUndoTodo(todo)
+                  }}
+                />
+              )
+            })}
           </section>
         )
       })}
