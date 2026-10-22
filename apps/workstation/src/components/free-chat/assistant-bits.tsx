@@ -77,7 +77,7 @@ export function ReportNote({ message }: { message: FreeChatMessage }): React.Rea
           r.kind === 'done'
             ? 'text-ws-brand'
             : r.kind === 'decide'
-              ? 'text-amber-600'
+              ? 'text-ws-warn'
               : 'text-destructive',
         )}
       />

@@ -135,7 +135,7 @@ function DuplicateNotice({
     )
   if (hits.length === 0) return null
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2">
+    <div className="flex flex-col gap-2 rounded-md border border-ws-warn/40 bg-ws-warn-bg p-2">
       {hits.map((h) => (
         <div key={h.id} className="flex flex-col gap-1" data-testid="dupe-hit" data-hit={h.id}>
           <p className="text-xs">

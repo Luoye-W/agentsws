@@ -246,7 +246,7 @@ function ConfidenceTag({
   const from = cell.evidence?.[0]
   return (
     <span
-      className="rounded-sm bg-amber-100 px-1 text-[11px] text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
+      className="rounded-sm bg-ws-warn-bg px-1 text-[11px] text-ws-warn"
       data-testid={`intake-tag-${field}`}
       // 出处进 tooltip，不铺在外面（36 §7）
       title={

@@ -36,8 +36,8 @@ function DiffBody({ diff }: { diff: string }): ReactNode {
           // biome-ignore lint/suspicious/noArrayIndexKey: diff 的行没有 id——行号**就是**它在这一段里的身份，而且这一段只读、不排序、不增删
           key={`${i}-${line.slice(0, 12)}`}
           className={cn(
-            line.startsWith('+') && !line.startsWith('+++') && 'text-emerald-600',
-            line.startsWith('-') && !line.startsWith('---') && 'text-red-600',
+            line.startsWith('+') && !line.startsWith('+++') && 'text-ws-good',
+            line.startsWith('-') && !line.startsWith('---') && 'text-ws-bad',
             line.startsWith('@@') && 'text-muted-foreground',
           )}
         >
@@ -91,8 +91,8 @@ function ChangeFiles({ change_id }: { change_id: string }): ReactNode {
                 <ChevronRight aria-hidden className="size-3 shrink-0" />
               )}
               <span className="min-w-0 flex-1 truncate font-mono">{f.path}</span>
-              <span className="shrink-0 text-emerald-600">+{f.additions}</span>
-              <span className="shrink-0 text-red-600">-{f.deletions}</span>
+              <span className="shrink-0 text-ws-good">+{f.additions}</span>
+              <span className="shrink-0 text-ws-bad">-{f.deletions}</span>
             </button>
             {open ? (
               <div className="pl-4">

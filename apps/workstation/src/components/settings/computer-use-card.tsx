@@ -350,7 +350,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 </Button>
                 {check === undefined ? null : (
                   <span
-                    className={`text-[11px] ${check.ok ? 'text-emerald-600' : 'text-destructive'}`}
+                    className={`text-[11px] ${check.ok ? 'text-ws-good' : 'text-destructive'}`}
                     data-slot="status"
                     data-testid="computer-use-check-summary"
                   >
@@ -369,7 +369,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                       <span className="flex items-center gap-1">
                         {/* 驱动原话自带 ✅ / ❌ 就不再叠一个我们的勾叉 */}
                         {/^[✅❌]/u.test(c.detail) ? null : c.ok ? (
-                          <Check className="size-3 text-emerald-600" aria-hidden />
+                          <Check className="size-3 text-ws-good" aria-hidden />
                         ) : (
                           <X className="size-3 text-destructive" aria-hidden />
                         )}

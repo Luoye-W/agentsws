@@ -138,11 +138,7 @@ export function MarketsPicker({
   return (
     <div className="flex flex-wrap items-center gap-1" data-testid="markets-picker">
       {value.length === 0 ? (
-        <span
-          className="text-xs text-amber-700 dark:text-amber-300"
-          data-slot="status"
-          data-testid="markets-empty"
-        >
+        <span className="text-xs text-ws-warn" data-slot="status" data-testid="markets-empty">
           {t('markets.empty')}
         </span>
       ) : (
@@ -249,7 +245,7 @@ export function MarketsPicker({
       {/* WP240：国家太多、先只选了美国——这一句是状态，铺在外面（人得知道其余要自己加） */}
       {isManyDefault(origin) ? (
         <span
-          className="basis-full text-[11px] text-amber-700 dark:text-amber-300"
+          className="basis-full text-[11px] text-ws-warn"
           data-slot="status"
           data-testid="markets-many-note"
         >

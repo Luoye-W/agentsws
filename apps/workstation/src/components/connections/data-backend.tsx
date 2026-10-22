@@ -412,7 +412,7 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
                 if (r === undefined) return null
                 return (
                   <li key={key} data-ok={r.ok ? 'true' : 'false'}>
-                    <span className={r.ok ? 'text-emerald-600' : 'text-destructive'}>
+                    <span className={r.ok ? 'text-ws-good' : 'text-destructive'}>
                       {r.ok ? '✓' : '✗'} {t(`storage.${key}`)}
                     </span>
                     <span className="ml-1 text-muted-foreground">{r.detail ?? r.reason}</span>

@@ -47,7 +47,7 @@ export function ModelCheckSteps({
           className={cn(
             'flex items-center gap-1',
             s.ok
-              ? 'text-emerald-600 dark:text-emerald-400'
+              ? 'text-ws-good'
               : s.skipped === true
                 ? 'text-muted-foreground'
                 : 'text-destructive',

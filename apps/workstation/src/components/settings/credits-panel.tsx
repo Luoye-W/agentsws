@@ -775,7 +775,7 @@ function MyAllowance({
         <span className="h-1.5 w-full overflow-hidden rounded bg-muted">
           <span
             className={`block h-full ${
-              state === 'full' ? 'bg-destructive' : state === 'near' ? 'bg-amber-500' : 'bg-primary'
+              state === 'full' ? 'bg-destructive' : state === 'near' ? 'bg-ws-warn' : 'bg-primary'
             }`}
             style={{ width: `${String(Math.min(100, percent))}%` }}
           />
@@ -786,7 +786,7 @@ function MyAllowance({
           {t('credits.mine.full')}
         </p>
       ) : state === 'near' ? (
-        <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="credits-mine-near">
+        <p className="text-xs text-ws-warn" data-testid="credits-mine-near">
           {t('credits.mine.near', { p: String(percent) })}
         </p>
       ) : null}

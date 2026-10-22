@@ -157,7 +157,7 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
           <span
             className={
               using.own_key
-                ? 'rounded bg-emerald-500/10 px-1.5 py-px text-[11px] text-emerald-700 dark:text-emerald-400'
+                ? 'rounded bg-ws-good-bg px-1.5 py-px text-[11px] text-ws-good'
                 : 'rounded bg-muted px-1.5 py-px text-[11px] text-muted-foreground'
             }
             data-slot="badge"
@@ -287,18 +287,11 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
       data.unavailable_reason === undefined ||
       saved ||
       provider !== storedOf(data) ? null : (
-        <p
-          className="text-[11px] text-amber-600 dark:text-amber-400"
-          data-testid="models-image-reason"
-        >
+        <p className="text-[11px] text-ws-warn" data-testid="models-image-reason">
           {data.unavailable_reason}
         </p>
       )}
-      {saved ? (
-        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-          {t('models.image.saved')}
-        </p>
-      ) : null}
+      {saved ? <p className="text-[11px] text-ws-good">{t('models.image.saved')}</p> : null}
       {error === null ? null : <p className="text-[11px] text-destructive">{error}</p>}
     </section>
   )

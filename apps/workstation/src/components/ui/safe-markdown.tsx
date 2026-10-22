@@ -380,7 +380,7 @@ export function SafeMarkdown({
             <p
               key={key}
               data-slot="callout"
-              className="rounded-md border-l-2 border-amber-500/60 bg-amber-500/5 px-2 py-1 text-xs"
+              className="rounded-md border-l-2 border-ws-warn/60 bg-ws-warn-bg px-2 py-1 text-xs"
             >
               <MarkdownInline text={b.lines.join(' ')} />
             </p>

@@ -451,7 +451,7 @@ export function MeetingPage(): React.ReactNode {
       </Card>
 
       {card === null ? null : (
-        <Card className="border-amber-500/50">
+        <Card className="border-ws-warn/50">
           <CardHeader>
             <CardTitle className="text-sm">{card.title}</CardTitle>
           </CardHeader>

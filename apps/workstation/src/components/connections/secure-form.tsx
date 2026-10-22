@@ -119,7 +119,7 @@ export function SecureForm({
         <p
           className={
             preset.auth === 'oauth_required'
-              ? 'flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs'
+              ? 'flex items-start gap-1.5 rounded-md border border-ws-warn/40 bg-ws-warn-bg px-2 py-1.5 text-xs'
               : 'flex items-start gap-1.5 rounded-md bg-muted/60 px-2 py-1.5 text-xs'
           }
           data-testid="mail-preset"

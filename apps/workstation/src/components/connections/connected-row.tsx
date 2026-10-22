@@ -145,7 +145,7 @@ export function ConnectedRow({
       </div>
       {connection.legacy === undefined ? null : (
         <p
-          className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400"
+          className="flex items-start gap-1.5 rounded-md border border-ws-warn/40 bg-ws-warn-bg px-2 py-1.5 text-xs text-ws-warn"
           data-testid="connection-legacy"
           data-legacy-kind={connection.legacy.kind}
           data-slot="warning"
@@ -160,7 +160,7 @@ export function ConnectedRow({
       )}
       {connection.brand_conflict === undefined ? null : (
         <p
-          className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400"
+          className="flex items-start gap-1.5 rounded-md border border-ws-warn/40 bg-ws-warn-bg px-2 py-1.5 text-xs text-ws-warn"
           data-testid="connection-brand-conflict"
           data-kind={connection.brand_conflict.kind}
           data-slot="warning"

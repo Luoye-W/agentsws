@@ -61,7 +61,7 @@ export function MailboxSwitches({
     <div
       className={cn(
         'flex flex-col gap-1.5 rounded-md border px-2 py-1.5',
-        shadow ? 'border-amber-500/50 bg-amber-500/5' : 'border-ws-line',
+        shadow ? 'border-ws-warn/50 bg-ws-warn-bg' : 'border-ws-line',
       )}
       data-testid="mailbox-switches"
       data-shadow={shadow ? 'true' : undefined}
@@ -87,7 +87,7 @@ export function MailboxSwitches({
         <Hint text={t('connections.mailbox.takeover.hint')} />
         {shadow ? (
           <strong
-            className="ml-auto flex items-center gap-1 text-[12px] font-semibold text-amber-700 dark:text-amber-400"
+            className="ml-auto flex items-center gap-1 text-[12px] font-semibold text-ws-warn"
             data-slot="status"
             data-testid="mailbox-shadow-badge"
           >

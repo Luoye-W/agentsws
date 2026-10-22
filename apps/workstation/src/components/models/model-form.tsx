@@ -427,10 +427,7 @@ export function ModelForm({
           </Button>
         </div>
         {listing === undefined || listing.ok ? null : (
-          <p
-            className="text-[11px] text-amber-600 dark:text-amber-400"
-            data-testid="model-discover-failed"
-          >
+          <p className="text-[11px] text-ws-warn" data-testid="model-discover-failed">
             {t('models.discover.failed', { reason: listing.reason ?? '' })}
           </p>
         )}

@@ -79,7 +79,7 @@ export function AiTag({ field, title }: { field: string; title?: string }): Reac
   const { t } = useApp()
   return (
     <span
-      className="rounded-sm bg-violet-100 px-1 text-[11px] text-violet-900 dark:bg-violet-900/40 dark:text-violet-200"
+      className="rounded-sm bg-ws-info-bg px-1 text-[11px] text-ws-info"
       data-testid={`insight-ai-${field}`}
       title={title ?? t('intake.tag.ai.hint')}
     >

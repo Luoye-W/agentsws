@@ -263,7 +263,7 @@ export function CloudAuthForm({
                     ? strength <= 1
                       ? 'bg-destructive'
                       : strength === 2
-                        ? 'bg-amber-500'
+                        ? 'bg-ws-warn'
                         : 'bg-primary'
                     : 'bg-ws-subtle',
                 )}
