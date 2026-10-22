@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 190
 positions: [social-media, pr]
 roles: [social.reddit, social.discord, social.telegram-group, pr.reddit, pr.forums]
 ---

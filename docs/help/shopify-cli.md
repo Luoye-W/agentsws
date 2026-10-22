@@ -1,4 +1,6 @@
 ---
+group: tools
+order: 120
 positions: [site]
 roles: [site.shopify-theme]
 ---

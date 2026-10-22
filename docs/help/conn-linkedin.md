@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 180
 positions: [social-media]
 roles: [social.linkedin]
 ---

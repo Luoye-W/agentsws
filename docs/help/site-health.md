@@ -1,4 +1,6 @@
 ---
+group: tools
+order: 330
 positions: [web-ops, site, dtc-ops]
 roles: [dtc.store, site.shopify-build, site.shopify-theme, dtc.seo]
 ---

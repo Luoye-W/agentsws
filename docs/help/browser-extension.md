@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 210
 positions: [kol-marketing]
 roles: [kol.youtube, kol.instagram, kol.tiktok, kol.facebook, kol.x]
 ---

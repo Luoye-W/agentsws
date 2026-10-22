@@ -1,4 +1,6 @@
 ---
+group: channels
+order: 220
 positions: []
 roles: []
 ---

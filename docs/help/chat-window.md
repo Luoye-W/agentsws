@@ -1,4 +1,6 @@
 ---
+group: channels
+order: 250
 positions: [customer-care]
 roles: [dtc.live-chat]
 ---

@@ -1,4 +1,6 @@
 ---
+group: tools
+order: 100
 positions: [web-ops, dtc-ops]
 roles: [dtc.seo]
 ---

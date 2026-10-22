@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 170
 positions: [ads, social-media, kol-marketing]
 roles: [ads.x, social.x, kol.x]
 ---

@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 150
 positions: [ads, social-media, kol-marketing]
 roles: [ads.meta, kol.instagram, kol.facebook, social.facebook, social.instagram, social.threads, social.whatsapp, social.facebook-group]
 ---

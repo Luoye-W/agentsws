@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 260
 positions: [b2b]
 roles: [b2b.outbound]
 ---

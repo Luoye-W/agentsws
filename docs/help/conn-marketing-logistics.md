@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 200
 positions: [dtc-ops, web-ops, customer-care, site]
 roles: [dtc.email-marketing, dtc.fulfillment, site.shopify-email, dtc.support]
 ---

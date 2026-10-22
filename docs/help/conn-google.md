@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 140
 positions: [web-ops, dtc-ops, ads, pr]
 roles: [ads.google, kol.youtube, social.youtube, dtc.analytics, dtc.seo, pr.monitoring]
 ---

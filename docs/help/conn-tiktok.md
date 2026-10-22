@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 160
 positions: [ads, social-media, kol-marketing]
 roles: [ads.tiktok, social.tiktok, kol.tiktok]
 ---

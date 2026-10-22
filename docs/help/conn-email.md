@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 130
 positions: [customer-care, kol-marketing, b2b, pr]
 roles: [dtc.support, b2b.sales, b2b.outbound, pr.press]
 ---

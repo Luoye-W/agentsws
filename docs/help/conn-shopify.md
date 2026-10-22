@@ -1,4 +1,6 @@
 ---
+group: connect
+order: 110
 positions: [dtc-ops, web-ops, customer-care, site]
 roles: [dtc.store, dtc.store-config, dtc.catalog, dtc.support, site.shopify-build, site.shopify-theme, site.shopify-apps]
 ---
