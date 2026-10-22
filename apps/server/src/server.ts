@@ -7809,13 +7809,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const seoModel = (
       actor: { assignment_id: string; role_id: string },
       run_id: string,
-    ): ((input: { prompt: string }) => Promise<{ text: string }>) | undefined => {
+    ): ((input: { prompt: string; system?: string }) => Promise<{ text: string }>) | undefined => {
       if (!effectiveModels().configured()) return undefined
       const ref = effectiveModels().purposeRef('run')
       if (ref.provider === 'stub') return undefined
-      return async ({ prompt }) => {
+      return async ({ prompt, system }) => {
         const completion = await gatewayProxy.complete({
-          messages: [{ role: 'user', content: prompt }],
+          // WP471：给了 `system` 就放最前面（同品牌固定不变的说明，命中缓存）；不给照旧一条用户消息
+          messages: [
+            ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+            { role: 'user', content: prompt },
+          ],
           meta: {
             workspace_id: ws,
             assignment_id: actor.assignment_id as never,
