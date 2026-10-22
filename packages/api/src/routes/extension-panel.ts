@@ -25,12 +25,18 @@ import type {
   PanelPost,
   PanelProgress,
   PanelRecord,
+  PanelSentInput,
   PanelSinkView,
   PanelSkipResult,
   PanelSnapshot,
   PanelWrite,
 } from '@agentsws/browser-action'
-import { PANEL_DRAFT_MAX, PANEL_TITLE_MAX } from '@agentsws/browser-action'
+import {
+  bareRedditId,
+  PANEL_DRAFT_MAX,
+  PANEL_TITLE_MAX,
+  redditPostIdOf,
+} from '@agentsws/browser-action'
 import type { ApprovalItem, MaybePromise } from '@agentsws/contracts'
 import {
   isPlaceholderOwnerName,
@@ -87,6 +93,15 @@ export interface ExtensionPanelPort {
     job_id: string,
     edit: { text?: string; title?: string },
   ): MaybePromise<PanelOpenResult>
+  /**
+   * WP467：人在 Reddit 上自己发出去了（插件认出来的 / 贴链接 / 认最近一条）——核一遍（这个帖子里、文本相近、
+   * 同一条不记两次）再记「已记录」。
+   */
+  sentWrite?(
+    session: ExtensionSession,
+    job_id: string,
+    input: PanelSentInput,
+  ): MaybePromise<{ ok: true; write?: PanelWrite } | { ok: false; message: string }>
   /** WP432：侧边栏里点「不发了」。 */
   dropWrite?(
     session: ExtensionSession,
@@ -204,6 +219,13 @@ export function panelCardOf(item: ApprovalItem): PanelCard | undefined {
   const opt = <K extends string>(k: K, v: string | undefined): Partial<Record<K, string>> =>
     v === undefined ? {} : ({ [k]: v } as Record<K, string>)
   const postTitle = str(r.post_title)
+  // WP467：写到哪个帖子 / 回哪条评论（插件按它找开着的原帖页、认人自己发出去的那一条）
+  const parentFull = str(r.parent_fullname)?.toLowerCase()
+  const targetPost =
+    (parentFull?.startsWith('t3_') === true ? bareRedditId(parentFull, 't3') : undefined) ??
+    (str(r.permalink) === undefined ? undefined : redditPostIdOf(str(r.permalink) ?? ''))
+  const targetParent =
+    kind === 'reply' && parentFull?.startsWith('t1_') === true ? parentFull : undefined
   // WP419（自查 U15）：回帖子时「回的那一句」就是原帖标题（`in_reply_to` 兜底取的标题）——不再重复一遍
   const parentRaw = str(r.parent_text) ?? str(p.in_reply_to)
   const parentText =
@@ -221,6 +243,8 @@ export function panelCardOf(item: ApprovalItem): PanelCard | undefined {
     ...opt('parent_author', str(r.parent_author) ?? str(p.author)),
     ...opt('parent_text', parentText),
     ...opt('link', linkOf(str(r.permalink))),
+    ...(kind === 'submit' ? {} : opt('target_post', targetPost)),
+    ...opt('target_parent', targetParent),
     draft: { text: str(b.text) ?? '', ...(title === undefined ? {} : { title }) },
     ...opt('reason', str(p.reason)),
     ...(facts.length === 0 ? {} : { facts }),
@@ -353,7 +377,7 @@ async function snapshotOf(deps: GatewayDeps, session: ExtensionSession): Promise
       // WP432：等你发的那几条带上卡上的上下文（原帖、被回的那句、为什么回）——侧边栏是发帖台
       ...(w.state === 'awaiting' || w.state === 'filling' || w.state === 'queued'
         ? writeContextOf(it)
-        : {}),
+        : { ...targetOf(it), ...kindOf(it) }),
     })
   }
   const records: PanelRecord[] = []
@@ -407,6 +431,17 @@ export function writeContextOf(item: ApprovalItem): Partial<PanelWrite> {
     ...(card.parent_text === undefined ? {} : { parent_text: card.parent_text }),
     ...(card.link === undefined ? {} : { thread_link: card.link }),
     ...(card.reason === undefined ? {} : { reason: card.reason }),
+    ...targetOf(item),
+  }
+}
+
+/** WP467：一张卡写到哪个帖子 / 回哪条评论（所有状态的写都带：没发出去的也要能「我发了，帮我记一下」）。 */
+export function targetOf(item: ApprovalItem): Partial<PanelWrite> {
+  const card = panelCardOf(item)
+  if (card === undefined) return {}
+  return {
+    ...(card.target_post === undefined ? {} : { target_post: card.target_post }),
+    ...(card.target_parent === undefined ? {} : { target_parent: card.target_parent }),
   }
 }
 
@@ -484,6 +519,25 @@ async function decidePostCard(
     // 卡定不上不挡帖子那一头（帖子已经记了发好了 / 没发）
   }
 }
+
+/** 没发出去的那几条也带上写哪种（插件「我发了，帮我记一下」看要不要给「认最近一条」）。 */
+const kindOf = (item: ApprovalItem): Partial<PanelWrite> => {
+  const card = panelCardOf(item)
+  return card === undefined ? {} : { kind: card.kind }
+}
+
+const sentSchema = z
+  .object({
+    how: z.enum(['seen', 'link', 'latest']),
+    permalink: z.string().max(500).optional(),
+    fullname: z
+      .string()
+      .regex(/^t[13]_[a-z0-9]{1,13}$/u)
+      .optional(),
+    text: z.string().max(PANEL_DRAFT_MAX).optional(),
+    author: z.string().max(40).optional(),
+  })
+  .strict()
 
 const openSchema = z
   .object({
@@ -755,6 +809,40 @@ export function extensionPanelRoutes(): Route[] {
         }
         const out: PanelOpenResult = await port.openWrite(session, param(c, 'job'), edit)
         return ok(c, out)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/extension/panel/writes/:job/sent',
+        operationId: 'extensionPanelSent',
+        summary:
+          'WP467：人在 Reddit 上自己发出去了（插件在原帖页认出来的 / 贴的链接 / 认最近一条）——核过（这个帖子里、文本相近、同一条不记两次）记「已记录」',
+        tag: 'extension',
+        auth: 'public',
+        params: [{ name: 'job', in: 'path', required: true, description: '插件动作的那一件 id' }],
+        body: sentSchema,
+        returns: 'PanelFillResult',
+      },
+      async (c, deps) => {
+        const session = actorOf(c, deps)
+        const input = await body(c, sentSchema)
+        const port = portOf(deps)
+        await ownWrite(deps, port, session, param(c, 'job'))
+        if (port.sentWrite === undefined)
+          throw new ApiError(
+            'not_implemented',
+            '这个本机服务版本还不能记人自己发的，先升级 Agents 工坊。',
+          )
+        const out = await port.sentWrite(session, param(c, 'job'), {
+          how: input.how,
+          ...(input.permalink === undefined ? {} : { permalink: input.permalink }),
+          ...(input.fullname === undefined ? {} : { fullname: input.fullname }),
+          ...(input.text === undefined ? {} : { text: input.text }),
+          ...(input.author === undefined ? {} : { author: input.author }),
+        })
+        const result: PanelFillResult = out
+        return ok(c, result)
       },
     ),
     route(

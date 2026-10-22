@@ -54,11 +54,16 @@ export function checkStep(step: ActionStep, allow: ActionAllowlist, kind: string
   switch (step.op) {
     case 'goto': {
       const host = hostOfUrl(step.url)
-      return hostMatches(host, allow.hosts)
+      if (!hostMatches(host, allow.hosts))
+        return { ok: false, why: `要打开的页面不在白名单里：${host || step.url}` }
+      // WP467：「就地填」时看的那一个也要写在白名单里（只看不动，但不让步骤表自己加）
+      return step.need === undefined || (allow.wait ?? []).includes(step.need)
         ? { ok: true }
-        : { ok: false, why: `要打开的页面不在白名单里：${host || step.url}` }
+        : notListed('要看的那一个', kind)
     }
     case 'click':
+      if (step.unless !== undefined && !(allow.wait ?? []).includes(step.unless))
+        return notListed('要看的那一个', kind)
       return allow.click.includes(step.selector) ? { ok: true } : notListed('这一下点击', kind)
     case 'fill':
       if (!allow.fill.includes(step.selector)) return notListed('这个输入框', kind)
@@ -66,6 +71,10 @@ export function checkStep(step: ActionStep, allow: ActionAllowlist, kind: string
         ? { ok: true }
         : { ok: false, why: '要填的字和审批卡上的不一样，已拦下。' }
     case 'wait':
+      // WP467：等之前滚到眼前的那一个（只滚不点）也要在白名单里
+      if (step.reveal !== undefined && !(allow.wait ?? []).includes(step.reveal))
+        return notListed('要滚到眼前的那一个', kind)
+      return { ok: true }
     case 'read':
     case 'expect_none':
       // 只看不动：不点、不填、不发东西。选择器是步骤表里写死的，这里只拦「看的还在不在后台里」

@@ -126,6 +126,12 @@ export interface PanelCard {
   parent_text?: string
   /** 原帖 / 被回那一条的链接。 */
   link?: string
+  /**
+   * WP467：写到哪个帖子（不带 `t3_`）、回的是哪一条评论（`t1_…`）——插件按它找用户已经开着的原帖标签页、
+   * 认人自己发出去的那一条。发新帖没有。
+   */
+  target_post?: string
+  target_parent?: string
   /** 草稿（人可以改）。发新帖时 `title` 是标题。 */
   draft: { text: string; title?: string }
   /** AI 为什么要回（判断理由）。 */
@@ -182,6 +188,9 @@ export interface PanelWrite {
   thread_link?: string
   /** WP432：为什么回这条。 */
   reason?: string
+  /** WP467：写到哪个帖子 / 回哪条评论（同 {@link PanelCard.target_post}）。 */
+  target_post?: string
+  target_parent?: string
 }
 
 /** 一个记录去处写这一行的结果。 */
@@ -337,6 +346,26 @@ export interface PanelSkipResult {
 
 /** WP445：「不发」时的快捷理由（理由可选；写了理由才跟随同类、才进学习回路）。 */
 export const PANEL_SKIP_REASONS: readonly string[] = ['不相关', '时机不对', '不想回']
+
+/**
+ * WP467：`POST /v1/extension/panel/writes/:job/sent`——人在 Reddit 上自己发出去了（插件填好之后点的、或复制粘贴发的），
+ * 记成「已记录」。三种来路：
+ * - `seen`：插件在原帖页上认出来的（这个帖子里、文本相近、当前登录的号发的）；
+ * - `link`：人在侧边栏「我发了，帮我记一下」里贴的那一条的链接；
+ * - `latest`：人点「认最近一条」，插件读这个帖子里这个号最新发的那一条。
+ * 本机服务再核一遍：链接要在这个帖子里（错帖不记）、`seen` 要文本相近、同一条不记两次。
+ */
+export interface PanelSentInput {
+  how: 'seen' | 'link' | 'latest'
+  /** 那一条的链接（站内路径或完整网址）。 */
+  permalink?: string
+  /** `t1_…` / `t3_…`（不给就从链接里认）。 */
+  fullname?: string
+  /** 页面上读回来的正文（真发出去的字）。 */
+  text?: string
+  /** 页面上标的作者。 */
+  author?: string
+}
 
 /** 草稿最长多少字（Reddit 评论上限 10000）。 */
 export const PANEL_DRAFT_MAX = 10_000
