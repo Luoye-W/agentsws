@@ -49,7 +49,7 @@ describe('37 §1 第 2 行 + WP98 收口：头一行 = 岗位 · 类别 → 等�
     expect(row.textContent).not.toContain('Anna Meyer')
   })
 
-  it('优先级不再单占一枚胶囊，它成了「岗位 · 类别」那一枚的颜色：P0 红、P2 蓝', () => {
+  it('WP456-T3：「岗位 · 类别」是灰色分类标签（颜色只表示状态）；P0 多一颗红的「马上」，P2 没有', () => {
     const p0 = renderWithProviders(
       <DeckCardView
         card={draftCard({ priority_band: 'P0' })}
@@ -58,7 +58,9 @@ describe('37 §1 第 2 行 + WP98 收口：头一行 = 岗位 · 类别 → 等�
         onOpen={noop}
       />,
     )
-    expect(screen.getByTestId('deck-band').getAttribute('data-tone')).toBe('bad')
+    expect(screen.getByTestId('deck-band').className).toContain('ws-tag')
+    expect(screen.getByTestId('deck-band').getAttribute('data-band')).toBe('P0')
+    expect(screen.getByTestId('deck-urgent').getAttribute('data-tone')).toBe('bad')
     // "排队"那两个字不再单独占一枚
     expect(screen.getByTestId('deck-tag-row').textContent).not.toContain('排队')
     p0.unmount()
@@ -70,7 +72,8 @@ describe('37 §1 第 2 行 + WP98 收口：头一行 = 岗位 · 类别 → 等�
         onOpen={noop}
       />,
     )
-    expect(screen.getByTestId('deck-band').getAttribute('data-tone')).toBe('info')
+    expect(screen.getByTestId('deck-band').className).toContain('ws-tag')
+    expect(screen.queryByTestId('deck-urgent')).toBeNull()
   })
 
   it('一小时以上换粗粒度：不印「剩 6789:08」这种没人读得懂的大数', () => {
@@ -282,9 +285,10 @@ describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· �
     const bar = screen.getByTestId('deck-action-bar')
     expect(within(bar).getByText('发送')).toBeDefined()
     expect(within(bar).queryByText('批准')).toBeNull()
-    expect(within(bar).getByText('发送').closest('button')?.className.includes('bg-primary')).toBe(
-      true,
-    )
+    // WP456-T3：主按钮 = 品牌色实底（ws-btn-primary）
+    expect(
+      within(bar).getByText('发送').closest('button')?.className.includes('ws-btn-primary'),
+    ).toBe(true)
     expect(within(bar).getByText('发送').closest('button')?.dataset.rank).toBe('primary')
     expect(within(bar).getByText('修改').closest('button')?.dataset.rank).toBe('secondary')
   })
@@ -304,7 +308,7 @@ describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· �
     expect(within(bar).getByText('不用')).toBeDefined()
   })
 
-  it('WP414：「稍后」外露、没有「需要补素材」也没有 ···；次按钮都是描边按钮', () => {
+  it('WP414：「稍后」外露、没有「需要补素材」也没有 ···；次按钮都是有底的按钮（WP456-T3：灰底次按钮）', () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
@@ -315,8 +319,8 @@ describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· �
     for (const label of ['修改', '不发', '稍后']) {
       const button = within(bar).getByText(label).closest('button')
       expect(button?.dataset.rank).toBe('secondary')
-      // 描边按钮（不是一行说明文字）
-      expect(button?.className.includes('border')).toBe(true)
+      // 有底的按钮（不是一行说明文字）：WP456-T3 起是灰底次按钮
+      expect(button?.className.includes('ws-btn-secondary')).toBe(true)
     }
   })
 
@@ -375,13 +379,16 @@ describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· �
 })
 
 describe('选择题卡（36 §2.1：裸 approve 服务端会拒）', () => {
-  it('没选中时 approve 是禁用的，并说清楚要先选一个', () => {
+  it('没选中时 approve 是禁用的（40% 透明），悬停说要先选一个', () => {
     const onDecide = vi.fn()
     renderWithProviders(
       <DeckCardView card={questionCard()} mode="zh_summary" onDecide={onDecide} onOpen={noop} />,
     )
-    expect(screen.getByText('批准').closest('button')?.hasAttribute('disabled')).toBe(true)
-    expect(screen.getByTestId('deck-action-bar').textContent).toContain('先选一个')
+    const approve = screen.getByText('批准').closest('button')
+    expect(approve?.hasAttribute('disabled')).toBe(true)
+    // WP456-T3（§3.1）：卡底不再写「先选一个」那句灰字，放进主按钮的悬停提示
+    expect(screen.getByTestId('deck-action-bar').textContent).not.toContain('先选一个')
+    expect(approve?.getAttribute('title')).toBe('先选一个')
   })
 
   it('选了之后带 selected_option_id 走 decide；选项是单选不是输入框', async () => {

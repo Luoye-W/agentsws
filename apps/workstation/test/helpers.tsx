@@ -51,6 +51,11 @@ export async function openRailPanel(id: string): Promise<void> {
     fireEvent.click(await screen.findByTestId(`rail-menu-${id}`))
     return
   }
+  // WP456-T3（决策 1448）：产出 / 连接 / 设定 / 工坊服务合进了清单卡——点那一行就在第三栏开完整一格
+  if (LIST_CARDS.has(card)) {
+    fireEvent.click(await screen.findByTestId(`rail-list-row-${card}`))
+    return
+  }
   await openRailCard(card)
   // WP433：「显示更多」只在多于 5 条时出；条数少的卡从卡里那一行进（产出 → 记录、计划 → 定时任务、设定 → 那一格）
   const more = await screen
@@ -65,6 +70,14 @@ export async function openRailPanel(id: string): Promise<void> {
   const box = screen.getByTestId(`rail-card-${card}`)
   fireEvent.click((await within(box).findAllByTestId(row))[0] as HTMLElement)
 }
+
+/** WP456-T3：合进清单卡的那几张（没有展开，点那一行开第三栏）。 */
+export const LIST_CARDS: ReadonlySet<string> = new Set([
+  'outputs',
+  'connections',
+  'settings',
+  'workshop-services',
+])
 
 /** WP433：条数少、没有「显示更多」时，从卡里哪一行进完整那一格。 */
 const CARD_ROW: Record<string, string> = {
@@ -81,6 +94,8 @@ const CARD_ROW: Record<string, string> = {
 export async function openRailCard(card: string): Promise<HTMLElement> {
   // WP433：卡片列属于中栏、一直在（第三栏开着也不挡它）
   const box = await screen.findByTestId(`rail-card-${card}`)
+  // WP456-T3：清单卡里那几行没有展开 / 收起
+  if (LIST_CARDS.has(card)) return box
   if (box.getAttribute('data-open') !== 'true')
     fireEvent.click(screen.getByTestId(`rail-card-toggle-${card}`))
   return box

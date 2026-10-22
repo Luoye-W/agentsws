@@ -33,6 +33,7 @@ import {
   sequencesOf,
   startRoundOf,
 } from './b2b-outbound.js'
+import { contextRoleOf, orderContextItems } from './context-order.js'
 import {
   DESK_TOOL_DEF_BY_NAME,
   deskBranch,
@@ -483,24 +484,15 @@ export function assemblePrompt(req: RunRequest): { messages: ChatMessage[]; tool
   ]
   const brief = ontologyBriefOf(req)
   if (brief !== '') messages.push({ role: 'system', content: brief })
-  const ordered = [
-    ...itemsOfKind(req, 'policy'),
-    ...req.context.filter(
-      (c) =>
-        c.kind !== 'policy' && c.kind !== 'thread' && c.kind !== 'app_events' && c.kind !== 'time',
-    ),
-    ...itemsOfKind(req, 'app_events'),
-    ...itemsOfKind(req, 'thread'),
-    /*
-     * WP180：「现在时间 + 公司时区」排在**最后**、按 user 消息发——与官方 `dsh-time-context` 一样（它追加的是一条
-     * user 消息），而且落在静态前缀（开头连续的 system 消息，22 §2）之外：它每小时一变，放前面会让同一件事
-     * 跨小时重跑时整段前缀都吃不上缓存。没有这一条的老请求，装配出来的字节与改前一模一样。
-     */
-    ...itemsOfKind(req, 'time'),
-  ]
-  for (const item of ordered) {
+  /*
+   * WP472（docs/116 §6 A）：上下文按 `orderContextItems` 排——政策 / 边界走系统提示、紧跟静态前缀；
+   * 其余（之前的对话原文 → 记录 → 事项摘要 → 岗位状态 → 设置快照 → app 事件 → 时间 → 这一次的话）
+   * 一律按 user 消息发。每次都变的东西不再混进系统提示（DeepSeek 账号口会把系统消息并成开头一段）。
+   * 时间仍在这一次的话之前、静态前缀之外（WP180：每小时一变）。三个运行时同一份顺序与层级。
+   */
+  for (const item of orderContextItems(req.context)) {
     messages.push({
-      role: item.kind === 'thread' || item.kind === 'time' ? 'user' : 'system',
+      role: contextRoleOf(item.kind),
       content: `[${item.kind}:${item.id}]\n${plainText(item.content)}`,
     })
   }
@@ -514,6 +506,15 @@ export function ontologyBriefOf(req: RunRequest): string {
     role_id: req.actor.role_id,
     tools: [...req.tools.allow, ...outputToolNames(req)],
   })
+}
+
+/**
+ * WP473（docs/116 §4）：一次运行的**静态前缀**有几条消息——`assemblePrompt` 开头的岗位说明、技能索引、
+ * 登记表（有才算）。前缀指纹与缓存断点（`cache_breakpoints`）就打在它们之后：后面的上下文（政策、
+ * 记录、事项摘要、岗位状态……）每次可能都不同，混进指纹就等于没有指纹。
+ */
+export function runStaticPrefixCount(req: RunRequest): number {
+  return ontologyBriefOf(req) === '' ? 2 : 3
 }
 
 /**

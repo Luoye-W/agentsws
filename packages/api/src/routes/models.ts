@@ -20,6 +20,7 @@
 import type {
   MaybePromise,
   ModelCheckStepResult,
+  ModelFeature,
   ModelPurpose,
   ModelRef,
 } from '@agentsws/contracts'
@@ -627,9 +628,15 @@ export interface SetModelInheritanceInput {
 
 export interface ModelUsageRow {
   purpose: ModelPurpose
+  /**
+   * WP473（只加）：`purpose = run` 的那几行按功能拆开（岗位运行 / 客服聊天窗 / 邮件自动回 / SEO·GEO /
+   * B2B / 广告 / 社媒 / 其它）；别的 purpose 不拆、没有这一格。
+   */
+  feature?: ModelFeature
   calls: number
   input_tokens: number
   output_tokens: number
+  /** `input_tokens` 里命中缓存的部分；命中率 = cached_tokens / input_tokens。 */
   cached_tokens: number
   cost_base: number
 }

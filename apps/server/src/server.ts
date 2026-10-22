@@ -161,7 +161,6 @@ import {
   socialChannelSpec,
 } from '@agentsws/contracts'
 import {
-  EXTERNAL_FENCE,
   evaluateGuardrail,
   extractFigures,
   isInstructionRuleCard,
@@ -985,6 +984,7 @@ import { createWeeklyReviewService } from './weekly-review.js'
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
 import {
+  archiveRerankUser,
   createArchiveStateStore,
   createWorkArchive,
   type WorkArchiveAssembly,
@@ -5600,9 +5600,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const models = effectiveModels()
         const ref = models.configured() ? models.defaultRef() : undefined
         if (ref === undefined || ref.provider === 'stub') return undefined
-        return modelReplyDrafter(async (prompt) => {
+        return modelReplyDrafter(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的规矩在系统提示，这一条的渠道 / 作者 / 原话在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: actor.assignment_id as never,
@@ -5639,9 +5643,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 .listByRole(spec.role_id)
                 .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
         if (holder === undefined) return undefined
-        return modelTagReviewer(async (prompt) => {
+        return modelTagReviewer(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的六类说明在系统提示，这条帖子在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: holder.id as never,
@@ -6277,9 +6285,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const models = effectiveModels()
         const ref = models.configured() ? models.defaultRef() : undefined
         if (ref === undefined || ref.provider === 'stub') return undefined
-        return modelRedditDrafter(async (prompt) => {
+        return modelRedditDrafter(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的话术 / 人设 / 规矩在系统提示，这一帖的在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: actor.assignment_id as never,
@@ -7101,6 +7113,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             modelRef: () => effectiveModels().defaultRef(),
             // WP150：这次运行的模型请求会落到哪条来源（登出 DeepSeek 账号前据此认出在用账号跑的事）
             runModelRef: () => effectiveModels().purposeRef('run'),
+            // WP472：模型目录里写了上下文窗口就按它压历史、带对话原文（没写按 64K）
+            contextWindow: (ref) =>
+              effectiveModels()
+                .chatChoices()
+                .find((c) => c.id === `${ref.provider}/${ref.model}`)?.context_window,
             // WP342（决策 853）：事项自己选的 AI——还在「已接的」里面才认，否则跟品牌默认走
             modelOverride: (id) => chatModelRefOf(effectiveModels(), id),
             // WP370：事项选的思考程度这个模型还有没有
@@ -7809,13 +7826,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const seoModel = (
       actor: { assignment_id: string; role_id: string },
       run_id: string,
-    ): ((input: { prompt: string }) => Promise<{ text: string }>) | undefined => {
+    ): ((input: { prompt: string; system?: string }) => Promise<{ text: string }>) | undefined => {
       if (!effectiveModels().configured()) return undefined
       const ref = effectiveModels().purposeRef('run')
       if (ref.provider === 'stub') return undefined
-      return async ({ prompt }) => {
+      return async ({ prompt, system }) => {
         const completion = await gatewayProxy.complete({
-          messages: [{ role: 'user', content: prompt }],
+          // WP471：给了 `system` 就放最前面（同品牌固定不变的说明，命中缓存）；不给照旧一条用户消息
+          messages: [
+            ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+            { role: 'user', content: prompt },
+          ],
           meta: {
             workspace_id: ws,
             assignment_id: actor.assignment_id as never,
@@ -9812,10 +9833,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               const holder = redditHolder()
               if (ref === undefined || ref.provider === 'stub' || holder === undefined)
                 return undefined
-              return async (prompt: string) =>
+              return async (prompt: string, system?: string) =>
                 (
                   await gatewayProxy.complete({
-                    messages: [{ role: 'user', content: prompt }],
+                    // WP471：固定判断说明在系统提示，话题清单与待判内容在用户消息
+                    messages: [
+                      ...(system === undefined
+                        ? []
+                        : [{ role: 'system' as const, content: system }]),
+                      { role: 'user', content: prompt },
+                    ],
                     meta: {
                       workspace_id: ws,
                       assignment_id: holder.id as never,
@@ -14212,6 +14239,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       store,
       assistant,
+      // WP470：每轮末尾那句「现在时间」按公司时区写（与岗位运行同一份，按小时取整）
+      timeZone: async () => (await identity.getWorkspace(ws))?.tz,
       // WP357（决策 902）：助理记进知识库的口径，知识库与岗位第三栏里能改能删
       notes: { edit: assistantNotes.edit, remove: assistantNotes.retire },
       // WP352：一条长对话——每一轮拼进了多少、段收起 / 压缩，记进事件日志（不带正文）
@@ -14601,10 +14630,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const ref = models.defaultRef()
     if (ref.provider === 'stub') return undefined
     const gateway = await brandModules.gateway(ws)
-    const lines = pool.map(
-      (c) =>
-        `${c.id} | ${c.last_activity.slice(0, 10)} | ${c.title.replace(/\s+/g, ' ')} | ${c.summary.replace(/\s+/g, ' ').slice(0, 160)}`,
-    )
     const out = await gateway.complete({
       model: ref,
       messages: [
@@ -14616,7 +14641,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         },
         {
           role: 'user',
-          content: `用户的描述：${query}\n今天：${clock.now().slice(0, 10)}\n\n${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(lines.join('\n'), 8000)}\n${EXTERNAL_FENCE.close}`,
+          // WP471（决策 1549）：归档清单在前（按 id 排），用户的描述与「今天」在后
+          content: archiveRerankUser(pool, query, clock.now().slice(0, 10)),
         },
       ],
       meta: {

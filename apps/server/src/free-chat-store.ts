@@ -117,6 +117,18 @@ export interface AssistantSegmentRow {
   dispatches?: { matter_id: string; title: string; position_name: string; batch_id?: string }[]
   /** 段内压缩：`upto` 这条（含）以前的原话已经压进 `text`，进模型时只带它与之后的原话。 */
   compact?: { upto: string; text: string; at: string }
+  /**
+   * WP470（决策 1543）：这一段第一轮拼上下文时冻结的那几块——之后这一段每一轮的系统提示都用它，
+   * 开头逐字不变才命中缓存。`memory_ids` = 当时已有的记忆（进系统提示的照旧是其中最近 20 条；段内新记的放末尾附加）；
+   * `topics` = 当时那份「最近聊过的几个话题」（后台 AI 小结出来了也等下一段再换）。
+   */
+  frozen?: {
+    at: string
+    memory_ids: string[]
+    topics: string
+    topic_count: number
+    topic_tokens: number
+  }
 }
 
 export interface FreeChatStore {

@@ -13,6 +13,7 @@ import { AMAZON_LISTING_EN, AMAZON_LISTING_ZH } from './i18n-amazon-listing'
 import { AMAZON_OPS_EN, AMAZON_OPS_ZH } from './i18n-amazon-ops'
 import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { ASSISTANT_EN, ASSISTANT_ZH } from './i18n-assistant'
+import { CAL_TODO_EN, CAL_TODO_ZH } from './i18n-cal-todo'
 import { CARD_PAGE_EN, CARD_PAGE_ZH } from './i18n-card-page'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
@@ -2083,8 +2084,8 @@ const zh: Table = {
   'deck.detail.toggle': '展开 / 收起详情',
   // ── WP96 卡片十一种排版（09-18 设计画布）─────────────────────────────
   'deck.go': '打开这件事',
-  'deck.before': '改之前',
-  'deck.after': '改之后',
+  'deck.before': '现在',
+  'deck.after': '改成',
   'deck.proposer.agent': 'AI',
   'deck.proposer.person': '人',
   'deck.proposer.sentinel': '哨',
@@ -2859,6 +2860,18 @@ const zh: Table = {
   'models.usage.calls': '次数',
   'models.usage.tokens': 'token',
   'models.usage.cost': '花费',
+  // WP473（docs/116 §6 D）：命中率一列 + 「运行」按功能拆
+  'models.usage.cache': '命中缓存',
+  'models.usage.cache.hint': '命中的部分按约 1/30～1/50 的价钱算；越高越省',
+  'models.feature.position_run': '岗位运行',
+  'models.feature.support_chat': '客服聊天窗',
+  'models.feature.email_auto_reply': '邮件自动回',
+  'models.feature.seo': 'SEO · GEO',
+  'models.feature.b2b': 'B2B',
+  'models.feature.ads': '广告',
+  'models.feature.social': '社媒',
+  'models.feature.assistant': '助理',
+  'models.feature.other': '其它跑活',
   // ── 46 首次设置与同事发现（WP51）──────────────────────────────────
   //
   // 36 §7：解释性文字（"为什么""怎么来的""填什么格式"）一律进 tooltip，
@@ -6516,8 +6529,8 @@ const en: Table = {
   'deck.detail.toggle': 'Toggle details',
   // ── WP96 card layouts ────────────────────────────────────────────────
   'deck.go': 'Open this matter',
-  'deck.before': 'before',
-  'deck.after': 'after',
+  'deck.before': 'Now',
+  'deck.after': 'Change to',
   'deck.proposer.agent': 'AI',
   'deck.proposer.person': 'H',
   'deck.proposer.sentinel': 'S',
@@ -7316,6 +7329,18 @@ const en: Table = {
   'models.usage.calls': 'Calls',
   'models.usage.tokens': 'Tokens',
   'models.usage.cost': 'Cost',
+  'models.usage.cache': 'Cache hits',
+  'models.usage.cache.hint':
+    'Cached input costs about 1/30–1/50 of the full price; higher means cheaper',
+  'models.feature.position_run': 'Position runs',
+  'models.feature.support_chat': 'Website chat',
+  'models.feature.email_auto_reply': 'Email auto-reply',
+  'models.feature.seo': 'SEO · GEO',
+  'models.feature.b2b': 'B2B',
+  'models.feature.ads': 'Ads',
+  'models.feature.social': 'Social',
+  'models.feature.assistant': 'Assistant',
+  'models.feature.other': 'Other work',
   // ── 46 first-run setup and finding colleagues (WP51) ──────────────
   'onboarding.title': 'Initial setup',
   'onboarding.skip': 'Skip for now',
@@ -9039,6 +9064,8 @@ const TABLES: Record<Lang, Table> = {
     ...MESSAGE_RULES_ZH,
     ...FOLLOW_UP_ZH,
     ...INBOX_ZH,
+    // WP469：日历与待办（待办 + 日历合成一页）
+    ...CAL_TODO_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
@@ -9114,6 +9141,7 @@ const TABLES: Record<Lang, Table> = {
     ...MESSAGE_RULES_EN,
     ...FOLLOW_UP_EN,
     ...INBOX_EN,
+    ...CAL_TODO_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...GOOGLE_ALERTS_EN,

@@ -40,6 +40,7 @@ import {
   GENERAL_UNFINISHED_NUDGE,
   looksUnfinished,
   promptHash,
+  runStaticPrefixCount,
   shouldNudgeGeneral,
   TOOL_CALL_TEXT_FAILURE,
   TOOL_CALL_TEXT_NUDGE,
@@ -409,7 +410,10 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         emit({
           type: 'prompt.assembled',
           hash: promptHash(prompt),
-          static_prefix_hash: staticPrefixHash(prompt.messages, prompt.tools),
+          // WP473：指纹只算静态前缀（岗位说明 + 技能索引 + 登记表），后面每次都变的上下文不混进来
+          static_prefix_hash: staticPrefixHash(prompt.messages, prompt.tools, [
+            Math.min(runStaticPrefixCount(req), prompt.messages.length),
+          ]),
           total_tokens,
         })
         if (total_tokens > req.budget.max_tokens) {

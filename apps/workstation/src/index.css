@@ -1537,14 +1537,3 @@
 :root[data-ws-motion="off"] .ws-skel {
   animation: none;
 }
-
-/*
- * WP456-T6（WP456 §2.5「卡不加边框」，§3.8）：设置弹窗里各节的卡（shadcn `Card`）——去掉那圈 ring，
- * 换成卡阴影（深色带细边）；放在 utilities 层，压得过 `Card` 自带的 `ring-1`。只管设置弹窗这一处，
- * 别处的 `Card` 等各页那一单再换。
- */
-@layer utilities {
-  [data-slot="settings-items"] [data-slot="card"] {
-    box-shadow: var(--ws-card-edge), var(--ws-shadow);
-  }
-}

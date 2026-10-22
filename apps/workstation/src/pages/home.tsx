@@ -15,9 +15,19 @@
  * 三种模式（决策 222）：同事互联 / 公司集体时，「正在进行」「待认领」照旧接在最下面（个人模式收起）。
  */
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, HandHeart, Inbox, Plug, Plus, Sparkles, Users } from 'lucide-react'
+import {
+  CalendarDays,
+  ChevronRight,
+  HandHeart,
+  Inbox,
+  Plug,
+  Plus,
+  Sparkles,
+  Users,
+} from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { useOpenTodos } from '@/components/cal-todo/use-todos'
 import { connectServiceFor } from '@/components/connections/links'
 import { BrandMark, StatusPill, WsCard } from '@/components/design'
 import { SimpleComposer } from '@/components/free-chat/simple-composer'
@@ -40,6 +50,7 @@ import {
   type PositionInstanceData,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { clock, homeTodoLine } from '@/lib/cal-todo'
 import { useMode } from '@/lib/mode'
 import { getReportsOverview, REPORTS_QUERY, type ReportsOverview } from '@/lib/reports-api'
 import { cn } from '@/lib/utils'
@@ -101,7 +112,7 @@ function InboxLine(): ReactNode {
   return (
     <Link
       to="/inbox"
-      className="ws-card mt-[30px] flex items-center gap-3 px-[18px] py-3.5 transition-shadow hover:shadow-[var(--ws-shadow-hover)]"
+      className="flex items-center gap-3 px-[18px] py-3.5 transition-colors hover:bg-ws-hover"
       data-testid="home-inbox-line"
     >
       <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-ws-tint text-ws-brand-ink">
@@ -122,6 +133,41 @@ function InboxLine(): ReactNode {
           {t('inbox.home.top', { title: view.brief.top })}
         </span>
       )}
+      <ChevronRight aria-hidden className="size-4 shrink-0 text-ws-faint" />
+    </Link>
+  )
+}
+
+/**
+ * WP469（决策 1521）：收件箱那一行下面再一行「今天 3 件待办 · 下一件 15:00 … · 还有 7 件没排期 →」，
+ * 点了去「日历与待办」（打开哪一面照那一页自己的记忆）。没有待办、也没有没排期的就不出这一行。
+ */
+function TodoLine(): ReactNode {
+  const { t } = useApp()
+  const open = useOpenTodos()
+  const todos = open.data?.todos
+  if (todos === undefined) return null
+  const line = homeTodoLine(todos, new Date())
+  if (line.today === 0 && line.unscheduled === 0) return null
+  const rest = [
+    ...(line.next === undefined
+      ? []
+      : [t('caltodo.home.next', { time: clock(new Date(line.next.at)), title: line.next.title })]),
+    ...(line.unscheduled === 0 ? [] : [t('caltodo.home.undated', { n: line.unscheduled })]),
+  ].join(' · ')
+  return (
+    <Link
+      to="/planner"
+      className="flex items-center gap-3 border-t border-ws-line px-[18px] py-3.5 transition-colors hover:bg-ws-hover"
+      data-testid="home-todo-line"
+    >
+      <span className="grid size-[30px] shrink-0 place-items-center rounded-[8px] bg-ws-tint text-ws-brand-ink">
+        <CalendarDays aria-hidden className="size-4" />
+      </span>
+      <b className="shrink-0 text-[14px] font-semibold text-ws-ink" data-testid="home-todo-count">
+        {line.today === 0 ? t('caltodo.home.empty') : t('caltodo.home.line', { n: line.today })}
+      </b>
+      <span className="min-w-0 flex-1 truncate text-[13px] text-ws-muted-fg">{rest}</span>
       <ChevronRight aria-hidden className="size-4 shrink-0 text-ws-faint" />
     </Link>
   )
@@ -529,8 +575,11 @@ export function HomePage(): ReactNode {
         </p>
       </header>
 
-      {/* ② 收件箱那一行（WP459：首页不再列决策卡） */}
-      <InboxLine />
+      {/* ② 收件箱那一行（WP459：首页不再列决策卡）+ 今天的待办那一行（WP469） */}
+      <div className="ws-card mt-[30px] overflow-hidden" data-testid="home-lines">
+        <InboxLine />
+        <TodoLine />
+      </div>
 
       {/* ③ 关键数字：一句话 + 4 个数（点了在第三栏打开那份报表） */}
       <KeyNumbers data={overview.data} range={range} onRange={setRange} instances={insts} />

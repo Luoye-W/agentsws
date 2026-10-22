@@ -56,6 +56,7 @@ import type {
   ImageEditRequest,
   ImageGenerateRequest,
   ImageProvider,
+  ModelFeature,
   ModelMeta,
   ModelProvider,
   ModelPurpose,
@@ -101,6 +102,7 @@ import {
   deepseekAccountProvider,
   deepseekMessagesProvider,
   defaultImageModels,
+  featureOf,
   geminiImageProvider,
   hostOf,
   imageMaskSupported,
@@ -1334,8 +1336,9 @@ function startOfDay(at: string): string {
   return `${at.slice(0, 10)}T00:00:00.000Z`
 }
 
-const EMPTY_ROW = (purpose: ModelPurpose): ModelUsageRow => ({
+const EMPTY_ROW = (purpose: ModelPurpose, feature?: ModelFeature): ModelUsageRow => ({
   purpose,
+  ...(feature === undefined ? {} : { feature }),
   calls: 0,
   input_tokens: 0,
   output_tokens: 0,
@@ -3302,21 +3305,29 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
     async usage(actor, since): Promise<ModelUsageView> {
       const from = since ?? startOfDay(clock.now())
-      const rows = new Map<ModelPurpose, ModelUsageRow>()
+      const rows = new Map<string, ModelUsageRow>()
       for (const record of gateway.records()) {
         if (record.workspace_id !== actor.workspace_id) continue
         if (record.at < from) continue
-        const row = rows.get(record.purpose) ?? EMPTY_ROW(record.purpose)
+        // WP473（docs/116 §6 D）：「运行」按功能拆开（岗位运行 / 客服聊天窗 / 邮件自动回 / SEO …）
+        const feature = record.purpose === 'run' ? (record.feature ?? featureOf(record)) : undefined
+        const key = feature === undefined ? record.purpose : `${record.purpose}:${feature}`
+        const row = rows.get(key) ?? EMPTY_ROW(record.purpose, feature)
         row.calls += 1
         row.input_tokens += record.input_tokens
         row.output_tokens += record.output_tokens
         row.cached_tokens += record.cached_tokens
         row.cost_base += record.cost_base
-        rows.set(record.purpose, row)
+        rows.set(key, row)
       }
-      const list = [...rows.values()].sort((a, b) => b.cost_base - a.cost_base)
+      const list = [...rows.values()].sort(
+        (a, b) => b.cost_base - a.cost_base || b.input_tokens - a.input_tokens,
+      )
       const total = list.reduce<ModelUsageRow | undefined>((acc, row) => {
-        if (acc === undefined) return { ...row, purpose: row.purpose }
+        if (acc === undefined) {
+          const { feature: _feature, ...first } = row
+          return { ...first }
+        }
         return {
           purpose: acc.purpose,
           calls: acc.calls + row.calls,

@@ -12,7 +12,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { cn } from 'cn'
-import { Loader2, Plus, Search, Send } from 'lucide-react'
+import { Loader2, MessageCircle, Plus, Search, Send } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useConversationActions } from '@/components/conversations/actions'
@@ -21,9 +21,12 @@ import { MatterMenu } from '@/components/sidebar/matter-menu'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/lib/app-context'
 import { TASK_TEXT_MAX } from '@/lib/handoff'
+import { shortAgo } from '@/lib/short-ago'
 import { RAIL_KEY, type RailMatter, type RailMatterState } from '@/lib/work-archive'
 
-/** 行首的记号：在做转圈、等你看黄点、其余留同宽的空位（标题对齐）。 */
+/**
+ * 行首的记号：在做转圈、等你看黄点、其余一个灰色对话图标（WP456-T3 §3.9：每行「图标 + 名字 + 灰色时间」）。
+ */
 export function ConvMarker({ state }: { state: RailMatterState }): ReactNode {
   const { t } = useApp()
   if (state === 'running')
@@ -33,12 +36,12 @@ export function ConvMarker({ state }: { state: RailMatterState }): ReactNode {
         aria-label={t('conv.running')}
         data-testid="conv-marker"
         data-state="running"
-        className="size-3 shrink-0 animate-spin text-ws-brand motion-reduce:animate-none"
+        className="size-3.5 shrink-0 animate-spin text-ws-brand motion-reduce:animate-none"
       />
     )
   if (state === 'awaiting' || state === 'ready')
     return (
-      <span className="flex size-3 shrink-0 items-center justify-center">
+      <span className="flex size-3.5 shrink-0 items-center justify-center">
         <i
           role="img"
           aria-label={t('conv.waiting')}
@@ -49,11 +52,12 @@ export function ConvMarker({ state }: { state: RailMatterState }): ReactNode {
         />
       </span>
     )
-  return <span aria-hidden className="size-3 shrink-0" />
+  return <MessageCircle aria-hidden className="size-3.5 shrink-0 text-ws-faint" />
 }
 
 export function ConvRow({ matter }: { matter: RailMatter }): ReactNode {
   const actions = useConversationActions()
+  const { t, lang } = useApp()
   return (
     <li
       className="group/thread flex items-center gap-0.5"
@@ -66,15 +70,22 @@ export function ConvRow({ matter }: { matter: RailMatter }): ReactNode {
         data-state={matter.state}
         className={({ isActive }) =>
           cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-[8px] px-1.5 py-1 text-[13px] transition-colors',
+            // WP456-T3（§3.9）：每行 32 高；选中那行品牌浅底
+            'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[8px] px-2 text-[13px] transition-colors',
             isActive
-              ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-              : 'text-ws-body hover:bg-sidebar-accent/60',
+              ? 'bg-ws-tint font-medium text-ws-brand-ink'
+              : 'text-ws-body hover:bg-ws-hover',
           )
         }
       >
         <ConvMarker state={matter.state} />
-        <span className="truncate">{matter.title}</span>
+        <span className="min-w-0 flex-1 truncate">{matter.title}</span>
+        <span
+          className="ws-num shrink-0 text-[12px] font-normal text-ws-faint"
+          data-testid="conv-when"
+        >
+          {shortAgo(matter.last_activity, t, lang)}
+        </span>
       </NavLink>
       {actions.archive === undefined ? null : (
         <MatterMenu

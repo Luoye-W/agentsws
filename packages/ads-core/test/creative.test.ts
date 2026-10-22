@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AD_COPY_RULES,
   adCopyLength,
+  buildCopyMessages,
   bytesToBase64,
   type CopyComplete,
   checkExperiment,
@@ -201,6 +202,28 @@ describe('两个子 Agent（替身模型）', () => {
     expect(user).toContain('<external_data')
     expect(user).toContain('续航 10000mAh')
     expect(user).toContain('带价格更好')
+  })
+
+  it('WP471（决策 1549）：同一品牌两条广告——系统提示逐字相同；品牌语气 / 规范在前，「写 N 条」与这条广告在后', () => {
+    const ctx = {
+      platform: 'google' as const,
+      skills: { headline: '# 标题技能' },
+      brand_voice: '平实、不夸张',
+      design_prompt: '品牌色只用蓝',
+      facts: '续航 10000mAh',
+    }
+    const a = buildCopyMessages('headline', { ...ctx, ad }, { want: 5 })
+    const b = buildCopyMessages(
+      'headline',
+      { ...ctx, ad: { ...ad, ad_id: 'other', campaign: 'Other campaign', headlines: ['X'] } },
+      { want: 3 },
+    )
+    expect(b.system).toBe(a.system)
+    const cut = (u: string) => u.slice(0, u.indexOf('写 '))
+    expect(cut(a.user)).toContain('平实、不夸张')
+    expect(cut(b.user)).toBe(cut(a.user))
+    expect(a.user.indexOf('品牌色只用蓝')).toBeLessThan(a.user.indexOf('【这条广告】'))
+    expect(a.user.indexOf('续航 10000mAh')).toBeLessThan(a.user.indexOf('写 5 条'))
   })
 
   it('模型没接上：不抛，写一句话；少于平台最少条数也写一句话', async () => {

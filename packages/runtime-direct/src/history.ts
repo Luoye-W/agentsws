@@ -1,4 +1,5 @@
 import type { ChatMessage, ToolDef } from '@agentsws/contracts'
+import { chatContentText } from '@agentsws/contracts'
 import { estimateInputTokens } from '@agentsws/model-gateway'
 
 /** 被 compact 掉的工具结果占位（Commerce Agents `compact_history` 的移植）。 */
@@ -9,12 +10,29 @@ export const COMPACT_PLACEHOLDER =
 export const CLOSED_TOOL_RESULT = (reason: string): string =>
   `[tool call closed without a result: ${reason}]`
 
+/**
+ * 历史有多大（压不压看它）。WP472：汉字（及全角）一个字算 1 个 token，其余 4 个字符算 1（宁多不少，
+ * 与助理 `assistant-thread.ts` 的估法同一个口径）。以前一律 4 个字符算 1，中文 / 带中文的 JSON 会少估
+ * 一大截（10-22 真机：估 1.2 万时实际已 2 万）——阈值按模型窗口定之后，少估就可能真撑破窗口。
+ * 没有中文的内容与以前的估数一样（{@link estimateInputTokens}）。
+ */
 export function historyTokens(messages: ChatMessage[], tools: ToolDef[]): number {
-  return estimateInputTokens(messages, tools, 4)
+  let wide = 0
+  for (const m of messages)
+    for (const ch of chatContentText(m.content)) if ((ch.codePointAt(0) ?? 0) > 0x2e7f) wide += 1
+  // 宽字符在 4 字符一 token 里本来算了 1/4，这里补齐到 1
+  return estimateInputTokens(messages, tools, 4) + Math.ceil((wide * 3) / 4)
 }
 
 /**
- * A9 `compact_history`：累计 token 超阈值时，把**最早**的 tool 结果换成占位，直到回到阈值以下。
+ * WP472（docs/116 §6 B）：压一次压到阈值的几成为止（`produce` 那版与普通运行同一个数）。
+ * 不是刚好压回阈值：那样过线之后每一步都要再改一条最早的工具结果，从那里往后整段历史每步都不命中缓存。
+ */
+export const COMPACT_TARGET_RATIO = 0.7
+
+/**
+ * A9 `compact_history`：累计 token 超阈值时，把**最早**的 tool 结果换成占位，直到回到 `limitTokens × targetRatio`
+ * 以下（`targetRatio` 不给 = 1：刚好压回阈值，老行为）。
  * 只动 `role: 'tool'` 的消息：system 前缀是缓存前缀不能动，assistant 的 tool_call 不能动
  * （动了就成了"孤儿工具结果"），user 消息是本次要回答的问题。
  */
@@ -22,10 +40,12 @@ export function compactHistory(
   messages: ChatMessage[],
   tools: ToolDef[],
   limitTokens: number,
+  targetRatio = 1,
 ): { messages: ChatMessage[]; compacted: number } {
+  const target = Math.floor(limitTokens * targetRatio)
   const out = [...messages]
   let compacted = 0
-  while (historyTokens(out, tools) > limitTokens) {
+  while (historyTokens(out, tools) > target) {
     const idx = out.findIndex((m) => m.role === 'tool' && m.content !== COMPACT_PLACEHOLDER)
     const victim = out[idx]
     if (idx < 0 || victim === undefined) break
@@ -67,7 +87,7 @@ export function compactHistoryFor(
   limitTokens: number,
   policy: CompactPolicy,
 ): { messages: ChatMessage[]; compacted: number } {
-  const target = Math.floor(limitTokens * (policy.targetRatio ?? 0.7))
+  const target = Math.floor(limitTokens * (policy.targetRatio ?? COMPACT_TARGET_RATIO))
   const out = [...messages]
   const isCompacted = (m: ChatMessage): boolean =>
     m.content === COMPACT_PLACEHOLDER ||

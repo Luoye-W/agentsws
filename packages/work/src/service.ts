@@ -1045,19 +1045,31 @@ export class Work {
       patch.position_id === null ? undefined : (patch.position_id ?? todo.position_id)
     const status = patch.status ?? todo.status
     const closing = status === 'done' || status === 'dropped'
+    /**
+     * WP469：没日子的待办（「本周」或「以后」）只是改个字 / 打个勾，`horizon` 照旧——
+     * 以前一律按 due / scheduled 重推，「本周」那几条没日子的一碰就掉回「以后」。
+     */
+    const keepHorizon =
+      patch.horizon === undefined &&
+      due === undefined &&
+      scheduled === undefined &&
+      todo.due === undefined &&
+      todo.scheduled === undefined
     const next: Todo = {
       ...todo,
       title: patch.title ?? todo.title,
       status,
-      horizon: resolveHorizon(
-        {
-          ...(due === undefined ? {} : { due }),
-          ...(scheduled === undefined ? {} : { scheduled }),
-          ...(patch.horizon === undefined ? {} : { horizon: patch.horizon }),
-        },
-        at,
-        this.tz_offset_minutes,
-      ),
+      horizon: keepHorizon
+        ? todo.horizon
+        : resolveHorizon(
+            {
+              ...(due === undefined ? {} : { due }),
+              ...(scheduled === undefined ? {} : { scheduled }),
+              ...(patch.horizon === undefined ? {} : { horizon: patch.horizon }),
+            },
+            at,
+            this.tz_offset_minutes,
+          ),
       updated_at: at,
     }
     // exactOptionalPropertyTypes：可空字段要么有值要么整个键不在
@@ -2388,7 +2400,11 @@ export class Work {
   calendar(range: CalendarRange, actor: { person_id?: PersonId }, sources: CalendarSources = {}) {
     const todos = this.listTodos({
       ...(actor.person_id === undefined ? {} : { owner: actor.person_id }),
-      status: ['open', 'doing', 'blocked'],
+      // WP469（决策 1524）：要了「做完的」才把做完的也取出来（划掉、变淡）
+      status:
+        range.include_done === true
+          ? ['open', 'doing', 'blocked', 'done']
+          : ['open', 'doing', 'blocked'],
     })
     const input: CalendarInput = {
       range,

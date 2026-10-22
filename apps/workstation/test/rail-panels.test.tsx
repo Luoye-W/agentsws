@@ -220,17 +220,14 @@ describe('第三栏骨架（36 §9）', () => {
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
-  it('WP375 / WP412 / WP431 / WP433：岗位页面板一直开着卡片堆（默认展开对话、计划）；点标题行展开设定，「显示更多」= 第三栏的完整列表，× 收起；没有开关', async () => {
+  it('WP375 / WP412 / WP431 / WP433 / WP456-T3：岗位页面板一直开着卡片堆（默认展开对话、计划）；设定在清单卡里，点那一行 = 第三栏的完整一格，× 收起；没有开关', async () => {
     renderRail()
     expect(await screen.findByTestId('rail-panel-cards')).toBeDefined()
     expect(screen.getByTestId('rail-card-conversations').getAttribute('data-open')).toBe('true')
     expect(screen.getByTestId('rail-card-plans').getAttribute('data-open')).toBe('true')
-    expect(screen.getByTestId('rail-card-settings').getAttribute('data-open')).toBe('false')
-
-    fireEvent.click(screen.getByTestId('rail-card-toggle-settings'))
-    expect(screen.getByTestId('rail-card-settings').getAttribute('data-open')).toBe('true')
-    // 设定 7 行，多于 5 行才有「显示更多」（WP433）
-    fireEvent.click(await screen.findByTestId('rail-card-more-settings'))
+    // WP456-T3（决策 1448）：设定合进了清单卡——没有展开 / 收起，点那一行开第三栏
+    expect(screen.queryByTestId('rail-card-toggle-settings')).toBeNull()
+    fireEvent.click(screen.getByTestId('rail-list-row-settings'))
     expect(await screen.findByTestId('rail-panel-settings')).toBeDefined()
     // WP433：第三栏开在卡片列右边，卡片列还在；× 收起第三栏
     expect(screen.getByTestId('rail-panel-cards')).toBeDefined()

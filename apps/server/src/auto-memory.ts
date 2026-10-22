@@ -43,8 +43,11 @@ export const AUTO_MEMORY_MAX_CHARS = 200
 export const AUTO_MEMORY_SAME = 0.85
 /** 像到这个份上就算同一件事的新说法（并进 AI 以前记的那条；人写的不碰；删过的不再记）。 */
 export const AUTO_MEMORY_SIMILAR = 0.5
-/** 提示词里「记忆」那一段的位置：公共段（25）之后、下一步建议（27）之前。 */
-export const MEMORY_SECTION_ORDER = 26
+/**
+ * 提示词里「记忆」那一段的位置。WP472（docs/116 §2 第 7 条）：从 26（公共段之后）挪到技能索引（90）之后——
+ * 记忆一写新的这一段就变，排在技能正文前面时后面的技能正文、索引全跟着不命中缓存。内容一个字不改，只换位置。
+ */
+export const MEMORY_SECTION_ORDER = 92
 /** 提示词里最多列几条记忆（再多的仍在技能正文 / 面板里，只是不在这一段重复）。 */
 export const MEMORY_SECTION_MAX = 30
 

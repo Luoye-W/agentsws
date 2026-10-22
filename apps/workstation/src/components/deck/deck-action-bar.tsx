@@ -16,14 +16,26 @@
  *   用户会以为是说明；「稍后」不再收进 `···`（有的卡暂时不知道怎么处理，要能一眼跳过）；
  *   「需要补素材」并进「修改」（点开同一个框：说一句怎么改，或贴素材）；
  * - **`···`**：只留真正少用的（主次都排不上的动作）；没有就不出。
+ *
+ * WP456-T3（规范 §2.6 第 10 / 13 条）：按钮走四级里的「主 / 次」两级——主按钮品牌色实底（还不能点时 40% 透明，
+ * 不另起一种淡绿），其余一律**次按钮（灰底）**：WP414 定过「只是文字的按钮会被当成说明」，所以「稍后」也不降成弱按钮。
+ * 「先选一个」那句灰字去掉（主按钮淡着就说明了，悬停再说一遍）；快捷键写进每颗按钮的悬停提示。
  */
 import { FOLLOW_UP_CARD_FORM } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsws/deck'
 import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { useMode } from '@/lib/mode'
+import { cn } from '@/lib/utils'
+
+/** 方向键 → 动作（和 `deck-keys.ts` 同一张表）；按钮悬停时写「→ 通过」。 */
+const KEY_OF: Partial<Record<DeckAction, string>> = {
+  approve: '→',
+  reject: '←',
+  snooze: '↑',
+  instruct: '↓',
+}
 
 /** 主动词 + 「修改 / 不要 / 稍后」。 */
 export const MAX_QUICK_ACTIONS = 4
@@ -129,6 +141,7 @@ export function DeckActionBar({
   optionMissing,
   onAction,
   extra,
+  keys,
 }: {
   card: DeckCard
   disabled?: boolean
@@ -137,6 +150,8 @@ export function DeckActionBar({
   onAction: (action: DeckAction) => void
   /** WP219：主次按钮后面再放一个（内容更新卡的「查看改动」）。不是第四个决定，只是看。 */
   extra?: React.ReactNode
+  /** WP456-T3：哪几个动作有方向键（悬停提示里写上）。 */
+  keys?: readonly DeckAction[]
 }): React.ReactNode {
   // WP275：按钮的字按模式换（① ② 是「通过 / 不要」）
   const { t } = useMode()
@@ -174,36 +189,46 @@ export function DeckActionBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="deck-action-bar">
-      {quick.map((action) => (
-        <Button
-          key={action}
-          size="sm"
-          variant={verbRank(card.layout, action) === 'primary' ? 'default' : 'outline'}
-          disabled={disabled === true || (action === 'approve' && optionMissing === true)}
-          data-action={action}
-          data-rank={verbRank(card.layout, action)}
-          data-armed={action === 'approve' && armed ? 'true' : undefined}
-          onClick={() => {
-            if (action === 'approve' && card.reconfirm === true && !armed) {
-              setArmed(true)
-              return
+      {quick.map((action) => {
+        const waiting = action === 'approve' && optionMissing === true
+        const key = keys?.includes(action) === true ? KEY_OF[action] : undefined
+        return (
+          <button
+            key={action}
+            type="button"
+            className={cn(
+              'ws-btn',
+              verbRank(card.layout, action) === 'primary' ? 'ws-btn-primary' : 'ws-btn-secondary',
+            )}
+            title={
+              waiting
+                ? t('deck.option_required')
+                : key === undefined
+                  ? undefined
+                  : `${key} ${labelOf(action)}`
             }
-            onAction(action)
-          }}
-        >
-          {action === 'approve' && armed ? t('deck.reconfirm.again') : labelOf(action)}
-        </Button>
-      ))}
+            disabled={disabled === true || waiting}
+            data-action={action}
+            data-rank={verbRank(card.layout, action)}
+            data-armed={action === 'approve' && armed ? 'true' : undefined}
+            onClick={() => {
+              if (action === 'approve' && card.reconfirm === true && !armed) {
+                setArmed(true)
+                return
+              }
+              onAction(action)
+            }}
+          >
+            {action === 'approve' && armed ? t('deck.reconfirm.again') : labelOf(action)}
+          </button>
+        )
+      })}
       {card.reconfirm === true ? (
         <span className="text-xs text-ws-warn" data-testid="deck-reconfirm-hint">
           {t('deck.reconfirm.hint')}
         </span>
       ) : null}
       {extra}
-      {/* 主按钮在卡身里的卡（底下没有「通过」）不出「先选一个」 */}
-      {optionMissing === true && quick.includes('approve') ? (
-        <span className="text-xs text-muted-foreground">{t('deck.option_required')}</span>
-      ) : null}
       {/* WP414：`···` 只留真正少用的（主次都排不上的动作）；没有就不出 */}
       {more.length === 0 ? null : (
         <span className="relative ml-auto inline-flex" ref={box}>

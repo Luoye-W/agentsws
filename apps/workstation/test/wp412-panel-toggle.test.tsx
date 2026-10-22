@@ -274,12 +274,12 @@ describe('WP433：岗位 / 职责 / 事项页卡片列一直在（Luoye 10-20 �
     expect(screen.getByTestId('rail-cards')).toBeDefined()
   })
 
-  it('别处自动弹开（连接卡）= 展开那张卡', async () => {
+  it('别处自动弹开（连接卡）= WP456-T3 起「连接」在清单卡里，开第三栏「连接」那一格', async () => {
     renderRail('/positions/asg_sup/duties/dtc.support')
     await screen.findByTestId('rail-cards')
     fireEvent.click(screen.getByTestId('auto-open'))
     await waitFor(() => {
-      expect(screen.getByTestId('rail-card-connections').getAttribute('data-open')).toBe('true')
+      expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('connections')
     })
   })
 

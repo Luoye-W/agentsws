@@ -130,6 +130,8 @@ interface WireUsage {
   completion_tokens?: number
   prompt_cache_hit_tokens?: number
   prompt_tokens_details?: { cached_tokens?: number }
+  /** WP473：个别中转把命中数放在顶层 `usage.cached_tokens`。 */
+  cached_tokens?: number
 }
 interface WireChatResponse {
   choices?: {
@@ -323,8 +325,9 @@ function hintFields(
   }
 }
 
+/** 命中缓存的 token：OpenAI 本家在 `prompt_tokens_details`，DeepSeek 在 `prompt_cache_hit_tokens`，个别中转在顶层（WP473）。 */
 const cachedOf = (u: WireUsage | undefined): number =>
-  u?.prompt_tokens_details?.cached_tokens ?? u?.prompt_cache_hit_tokens ?? 0
+  u?.prompt_tokens_details?.cached_tokens ?? u?.prompt_cache_hit_tokens ?? u?.cached_tokens ?? 0
 
 /** 网关是唯一持凭据的地方；这里也只拿环境变量名，不接受字面量凭据。 */
 /**

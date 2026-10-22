@@ -53456,6 +53456,25 @@
                   "distinct_reason": {
                     "type": "string",
                     "maxLength": 500
+                  },
+                  "scheduled": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "end": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["start", "end"]
+                  },
+                  "from_inbox": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
                   }
                 },
                 "required": ["title"]
@@ -54316,6 +54335,27 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "scheduled": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "end": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": ["start", "end"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               }
@@ -54779,6 +54819,163 @@
         }
       }
     },
+    "/v1/todos/slots": {
+      "post": {
+        "operationId": "proposeTodoSlots",
+        "summary": "帮我排进空档：几件没日子的待办各找一个空档（只给候选，人点采用才写，WP469）",
+        "tags": ["work"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ proposals: TodoSlotProposal[], unplaced: TodoId[] }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "{ proposals: TodoSlotProposal[], unplaced: TodoId[] }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "todo_ids": {
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "from": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "to": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tz_offset_minutes": {
+                    "type": "integer",
+                    "minimum": -840,
+                    "maximum": 840
+                  }
+                },
+                "required": ["todo_ids", "from", "to"]
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/todos/{id}/delegate": {
       "post": {
         "operationId": "delegateTodo",
@@ -55143,6 +55340,15 @@
             "in": "query",
             "required": false,
             "description": "图层，逗号分隔；**不传 = 全部**（WP74，37 §2.5）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "done",
+            "in": "query",
+            "required": false,
+            "description": "true = 做完的待办也要（划掉、变淡；WP469 决策 1524）",
             "schema": {
               "type": "string"
             }

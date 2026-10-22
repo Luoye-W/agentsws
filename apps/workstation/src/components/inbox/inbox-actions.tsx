@@ -6,7 +6,7 @@ import type { InboxItem } from '@agentsws/deck'
 import { useMutation } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { claimMessage, handMessageToPosition } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { apiErrorText } from '@/lib/error-text'
@@ -18,6 +18,10 @@ export interface InboxNotice {
   tone: 'ok' | 'warn' | 'error'
   text: string
   undo?: (() => void) | undefined
+  /** WP469：主句后面一段灰字（「补营业执照 · 周五前」） */
+  detail?: string | undefined
+  /** WP469：「去看」——站内地址 */
+  go?: { label: string; to: string } | undefined
 }
 
 /** 「我自己回」：到「全部信」打开这条会话并开写信框。 */
@@ -143,6 +147,21 @@ export function InboxToast({
       >
         {notice.text}
       </span>
+      {notice.detail === undefined ? null : (
+        <span className="min-w-0 truncate text-ws-muted-fg" data-testid="inbox-notice-detail">
+          {notice.detail}
+        </span>
+      )}
+      {notice.go === undefined ? null : (
+        <Link
+          to={notice.go.to}
+          className="ws-link shrink-0"
+          data-testid="inbox-notice-go"
+          onClick={onClose}
+        >
+          {notice.go.label}
+        </Link>
+      )}
       {notice.undo === undefined ? null : (
         <button
           type="button"

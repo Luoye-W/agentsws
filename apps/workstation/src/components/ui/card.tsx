@@ -1,6 +1,10 @@
 import { cn } from 'cn'
 import type * as React from 'react'
 
+/**
+ * WP456-T3（决策 1483 / 1536，规范 §2.5「卡不加边框」）：全站 `Card` 一种样子——不画那圈 ring，
+ * 用卡阴影（深色下 `--ws-card-edge` 带一圈细边）。原来只在设置弹窗里生效的那条 index.css 规则删了。
+ */
 function Card({
   className,
   size = 'default',
@@ -11,7 +15,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        'group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl',
+        'group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground shadow-ws [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl',
         className,
       )}
       {...props}

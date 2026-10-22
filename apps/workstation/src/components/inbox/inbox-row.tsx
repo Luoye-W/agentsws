@@ -29,14 +29,8 @@ import {
 } from './inbox-model'
 
 export type RowAct =
-  | 'approve'
-  | 'reject'
-  | 'snooze'
-  | 'hand'
-  | 'self'
-  | 'notice'
-  | 'original'
-  | 'position'
+  /** WP469：记成待办（「⋯」第一项，快捷键 T） */
+  'todo' | 'approve' | 'reject' | 'snooze' | 'hand' | 'self' | 'notice' | 'original' | 'position'
 
 /** 行上那颗药丸（等了多久 / 剩多久 / 等你发 / 急）。 */
 export function rowPill(
@@ -154,7 +148,8 @@ export function InboxRow({
     setInboxOpen({ kind: 'item', id: item.id })
   }
   const card = item.card
-  const menuItems: { act: RowAct | 'open' | 'edit'; label: string }[] = [
+  const menuItems: { act: RowAct | 'open' | 'edit'; label: string; key?: string }[] = [
+    { act: 'todo', label: t('inbox.menu.todo'), key: 'T' },
     { act: 'open', label: t('inbox.menu.open') },
     ...(card === undefined
       ? [
@@ -313,7 +308,7 @@ export function InboxRow({
                 type="button"
                 role="menuitem"
                 data-testid={`inbox-menu-${m.act}`}
-                className="rounded-[8px] px-2.5 py-1.5 text-left text-[13px] hover:bg-ws-surface"
+                className="flex items-center rounded-[8px] px-2.5 py-1.5 text-left text-[13px] hover:bg-ws-surface"
                 onClick={() => {
                   setMenu(false)
                   if (m.act === 'open') open()
@@ -324,7 +319,10 @@ export function InboxRow({
                   } else onAct(item, m.act)
                 }}
               >
-                {m.label}
+                <span className="min-w-0 flex-1">{m.label}</span>
+                {m.key === undefined ? null : (
+                  <kbd className="ws-num ml-2 text-xs text-ws-faint">{m.key}</kbd>
+                )}
               </button>
             ))}
           </div>

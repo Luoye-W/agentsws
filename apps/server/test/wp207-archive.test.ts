@@ -5,7 +5,11 @@
 import type { PositionInstance } from '@agentsws/contracts'
 import { createWork, DAY_MS } from '@agentsws/work'
 import { describe, expect, it } from 'vitest'
-import { createArchiveStateStore, createWorkArchive } from '../src/work-archive.js'
+import {
+  archiveRerankUser,
+  createArchiveStateStore,
+  createWorkArchive,
+} from '../src/work-archive.js'
 
 const T0 = '2026-09-20T02:00:00.000Z'
 
@@ -280,5 +284,21 @@ describe('WP207 手动归档（Fable 09-30）', () => {
     expect(t.events.filter((e) => e.type === 'work.archived').map((e) => e.payload.by)).toEqual([
       'user',
     ])
+  })
+})
+
+describe('WP471（决策 1549）：找回重排——归档清单在前（按 id 排），描述与「今天」在后', () => {
+  it('两次找回同一堆：描述之前逐字相同（不管这一堆进来的先后）', () => {
+    const pool = [
+      { id: 'mt_b', title: '首页改版', summary: '换横幅', last_activity: '2026-10-01T00:00:00Z' },
+      { id: 'mt_a', title: '周报', summary: '上周数据', last_activity: '2026-10-02T00:00:00Z' },
+    ]
+    const a = archiveRerankUser(pool, '那个首页的', '2026-10-22')
+    const b = archiveRerankUser([...pool].reverse(), '周报那件', '2026-10-23')
+    const head = (u: string) => u.slice(0, u.indexOf('用户的描述'))
+    expect(head(a)).toContain('mt_a')
+    expect(head(b)).toBe(head(a))
+    expect(head(a).indexOf('mt_a')).toBeLessThan(head(a).indexOf('mt_b'))
+    expect(a.trimEnd().endsWith('今天：2026-10-22')).toBe(true)
   })
 })

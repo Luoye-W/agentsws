@@ -13,6 +13,11 @@ import { useApp } from '@/lib/app-context'
 export const OUTPUT_TABS = ['records', 'outbound', 'evidence'] as const
 type OutputTab = (typeof OUTPUT_TABS)[number]
 
+/** WP456-T3：「记录」那一格最上面是 AI 写的报告文档（「产出」卡合进清单卡后从卡上挪过来）。 */
+const Docs = lazy(async () => ({
+  default: (await import('@/components/rail/cards/card-bodies')).OutputDocs,
+}))
+
 const BODIES: Record<OutputTab, LazyExoticComponent<ComponentType<RailPanelBodyProps>>> = {
   records: lazy(async () => ({ default: (await import('./records-panel')).RecordsPanel })),
   outbound: lazy(async () => ({ default: (await import('./outbound-panel')).OutboundPanel })),
@@ -60,7 +65,10 @@ export function OutputsPanel(props: RailPanelBodyProps): ReactNode {
               {t('rail.no_scope')}
             </p>
           ) : (
-            <Body {...props} />
+            <>
+              {tab === 'records' ? <Docs {...props} /> : null}
+              <Body {...props} />
+            </>
           )}
         </Suspense>
       </div>

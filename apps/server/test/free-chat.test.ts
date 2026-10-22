@@ -6,7 +6,13 @@ import type { FreeChatFrame, FreeChatMessageView } from '@agentsws/api'
 import type { ChatMessage, ModelProvider, ModelRef } from '@agentsws/contracts'
 import { createModelGateway, type ModelGatewayEvent } from '@agentsws/model-gateway'
 import { describe, expect, it } from 'vitest'
-import { chatCredits, createFreeChatPort, type FreeChatOptions } from '../src/free-chat.js'
+import {
+  chatCredits,
+  createFreeChatPort,
+  type FreeChatOptions,
+  WEB_OFF_LINE,
+  WEB_OFF_REFUSAL,
+} from '../src/free-chat.js'
 import { createFreeChatStore } from '../src/free-chat-store.js'
 import type { ModelChatChoice } from '../src/models.js'
 
@@ -284,11 +290,21 @@ describe('WP188 随便聊：一轮流式对话', () => {
 })
 
 describe('WP188 随便聊：联网搜索与公司资料', () => {
-  it('联网开关关着：模型手上一个工具都没有', async () => {
-    const { port, seen } = setup()
+  it('联网开关关着：web_search 照旧挂着（WP470：工具清单不随开关变），点了也不搜、回一句说明', async () => {
+    const { port, seen, searched } = setup({
+      script: [{ search: '上海天气' }, '没联网，按我知道的说'],
+    })
     const s = await port.create(actor, {})
-    await say(port, s.id, { web_search: false })
-    expect(seen[0]?.tools).toEqual([])
+    const { done } = await say(port, s.id, { web_search: false })
+    expect(seen[0]?.tools).toEqual(['web_search'])
+    expect(seen[1]?.tools).toEqual(['web_search'])
+    expect(searched).toEqual([])
+    const said = [...(seen[0]?.messages ?? [])].reverse().find((m) => m.role === 'user')
+    expect(String(said?.content)).toContain(WEB_OFF_LINE)
+    const tool = seen[1]?.messages.find((m) => m.role === 'tool')
+    expect(tool?.content).toBe(WEB_OFF_REFUSAL)
+    expect(done?.sources).toBeUndefined()
+    expect(done?.text).toBe('没联网，按我知道的说')
   })
 
   it('开着：只挂 web_search；搜到的来源带回界面、存进回复', async () => {
@@ -320,16 +336,23 @@ describe('WP188 随便聊：联网搜索与公司资料', () => {
     expect(done?.error).toBeUndefined()
   })
 
-  it('用公司资料回答：查到的资料进系统提示，回复带出处', async () => {
+  it('用公司资料回答：查到的资料接在这一轮那句话后面（WP470：不进系统提示），回复带出处', async () => {
     const { port, seen } = setup()
     const s = await port.create(actor, {})
     const { done } = await say(port, s.id, { knowledge: true, text: '退货期限多久？' })
     const system = seen[0]?.messages[0]
-    expect(String(system?.content)).toContain('[1] 退货期限是 30 天')
+    expect(String(system?.content)).not.toContain('退货期限是 30 天')
+    const said = String(seen[0]?.messages.at(-1)?.content)
+    expect(said.startsWith('退货期限多久？')).toBe(true)
+    expect(said).toContain('[1] 退货期限是 30 天')
+    expect(said).toContain('<external_data>')
     expect(done?.citations).toEqual([
       { n: 1, fact_card_id: 'fc_1', text: '退货期限是 30 天', source: '售后手册.pdf' },
     ])
-    expect(seen[0]?.tools).toEqual([])
+    // 存下来的那句话还是用户原话（末尾附加只给模型看）
+    const stored = await port.messages(actor, s.id)
+    expect(stored[0]?.text).toBe('退货期限多久？')
+    expect(seen[0]?.tools).toEqual(['web_search'])
   })
 })
 

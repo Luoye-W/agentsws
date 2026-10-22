@@ -127,7 +127,7 @@ beforeEach(() => {
 })
 
 describe('职责页（WP71 / 36 §10 → WP412 和岗位页同一个样子）', () => {
-  it('面包屑「岗位 › 职责」；页头只有图标、名字、问号与「⋯」——版本号、「内置只读」、几个人在做都不上屏', async () => {
+  it('面包屑「岗位 › 职责」；页头只有图标、名字与「⋯」（介绍在下拉第一行）——版本号、「内置只读」、几个人在做都不上屏', async () => {
     renderWithProviders(<DutyPage />, '/positions/asg_store/duties/dtc.store', 'asg_store')
     // 名字要等两条查询回来（在那之前先显示 role_id——不留空白，也不假装知道）
     await waitFor(() => {
@@ -143,10 +143,10 @@ describe('职责页（WP71 / 36 §10 → WP412 和岗位页同一个样子）', 
     expect(header.textContent).not.toContain('从内置模板复制')
     expect(screen.queryByTestId('duty-source')).toBeNull()
     expect(screen.queryByTestId('duty-holders')).toBeNull()
-    // 这条职责干什么：整段在名字旁的问号里
-    expect(screen.getByTestId('duty-description').getAttribute('data-hint')).toBe(
-      '管商品、价格、库存',
-    )
+    // WP456-T3（§3.2）：这条职责干什么不再是名字旁的问号（挤着下拉箭头）——进下拉菜单第一行
+    expect(screen.queryByTestId('duty-description')).toBeNull()
+    fireEvent.click(screen.getByTestId('duty-title-menu'))
+    expect((await screen.findByTestId('duty-description')).textContent).toBe('管商品、价格、库存')
     // WP431：「职责设置」是顶栏右边那排里的一颗滑杆（字在读屏与悬停里）
     expect(screen.getByTestId('duty-about-link').textContent).toContain('职责设置')
     expect(screen.getByTestId('duty-about-link').getAttribute('title')).toBe('职责设置')

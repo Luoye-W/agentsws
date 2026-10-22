@@ -179,6 +179,10 @@ const ConnectionsCardBody = lazy(async () => {
   const m = await import('@/components/rail/cards/card-bodies')
   return { default: m.ConnectionsCard }
 })
+const ConnectionsPanelBody = lazy(async () => {
+  const m = await import('@/components/rail/cards/card-bodies')
+  return { default: m.ConnectionsPanel }
+})
 // WP390：工坊服务（订单面板、服务列表、右栏那张卡）
 /** WP406：岗位更新——卡上「挑着看」开的那一页。 */
 const ContentUpdatesBody = lazy(async () => {
@@ -246,6 +250,8 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     order: at('conversations'),
     panel: 'conversations',
     useStatus: useConversationsStatus,
+    // WP456-T3（§3.9）：「+ 新对话」从卡里那一行挪到卡头右边（展开卡、开新对话那一格）
+    action: { icon: Plus, label: 'conv.new', intent: 'compose' },
   })
   registerRailCardBody('conversations', ConversationsCardBody)
   registerRailCard({
@@ -277,6 +283,8 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     order: at('outputs'),
     panel: 'outputs',
     useStatus: useOutputsStatus,
+    // WP456-T3（决策 1448）：产出 / 连接 / 设定 / 工坊服务合成一张清单卡
+    list: true,
   })
   registerRailCardBody('outputs', OutputsCardBody)
   registerRailCard({
@@ -293,8 +301,11 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     label: 'rail.card.connections',
     icon: Plug,
     order: at('connections'),
+    // WP456-T3：清单卡那一行点了在第三栏开连接的完整一格（原来的卡身体 + 连接卡就地连）
+    panel: 'connections',
     moreHref: settingsHref('connections'),
     useStatus: useConnectionsStatus,
+    list: true,
   })
   registerRailCardBody('connections', ConnectionsCardBody)
   registerRailCard({
@@ -304,6 +315,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     order: at('settings'),
     panel: 'settings',
     useStatus: useSettingsStatus,
+    list: true,
   })
   registerRailCardBody('settings', SettingsCardBody)
   // WP390（docs/105 §4.1 ③）：第七张卡「工坊服务」排在最下面——岗位页 = 这个岗位能用的服务（最多三项）+ 在做的单
@@ -314,6 +326,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     order: DEFAULT_CARD_ORDER.length + 1,
     panel: 'workshop-services',
     useStatus: useWorkshopServicesStatus,
+    list: true,
   })
   registerRailCardBody('workshop-services', WorkshopServicesCardBody)
 
@@ -412,7 +425,19 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
   // WP335：「关注设置」（只在「内容与搜索」职责层出那个标签）也落在「设定」里
   for (const sub of ['role', 'memory', 'knowledge', 'skills', 'caps', 'geo-watch'])
     registerPanelAlias({ id: sub, panel: 'settings', sub })
-  // WP324（决策 690）：连接卡——「去连接」开的；WP372 起展开「连接」卡、在那张卡里就地连
+  // WP456-T3（决策 1448）：「连接」合进清单卡后，它的完整一格（第三栏）——原来卡里那几行 + 连接卡就地连
+  registerPanelType({
+    id: 'connections',
+    label: 'rail.card.connections',
+    icon: Plug,
+    priority: 'builtin',
+    group: 'layer',
+    scoped: true,
+    card: 'connections',
+  })
+  registerPanelBody('connections', ConnectionsPanelBody)
+  // WP324（决策 690）：连接卡——「去连接」开的；WP372 起展开「连接」卡、在那张卡里就地连；
+  // WP456-T3：「连接」进了清单卡，改成在第三栏开「连接」那一格、连接卡在顶上就地连
   registerPanelType({
     id: 'connect',
     label: 'rail.panel.connect',

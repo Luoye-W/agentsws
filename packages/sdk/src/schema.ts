@@ -5847,6 +5847,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/todos/slots': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 帮我排进空档：几件没日子的待办各找一个空档（只给候选，人点采用才写，WP469） */
+    post: operations['proposeTodoSlots']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/todos/{id}/delegate': {
     parameters: {
       query?: never
@@ -48573,6 +48590,11 @@ export interface operations {
           collision?: 'join' | 'handoff' | 'force'
           collision_target?: string
           distinct_reason?: string
+          scheduled?: {
+            start: string
+            end: string
+          }
+          from_inbox?: string
         }
       }
     }
@@ -49150,6 +49172,10 @@ export interface operations {
           horizon?: 'backlog' | 'week' | 'today'
           due?: string | null
           goal_id?: string | null
+          scheduled?: {
+            start: string
+            end: string
+          } | null
         }
       }
     }
@@ -49537,6 +49563,103 @@ export interface operations {
       }
     }
   }
+  proposeTodoSlots: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          todo_ids: string[]
+          from: string
+          to: string
+          tz_offset_minutes?: number
+        }
+      }
+    }
+    responses: {
+      /** @description { proposals: TodoSlotProposal[], unplaced: TodoId[] } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
   delegateTodo: {
     parameters: {
       query?: never
@@ -49762,6 +49885,8 @@ export interface operations {
         to: string
         /** @description 图层，逗号分隔；**不传 = 全部**（WP74，37 §2.5） */
         sources?: string
+        /** @description true = 做完的待办也要（划掉、变淡；WP469 决策 1524） */
+        done?: string
       }
       header: {
         /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */

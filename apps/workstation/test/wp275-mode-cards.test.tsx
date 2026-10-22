@@ -149,9 +149,8 @@ describe('WP275：卡片词按模式', () => {
       <DeckCardView card={policyCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
     const body = screen.getByTestId('deck-layout-policy')
-    await waitFor(() => {
-      expect(body.textContent).toContain('点通过以后都这样做')
-    })
+    // WP456-T3（§3.1）：「点通过以后都这样做」去掉了（标题下那一句已经说了「定了以后照这个办」）
+    expect(body.textContent).not.toContain('点通过以后都这样做')
     expect(body.textContent).not.toContain('owner')
     expect(companyWordsIn(body)).toEqual([])
   })
@@ -177,12 +176,15 @@ describe('WP275：卡片词按模式', () => {
     expect(body.textContent).not.toContain('owner')
   })
 
-  it('③ 策略卡照旧：只有 owner 能批', () => {
+  it('③ 策略卡照旧：只有 owner 能批', async () => {
     state.orgs = [COMPANY_ORG]
     renderWithProviders(
       <DeckCardView card={policyCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
-    expect(screen.getByTestId('deck-layout-policy').textContent).toContain('owner')
+    // WP456-T3：知道是公司模式了才写这一句（模式没取到时不先闪一句）
+    await waitFor(() => {
+      expect(screen.getByTestId('deck-layout-policy').textContent).toContain('owner')
+    })
   })
 
   it('① B2B 报价：「等你确认」，不写「上级批 / 老板批 / 在批」', async () => {
