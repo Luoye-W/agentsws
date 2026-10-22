@@ -125,9 +125,9 @@ function RunBrowserStatus({ pathname }: RailPanelBodyProps): ReactNode {
             <p className="text-muted-foreground">{t('rail.browser.ego.none')}</p>
           ) : (
             <ol className="space-y-1">
-              {(view.ego_runs ?? []).map((r, i) => (
+              {(view.ego_runs ?? []).map((r) => (
                 <li
-                  key={`${r.at}-${i}`}
+                  key={`${r.at}|${r.note}`}
                   className="break-words font-mono text-xs"
                   data-testid="rail-browser-ego-run"
                 >
