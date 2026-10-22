@@ -8941,7 +8941,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(triage.kind === undefined ? {} : { kind: triage.kind }),
             summary: triage.summary,
             rule_names: hitRules.map((r) => r.name),
-            link: `/messages?thread=${encodeURIComponent(record.thread_id)}`,
+            link: `/messages?view=all&thread=${encodeURIComponent(record.thread_id)}`,
           },
           // 点名的去处没配好（只说了名字）：只记在本机的记录里
           only_sinks: target === undefined ? [] : [target.id],

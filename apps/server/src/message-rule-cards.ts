@@ -3,7 +3,7 @@
  *
  * 1. **「要建这条规则吗」**——复用 `policy_change`（「定规矩」家族，与记录去处同一种卡）：卡面一行白话、
  *    试跑（过去 30 天会命中几封、前 5 封、**会被改掉去向的那几封**）、用工坊积分时会花多少；按钮「建 / 不要」，
- *    一个勾「也处理过去 30 天的」默认不勾（随决定的 `edited_payload.apply_past` 带回）。建规则 = 拍板，永远 L1。
+ *    一个勾「也处理过去 30 天的」默认不勾（勾了点「建」= 选项 `after_past`）。建规则 = 拍板，永远 L1。
  * 2. **规则起草的回信**——`outbound_draft`（`payload.form = message_rule_draft`）：按来信语言、接口吻；
  *    批了才从收信那只邮箱回（`messages.deliverRuleDraft`），出站门照旧。规则自己永远不发信。
  */
@@ -74,11 +74,12 @@ export function messageRuleCardInput(
       draft,
       plain: input.plain,
       trial,
-      apply_past: false,
       ...(input.rule_id === undefined ? {} : { rule_id: input.rule_id }),
       ...(input.revision === undefined ? {} : { revision: input.revision }),
+      // 「也处理过去 30 天的」是卡身里的一个勾（默认不勾）：勾了点「建」= 选 `after_past`
       options: [
         { id: 'after', label: '建' },
+        { id: 'after_past', label: '建，也处理过去 30 天的' },
         { id: 'before', label: '不要' },
       ],
       target: 'workspace_policy',

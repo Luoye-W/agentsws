@@ -35,6 +35,7 @@ import {
   ListChecks,
   MessageSquareQuote,
   MessagesSquare,
+  Newspaper,
   Package,
   Plug,
   Plus,
@@ -44,7 +45,7 @@ import {
 } from 'lucide-react'
 import { lazy } from 'react'
 import { registerKeywordBankBlock } from '@/components/amazon/keyword-bank-block'
-import { MESSAGE_RULES_ADDRESS } from '@/components/messages/rules-address'
+import { MESSAGE_DIGEST_ADDRESS, MESSAGE_RULES_ADDRESS } from '@/components/messages/rules-address'
 import {
   useConnectionsStatus,
   useConversationsStatus,
@@ -129,6 +130,11 @@ const ConversationsBody = lazy(async () => {
 const MessageRulesBody = lazy(async () => {
   const m = await import('@/components/rail/panels/message-rules-panel')
   return { default: m.MessageRulesPanel }
+})
+/** WP441：消息页右栏「今天的简报」（铃铛「消息简报：今天 N 封」点进来）。 */
+const MessageDigestBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/message-digest-panel')
+  return { default: m.MessageDigestPanel }
 })
 /** WP372（决策 1019）：报表——全部 + 看板，与看一份。 */
 const ReportsBody = lazy(async () => {
@@ -536,6 +542,17 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('message-rules', MessageRulesBody)
+  // WP441（docs/108 §5.6）：今天的简报——按规则分组、每封一行摘要、「全部知道了」
+  registerPanelType({
+    id: 'message-digest',
+    label: 'rail.panel.message-digest',
+    icon: Newspaper,
+    priority: 'builtin',
+    group: 'context',
+    matches: [MESSAGE_DIGEST_ADDRESS],
+    hidden: true,
+  })
+  registerPanelBody('message-digest', MessageDigestBody)
   // WP398：岗位页「词库」块（WP395 的面板留的那一块）
   registerKeywordBankBlock()
 }

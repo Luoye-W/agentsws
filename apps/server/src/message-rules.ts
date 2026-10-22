@@ -693,7 +693,7 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
         options.notify?.({
           person_id: n.person_id as PersonId,
           text: `${from} 来信：${summary}`,
-          href: `/messages?thread=${encodeURIComponent(record.thread_id)}`,
+          href: `/messages?view=all&thread=${encodeURIComponent(record.thread_id)}`,
           key: `message_rule:${n.rule_id}:${bucket}`,
         })
       } catch (e) {
@@ -741,9 +741,12 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
 
   const onCardDecided = async (item: ApprovalItem): Promise<void> => {
     if (!isMessageRuleCard(item) || item.workspace_id !== workspace_id) return
-    const picked = item.decision?.selected_option_id
-    if (!APPROVED.has(item.state) || picked === 'before') return
     const p = item.payload as Record<string, unknown>
+    // 选择题卡批了 = 选项落在决定上，或（卡片动词那一路）写回卡面的 `selected_option_id`
+    const picked =
+      item.decision?.selected_option_id ??
+      (typeof p.selected_option_id === 'string' ? p.selected_option_id : undefined)
+    if (!APPROVED.has(item.state) || picked === 'before') return
     const draft = p.draft as MessageRuleDraft | undefined
     if (draft === undefined) return
     const decidedBy = item.decision?.by
@@ -777,7 +780,8 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
       options.logQuiet('message_rule_create_failed', '', e)
       return
     }
-    if (p.apply_past === true) await applyPast(rule)
+    // 「也处理过去 30 天的」：勾了点「建」= 选 `after_past`
+    if (picked === 'after_past') await applyPast(rule)
   }
 
   /**

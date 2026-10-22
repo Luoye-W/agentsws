@@ -72,7 +72,8 @@ export const NOTIFY_EN: Record<string, string> = {
   'notify.cat.outbound.hint':
     'Approved Reddit replies / posts waiting for you to open in the browser extension and send yourself',
   'notify.cat.messages': 'Messages',
-  'notify.cat.messages.hint': 'Mail your message rules said to tell you about, and the daily message digest',
+  'notify.cat.messages.hint':
+    'Mail your message rules said to tell you about, and the daily message digest',
   'notify.col.inbox': 'In app',
   'notify.col.system': 'System',
   'notify.col.inbox.hint': 'Shows under the bell, top right',

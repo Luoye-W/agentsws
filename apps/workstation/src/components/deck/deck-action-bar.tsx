@@ -57,7 +57,9 @@ export function quickActions(card: DeckCard): DeckAction[] {
     (card.detail.payload as { kind?: unknown } | undefined)?.kind === 'google_alert_change' ||
     (typeof form === 'string' && form.startsWith('service_')) ||
     // WP406：岗位更新的「全部应用 / 这次跳过」在卡身里（带选项）
-    form === 'content_update_digest'
+    form === 'content_update_digest' ||
+    // WP441：「要建这条规则吗」——「建」要带上「也处理过去 30 天的」那个勾，在卡身里
+    form === 'message_rule'
   return card.available_actions
     .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
     .filter((a) => !(bodyPrimary && a === 'approve'))

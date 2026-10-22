@@ -196,13 +196,12 @@ function decided(
       by: over.by ?? 'p_owner',
       at: '2026-10-22T02:00:00.000Z',
       via: 'workstation',
-      selected_option_id: over.pick ?? 'after',
+      selected_option_id: over.pick ?? (over.apply_past === true ? 'after_past' : 'after'),
     },
     payload: {
       form: 'message_rule',
       draft: input.draft,
       ...(input.rule_id === undefined ? {} : { rule_id: input.rule_id, revision: input.revision }),
-      apply_past: over.apply_past === true,
     },
   } as unknown as ApprovalItem
 }
