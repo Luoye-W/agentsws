@@ -30,6 +30,7 @@ import {
   isMcpReadTool,
   isScheduleTool,
   isWebTool,
+  MESSAGE_RULE_TOOL_DEF_BY_NAME,
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
   RECORD_SINK_TOOL_DEF_BY_NAME,
@@ -365,6 +366,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     IMAGE_TOOL_DEF_BY_NAME.get(name) ??
     // WP323：记录去处的三个工具同一个转法（定义在 stand-ins 的 `runtime/record-sink.ts`）
     RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ??
+    // WP441：一句话写消息规则（定义在 stand-ins 的 `runtime/message-rule.ts`）
+    MESSAGE_RULE_TOOL_DEF_BY_NAME.get(name) ??
     // WP331：报告积木（定义在 stand-ins 的 `runtime/report.ts`）
     REPORT_TOOL_DEF_BY_NAME.get(name) ??
     // WP315：投放岗看数据（定义在 stand-ins 的 `runtime/ads-data.ts`）
@@ -540,6 +543,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       IMAGE_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP323：记录去处（读表头只读；配置只出「定规矩」卡）
       RECORD_SINK_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP441：一句话写消息规则（转规则、试跑、出「要建吗」卡；不直接生效）
+      MESSAGE_RULE_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP331：报告积木（查数据只读；发布只进这个岗位的报表区）
       REPORT_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP315：投放岗看数据（查数只读；现在导一次走插件；止损只出卡）

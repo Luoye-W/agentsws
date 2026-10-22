@@ -95,6 +95,21 @@ export interface OutboundRecord {
   score?: number
   /** WP432：票数是什么时候读的。 */
   score_at?: Iso8601
+  /**
+   * WP441（docs/108 §5.1.1「记到某处」）：消息规则记下的**一封来信**（动作 `message_rule`，只有点名的去处才记）。
+   * 不是我们发出去的东西：`content` 放摘要，原文不进这一行。
+   */
+  message?: {
+    sender: string
+    received_at: Iso8601
+    kind?: string
+    summary?: string
+    rule_names: string[]
+    /** 工作台里打开这封信的地址（`/messages?thread=…`）。 */
+    link: string
+  }
+  /** WP441：只写进这几个去处（消息规则点名的那一个）；不给 = 按各去处的筛选。 */
+  only_sinks?: string[]
   follow_ups: OutboundFollowUp[]
 }
 
@@ -134,6 +149,13 @@ export const OUTBOUND_FIELDS = [
   // WP432（只加）：人改过时 AI 起草的那一版、读回的票数
   { id: 'draft_content', zh: 'AI 草稿（人改过才有）' },
   { id: 'score', zh: '票数' },
+  // WP441（docs/108 §6）：消息规则「记到某处」那一组（主题用上面的 subject）
+  { id: 'sender', zh: '发件人' },
+  { id: 'received_at', zh: '收到时间' },
+  { id: 'message_kind', zh: '类型' },
+  { id: 'summary', zh: '摘要' },
+  { id: 'rule_names', zh: '命中规则' },
+  { id: 'message_link', zh: '原件链接' },
 ] as const
 
 export type OutboundField = (typeof OUTBOUND_FIELDS)[number]['id']

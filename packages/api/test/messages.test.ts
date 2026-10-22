@@ -344,6 +344,8 @@ describe('63 消息面路由', () => {
     expect(deletes.sort()).toEqual([
       '/v1/messages/drafts/:id',
       '/v1/messages/labels/:id',
+      // WP441：消息规则（删的是规则，不是信）
+      '/v1/messages/message-rules/:id',
       '/v1/messages/rules/:id',
     ])
   })

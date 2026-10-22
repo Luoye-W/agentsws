@@ -19,11 +19,13 @@ import type {
   Clock,
   DeletedSenderRule,
   MessageCorrection,
+  MessageDigestEntry,
   MessageDraft,
   MessageFolder,
   MessageLabel,
   MessageListQuery,
   MessageRecord,
+  MessageRule,
   MessageThreadSummary,
   SenderRule,
 } from '@agentsws/contracts'
@@ -105,6 +107,23 @@ CREATE TABLE IF NOT EXISTS message_sender_rules_deleted (
   deleted_at_ms INTEGER NOT NULL,
   json          TEXT NOT NULL
 ) STRICT;
+`,
+  },
+  {
+    // WP441：消息规则（清单顺序 = 优先级）与今天的简报里攒着的信
+    version: 4,
+    sql: `
+CREATE TABLE IF NOT EXISTS message_rules (
+  id    TEXT PRIMARY KEY NOT NULL,
+  ord   INTEGER NOT NULL,
+  json  TEXT NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS message_digest (
+  message_id TEXT PRIMARY KEY NOT NULL,
+  at_ms      INTEGER NOT NULL,
+  json       TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS message_digest_by_at ON message_digest (at_ms DESC);
 `,
   },
 ]
@@ -374,6 +393,43 @@ export class SqliteMessageStore implements MessageStore {
       this.#db.prepare('DELETE FROM message_sender_rules_deleted WHERE rule_id = ?').run(rule_id)
         .changes > 0
     )
+  }
+
+  messageRules(): MessageRule[] {
+    return this.#db
+      .prepare<[], Row>('SELECT json FROM message_rules')
+      .all()
+      .map((r) => JSON.parse(r.json) as MessageRule)
+      .sort((a, b) => a.order - b.order || a.created_at.localeCompare(b.created_at))
+  }
+
+  putMessageRule(rule: MessageRule): void {
+    this.#db
+      .prepare(
+        `INSERT INTO message_rules (id, ord, json) VALUES (?,?,?)
+         ON CONFLICT(id) DO UPDATE SET ord = excluded.ord, json = excluded.json`,
+      )
+      .run(rule.id, Math.trunc(rule.order), JSON.stringify(rule))
+  }
+
+  deleteMessageRule(id: string): boolean {
+    return this.#db.prepare('DELETE FROM message_rules WHERE id = ?').run(id).changes > 0
+  }
+
+  digestEntries(): MessageDigestEntry[] {
+    return this.#db
+      .prepare<[], Row>('SELECT json FROM message_digest ORDER BY at_ms DESC')
+      .all()
+      .map((r) => JSON.parse(r.json) as MessageDigestEntry)
+  }
+
+  putDigestEntry(entry: MessageDigestEntry): void {
+    this.#db
+      .prepare(
+        `INSERT INTO message_digest (message_id, at_ms, json) VALUES (?,?,?)
+         ON CONFLICT(message_id) DO UPDATE SET at_ms = excluded.at_ms, json = excluded.json`,
+      )
+      .run(entry.message_id, Date.parse(entry.at) || 0, JSON.stringify(entry))
   }
 
   drafts(): MessageDraft[] {

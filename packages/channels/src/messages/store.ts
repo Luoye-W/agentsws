@@ -13,12 +13,14 @@ import type {
   DeletedSenderRule,
   MaybePromise,
   MessageCorrection,
+  MessageDigestEntry,
   MessageDraft,
   MessageFolder,
   MessageFolderKind,
   MessageLabel,
   MessageListQuery,
   MessageRecord,
+  MessageRule,
   MessageThreadSummary,
   SenderRule,
 } from '@agentsws/contracts'
@@ -83,6 +85,14 @@ export interface MessageStore {
   trustedSenders(): MaybePromise<string[]>
   trustSender(email: string): MaybePromise<void>
 
+  /** WP441：消息规则（清单顺序由规则自己的 `order` 定）。不实现 = 没有消息规则。 */
+  messageRules?(): MaybePromise<MessageRule[]>
+  putMessageRule?(rule: MessageRule): MaybePromise<void>
+  deleteMessageRule?(id: string): MaybePromise<boolean>
+  /** WP441：今天的简报里攒着的信（按信 id 一条；同一封再命中就并进去）。 */
+  digestEntries?(): MaybePromise<MessageDigestEntry[]>
+  putDigestEntry?(entry: MessageDigestEntry): MaybePromise<void>
+
   /** WP212：最近的改判 / 改岗位（新的在前）。可选：老实现没有就是"还没教过"。 */
   corrections?(limit?: number): MaybePromise<MessageCorrection[]>
   putCorrection?(correction: MessageCorrection): MaybePromise<void>
@@ -144,6 +154,8 @@ export class MemoryMessageStore implements MessageStore {
   private readonly draftRows = new Map<string, MessageDraft>()
   private readonly trusted = new Set<string>()
   private readonly correctionRows = new Map<string, MessageCorrection>()
+  private readonly messageRuleRows = new Map<string, MessageRule>()
+  private readonly digestRows = new Map<string, MessageDigestEntry>()
 
   put(record: MessageRecord): void {
     this.rows.set(record.id, clone(record))
@@ -292,6 +304,30 @@ export class MemoryMessageStore implements MessageStore {
 
   trustSender(email: string): void {
     this.trusted.add(email.trim().toLowerCase())
+  }
+
+  messageRules(): MessageRule[] {
+    return [...this.messageRuleRows.values()]
+      .map((r) => structuredClone(r))
+      .sort((a, b) => a.order - b.order || a.created_at.localeCompare(b.created_at))
+  }
+
+  putMessageRule(rule: MessageRule): void {
+    this.messageRuleRows.set(rule.id, structuredClone(rule))
+  }
+
+  deleteMessageRule(id: string): boolean {
+    return this.messageRuleRows.delete(id)
+  }
+
+  digestEntries(): MessageDigestEntry[] {
+    return [...this.digestRows.values()]
+      .map((e) => structuredClone(e))
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+  }
+
+  putDigestEntry(entry: MessageDigestEntry): void {
+    this.digestRows.set(entry.message_id, structuredClone(entry))
   }
 }
 

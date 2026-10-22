@@ -20,6 +20,8 @@ export type NotificationCategory =
   | 'update'
   /** WP432：批过的 Reddit 回复 / 帖子等你在浏览器插件里打开、自己点发送（插件图标上也有数字）。 */
   | 'outbound'
+  /** WP441（docs/108 §5.6）：消息规则「告诉我一声」、今天的简报。 */
+  | 'messages'
 
 export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'team',
@@ -28,6 +30,7 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'credits',
   'update',
   'outbound',
+  'messages',
 ]
 
 /** 保留多少天（按最后一次更新算）。 */
@@ -90,6 +93,8 @@ export const DEFAULT_NOTIFICATION_PREFS: Readonly<NotificationPrefs> = {
   update: { inbox: true, system: false },
   // WP432：等你发——有东西在等你亲手点发送，默认系统通知也开（插件里也弹一句）
   outbound: { inbox: true, system: true },
+  // WP441：消息规则的「告诉我一声」与简报——默认只进铃铛，不弹系统通知
+  messages: { inbox: true, system: false },
 }
 
 /** 合并默认值与人改过的（缺的类别用默认；站内关了系统也算关）。 */

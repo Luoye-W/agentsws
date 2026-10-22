@@ -14,6 +14,7 @@ import {
   CheckCheck,
   Coins,
   type LucideIcon,
+  Mail,
   RefreshCw,
   SendHorizontal,
   Settings2,
@@ -51,6 +52,8 @@ export const CATEGORY_LOOK: Record<NotificationCategory, { icon: LucideIcon; ton
   update: { icon: RefreshCw, tone: 'bg-ws-brand-soft text-ws-brand' },
   // WP432：等你在插件里发
   outbound: { icon: SendHorizontal, tone: 'bg-ws-warn-bg text-ws-warn' },
+  // WP441：消息规则「告诉我一声」、今天的简报
+  messages: { icon: Mail, tone: 'bg-ws-info-bg text-ws-info' },
 }
 
 /** 「刚刚 / 5 分钟前 / 3 小时前 / 昨天 / 4 天前」。 */

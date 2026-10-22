@@ -58,6 +58,12 @@ import {
   renderKolAnswer,
 } from './kol.js'
 import {
+  MESSAGE_RULE_TOOL_DEF_BY_NAME,
+  messageRuleBranch,
+  messageRuleDataOf,
+  renderMessageRuleAnswer,
+} from './message-rule.js'
+import {
   connectionsOf,
   OWNER_CONNECTIONS_TOOL,
   OWNER_POSITIONS_TOOL,
@@ -420,6 +426,8 @@ function toolDefs(req: RunRequest): ToolDef[] {
       IMAGE_TOOL_DEF_BY_NAME.get(name) ??
       // WP323：记录去处的三个工具（服务端接了发出记录的运行才有）
       RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ??
+      // WP441：一句话写消息规则（服务端接了消息规则的运行才有）
+      MESSAGE_RULE_TOOL_DEF_BY_NAME.get(name) ??
       // WP331：报告积木（查巡查数据 / 立即巡查 / 查发出记录 / 发布报告；服务端接了才有）
       REPORT_TOOL_DEF_BY_NAME.get(name) ??
       // WP315：投放岗看数据（查广告数据 / 现在导一次 / 提止损卡；服务端接了才有）
@@ -1711,6 +1719,61 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         if (res.status === 'ok') readTools.push(sinkStep.tool)
         const data = res.status === 'ok' ? recordSinkDataOf(res.data) : undefined
         const answer = renderRecordSinkAnswer({
+          ...(data === undefined ? {} : { data }),
+          ...(res.status === 'ok'
+            ? {}
+            : {
+                failed: res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? ''),
+              }),
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
+      /*
+       * WP441：**一句话写消息规则**（演示用剧本）。工具面里有它、话里像是在给一类来信定规矩（「…的都告诉我」
+       * 「…打标签、别烦我」），就调一次 propose_message_rule（服务端转规则、试跑、出「要建吗」卡；不直接生效）。
+       */
+      const ruleStep = messageRuleBranch(req, b2bText)
+      if (ruleStep !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: ruleStep.tool, input: ruleStep.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: ruleStep.tool,
+                input: ruleStep.input,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        if (res.status === 'ok') readTools.push(ruleStep.tool)
+        const data = res.status === 'ok' ? messageRuleDataOf(res.data) : undefined
+        const answer = renderMessageRuleAnswer({
           ...(data === undefined ? {} : { data }),
           ...(res.status === 'ok'
             ? {}

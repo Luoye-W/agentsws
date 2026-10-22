@@ -98,6 +98,23 @@ export interface MessageTriage {
    * 「没人接的」里那个主按钮「交给 X」就是它；发件人规则里记过岗位时由规则给（把握 1）。
    */
   suggested_position?: string
+  /**
+   * WP441（docs/108 §5.1.3–§5.1.4）：这封信命中了哪几条**消息规则**（按清单顺序）。写死条件命中是 `static`，
+   * AI 条件命中是 `ai`（带把握）。界面「为什么这样处理」照它写「按规则『结算通知』处理 · 另有 1 条也命中」。
+   */
+  rule_hits?: MessageRuleHit[]
+  /** WP441：去向由哪条规则定的（多条命中时只认排最前、带去向动作的那一条）。 */
+  rule_route?: string
+}
+
+/** WP441：一封信命中的一条消息规则。 */
+export interface MessageRuleHit {
+  rule_id: string
+  by: 'static' | 'ai'
+  /** AI 条件命中的把握（0–1）。 */
+  confidence?: number
+  /** 命中那一刻规则的名字（规则后来改名 / 删了，这一封照样说得出当时按哪条走的）。 */
+  name?: string
 }
 
 /* ── WP212：类型、没人接 / 已交出去（docs/88 §3、§7；只加不改）──────────── */
@@ -431,6 +448,8 @@ export interface MessageThreadSummary {
   open_card_count?: number
   /** WP212：跳到卡片那一头的链接（事项页，那里列着这件事的卡）。 */
   card_link?: string
+  /** WP441：最新那封来信命中的消息规则（「为什么这样处理」那一格）。 */
+  rule_hits?: MessageRuleHit[]
 }
 
 /* ── 标签 ─────────────────────────────────────────────────────────────── */

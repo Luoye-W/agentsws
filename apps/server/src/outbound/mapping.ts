@@ -90,12 +90,25 @@ export function fieldValue(record: OutboundRecord, field: OutboundField): string
     // WP432：票数是数（没读过留空）
     case 'score':
       return record.score ?? ''
+    // WP441：消息规则记下的来信那一组
+    case 'sender':
+      return record.message?.sender ?? ''
+    case 'received_at':
+      return record.message?.received_at ?? ''
+    case 'message_kind':
+      return record.message?.kind ?? ''
+    case 'summary':
+      return record.message?.summary ?? ''
+    case 'rule_names':
+      return (record.message?.rule_names ?? []).join('；')
+    case 'message_link':
+      return record.message?.link ?? ''
     default:
       return (record[field] as string | undefined) ?? ''
   }
 }
 
-const TIME_FIELDS = new Set<OutboundField>(['sent_at', 'sent_date', 'approved_at'])
+const TIME_FIELDS = new Set<OutboundField>(['sent_at', 'sent_date', 'approved_at', 'received_at'])
 
 const pad = (n: number, w = 2): string => String(n).padStart(w, '0')
 
@@ -220,6 +233,13 @@ const SYNONYMS: ReadonlyArray<[OutboundField, readonly string[]]> = [
   ['faq', ['faq', '依据', '引用']],
   ['follow_up_count', ['对方回复数', '后续', '回复数', 'replies']],
   ['record_id', ['记录编号', '编号', 'record id', 'id']],
+  // WP441：消息规则记下的来信那一组（放最后：老表头的猜法一个不变）
+  ['sender', ['发件人', '来信人', 'sender']],
+  ['received_at', ['收到时间', '收信时间', 'received at']],
+  ['message_kind', ['邮件类型', '消息类型']],
+  ['summary', ['摘要', 'summary']],
+  ['rule_names', ['命中规则', '规则']],
+  ['message_link', ['原件链接', '原邮件链接', '邮件链接']],
 ]
 
 const norm = (s: string): string =>

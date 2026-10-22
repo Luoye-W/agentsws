@@ -139,6 +139,7 @@ import {
   isScheduleTool,
   isSiteHealthRole,
   isThemeRole,
+  MESSAGE_RULE_TOOL_NAMES,
   OWNER_TOOL_NAMES,
   PR_MONITOR_TOOL_NAMES,
   READ_SKILL_TOOL,
@@ -228,6 +229,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...IMAGE_TOOL_NAMES,
     // WP323：记录去处——读表头只读外部；配置只出「定规矩」卡（本机执行器）
     ...RECORD_SINK_TOOL_NAMES,
+    // WP441：消息规则——列规则只读本机；转规则只出「要建吗」卡（本机执行器）
+    ...MESSAGE_RULE_TOOL_NAMES,
     // WP331：报告积木——查巡查 / 查发出记录只读本机库；立即巡查读外部（只读）；发布只进本岗位报表区
     ...REPORT_TOOL_NAMES,
     // WP315：投放岗看数据——查数只读本机库；现在导一次排给插件（只点导出）；止损只出卡
@@ -544,6 +547,11 @@ export interface RuntimeOptions {
    * （老装配、模拟世界字节不变）。
    */
   recordSinkTools?: ToolExecutor
+  /**
+   * WP441（docs/108 §5.1.2）：一句话写消息规则的两个工具（`message-rule-tools.ts` 建的那一份）。**所有职责都有**——
+   * 用户在助理或哪个岗位里说「…的信以后都…」都能配；只出「要建这条规则吗」卡。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  messageRuleTools?: ToolExecutor
   /**
    * WP331（决策 691）：报告积木的四个工具（`report-tools.ts` 建的那一份）。查发出记录 / 发布报告给所有职责；
    * 查巡查数据 / 立即巡查只给 `watchRoles`。不给 = 没有这一组（老装配、模拟世界字节不变）。
@@ -1452,6 +1460,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const dev = options.devTools
     const automation = options.automation
     const sinkTools = options.recordSinkTools
+    const ruleTools = options.messageRuleTools
     const reportTools = options.reportTools?.execute
     const adsDataTools = options.adsDataTools
     const amazonListingTools = options.amazonListingTools
@@ -1493,6 +1502,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       readSkill === undefined &&
       automation === undefined &&
       sinkTools === undefined &&
+      ruleTools === undefined &&
       reportTools === undefined &&
       adsDataTools === undefined &&
       setupRequest === undefined &&
@@ -1550,6 +1560,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP323：记录去处（名字与别处不重名）
       if (sinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bareOf(call.name))) {
         return sinkTools(call)
+      }
+      // WP441：消息规则（名字与别处不重名）
+      if (ruleTools !== undefined && MESSAGE_RULE_TOOL_NAMES.includes(bareOf(call.name))) {
+        return ruleTools(call)
       }
       // WP331：报告积木（名字与别处不重名）
       if (reportTools !== undefined && REPORT_TOOL_NAMES.includes(bareOf(call.name))) {
@@ -1655,6 +1669,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.shopTools !== undefined && SHOP_TOOL_NAMES.includes(bare)) return true
     if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
     if (options.recordSinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bare)) return true
+    if (options.messageRuleTools !== undefined && MESSAGE_RULE_TOOL_NAMES.includes(bare))
+      return true
     if (options.reportTools !== undefined && REPORT_TOOL_NAMES.includes(bare)) return true
     if (options.prMonitorTools !== undefined && PR_MONITOR_TOOL_NAMES.includes(bare)) return true
     if (options.adsDataTools !== undefined && ADS_DATA_TOOL_NAMES.includes(bare)) return true
@@ -2179,6 +2195,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(automationOn ? SCHEDULE_TOOL_NAMES : []),
         // WP323：记录去处（所有职责；接了发出记录才有）
         ...(options.recordSinkTools === undefined ? [] : RECORD_SINK_TOOL_NAMES),
+        // WP441：一句话写消息规则（所有职责；接了消息规则才有）
+        ...(options.messageRuleTools === undefined ? [] : MESSAGE_RULE_TOOL_NAMES),
         // WP331：报告积木（查发出记录 / 发布报告所有职责；查巡查 / 立即巡查只给担巡查的职责）
         ...(options.reportTools === undefined
           ? []

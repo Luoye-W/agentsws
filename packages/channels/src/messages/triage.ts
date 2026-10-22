@@ -27,12 +27,26 @@ import type {
   MessageKind,
   MessagePriority,
   MessageRoute,
+  MessageRule,
+  MessageSource,
   MessageTriage,
   SenderRule,
 } from '@agentsws/contracts'
 import { MESSAGE_KINDS, TRIAGE_CONFIDENCE_FLOOR } from '@agentsws/contracts'
 import { looksLikeB2bInquiry, platformInquiryOf } from './b2b-signals.js'
 import { isMessageKind, isNoticeKind, kindOfLabels, kindOfRoute } from './kind.js'
+import {
+  aiRulePrompts,
+  applyRuleActions,
+  evaluateRule,
+  needsAi,
+  parseRuleHits,
+  type RuleMail,
+  type RuleMatch,
+  resolveRuleActions,
+  ruleApplies,
+  sortRules,
+} from './message-rules.js'
 
 /** 分拣要看的那几样（全是已解析的头与正文；判定方自己不碰 MIME）。 */
 export interface TriageInput {
@@ -48,6 +62,12 @@ export interface TriageInput {
   headers: Readonly<Record<string, string>>
   /** 有没有附件（只影响"要不要人看一眼"，不进模型）。 */
   has_attachments: boolean
+  /** WP441：收信邮箱（消息规则的「收信邮箱」条件与范围）。 */
+  account?: string
+  /** WP441：来源（邮件 / 网站聊天）。 */
+  source?: MessageSource
+  /** WP441：信上的日期（消息规则「生效只管以后进来的」）。 */
+  date?: string
 }
 
 /** 分拣时这台机器上的现状。 */
@@ -74,6 +94,11 @@ export interface TriageContext {
   /** `halt.model` 开着吗。 */
   model_halted: boolean
   at: string
+  /**
+   * WP441（docs/108 §5.1.3）：开着的**消息规则**（按清单顺序）。写死条件跑在发件人规则之后、自动信头之前；
+   * AI 条件塞进第 ④ 层那一次模型调用里顺带判。不给 = 老行为。
+   */
+  messageRules?: readonly MessageRule[]
 }
 
 /** ④ 那一层的注入口。包内不调模型——宿主拿模型网关实现它。 */
@@ -89,6 +114,11 @@ export interface TriageModel {
     allowed_labels: readonly string[]
     /** WP212：能选的类型（docs/88 §3 的十种）。 */
     allowed_kinds?: readonly MessageKind[]
+    /**
+     * WP441：顺带判这几条消息规则的 AI 条件（编号 + 一句描述）。模型多回一项 `rule_hits`；
+     * 不给 = 没有要判的规则（提示词与老的一样）。
+     */
+    rules?: readonly { id: string; text: string }[]
   }): Promise<{
     route: MessageRoute
     labels: string[]
@@ -98,6 +128,8 @@ export interface TriageModel {
     confidence: number
     /** WP212：模型判的类型（可不给——不给就按路由与标签推一个）。 */
     kind?: MessageKind | string
+    /** WP441：符合哪几条规则（编号 + 把握）。 */
+    rule_hits?: unknown
   }>
 }
 
@@ -256,11 +288,22 @@ const AMAZON_RELAY = /^[a-z0-9]{8,32}@marketplace\.amazon\.[a-z.]{2,10}$/i
  * 一条命中客服线程的规则也只会把它留在收件箱（那条线程本来也不存在）。
  */
 export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTriage | undefined {
+  return triageLayers(input, ctx)?.verdict
+}
+
+/** WP441：规则层哪一层给的结论（消息规则跟着它决定管不管、能不能改去向）。 */
+type TriageLayer = 'structural' | 'sender' | 'auto'
+
+function triageLayers(
+  input: TriageInput,
+  ctx: TriageContext,
+): { verdict: MessageTriage; layer: TriageLayer } | undefined {
+  const structural = (verdict: MessageTriage) => ({ verdict, layer: 'structural' as const })
   const text = hay(input)
 
   // ① 线程归并——结构事实，模型答不出比它更准的
   if (ctx.support_enabled && ctx.isSupportThread(input.thread_id, input.references)) {
-    return {
+    return structural({
       route: 'support',
       labels: [],
       needs_reply: true,
@@ -271,14 +314,14 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       reasons: ['In-Reply-To / References 命中客服已有线程'],
       at: ctx.at,
       ...ruleKind('customer_question', 1),
-    }
+    })
   }
   /*
    * WP417（自查客服 B3）：Amazon 买家消息（发件人是 marketplace relay 地址）一律是客服——
    * 这类信的信头常像自动通知，不先认出来就会被下面那一档当通知拦掉。
    */
   if (ctx.support_enabled && AMAZON_RELAY.test(input.from_email.trim())) {
-    return {
+    return structural({
       route: 'support',
       labels: [],
       needs_reply: true,
@@ -289,10 +332,10 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       reasons: ['发件人是 Amazon 买家消息的转发地址'],
       at: ctx.at,
       ...ruleKind('customer_question', 0.95),
-    }
+    })
   }
   if (ctx.kol_enabled && ctx.isKolThread(input.thread_id, input.references)) {
-    return {
+    return structural({
       route: 'kol',
       labels: ['partnership'],
       needs_reply: true,
@@ -303,13 +346,13 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       reasons: ['In-Reply-To / References 命中红人合作线程'],
       at: ctx.at,
       ...ruleKind('creator_reply', 1),
-    }
+    })
   }
 
   // WP172 B2B ①：回我们发出去的开发信 / 报价信——线程对得上就是 B2B，不靠猜
   const b2b = ctx.b2b_enabled === true
   if (b2b && ctx.isB2bThread?.(input.thread_id, input.references) === true) {
-    return {
+    return structural({
       route: 'b2b',
       labels: [],
       needs_reply: true,
@@ -320,7 +363,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       reasons: ['In-Reply-To / References 命中我们发出去的 B2B 信'],
       at: ctx.at,
       ...ruleKind('inquiry', 1),
-    }
+    })
   }
 
   // ② 发件人规则（用户教过的）
@@ -330,7 +373,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
     // WP212：规则教过类型就按它；只教过路由 / 标签的老规则按它们推（与回填同一张表）
     const kind =
       rule.kind ?? kindOfRoute(rule.route) ?? kindOfLabels(rule.labels) ?? 'personal_other'
-    return {
+    const verdict: MessageTriage = {
       route,
       labels: [...rule.labels],
       // 只教过类型的规则：要不要回按类型（通知类不用回，其余要）
@@ -348,11 +391,12 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       kind_confidence: 1,
       ...(rule.position === undefined ? {} : { suggested_position: rule.position }),
     }
+    return { verdict, layer: 'sender' }
   }
 
   // WP172 B2B ②：发件人已经在 B2B 客户 / 联系人库里——和客服抢的时候按库里算（docs/84 §5）
   if (b2b && ctx.isB2bSender?.(input.from_email) === true) {
-    return {
+    return structural({
       route: 'b2b',
       labels: [],
       needs_reply: true,
@@ -363,12 +407,12 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       reasons: ['发件人在 B2B 客户 / 联系人库里'],
       at: ctx.at,
       ...ruleKind('inquiry', 1),
-    }
+    })
   }
   // WP172 B2B ③：平台询盘通知（要在"自动信头"之前：这些通知都是 noreply 发的）
   const platform = b2b ? platformInquiryOf(input) : undefined
   if (platform !== undefined) {
-    return {
+    return structural({
       route: 'b2b',
       labels: ['platform'],
       needs_reply: true,
@@ -379,7 +423,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       reasons: [`B2B 平台询盘通知：${platform}`],
       at: ctx.at,
       ...ruleKind('inquiry', 0.95),
-    }
+    })
   }
 
   // ③ 自动信头：订阅 / 通知类，不花模型
@@ -394,7 +438,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       }
     }
     if (hits(text, SUSPICIOUS_TERMS).length > 0) labels.add('suspicious')
-    return {
+    const verdict: MessageTriage = {
       route: 'inbox',
       labels: [...labels],
       needs_reply: false,
@@ -407,6 +451,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       // WP212：自动信一律按标签定类型（账单 / 物流 / 营销），推不出就是营销订阅
       ...ruleKind(kindOfLabels([...labels]) ?? 'marketing', 0.9),
     }
+    return { verdict, layer: 'auto' }
   }
   return undefined
 }
@@ -473,23 +518,159 @@ export async function triageMessage(
   ctx: TriageContext,
   model?: TriageModel,
 ): Promise<MessageTriage> {
-  const byRule = triageByRules(input, ctx)
-  if (byRule !== undefined) return byRule
+  const layered = triageLayers(input, ctx)
+  const rules = activeRules(input, ctx)
+  // ① 线程归并 / B2B 结构事实：消息规则不管（这几封的主人是确定的）
+  if (layered?.layer === 'structural' || rules.length === 0) {
+    if (layered !== undefined) return layered.verdict
+    return modelVerdict(input, ctx, model, [])
+  }
+  const mail = ruleMailOf(input)
+  // ② 发件人规则：人明确教过的，去向听它的；AI 条件不再问模型，写死条件的其余动作照做
+  if (layered?.layer === 'sender') {
+    const v = layered.verdict
+    return withRules(v, matchAll(rules, { ...mail, kind: v.kind }, new Map()), ctx, false)
+  }
+  // ②' 消息规则（写死条件）：带去向的命中了就不再问模型（先写死、后 AI）
+  const early = matchAll(rules, mail, new Map())
+  const earlyDest = resolveRuleActions(early).destination
+  if (earlyDest !== undefined) {
+    const base = layered?.verdict ?? ruleOnlyVerdict(input, ctx)
+    return withRules(base, matchAll(rules, { ...mail, kind: base.kind }, new Map()), ctx)
+  }
+  const pending = rules.filter((r) => needsAi(r, mail))
+  // ③ 自动信头：结论听信头的；有开着的 AI 条件规则要判，就问一次模型（只取它判的规则）
+  if (layered?.layer === 'auto') {
+    const v = layered.verdict
+    let ai = new Map<string, number>()
+    if (pending.length > 0 && !ctx.model_halted && model !== undefined) {
+      try {
+        const out = await model.classify(modelInput(input, ctx, pending))
+        ai = hitMap(out.rule_hits, pending)
+      } catch {
+        ai = new Map()
+      }
+    }
+    return withRules(v, matchAll(rules, { ...mail, kind: v.kind }, ai), ctx)
+  }
+  // ④ 模型：一次调用，顺带判 AI 条件
+  const ai = new Map<string, number>()
+  const v = await modelVerdict(input, ctx, model, pending, ai)
+  return withRules(v, matchAll(rules, { ...mail, kind: v.kind }, ai), ctx)
+}
+
+/** ④ 那一层（与 WP441 之前同一套：急停 / 没模型 / 调用失败都落兜底）。`ai` 收模型判的规则。 */
+async function modelVerdict(
+  input: TriageInput,
+  ctx: TriageContext,
+  model: TriageModel | undefined,
+  pending: readonly MessageRule[],
+  ai?: Map<string, number>,
+): Promise<MessageTriage> {
   if (ctx.model_halted || model === undefined) return triageFallback(input, ctx)
   try {
-    const out = await model.classify({
-      from_email: input.from_email,
-      ...(input.from_name === undefined ? {} : { from_name: input.from_name }),
-      subject: input.subject,
-      body: input.text.slice(0, MODEL_BODY_LIMIT),
-      allowed_routes: allowedRoutes(ctx),
-      allowed_labels: BUILTIN_LABEL_ORDER,
-      allowed_kinds: MESSAGE_KINDS,
-    })
+    const out = await model.classify(modelInput(input, ctx, pending))
+    if (ai !== undefined) for (const [id, c] of hitMap(out.rule_hits, pending)) ai.set(id, c)
     return normalizeVerdict(out, ctx)
   } catch {
     // 模型挂了不该让这封信进不来：落兜底，界面显示「未分拣」
     return triageFallback(input, ctx)
+  }
+}
+
+function modelInput(
+  input: TriageInput,
+  ctx: TriageContext,
+  pending: readonly MessageRule[],
+): Parameters<TriageModel['classify']>[0] {
+  return {
+    from_email: input.from_email,
+    ...(input.from_name === undefined ? {} : { from_name: input.from_name }),
+    subject: input.subject,
+    body: input.text.slice(0, MODEL_BODY_LIMIT),
+    allowed_routes: allowedRoutes(ctx),
+    allowed_labels: BUILTIN_LABEL_ORDER,
+    allowed_kinds: MESSAGE_KINDS,
+    ...(pending.length === 0 ? {} : { rules: aiRulePrompts(pending) }),
+  }
+}
+
+function hitMap(raw: unknown, pending: readonly MessageRule[]): Map<string, number> {
+  return new Map(
+    parseRuleHits(
+      raw,
+      pending.map((r) => r.id),
+    ).map((h) => [h.id, h.confidence]),
+  )
+}
+
+/** WP441：这封信能用的规则（开着、不是系统规则、信是规则建好之后来的），按清单顺序。 */
+function activeRules(input: TriageInput, ctx: TriageContext): MessageRule[] {
+  const all = ctx.messageRules ?? []
+  if (all.length === 0) return []
+  return sortRules(all.filter((r) => ruleApplies(r, input.date)))
+}
+
+function ruleMailOf(input: TriageInput): RuleMail {
+  return {
+    from_email: input.from_email,
+    ...(input.from_name === undefined ? {} : { from_name: input.from_name }),
+    subject: input.subject,
+    text: input.text,
+    ...(input.account === undefined ? {} : { account: input.account }),
+    ...(input.source === undefined ? {} : { source: input.source }),
+    has_attachments: input.has_attachments,
+  }
+}
+
+function matchAll(
+  rules: readonly MessageRule[],
+  mail: RuleMail,
+  ai: ReadonlyMap<string, number>,
+): RuleMatch[] {
+  const out: RuleMatch[] = []
+  for (const rule of rules) {
+    const r = evaluateRule(rule, mail, ai.get(rule.id))
+    if (r.hit)
+      out.push({
+        rule,
+        by: r.by,
+        ...(r.confidence === undefined ? {} : { confidence: r.confidence }),
+      })
+  }
+  return out
+}
+
+function withRules(
+  verdict: MessageTriage,
+  matches: readonly RuleMatch[],
+  ctx: TriageContext,
+  allowDestination = true,
+): MessageTriage {
+  if (matches.length === 0) return verdict
+  return applyRuleActions(verdict, resolveRuleActions(matches, allowDestination), ctx)
+}
+
+/**
+ * 写死条件的规则定了去向、又没有信头可依（不是自动信）：不问模型，按规则给一份结论——
+ * 类型按规则里写的类型条件、再按标签推，推不出就是「个人与其他」；摘要用主题。
+ */
+function ruleOnlyVerdict(input: TriageInput, ctx: TriageContext): MessageTriage {
+  const kindCond = (ctx.messageRules ?? [])
+    .flatMap((r) => r.when.conditions)
+    .find((c) => c.type === 'kind')
+  const kind = kindCond?.type === 'kind' ? kindCond.value : 'personal_other'
+  return {
+    route: 'inbox',
+    labels: [],
+    needs_reply: true,
+    priority: 'normal',
+    summary: clip(input.subject || '按消息规则处理'),
+    confidence: 1,
+    by: 'rule',
+    reasons: ['消息规则（写死条件）命中，没问模型'],
+    at: ctx.at,
+    ...ruleKind(kind, kindCond === undefined ? 0.6 : 1),
   }
 }
 

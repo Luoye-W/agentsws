@@ -106,6 +106,9 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   list_design_requests: '设计需求单',
   get_brand_system: '品牌系统',
   request_design: '设计需求单',
+  // WP441：一句话写消息规则
+  propose_message_rule: '「要建这条规则吗」卡',
+  list_message_rules: '消息规则清单',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */
