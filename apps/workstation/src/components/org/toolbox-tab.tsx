@@ -291,7 +291,7 @@ export function ToolboxTab({
       )}
 
       {duplicates.length === 0 ? null : (
-        <Card className="border-amber-400/60" data-testid="toolbox-duplicates">
+        <Card className="border-ws-warn/60" data-testid="toolbox-duplicates">
           <CardHeader>
             <CardTitle className="flex items-center gap-1 text-sm">
               {t('toolbox.dupes')}
@@ -360,7 +360,7 @@ export function ToolboxTab({
                   data-testid="toolbox-entry"
                   className={cn(
                     'flex flex-col gap-1 rounded border px-3 py-2',
-                    flagged.has(e.id) && 'border-amber-400/60 bg-amber-50/40',
+                    flagged.has(e.id) && 'border-ws-warn/60 bg-ws-warn-bg',
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -393,7 +393,7 @@ export function ToolboxTab({
                   {e.reason_for_duplicate === undefined ? null : (
                     <Hint
                       text={t('toolbox.reason', { reason: e.reason_for_duplicate })}
-                      className="text-amber-700"
+                      className="text-ws-warn"
                     />
                   )}
                 </div>

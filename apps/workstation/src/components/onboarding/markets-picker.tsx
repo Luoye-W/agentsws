@@ -138,11 +138,7 @@ export function MarketsPicker({
   return (
     <div className="flex flex-wrap items-center gap-1" data-testid="markets-picker">
       {value.length === 0 ? (
-        <span
-          className="text-xs text-amber-700 dark:text-amber-300"
-          data-slot="status"
-          data-testid="markets-empty"
-        >
+        <span className="text-xs text-ws-warn" data-slot="status" data-testid="markets-empty">
           {t('markets.empty')}
         </span>
       ) : (
@@ -151,7 +147,7 @@ export function MarketsPicker({
           return (
             <span
               key={code}
-              className="inline-flex items-center gap-0.5 rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]"
+              className="inline-flex items-center gap-0.5 rounded-sm bg-ws-subtle px-1.5 py-0.5 text-xs"
               data-testid="market-chip"
               data-code={code}
             >
@@ -176,7 +172,7 @@ export function MarketsPicker({
       {many ? (
         <button
           type="button"
-          className="rounded-sm px-1 text-[11px] text-ws-muted-fg underline-offset-2 hover:text-foreground hover:underline"
+          className="rounded-sm px-1 text-xs text-ws-muted-fg underline-offset-2 hover:text-foreground hover:underline"
           data-testid="markets-more"
           onClick={() => {
             setExpanded((v) => !v)
@@ -189,7 +185,7 @@ export function MarketsPicker({
         <button
           type="button"
           disabled={disabled}
-          className="rounded-sm px-1 text-[11px] text-ws-muted-fg underline-offset-2 hover:text-foreground hover:underline"
+          className="rounded-sm px-1 text-xs text-ws-muted-fg underline-offset-2 hover:text-foreground hover:underline"
           data-testid="markets-clear"
           onClick={() => {
             onChange([])
@@ -205,7 +201,7 @@ export function MarketsPicker({
         placeholder={t('markets.search')}
         data-testid="market-search"
         disabled={disabled}
-        className="h-6 w-28 rounded-sm border bg-transparent px-1 text-[11px]"
+        className="h-6 w-28 rounded-sm border bg-transparent px-1 text-xs"
         value={query}
         onChange={(e) => {
           setQuery(e.target.value)
@@ -215,7 +211,7 @@ export function MarketsPicker({
         aria-label={t('markets.add')}
         data-testid="market-add"
         disabled={disabled}
-        className="h-6 max-w-28 rounded-sm border bg-transparent px-1 text-[11px] text-ws-muted-fg"
+        className="h-6 max-w-28 rounded-sm border bg-transparent px-1 text-xs text-ws-muted-fg"
         value=""
         onChange={(e) => {
           const code = e.target.value
@@ -249,7 +245,7 @@ export function MarketsPicker({
       {/* WP240：国家太多、先只选了美国——这一句是状态，铺在外面（人得知道其余要自己加） */}
       {isManyDefault(origin) ? (
         <span
-          className="basis-full text-[11px] text-amber-700 dark:text-amber-300"
+          className="basis-full text-xs text-ws-warn"
           data-slot="status"
           data-testid="markets-many-note"
         >
@@ -258,7 +254,7 @@ export function MarketsPicker({
       ) : null}
       {value.length < 2 ? null : (
         <span
-          className="flex basis-full items-center gap-1 text-[11px] text-ws-muted-fg"
+          className="flex basis-full items-center gap-1 text-xs text-ws-muted-fg"
           data-slot="status"
           data-testid="markets-cost"
         >

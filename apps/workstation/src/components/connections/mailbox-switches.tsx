@@ -61,7 +61,7 @@ export function MailboxSwitches({
     <div
       className={cn(
         'flex flex-col gap-1.5 rounded-md border px-2 py-1.5',
-        shadow ? 'border-amber-500/50 bg-amber-500/5' : 'border-ws-line',
+        shadow ? 'border-ws-warn/50 bg-ws-warn-bg' : 'border-ws-line',
       )}
       data-testid="mailbox-switches"
       data-shadow={shadow ? 'true' : undefined}
@@ -73,7 +73,7 @@ export function MailboxSwitches({
         <Hint text={t('connections.mailbox.title.hint')} />
         <span
           className={cn(
-            'rounded-full px-1.5 py-px text-[11px]',
+            'rounded-full px-1.5 py-px text-xs',
             data.takeover ? 'bg-ws-tint text-ws-brand-ink' : 'bg-muted text-muted-foreground',
           )}
           data-slot="badge"
@@ -87,7 +87,7 @@ export function MailboxSwitches({
         <Hint text={t('connections.mailbox.takeover.hint')} />
         {shadow ? (
           <strong
-            className="ml-auto flex items-center gap-1 text-[12px] font-semibold text-amber-700 dark:text-amber-400"
+            className="ml-auto flex items-center gap-1 text-[12px] font-semibold text-ws-warn"
             data-slot="status"
             data-testid="mailbox-shadow-badge"
           >
@@ -125,7 +125,7 @@ export function MailboxSwitches({
         <MailboxAutoReply connectionId={connectionId} assignment={assignment} />
       ) : null}
       {flip.error === null ? null : (
-        <p role="alert" className="text-[11px] text-destructive">
+        <p role="alert" className="text-xs text-destructive">
           {t('connections.mailbox.failed')}
         </p>
       )}

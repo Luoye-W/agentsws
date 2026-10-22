@@ -106,6 +106,19 @@ export {
   roleFromDocument,
   SUPERSEDED_POSITION_IDS,
 } from './load.js'
+// WP462：职责升大版本之后老分配怎么接上（只收窄 / 登记过的拆分自动，其余出确认卡）
+export {
+  autoUpgradable,
+  heirsOf,
+  isStaleMajor,
+  majorOf,
+  majorUpgradePath,
+  ROLE_MAJOR_UPGRADES,
+  type RoleMajorUpgrade,
+  type RoleMajorUpgradeKind,
+  type RoleUpgradeNeeded,
+  roleUpgradeText,
+} from './major-upgrades.js'
 export { assertTighterOverrides } from './overrides.js'
 export type {
   PersonaBrandContext,
@@ -220,6 +233,7 @@ export type {
   RangeExpanded,
   RangeGroupApi,
   RevokeInput,
+  RoleMajorUpgradeRecord,
   RoleMigration,
   RoleRegistry,
   RoleStore,

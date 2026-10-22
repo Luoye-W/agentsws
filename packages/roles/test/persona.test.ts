@@ -114,10 +114,10 @@ describe('六段骨架（69 §2）', () => {
     expect(checkPersona({ zh: OK_ZH, en: '' })).toBeUndefined()
   })
 
-  it('中文超长失败（上限 260 不变）', () => {
+  it('中文超长失败（决策 1392：上限 260 → 320）', () => {
     const long = `${OK_ZH}\n${'长'.repeat(MAX_PERSONA_CHARS.zh)}`
     expect(checkPersona({ zh: long, en: OK_EN })).toContain('上限')
-    expect(MAX_PERSONA_CHARS.zh).toBe(260)
+    expect(MAX_PERSONA_CHARS.zh).toBe(320)
   })
 
   it('老的纯字符串：有汉字按中文查，没有按英文查', () => {

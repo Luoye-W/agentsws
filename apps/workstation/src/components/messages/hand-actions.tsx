@@ -243,9 +243,7 @@ function HandMenu({
       role="listbox"
       aria-label={t('messages.hand.title')}
     >
-      <div className="px-2 pt-1 pb-1.5 text-[11px] text-ws-muted-fg">
-        {t('messages.hand.title')}
-      </div>
+      <div className="px-2 pt-1 pb-1.5 text-xs text-ws-muted-fg">{t('messages.hand.title')}</div>
       {sorted.map((p) => {
         const name = lang === 'en' ? p.name_en : p.name_zh
         return (
@@ -271,16 +269,16 @@ function HandMenu({
           >
             <span className="flex-1 truncate">{name}</span>
             {p.id === ai && kind !== undefined ? (
-              <span className="shrink-0 text-[11px] text-ws-muted-fg">
+              <span className="shrink-0 text-xs text-ws-muted-fg">
                 {t('messages.hand.ai', { kind: t(`messages.kind.${kind}`) })}
               </span>
             ) : !p.open ? (
-              <span className="shrink-0 text-[11px]">{t('messages.hand.closed_short')}</span>
+              <span className="shrink-0 text-xs">{t('messages.hand.closed_short')}</span>
             ) : null}
           </button>
         )
       })}
-      <p className="mt-1 border-t border-ws-line px-2 pt-2 text-[11px] leading-relaxed text-ws-muted-fg">
+      <p className="mt-1 border-t border-ws-line px-2 pt-2 text-xs leading-relaxed text-ws-muted-fg">
         {ai === undefined
           ? t('messages.hand.note_generic')
           : t('messages.hand.note', { name: positionName(positions, ai, lang) })}

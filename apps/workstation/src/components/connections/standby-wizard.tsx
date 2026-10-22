@@ -142,7 +142,7 @@ export function StandbyWizard({
         <div className="mt-3 space-y-2" data-testid="standby-step-open">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <Label htmlFor="standby-seats" className="text-[11px] text-muted-foreground">
+              <Label htmlFor="standby-seats" className="text-xs text-muted-foreground">
                 {t('standby.seats')}
               </Label>
               <Input
@@ -158,13 +158,13 @@ export function StandbyWizard({
                 }}
               />
             </div>
-            <dl className="text-[11px]" data-slot="data">
+            <dl className="text-xs" data-slot="data">
               <dt className="text-muted-foreground">{t('standby.monthly')}</dt>
               <dd className="font-medium" data-testid="standby-monthly">
                 {monthly === undefined ? '—' : t('standby.credits', { n: monthly })}
               </dd>
             </dl>
-            <dl className="text-[11px]" data-slot="data">
+            <dl className="text-xs" data-slot="data">
               <dt className="text-muted-foreground">{t('standby.balance')}</dt>
               <dd className="font-medium" data-testid="standby-balance">
                 {available === undefined ? '—' : t('standby.credits', { n: available })}
@@ -222,7 +222,7 @@ export function StandbyWizard({
               </p>
               <div className="mt-1 flex items-center gap-2">
                 <code
-                  className="flex-1 overflow-x-auto rounded border bg-background px-2 py-1 font-mono text-[11px]"
+                  className="flex-1 overflow-x-auto rounded border bg-background px-2 py-1 font-mono text-xs"
                   data-testid="standby-embed"
                 >
                   {view.embed_snippet}

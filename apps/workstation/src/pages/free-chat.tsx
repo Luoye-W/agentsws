@@ -581,7 +581,7 @@ function AssistantThreadPage(): React.ReactNode {
                             data-batch={seg.batch.id}
                           >
                             {seg.batch.title === '' ? null : (
-                              <p className="text-[11px] text-muted-foreground">
+                              <p className="text-xs text-muted-foreground">
                                 {t('fanout.batch', { title: seg.batch.title })}
                               </p>
                             )}

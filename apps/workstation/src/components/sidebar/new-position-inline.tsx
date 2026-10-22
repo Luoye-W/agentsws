@@ -94,7 +94,7 @@ export function NewPositionInline({
         }}
       />
       <fieldset className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
-        <legend className="mb-1 text-[11px] text-ws-muted-fg">{t('rail.position.pick')}</legend>
+        <legend className="mb-1 text-xs text-ws-muted-fg">{t('rail.position.pick')}</legend>
         {railPickable(roles.data ?? []).map((r) => {
           const on = picked.includes(r.id)
           return (
@@ -105,7 +105,7 @@ export function NewPositionInline({
               data-testid="rail-new-position-role"
               data-role={r.id}
               className={cn(
-                'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors hover:bg-muted',
+                'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs transition-colors hover:bg-muted',
                 on && 'border-primary bg-primary/10 [--ia:var(--ws-brand)]',
               )}
               onClick={() => {

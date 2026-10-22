@@ -263,8 +263,8 @@ function CliTags({ items, label }: { items: StatusItem[]; label: string }): Reac
             data-state={item.state}
             className={
               item.state === 'ok'
-                ? 'rounded-full bg-ws-good-bg px-2 py-px text-[11px] text-ws-good'
-                : 'rounded-full bg-ws-tint px-2 py-px text-[11px] text-ws-muted-fg'
+                ? 'rounded-full bg-ws-good-bg px-2 py-px text-xs text-ws-good'
+                : 'rounded-full bg-ws-tint px-2 py-px text-xs text-ws-muted-fg'
             }
           >
             {t(`platform_cli.tag.${item.key}.${item.state}`)}
@@ -377,7 +377,7 @@ function CliDetails({ cli }: { cli: PlatformCliView }): React.ReactNode {
             </code>
             {job.log.length === 0 ? null : (
               <pre
-                className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-2 font-mono text-[11px]"
+                className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-2 font-mono text-xs"
                 data-testid="platform-cli-log"
               >
                 {job.log.slice(-30).join('\n')}

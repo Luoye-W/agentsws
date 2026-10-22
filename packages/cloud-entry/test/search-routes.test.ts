@@ -316,7 +316,7 @@ describe('WP310：Claude 单独定价、全文与引用原样带回', () => {
     const chatgpt = body.results[0]
     expect(chatgpt).toMatchObject({ platform: 'chatgpt', via: 'web_ui', model: 'gpt-4o' })
     expect(String(chatgpt?.answer_markdown)).toMatch(/Wirecutter also like these/u)
-    expect((chatgpt?.citations as unknown[]).length).toBe(3)
+    expect(chatgpt?.citations).toHaveLength(3)
     expect(JSON.stringify(body)).not.toMatch(/dataforseo/i)
   })
 })

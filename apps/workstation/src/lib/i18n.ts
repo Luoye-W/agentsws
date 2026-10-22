@@ -3055,6 +3055,10 @@ const zh: Table = {
   // WP311（决策 507）：IM 里带品牌的链接，打开时自动切品牌；切不过去照实说一句
   'brand.link.missing': '链接里的品牌你进不去（不存在或没有权限），先留在「{brand}」。',
   'brand.link.failed': '没切到链接里的品牌，再点一次链接试试。',
+  // WP462：职责升了大版本、自动接不上的那一条——就地一张确认卡（别的岗位照常）
+  'role.upgrade.notice': '「{role}」这条职责升级了，点一下确认就能接着用',
+  'role.upgrade.confirm': '确认',
+  'role.upgrade.failed': '没确认成，再点一次试试。',
   // WP215：每个品牌一套后台——切换器与「品牌一览」那一格的 tooltip（36 §7 第四档）
   'brand.bg.label': '后台',
   'brand.bg.running': '后台在跑 · {n} 条定时任务',
@@ -7470,6 +7474,10 @@ const en: Table = {
   'brand.link.missing':
     'You can\u2019t open the brand in that link (it doesn\u2019t exist or you have no access). Staying in \u201c{brand}\u201d.',
   'brand.link.failed': 'Couldn\u2019t switch to the brand in that link. Try the link again.',
+  // WP462: a duty got a major upgrade that can't be carried over automatically — one confirm card in place
+  'role.upgrade.notice': '\u201c{role}\u201d was upgraded. Confirm to keep using it.',
+  'role.upgrade.confirm': 'Confirm',
+  'role.upgrade.failed': 'Couldn\u2019t confirm. Try again.',
   // WP215: every brand runs its own background — tooltip on the switcher / brand list (doc 36 §7 tier 4)
   'brand.bg.label': 'Background',
   'brand.bg.running': 'Background running · {n} scheduled tasks',

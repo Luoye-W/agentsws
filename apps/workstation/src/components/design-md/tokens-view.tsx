@@ -118,7 +118,7 @@ function EditableValue({
     <div className="flex items-center gap-1">
       <Input
         autoFocus
-        className="h-6 font-mono text-[11px]"
+        className="h-6 font-mono text-xs"
         value={editor.draft ?? ''}
         onChange={(e) => {
           editor.change?.(e.target.value)
@@ -132,7 +132,7 @@ function EditableValue({
       <Button
         size="sm"
         variant="secondary"
-        className="h-6 px-2 text-[11px]"
+        className="h-6 px-2 text-xs"
         data-testid={`design-md-edit-save-${path}`}
         onClick={() => {
           void editor.save?.(path, editor.draft ?? '')
@@ -143,7 +143,7 @@ function EditableValue({
       <Button
         size="sm"
         variant="ghost"
-        className="h-6 px-2 text-[11px]"
+        className="h-6 px-2 text-xs"
         data-testid={`design-md-edit-cancel-${path}`}
         onClick={() => {
           editor.cancel?.()
@@ -177,7 +177,7 @@ function Swatch({
       </WithSource>
       <p className="font-medium text-xs">{token}</p>
       <EditableValue path={path} value={value.value} editor={editor}>
-        <p className="font-mono text-[11px] text-ws-muted-fg">{value.value}</p>
+        <p className="font-mono text-xs text-ws-muted-fg">{value.value}</p>
       </EditableValue>
       {value.conflict === undefined ? null : (
         <div className="flex items-center gap-1" data-testid={`design-md-conflict-${token}`}>
@@ -186,7 +186,7 @@ function Swatch({
             style={{ backgroundColor: value.conflict.value }}
             title={t('design.md.conflict.site')}
           />
-          <span className="text-[10px] text-ws-muted-fg">{value.conflict.value}</span>
+          <span className="text-ws-tiny text-ws-muted-fg">{value.conflict.value}</span>
         </div>
       )}
     </div>
@@ -223,7 +223,7 @@ function TypeSample({
         >
           Agents 工坊 · The quick brown fox
         </p>
-        <p className="text-[11px] text-ws-muted-fg">
+        <p className="text-xs text-ws-muted-fg">
           {token} ·{' '}
           {[v.fontFamily, v.fontSize, v.fontWeight].filter((x) => x !== undefined).join(' / ')}
         </p>
@@ -383,7 +383,7 @@ export function TokensView({ profile, onEdit }: TokensViewProps): React.ReactEle
                   className="bg-ws-brand"
                   style={{ width: String(value.value), height: String(value.value), minWidth: 2 }}
                 />
-                <span className="text-[11px] text-ws-muted-fg">
+                <span className="text-xs text-ws-muted-fg">
                   {token} {String(value.value)}
                 </span>
               </div>
@@ -396,7 +396,7 @@ export function TokensView({ profile, onEdit }: TokensViewProps): React.ReactEle
                   className="h-10 w-10 border-2 border-ws-brand"
                   style={{ borderRadius: value.value }}
                 />
-                <span className="text-[11px] text-ws-muted-fg">
+                <span className="text-xs text-ws-muted-fg">
                   {token} {value.value}
                 </span>
               </div>
@@ -448,7 +448,7 @@ export function TokensView({ profile, onEdit }: TokensViewProps): React.ReactEle
                 >
                   <img src={logo.url} alt="" className="max-h-12 max-w-28 object-contain" />
                 </div>
-                <span className="text-[11px] text-ws-muted-fg">
+                <span className="text-xs text-ws-muted-fg">
                   {t(
                     logo.variant === 'dark' ? 'design.md.preview.dark' : 'design.md.preview.light',
                   )}

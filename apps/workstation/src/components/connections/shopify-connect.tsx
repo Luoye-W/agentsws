@@ -232,7 +232,7 @@ export function ShopifyConnect({
     return (
       <div className="flex flex-col gap-2" data-testid="shopconnect" data-state={blocked.reason}>
         <p className="flex items-center gap-1.5 text-xs text-ws-muted-fg" data-slot="status">
-          <AlertTriangle aria-hidden className="size-3.5 shrink-0 text-amber-500" />
+          <AlertTriangle aria-hidden className="size-3.5 shrink-0 text-ws-warn" />
           {t(textKey)}
           {blocked.reason === 'offline' ? (
             <Hint
@@ -445,7 +445,7 @@ function ShopRow({
     >
       <p className="flex flex-wrap items-center gap-1.5 text-sm">
         {broken ? (
-          <AlertTriangle aria-hidden className="size-4 text-amber-500" />
+          <AlertTriangle aria-hidden className="size-4 text-ws-warn" />
         ) : (
           <CircleCheck aria-hidden className="size-4 text-primary" />
         )}
@@ -463,7 +463,7 @@ function ShopRow({
         </p>
       )}
       {missing.length === 0 ? null : (
-        <p className="text-xs text-amber-600" data-testid="shopconnect-missing">
+        <p className="text-xs text-ws-warn" data-testid="shopconnect-missing">
           {t('shopconnect.missing', { list: missing.join('、') })}
         </p>
       )}

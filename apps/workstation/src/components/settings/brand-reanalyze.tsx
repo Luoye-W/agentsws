@@ -256,9 +256,7 @@ export function BrandReanalyze({
                   <span className="text-muted-foreground">{t('intake.empty')}</span>
                 )}
                 {r.human ? (
-                  <span className="ml-1 text-[11px] text-muted-foreground">
-                    {t('reanalyze.human')}
-                  </span>
+                  <span className="ml-1 text-xs text-muted-foreground">{t('reanalyze.human')}</span>
                 ) : null}
               </span>
               <span className="flex min-w-0 flex-col items-start gap-0.5 break-words">

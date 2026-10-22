@@ -157,8 +157,8 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
           <span
             className={
               using.own_key
-                ? 'rounded bg-emerald-500/10 px-1.5 py-px text-[11px] text-emerald-700 dark:text-emerald-400'
-                : 'rounded bg-muted px-1.5 py-px text-[11px] text-muted-foreground'
+                ? 'rounded bg-ws-good-bg px-1.5 py-px text-xs text-ws-good'
+                : 'rounded bg-muted px-1.5 py-px text-xs text-muted-foreground'
             }
             data-slot="badge"
             data-testid="models-image-badge"
@@ -170,7 +170,7 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
       {/* 积分出图的单价常显（WP127）；走自己的 key 时与他无关，不显示 */}
       {data.credits_per_image === undefined || using?.own_key === true ? null : (
         <p
-          className="text-[11px] text-muted-foreground"
+          className="text-xs text-muted-foreground"
           data-slot="status"
           data-testid="models-image-price"
         >
@@ -251,7 +251,7 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
       </div>
       {provider === CUSTOM ? (
         <div className="rounded-lg border p-2.5" data-testid="models-image-custom">
-          <p className="mb-1 text-[11px] text-muted-foreground">{t('models.image.custom_hint')}</p>
+          <p className="mb-1 text-xs text-muted-foreground">{t('models.image.custom_hint')}</p>
           <ModelForm
             template={customTemplate}
             imageOnly
@@ -278,7 +278,7 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
         </div>
       ) : null}
       {provider === '' || provider === CUSTOM || picked === undefined || picked.official ? null : (
-        <p className="text-[11px] text-muted-foreground" data-slot="status">
+        <p className="text-xs text-muted-foreground" data-slot="status">
           {t('models.image.own_price')}
         </p>
       )}
@@ -287,19 +287,12 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
       data.unavailable_reason === undefined ||
       saved ||
       provider !== storedOf(data) ? null : (
-        <p
-          className="text-[11px] text-amber-600 dark:text-amber-400"
-          data-testid="models-image-reason"
-        >
+        <p className="text-xs text-ws-warn" data-testid="models-image-reason">
           {data.unavailable_reason}
         </p>
       )}
-      {saved ? (
-        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-          {t('models.image.saved')}
-        </p>
-      ) : null}
-      {error === null ? null : <p className="text-[11px] text-destructive">{error}</p>}
+      {saved ? <p className="text-xs text-ws-good">{t('models.image.saved')}</p> : null}
+      {error === null ? null : <p className="text-xs text-destructive">{error}</p>}
     </section>
   )
 }

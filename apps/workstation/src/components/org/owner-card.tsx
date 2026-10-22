@@ -55,7 +55,7 @@ export function OwnerCard({
             >
               <span
                 aria-hidden
-                className="flex size-5 items-center justify-center rounded-full bg-muted font-medium text-[11px]"
+                className="flex size-5 items-center justify-center rounded-full bg-muted font-medium text-xs"
               >
                 {h.name.slice(0, 1)}
               </span>

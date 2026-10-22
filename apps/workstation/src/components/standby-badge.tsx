@@ -47,7 +47,7 @@ export function StandbyBadge(): React.ReactNode {
     <span
       data-testid="standby-badge"
       title={t('standby.badge.hint')}
-      className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400"
+      className="inline-flex items-center gap-1 rounded-full border border-ws-good/30 bg-ws-good-bg px-2 py-0.5 text-xs font-medium text-ws-good"
     >
       <Wifi className="size-3" aria-hidden />
       {status === 'running' ? t('standby.badge') : t('standby.badge.starting')}

@@ -648,6 +648,11 @@ export interface RolesPort {
   effectiveConfig(id: AssignmentId): EffectiveConfigLike
   getAssignment(id: AssignmentId): Assignment | undefined
   listAssignments(person_id: PersonId, filter?: { workspace_id?: WorkspaceId }): Assignment[]
+  /**
+   * WP462：人在确认卡上点了「确认」——把这条分配接到职责现在的版本（宿主记一条
+   * `assignment.role_major_upgraded`）。回接上之后的版本；本来就对得上回 `undefined`。可选：没装的宿主回 501。
+   */
+  reconfirmAssignment?(id: AssignmentId): { role_id: string; from: string; to: string } | undefined
 }
 
 /** trace_id 的异步传播（28 §1「trace_id 贯穿 run→tool→action→apply→delivery」）。 */
@@ -1363,6 +1368,22 @@ export interface PositionSummary {
   range: WorkstationRange
   /** 首页要不要给这个岗位出一条核心数据条（没有默认块的职责不出） */
   show_tiles: boolean
+  /**
+   * WP462（只加）：这条职责升了大版本、这条分配要重新确认才接着用（自动接不上的那一种）。
+   * 有这一格时 `ready` 为 false，界面就地出一张确认卡（点了走 `POST /v1/assignments/:id/reconfirm`）；
+   * 别的岗位、职责照常。老前端不读它，照旧只看到这一条「没就绪」。
+   */
+  needs_reconfirm?: RoleReconfirmView
+}
+
+/** WP462：确认卡要的那几格（与 `@agentsws/roles` 的 `RoleUpgradeNeeded` 同形）。 */
+export interface RoleReconfirmView {
+  reason: 'role_major_upgraded'
+  assignment_id: string
+  role_id: string
+  role_name: string
+  from: string
+  to: string
 }
 
 export type WorkstationRange = 'yesterday' | 'last_7d'

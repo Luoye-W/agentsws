@@ -59,9 +59,24 @@
   --ws-chart-single: #007b67;
   --ws-chart-grid: #eef1ed;
   --ws-chart-axis: #8d958f;
+  /*
+   * WP461（WP456 §2.4，决策 1446）：视觉规范 v1 新补的几个 token。
+   * - line-strong：输入框、表头下线、勾选框（比 --ws-line 深一档）；
+   * - hover：行和图标钮的悬停底色（ink 5%）；
+   * - pop：菜单、通知、搜索这些弹层的底色；
+   * - card-edge：卡的一圈细边——浅色没有，深色内描 1px 白 3.5%（不然深色卡和底几乎一样黑）。
+   * 图表 / 分类四色沿用 WP438 的 --ws-chart-1…4（WP456 稿里叫 s1–s4，同一组数），不另起名字。
+   */
+  --ws-line-strong: #e1e6df;
+  --ws-hover: color-mix(in srgb, var(--ws-ink) 5%, transparent);
+  --ws-pop: #ffffff;
+  --ws-card-edge: 0 0 #0000;
   /* 卡：圆角 16、无边框、两层浅阴影 */
   --ws-radius-card: 16px;
   --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
+  /* WP461：阴影只有三层——卡（上面那条）、弹层（菜单 / 通知 / 搜索）、弹窗 */
+  --ws-shadow-pop: 0 12px 32px rgba(20, 40, 30, 0.14), 0 1px 3px rgba(20, 40, 30, 0.08);
+  --ws-shadow-dialog: 0 24px 64px rgba(20, 40, 30, 0.2), 0 2px 6px rgba(20, 40, 30, 0.08);
   --ws-shadow-hover: 0 16px 34px rgba(20, 40, 30, 0.14), 0 2px 6px rgba(20, 40, 30, 0.06);
   /* 选中态的光晕：真渐变（模糊阴影），不是分层描边 */
   --ws-glow: 0 0 0 1px rgba(0, 123, 103, 0.32), 0 0 12px 2px rgba(0, 123, 103, 0.14);
@@ -112,7 +127,7 @@
   --foreground: var(--ws-ink);
   --card: var(--ws-card);
   --card-foreground: var(--ws-ink);
-  --popover: var(--ws-card);
+  --popover: var(--ws-pop);
   --popover-foreground: var(--ws-ink);
   --primary: var(--ws-brand);
   --primary-foreground: var(--ws-brand-fg);
@@ -125,7 +140,7 @@
   --destructive: var(--ws-bad);
   --destructive-foreground: #ffffff;
   --border: var(--ws-line);
-  --input: #e6eae5;
+  --input: var(--ws-line-strong);
   --ring: var(--ws-brand);
 
   --chart-1: var(--ws-brand);
@@ -176,7 +191,14 @@
   --ws-chart-single: #76fb91;
   --ws-chart-grid: #222624;
   --ws-chart-axis: #7c857f;
+  /* WP461：深色那一套（WP456 §2.4） */
+  --ws-line-strong: #2e332f;
+  --ws-hover: color-mix(in srgb, var(--ws-ink) 6%, transparent);
+  --ws-pop: #1d211e;
+  --ws-card-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
   --ws-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --ws-shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --ws-shadow-dialog: 0 24px 72px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
   --ws-shadow-hover: 0 16px 34px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.36);
   --ws-glow: 0 0 0 1px rgba(118, 251, 145, 0.32), 0 0 12px 2px rgba(118, 251, 145, 0.14);
 
@@ -207,7 +229,7 @@
   --foreground: var(--ws-ink);
   --card: var(--ws-card);
   --card-foreground: var(--ws-ink);
-  --popover: var(--ws-card);
+  --popover: var(--ws-pop);
   --popover-foreground: var(--ws-ink);
   --primary: var(--ws-brand);
   --primary-foreground: var(--ws-brand-fg);
@@ -220,7 +242,7 @@
   --destructive: var(--ws-bad);
   --destructive-foreground: #1a0f0d;
   --border: var(--ws-line);
-  --input: #2a2e2b;
+  --input: var(--ws-line-strong);
   --ring: var(--ws-brand);
 
   --chart-1: var(--ws-brand);
@@ -273,10 +295,45 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /*
+   * WP461（WP456 §2.5）：圆角只有五档 6 / 8 / 12 / 16 / 20，外加全圆（小药丸、头像、计数）。
+   * Tailwind 的几个名字直接落到档位上：sm = 6 标签、md = 8 按钮 / 输入框 / 图标钮、
+   * lg = 12 卡里的内块 / 选项组 / 菜单、xl = 2xl = 16 卡（原来 lg 10、xl 14 不在档位里）。
+   * 想写得更明白就用语义名：rounded-ws-tag / -ctl / -block / -card / -dialog。
+   * 光写 `rounded`（4px）不在档位里，由 scripts/check-ui-tokens.mjs 挡新的。
+   */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 16px;
+  --radius-ws-tag: 6px;
+  --radius-ws-ctl: 8px;
+  --radius-ws-block: 12px;
+  --radius-ws-dialog: 20px;
+
+  /*
+   * WP461（WP456 §2.3）：字号七档。中文最小 12px（Windows 上微软雅黑 11px 会糊），
+   * 11 那一档只给数字和英文（计数、快捷键、徽章）。Tailwind 的 text-xs（12）/ text-sm（14）/
+   * text-base（16）照旧能用，落在档位上；新写的地方优先用下面这几个语义名。
+   */
+  --text-ws-page: 22px;
+  --text-ws-page--line-height: 30px;
+  --text-ws-page--font-weight: 600;
+  --text-ws-title: 16px;
+  --text-ws-title--line-height: 24px;
+  --text-ws-title--font-weight: 600;
+  --text-ws-read: 14px;
+  --text-ws-read--line-height: 22px;
+  --text-ws-ui: 13px;
+  --text-ws-ui--line-height: 20px;
+  --text-ws-note: 12px;
+  --text-ws-note--line-height: 18px;
+  --text-ws-tiny: 11px;
+  --text-ws-tiny--line-height: 16px;
+  --text-ws-big: 28px;
+  --text-ws-big--line-height: 34px;
+  --text-ws-big--font-weight: 600;
 
   --font-sans: var(--font-stack-sans);
   --font-mono: var(--font-stack-mono);
@@ -299,7 +356,12 @@
   --color-ws-secondary: var(--ws-secondary);
   --color-ws-chart-1: var(--ws-chart-1);
   --color-ws-chart-2: var(--ws-chart-2);
+  --color-ws-chart-3: var(--ws-chart-3);
+  --color-ws-chart-4: var(--ws-chart-4);
   --color-ws-chart-single: var(--ws-chart-single);
+  --color-ws-line-strong: var(--ws-line-strong);
+  --color-ws-hover: var(--ws-hover);
+  --color-ws-pop: var(--ws-pop);
   --color-ws-good: var(--ws-good);
   --color-ws-good-bg: var(--ws-good-bg);
   --color-ws-warn: var(--ws-warn);
@@ -311,9 +373,12 @@
 
   --radius-ws-card: var(--ws-radius-card);
 
-  --shadow-ws: var(--ws-shadow);
+  /* WP461：卡的阴影带上深色那圈细边（浅色下 --ws-card-edge 是空的） */
+  --shadow-ws: var(--ws-card-edge), var(--ws-shadow);
   --shadow-ws-hover: var(--ws-shadow-hover);
   --shadow-ws-glow: var(--ws-glow);
+  --shadow-ws-pop: var(--ws-shadow-pop);
+  --shadow-ws-dialog: var(--ws-shadow-dialog);
 }
 
 @layer base {
@@ -351,6 +416,15 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+
+  /*
+   * WP461（WP456 §2.7）：Windows 上系统默认那条滚动条太粗，换成细的、颜色走 --ws-line-strong。
+   * `data-os` 由 main.tsx 按 userAgent 挂在 <html> 上；Mac 的浮动滚动条照旧，不动。
+   */
+  :where(html[data-os="windows"]) * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ws-line-strong) transparent;
+  }
 }
 
 @layer components {
@@ -366,7 +440,7 @@
     border: 0;
     background-color: var(--ws-card);
     color: var(--ws-ink);
-    box-shadow: var(--ws-shadow);
+    box-shadow: var(--ws-card-edge), var(--ws-shadow);
     transition:
       box-shadow 180ms ease-out,
       transform 180ms ease-out;
@@ -375,6 +449,85 @@
   .ws-card-selected {
     box-shadow: var(--ws-glow), var(--ws-shadow-hover);
     transform: translateY(-3px);
+  }
+
+  /* WP461（WP456 §2.3）：大数字——Outfit 28 / 600，和 WP434 的数字卡一致 */
+  .ws-bignum {
+    font-family: var(--ws-display);
+    font-size: 28px;
+    line-height: 34px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * WP461（WP456 §2.6 第 10 条）：按钮四级的基础类。
+   * 1. 主按钮 ws-btn-primary：品牌色实底，**一块里最多一个**；不能点时 40% 透明度（不另起一种淡绿）；
+   * 2. 次按钮 ws-btn-secondary：灰底；
+   * 3. 弱按钮 ws-btn-ghost：没有底，悬停才出底色；
+   * 4. 链接：就是下面的 ws-link / ws-link-muted（WP426）。
+   * 高度两档：默认 32，加 ws-btn-sm 是 28。危险操作用 ws-btn-danger（红字），放进「⋯」里、点了要确认。
+   */
+  .ws-btn {
+    display: inline-flex;
+    height: 32px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 120ms ease-out,
+      color 120ms ease-out,
+      filter 120ms ease-out;
+  }
+  .ws-btn-sm {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .ws-btn:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .ws-btn:disabled,
+  .ws-btn[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+  .ws-btn-primary {
+    background-color: var(--ws-brand);
+    color: var(--ws-brand-fg);
+    font-weight: 600;
+  }
+  .ws-btn-primary:hover:not(:disabled) {
+    filter: brightness(0.95);
+  }
+  .ws-btn-secondary {
+    background-color: var(--ws-secondary);
+    color: var(--ws-ink);
+  }
+  .ws-btn-secondary:hover:not(:disabled) {
+    background-color: var(--ws-line-strong);
+  }
+  .ws-btn-ghost {
+    background-color: transparent;
+    color: var(--ws-body);
+  }
+  .ws-btn-ghost:hover:not(:disabled) {
+    background-color: var(--ws-hover);
+    color: var(--ws-ink);
+  }
+  .ws-btn-danger {
+    color: var(--ws-bad);
   }
 
   /* 标题与大数字：Outfit，字距收紧、数字等宽 */

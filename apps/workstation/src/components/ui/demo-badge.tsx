@@ -54,7 +54,7 @@ export function DemoBadge(): ReactNode {
     <span
       data-testid="demo-badge"
       title={t('demo.badge.hint')}
-      className="rounded-full border border-ws-line px-2 py-0.5 text-[11px] text-ws-muted-fg"
+      className="rounded-full border border-ws-line px-2 py-0.5 text-xs text-ws-muted-fg"
     >
       {t('demo.badge')}
     </span>

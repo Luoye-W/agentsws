@@ -194,7 +194,7 @@ export function ArchivedDialog({
                     {m.snippet ?? m.summary}
                   </span>
                 ) : null}
-                <span className="block text-[11px] text-ws-muted-fg">
+                <span className="block text-xs text-ws-muted-fg">
                   {[
                     label(m.position_template_id, m.role_id),
                     t('archive.at', { when: formatDate(m.archived_at, lang) }),

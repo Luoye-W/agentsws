@@ -152,7 +152,7 @@ export function KolCloudCard({
             {t('kol_cloud.title')}
             <Hint text={t('kol_cloud.hint')} />
           </h4>
-          <p className="text-[11px] text-muted-foreground" data-slot="status">
+          <p className="text-xs text-muted-foreground" data-slot="status">
             {t('kol_cloud.price')}
           </p>
         </div>
@@ -163,8 +163,8 @@ export function KolCloudCard({
           // 欠费与暂停是"要用户做点什么"，所以给颜色；生效中不用喊
           className={
             state === 'grace' || state === 'suspended'
-              ? 'rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-400'
-              : 'rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground'
+              ? 'rounded bg-ws-warn-bg px-1.5 py-0.5 text-xs text-ws-warn'
+              : 'rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground'
           }
         >
           {t(`kol_cloud.state.${state}`)}
@@ -303,7 +303,7 @@ export function KolCloudCard({
             </Button>
             {confirming ? (
               <span className="flex items-center gap-1" data-testid="kol-cloud-delete-confirm">
-                <span className="text-[11px] text-destructive">
+                <span className="text-xs text-destructive">
                   {t('kol_cloud.delete_confirm', { n: String(view?.object_count ?? 0) })}
                 </span>
                 <Button
@@ -351,7 +351,7 @@ export function KolCloudCard({
               <Button
                 size="xs"
                 variant="ghost"
-                className="self-start text-amber-700 dark:text-amber-400"
+                className="self-start text-ws-warn"
                 aria-expanded={openConflicts}
                 data-testid="kol-cloud-conflicts-toggle"
                 onClick={() => {
@@ -363,9 +363,7 @@ export function KolCloudCard({
               </Button>
               {openConflicts ? (
                 <>
-                  <p className="text-[11px] text-muted-foreground">
-                    {t('kol_cloud.conflict_note')}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t('kol_cloud.conflict_note')}</p>
                   <ul className="flex flex-col gap-1">
                     {conflicts.map((c) => (
                       <li
@@ -375,7 +373,7 @@ export function KolCloudCard({
                         data-kind={c.kind}
                       >
                         <span className="font-medium">{c.label}</span>
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           {t(`kol_cloud.kind.${c.kind}`)}
                         </span>
                         <Button

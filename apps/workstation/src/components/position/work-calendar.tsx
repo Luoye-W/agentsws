@@ -34,7 +34,7 @@ function mondayOf(d: Date): Date {
 function Chip({ item }: { item: PositionWorkItem }): ReactNode {
   const body = (
     <span
-      className={`block truncate rounded-sm border-l-2 bg-ws-surface px-1.5 py-0.5 text-[11.5px] ${BAR[item.group]}`}
+      className={`block truncate rounded-sm border-l-2 bg-ws-surface px-1.5 py-0.5 text-xs ${BAR[item.group]}`}
       title={item.title}
       data-testid="work-cal-item"
       data-id={item.id}
@@ -189,7 +189,7 @@ export function WorkCalendar({
                 <Chip key={i.id} item={i} />
               ))}
               {list.length > shown.length ? (
-                <span className="text-[11px] text-ws-muted-fg">
+                <span className="text-xs text-ws-muted-fg">
                   {t('pos2.cal.more', { n: list.length - shown.length })}
                 </span>
               ) : null}

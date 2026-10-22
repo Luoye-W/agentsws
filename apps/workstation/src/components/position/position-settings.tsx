@@ -211,9 +211,7 @@ function Connections({
         >
           {required.length === 0 ? null : (
             <>
-              <p className="px-4 pt-2.5 text-[11px] text-ws-muted-fg">
-                {t('pos2.set.conn.required')}
-              </p>
+              <p className="px-4 pt-2.5 text-xs text-ws-muted-fg">{t('pos2.set.conn.required')}</p>
               <ul>
                 {required.map((i) => (
                   <ConnectionRow key={i.kind} item={i} satisfied={satisfied(i)} />
@@ -432,7 +430,7 @@ function DutyCapabilities({
           >
             <InfoTip text={l.raw}>{l.text}</InfoTip>
             {dev ? (
-              <code className="text-[10.5px] text-ws-muted-fg" data-testid="settings-raw-id">
+              <code className="text-ws-tiny text-ws-muted-fg" data-testid="settings-raw-id">
                 {l.raw}
               </code>
             ) : null}

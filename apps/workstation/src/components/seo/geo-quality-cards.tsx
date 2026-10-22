@@ -50,9 +50,7 @@ export function ConsistencyCardBody({
                   />
                   <span className="flex min-w-0 flex-col">
                     <span className="flex items-center gap-1.5">
-                      <WsTag className="h-[18px] px-1.5 text-[11px]">
-                        {t(`geo.field.${f.field}`)}
-                      </WsTag>
+                      <WsTag className="h-[18px] px-1.5 text-xs">{t(`geo.field.${f.field}`)}</WsTag>
                       {f.verdict === 'outdated' ? (
                         <span className="text-xs text-ws-warn">{t('geo.card.cons.outdated')}</span>
                       ) : null}
@@ -106,7 +104,7 @@ export function RecheckCardBody({ payload }: { payload: RecheckPayload }): React
       <span className="flex items-center gap-2">
         {r.advice === undefined ? null : (
           <WsTag
-            className={`h-[18px] px-1.5 text-[11px] ${r.advice === 'stop' ? 'bg-ws-bad-bg text-ws-bad' : r.advice === 'expand' ? 'bg-ws-good-bg text-ws-good' : ''}`}
+            className={`h-[18px] px-1.5 text-xs ${r.advice === 'stop' ? 'bg-ws-bad-bg text-ws-bad' : r.advice === 'expand' ? 'bg-ws-good-bg text-ws-good' : ''}`}
             data-testid="deck-geo-recheck-advice"
           >
             {t(`geo.advice.${r.advice}`)}

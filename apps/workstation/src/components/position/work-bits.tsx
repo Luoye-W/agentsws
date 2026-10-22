@@ -158,7 +158,7 @@ export function CardsBadge({
       type="button"
       data-testid="work-cards-badge"
       data-card={first}
-      className="inline-flex h-5 shrink-0 items-center rounded-full bg-ws-warn-bg px-2 text-[11px] font-medium whitespace-nowrap text-ws-warn hover:underline"
+      className="inline-flex h-5 shrink-0 items-center rounded-full bg-ws-warn-bg px-2 text-xs font-medium whitespace-nowrap text-ws-warn hover:underline"
       onClick={(e) => {
         e.stopPropagation()
         onJump(first)
@@ -176,7 +176,7 @@ export function OverdueBadge({ item }: { item: PositionWorkItem }): ReactNode {
   return (
     <span
       data-testid="work-overdue"
-      className="inline-flex h-5 shrink-0 items-center rounded-full bg-ws-bad-bg px-2 text-[11px] font-medium whitespace-nowrap text-ws-bad"
+      className="inline-flex h-5 shrink-0 items-center rounded-full bg-ws-bad-bg px-2 text-xs font-medium whitespace-nowrap text-ws-bad"
     >
       {t('pos2.overdue')}
     </span>
@@ -205,7 +205,7 @@ export function ProgressText({
     <>
       {item.result_ready === true ? (
         <span
-          className="mr-1.5 inline-flex h-4 items-center rounded-full bg-ws-good-bg px-1.5 text-[10.5px] font-medium text-ws-good"
+          className="mr-1.5 inline-flex h-4 items-center rounded-full bg-ws-good-bg px-1.5 text-xs font-medium text-ws-good"
           data-testid="work-result-ready"
         >
           {t('pos2.result_ready')}
@@ -245,7 +245,7 @@ export function WhoBadge({ item }: { item: PositionWorkItem }): ReactNode {
       <span
         data-testid="work-who"
         data-who={mine ? 'you' : 'ai'}
-        className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${mine ? 'bg-ws-warn-bg text-ws-warn' : 'bg-ws-good-bg text-ws-good'}`}
+        className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${mine ? 'bg-ws-warn-bg text-ws-warn' : 'bg-ws-good-bg text-ws-good'}`}
       >
         {mine ? '你' : 'AI'}
       </span>

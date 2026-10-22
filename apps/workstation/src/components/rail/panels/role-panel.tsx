@@ -107,7 +107,7 @@ function PersonaBody({
         {/* WP421（自查 general）：「包里自带」不上屏；只有公司改写过的标一下 */}
         {view.overridden ? (
           <span
-            className="rounded border px-1 py-0.5 text-[11px] text-muted-foreground"
+            className="rounded border px-1 py-0.5 text-xs text-muted-foreground"
             data-testid="role-source"
           >
             {t('rail.role.overridden')}
@@ -115,7 +115,7 @@ function PersonaBody({
         ) : null}
         {untranslated ? (
           <span
-            className="inline-flex items-center gap-1 rounded border px-1 py-0.5 text-[11px] text-muted-foreground"
+            className="inline-flex items-center gap-1 rounded border px-1 py-0.5 text-xs text-muted-foreground"
             data-testid="role-untranslated"
           >
             <Languages aria-hidden className="size-3" />
@@ -128,7 +128,7 @@ function PersonaBody({
       {editing ? (
         <div className="flex flex-col gap-1">
           {lang === 'zh' ? null : (
-            <p className="text-[11px] text-muted-foreground" data-testid="role-edit-source">
+            <p className="text-xs text-muted-foreground" data-testid="role-edit-source">
               {t('rail.role.edit_source')}
             </p>
           )}
@@ -178,17 +178,17 @@ function PersonaBody({
       {/* 69 §4：包里的原文永远留着——不显示出来，「还原」就是一个看不见结果的按钮 */}
       {view.overridden ? (
         <details data-testid="role-packaged">
-          <summary className="cursor-pointer text-[11px] text-muted-foreground">
+          <summary className="cursor-pointer text-xs text-muted-foreground">
             {t('rail.role.packaged')}
           </summary>
-          <p className="mt-1 whitespace-pre-wrap rounded-md border border-dashed p-2 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-1 whitespace-pre-wrap rounded-md border border-dashed p-2 text-xs leading-relaxed text-muted-foreground">
             {packaged}
           </p>
         </details>
       ) : null}
 
       {view.overridden && view.updated_at !== undefined ? (
-        <p className="text-[11px] text-muted-foreground" data-testid="role-updated">
+        <p className="text-xs text-muted-foreground" data-testid="role-updated">
           {t('rail.role.updated', { who: view.updated_by ?? '', at: view.updated_at.slice(0, 10) })}
         </p>
       ) : null}
@@ -225,15 +225,15 @@ function PersonaBody({
           </div>
         )
       ) : (
-        <p className="text-[11px] text-muted-foreground" data-testid="role-readonly">
+        <p className="text-xs text-muted-foreground" data-testid="role-readonly">
           {t('rail.role.readonly')}
         </p>
       )}
 
-      <p className="text-[11px] text-muted-foreground">{t('rail.role.hint')}</p>
+      <p className="text-xs text-muted-foreground">{t('rail.role.hint')}</p>
 
       {error === null ? null : (
-        <p role="alert" className="text-[11px] text-destructive" data-testid="role-error">
+        <p role="alert" className="text-xs text-destructive" data-testid="role-error">
           {error}
         </p>
       )}
@@ -295,12 +295,12 @@ export function RolePanel({ scope }: { scope: RailScope }): React.ReactNode {
         <RoleRules roleId={scope.scope_id} assignment={scope.assignment} hideWhenEmpty />
         {/* 69 §3：运行时先装岗位那一段、再装职责那一段，所以这里也按这个顺序给人看 */}
         {scope.parent === undefined ? (
-          <p className="text-[11px] text-muted-foreground" data-testid="role-no-position">
+          <p className="text-xs text-muted-foreground" data-testid="role-no-position">
             {t('rail.role.no_position')}
           </p>
         ) : (
           <div className="flex flex-col gap-1">
-            <p className="text-[11px] text-muted-foreground">{t('rail.role.position_of')}</p>
+            <p className="text-xs text-muted-foreground">{t('rail.role.position_of')}</p>
             <PersonaSection kind="position" id={scope.parent.scope_id} canEdit={canEdit} />
           </div>
         )}
@@ -314,7 +314,7 @@ export function RolePanel({ scope }: { scope: RailScope }): React.ReactNode {
       <PersonaSection kind="position" id={scope.scope_id} canEdit={canEdit} />
       {duties.length === 0 ? null : (
         <div className="flex flex-col gap-1">
-          <p className="text-[11px] text-muted-foreground">{t('rail.role.duties')}</p>
+          <p className="text-xs text-muted-foreground">{t('rail.role.duties')}</p>
           <ul className="flex flex-col gap-1">
             {duties.map((r) => (
               <li key={r.role_id}>

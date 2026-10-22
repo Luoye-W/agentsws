@@ -63,7 +63,7 @@ function Shot({
       type="button"
       data-testid="ads-change-shot"
       onClick={() => setOpen((v) => !v)}
-      className="flex cursor-zoom-in flex-col items-start gap-0.5 rounded text-[11px] text-ws-muted-fg outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex cursor-zoom-in flex-col items-start gap-0.5 rounded text-xs text-ws-muted-fg outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
     >
       <img
         src={`data:image/png;base64,${shot.data.png_base64}`}

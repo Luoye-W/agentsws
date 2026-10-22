@@ -65,7 +65,7 @@ export function MentionsTable({
   const failed = monitor?.view?.failed ?? 0
   return (
     <section className="flex flex-col gap-1.5" data-testid="pr-mentions">
-      <h4 className="text-[11px] tracking-wider text-ws-muted-fg uppercase">{t('prm.title')}</h4>
+      <h4 className="text-xs tracking-wider text-ws-muted-fg uppercase">{t('prm.title')}</h4>
       {failed === 0 ? null : (
         <p className="text-[12px] text-ws-warn" data-testid="pr-mentions-failed">
           {t('prm.failed', { n: failed })}

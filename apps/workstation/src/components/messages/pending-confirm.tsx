@@ -119,7 +119,7 @@ export function PendingActions({
         {t('messages.pending.no')}
       </Button>
       {refused ? (
-        <span role="alert" className="text-[11px] text-destructive">
+        <span role="alert" className="text-xs text-destructive">
           {t(wanted === 'b2b' ? 'messages.pending.refused_b2b' : 'messages.pending.refused')}
         </span>
       ) : null}

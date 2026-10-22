@@ -93,7 +93,7 @@ export function StatTileView({ tile }: { tile: StatTileData }): React.ReactNode 
                 <Link2Off className="size-3.5" aria-hidden />
                 <span>{t('tile.not_connected')}</span>
               </button>
-              <p className="mt-1 text-[11px] text-ws-muted-fg">{t('tile.not_connected.hint')}</p>
+              <p className="mt-1 text-xs text-ws-muted-fg">{t('tile.not_connected.hint')}</p>
             </>
           }
         />

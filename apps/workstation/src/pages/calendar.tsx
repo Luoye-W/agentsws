@@ -268,7 +268,7 @@ function LayerColumn({
     // 一组勾选框，所以是 fieldset / legend——标题本来就是它的名字
     <fieldset data-testid="calendar-layers" className="ws-card flex flex-col gap-0.5 p-2">
       <div className="flex w-full items-center px-2 pt-1 pb-2">
-        <legend className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+        <legend className="text-xs tracking-wider text-ws-muted-fg uppercase">
           {t('calendar.layers')}
         </legend>
         <span className="flex-1" />
@@ -277,7 +277,7 @@ function LayerColumn({
             type="button"
             data-testid="calendar-only-this"
             onClick={onOnlyThis}
-            className="text-[11.5px] text-ws-brand hover:underline"
+            className="text-xs text-ws-brand hover:underline"
           >
             {t('calendar.layers.only_this')}
           </button>
@@ -316,17 +316,14 @@ function LayerColumn({
             </span>
             <Icon className="size-3.5 shrink-0 text-ws-muted-fg" aria-hidden />
             <span className="min-w-0 flex-1 truncate">{t(`calendar.source.${layer}`)}</span>
-            <span
-              className="ws-num text-[11.5px] text-ws-muted-fg"
-              data-testid="calendar-layer-count"
-            >
+            <span className="ws-num text-xs text-ws-muted-fg" data-testid="calendar-layer-count">
               {counts[layer] === 0 ? '' : counts[layer]}
             </span>
           </label>
         )
       })}
       {/* 勾掉的那一层还在，只是这一屏不画它——这句话省掉的话，人会以为勾掉 = 删掉 */}
-      <p className="px-2 pt-1.5 pb-1 text-[11px] leading-snug text-ws-muted-fg">
+      <p className="px-2 pt-1.5 pb-1 text-xs leading-snug text-ws-muted-fg">
         {t('calendar.layers.hint')}
       </p>
     </fieldset>

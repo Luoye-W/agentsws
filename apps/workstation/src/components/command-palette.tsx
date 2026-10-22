@@ -812,7 +812,7 @@ export function CommandPalette({
         </CommandList>
         {/* 照 Claude：底下一行按键提示 */}
         <div
-          className="flex items-center justify-end gap-3 border-t border-ws-line px-3 py-2 text-[11.5px] text-ws-muted-fg"
+          className="flex items-center justify-end gap-3 border-t border-ws-line px-3 py-2 text-xs text-ws-muted-fg"
           data-testid="search-footer"
         >
           <span className="inline-flex items-center gap-1">
@@ -822,7 +822,7 @@ export function CommandPalette({
             {t('search.open')}
           </span>
           <span className="inline-flex items-center gap-1">
-            <kbd className="inline-flex h-5 items-center justify-center rounded border border-ws-line px-1 font-sans text-[10.5px]">
+            <kbd className="inline-flex h-5 items-center justify-center rounded border border-ws-line px-1 font-sans text-ws-tiny">
               Esc
             </kbd>
             {t('search.close')}

@@ -128,7 +128,7 @@ export function ReadRoutesSection({ assignment }: { assignment?: string }): Reac
           <Hint text={t('read_routes.hint')} testId="read-routes-hint" />
         </h3>
         <span className="flex-1" />
-        <span className="text-[11px] text-muted-foreground" data-slot="status">
+        <span className="text-xs text-muted-foreground" data-slot="status">
           {t('read_routes.checked_at', { time })}
         </span>
         <Button
@@ -161,7 +161,7 @@ export function ReadRoutesSection({ assignment }: { assignment?: string }): Reac
                 className="flex-1"
               />
               {route.active === undefined ? (
-                <span className="text-[11px] text-ws-bad" data-slot="status">
+                <span className="text-xs text-ws-bad" data-slot="status">
                   {t('read_routes.none_active')}
                 </span>
               ) : null}
@@ -179,7 +179,7 @@ export function ReadRoutesSection({ assignment }: { assignment?: string }): Reac
                 </Button>
               ) : null}
               {route.platform === 'web' ? (
-                <span className="flex items-center gap-1.5 text-[11px]">
+                <span className="flex items-center gap-1.5 text-xs">
                   <Switch
                     checked={data.settings.web_third_party_reader}
                     disabled={settings.isPending}
@@ -199,7 +199,7 @@ export function ReadRoutesSection({ assignment }: { assignment?: string }): Reac
         ))}
       </ul>
       {error === null || error === undefined ? null : (
-        <p role="alert" className="text-[11px] text-destructive" data-testid="read-routes-error">
+        <p role="alert" className="text-xs text-destructive" data-testid="read-routes-error">
           {apiErrorText(error, t)}
         </p>
       )}
@@ -227,7 +227,7 @@ function RedditAccountLine({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-24" data-testid="read-account">
       {status === undefined || status.text === '' ? null : (
         <span
-          className={status.bad ? 'text-[11px] text-ws-bad' : 'text-[11px]'}
+          className={status.bad ? 'text-xs text-ws-bad' : 'text-xs'}
           data-slot="status"
           data-testid="read-account-status"
           data-state={account.state}

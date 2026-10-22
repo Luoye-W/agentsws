@@ -733,7 +733,7 @@ export function AppShell({
                     </NavLink>
                     {/* WP207：标题右边一个常显的「+」= 新建岗位（照 Claude 的做法；只有所有者有） */}
                     <div className="flex items-center justify-between px-2 pt-3 pb-1">
-                      <span className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+                      <span className="text-xs tracking-wider text-ws-muted-fg uppercase">
                         {t('nav.positions')}
                       </span>
                       {owner === undefined || me === undefined ? null : (

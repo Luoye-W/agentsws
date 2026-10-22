@@ -51,7 +51,7 @@ export function ChatTranscript({
             m.role === 'operator' && 'border border-dashed bg-transparent',
           )}
         >
-          <div className="flex flex-wrap items-baseline gap-2 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
             <span>{t(`chat.role.${m.role}`)}</span>
             <time dateTime={m.at}>{formatDate(m.at, lang)}</time>
             {m.plan_action === undefined || m.auto_answer !== undefined ? null : (
@@ -64,7 +64,7 @@ export function ChatTranscript({
             <AutoAnswerMark sessionId={sessionId} message={m} assignment={assignment} />
           )}
           {m.role === 'operator' ? (
-            <p className="text-[11px] text-muted-foreground">{t('chat.role.operator.note')}</p>
+            <p className="text-xs text-muted-foreground">{t('chat.role.operator.note')}</p>
           ) : null}
         </li>
       ))}

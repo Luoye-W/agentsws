@@ -238,7 +238,7 @@ function ConfidenceTag({
   if (cell === undefined) return null
   if (edits[field] !== undefined || cell.edited === true)
     return (
-      <span className="text-[11px] text-ws-muted-fg" data-testid={`intake-tag-${field}`}>
+      <span className="text-xs text-ws-muted-fg" data-testid={`intake-tag-${field}`}>
         {t('intake.tag.edited')}
       </span>
     )
@@ -246,7 +246,7 @@ function ConfidenceTag({
   const from = cell.evidence?.[0]
   return (
     <span
-      className="rounded-sm bg-amber-100 px-1 text-[11px] text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
+      className="rounded-sm bg-ws-warn-bg px-1 text-xs text-ws-warn"
       data-testid={`intake-tag-${field}`}
       // 出处进 tooltip，不铺在外面（36 §7）
       title={
@@ -478,7 +478,7 @@ export function BrandProfileCard({
             .map((label) => (
               <span
                 key={label}
-                className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]"
+                className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-xs"
                 data-testid="intake-tag"
               >
                 {label}
@@ -491,7 +491,7 @@ export function BrandProfileCard({
       {products.length === 0 ? null : (
         <div className="flex flex-wrap gap-2" data-testid="intake-products">
           {products.slice(0, 6).map((p) => (
-            <figure key={p.title} className="w-20 text-[11px]">
+            <figure key={p.title} className="w-20 text-xs">
               {p.image_url === undefined ? null : (
                 <img
                   src={p.image_url}

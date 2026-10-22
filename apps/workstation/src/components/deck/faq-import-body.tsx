@@ -27,7 +27,7 @@ export const isFaqBatchPayload = (p: unknown): p is FaqBatchPayload =>
 const Chip = ({ children, testId }: { children: React.ReactNode; testId?: string }) => (
   <span
     {...(testId === undefined ? {} : { 'data-testid': testId })}
-    className="rounded-full bg-ws-tint px-2 py-px text-[11px] text-ws-muted-fg"
+    className="rounded-full bg-ws-tint px-2 py-px text-xs text-ws-muted-fg"
   >
     {children}
   </span>

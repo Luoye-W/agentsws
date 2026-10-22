@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { AppProvider } from '@/lib/app-context'
 import { installGlobalErrorReporting } from '@/lib/client-errors'
 import { DesktopDragStrip } from '@/lib/desktop-chrome'
+import { applyOsAttr } from '@/lib/os-attr'
 import { installPreloadReload } from '@/lib/preload-reload'
 import './index.css'
 
@@ -21,6 +22,9 @@ installPreloadReload()
 
 // WP195：「界面动效」那一项先挂到 <html data-ws-motion> 上，CSS 兜底层要看它
 applyMotionPref()
+
+// WP461：<html data-os>——Windows 上换细滚动条（index.css）
+applyOsAttr()
 
 const root = document.getElementById('root')
 if (root === null) throw new Error('#root 不在页面里')

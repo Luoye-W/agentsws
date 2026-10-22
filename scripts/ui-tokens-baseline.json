@@ -1,0 +1,497 @@
+{
+  "$comment": "WP461（决策 1446）：视觉规范落地前就有的、不在档位里的写法——按文件、按类计数。只减不增：T2–T8 清掉一处就跑 `node scripts/check-ui-tokens.mjs --update` 收紧；新写的地方一律按档位来。",
+  "files": {
+    "apps/workstation/src/components/ads/ad-changes-panel.tsx": {
+      "radius": 3
+    },
+    "apps/workstation/src/components/ads/ads-overview.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/amazon/amazon-ops-board.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/amazon/listing-checkup.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/answer/genui/host-nodes.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/app-shell.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/autopilot/autopilot-strip.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/blocks/block-view.tsx": {
+      "font-size": 4,
+      "radius": 4
+    },
+    "apps/workstation/src/components/brand-background-badge.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/calendar/calendar-link.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/calendar/unified-calendar.tsx": {
+      "font-size": 1,
+      "radius": 2
+    },
+    "apps/workstation/src/components/chat-window/widget-settings.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/chips.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/command-palette.tsx": {
+      "font-size": 2,
+      "radius": 2
+    },
+    "apps/workstation/src/components/connections/browser-extension.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/connections/platform-cli-card.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/connections/standby-wizard.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/content-updates/content-diff-dialog.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/content-updates/digest-card-body.tsx": {
+      "font-size": 2
+    },
+    "apps/workstation/src/components/content-updates/position-updates.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/deck/assistant-notes-body.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/deck/deck-battle-report.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/deck/deck-card-body.tsx": {
+      "font-size": 2,
+      "radius": 11
+    },
+    "apps/workstation/src/components/deck/deck-card.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/deck/deck-filters.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/deck/faq-import-body.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/deck/theme-choice-body.tsx": {
+      "radius": 3
+    },
+    "apps/workstation/src/components/deck/weekly-review-body.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/design-md/tokens-view.tsx": {
+      "radius": 4
+    },
+    "apps/workstation/src/components/design/bar-chart.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/design/notice-toast.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/design/position-card.tsx": {
+      "font-size": 3,
+      "radius": 1
+    },
+    "apps/workstation/src/components/design/stat-tile.tsx": {
+      "font-size": 3
+    },
+    "apps/workstation/src/components/design/status-icons.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/design/table-filter.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/duty-needed.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/error-boundary.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/free-chat/fanout-card.tsx": {
+      "radius": 3
+    },
+    "apps/workstation/src/components/free-chat/model-picker.tsx": {
+      "font-size": 1,
+      "radius": 2
+    },
+    "apps/workstation/src/components/free-chat/simple-composer.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/free-chat/thinking-control.tsx": {
+      "font-size": 2
+    },
+    "apps/workstation/src/components/im/team-bot-card.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/im/wechat-bind.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/kol/creator-card.tsx": {
+      "font-size": 1,
+      "radius": 3
+    },
+    "apps/workstation/src/components/kol/kol-card-bodies.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/kol/kol-panel.tsx": {
+      "radius": 4
+    },
+    "apps/workstation/src/components/library/skill-groups.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/matter/image-pick-card.tsx": {
+      "font-size": 4,
+      "radius": 1
+    },
+    "apps/workstation/src/components/matter/mask-dialog.tsx": {
+      "font-size": 2,
+      "radius": 1
+    },
+    "apps/workstation/src/components/matter/matter-composer.tsx": {
+      "font-size": 2,
+      "radius": 3
+    },
+    "apps/workstation/src/components/matter/matter-header.tsx": {
+      "font-size": 3
+    },
+    "apps/workstation/src/components/matter/matter-timeline.tsx": {
+      "font-size": 24,
+      "radius": 9,
+      "color": 5
+    },
+    "apps/workstation/src/components/messages/composer.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/messages/mail-ai-assistant.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/messages/message-body.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/messages/pending-confirm.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/messages/site-chat.tsx": {
+      "font-size": 1,
+      "radius": 2
+    },
+    "apps/workstation/src/components/messages/unclaimed-view.tsx": {
+      "font-size": 4,
+      "radius": 1
+    },
+    "apps/workstation/src/components/models/ai-source-order.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/models/image-model-section.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/models/model-form.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/models/subscription-plan.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/notifications/notification-bell.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/onboarding/position-planner.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/onboarding/step-progress.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/org/brand-assets-card.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/org/roles-tab.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/org/similar-choice.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/org/toolbox-tab.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/page-error.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/peers/handoff-strip.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/position/data-board.tsx": {
+      "font-size": 4
+    },
+    "apps/workstation/src/components/position/position-handoff.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/position/quick-answer.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/position/work-bits.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/position/work-calendar.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/position/work-list.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/position/work-section.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/pr/pr-watch-sources.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/rail/cards/card-bodies.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/rail/panels/caps-panel.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/rail/panels/changes-panel.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/rail/panels/evidence-panel.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/rail/panels/mail-assistant-panel.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/rail/panels/memory-panel.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/rail/panels/message-rules-panel.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/rail/panels/outbound-panel.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/rail/panels/role-panel.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/rail/right-rail.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/reports/kit/blocks.tsx": {
+      "font-size": 6,
+      "radius": 8
+    },
+    "apps/workstation/src/components/reports/kit/mini-report.tsx": {
+      "font-size": 1,
+      "radius": 2
+    },
+    "apps/workstation/src/components/reports/kit/parts.tsx": {
+      "font-size": 2,
+      "radius": 4
+    },
+    "apps/workstation/src/components/reports/kit/report-row.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/reports/report-compose.tsx": {
+      "font-size": 4,
+      "radius": 7
+    },
+    "apps/workstation/src/components/reports/report-view.tsx": {
+      "font-size": 7,
+      "radius": 7
+    },
+    "apps/workstation/src/components/reports/reports-panel.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/secretary/meet-inbox.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/seo/geo-answer.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/seo/geo-board.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/seo/geo-grid.tsx": {
+      "font-size": 1,
+      "radius": 2
+    },
+    "apps/workstation/src/components/seo/geo-tables.tsx": {
+      "font-size": 2,
+      "radius": 2
+    },
+    "apps/workstation/src/components/seo/geo-watch-card-body.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/seo/geo-watch-settings.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/settings-panel/setting-row.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/settings-panel/settings-dialog.tsx": {
+      "font-size": 2
+    },
+    "apps/workstation/src/components/settings/credits-panel.tsx": {
+      "font-size": 2,
+      "radius": 2
+    },
+    "apps/workstation/src/components/settings/kol-cloud-card.tsx": {
+      "radius": 3
+    },
+    "apps/workstation/src/components/settings/team-channel.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/setup/connect-card.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/setup/setup-plan.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/shell/top-bar-slots.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/sidebar/add-duty-inline.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/sidebar/archived-dialog.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/components/sidebar/matter-menu.tsx": {
+      "font-size": 1,
+      "radius": 2
+    },
+    "apps/workstation/src/components/sidebar/new-position-inline.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/sidebar/rail-plus.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/sidebar/recall-cards.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/social/moderation-card-body.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/social/own-sub-card-body.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/social/reddit-write-body.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/social/social-broadcast.tsx": {
+      "radius": 2
+    },
+    "apps/workstation/src/components/social/social-calendar.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/social/social-media-pick.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/ui/badge.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/ui/button.tsx": {
+      "font-size": 1,
+      "radius": 4
+    },
+    "apps/workstation/src/components/ui/input-group.tsx": {
+      "radius": 3
+    },
+    "apps/workstation/src/components/ui/safe-markdown.tsx": {
+      "font-size": 3,
+      "radius": 1
+    },
+    "apps/workstation/src/components/ui/tooltip.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/work/layer-memory.tsx": {
+      "radius": 1
+    },
+    "apps/workstation/src/components/workshop-services/handoff-offer.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/workshop-services/order-panel.tsx": {
+      "font-size": 4
+    },
+    "apps/workstation/src/components/workshop-services/service-card-body.tsx": {
+      "font-size": 9
+    },
+    "apps/workstation/src/components/workshop-services/service-offer-line.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/components/workshop-services/services-panel.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/pages/brand-assets.tsx": {
+      "font-size": 5
+    },
+    "apps/workstation/src/pages/brand-design.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/pages/calendar.tsx": {
+      "font-size": 1,
+      "radius": 3
+    },
+    "apps/workstation/src/pages/duty.tsx": {
+      "font-size": 2
+    },
+    "apps/workstation/src/pages/free-chat.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/pages/goals.tsx": {
+      "font-size": 1,
+      "radius": 1
+    },
+    "apps/workstation/src/pages/home.tsx": {
+      "font-size": 12,
+      "radius": 4
+    },
+    "apps/workstation/src/pages/im-channels.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/pages/in-progress.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/pages/influencer.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/pages/login.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/pages/matter.tsx": {
+      "font-size": 2,
+      "radius": 1
+    },
+    "apps/workstation/src/pages/messages.tsx": {
+      "font-size": 1,
+      "radius": 10
+    },
+    "apps/workstation/src/pages/onboarding.tsx": {
+      "font-size": 1
+    },
+    "apps/workstation/src/pages/org.tsx": {
+      "font-size": 2
+    },
+    "apps/workstation/src/pages/position.tsx": {
+      "font-size": 2
+    },
+    "apps/workstation/src/pages/todos.tsx": {
+      "radius": 4
+    }
+  }
+}

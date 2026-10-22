@@ -127,7 +127,7 @@ function MoreMenu({
           className="absolute top-full right-0 z-50 mt-1 w-60 rounded-[12px] bg-ws-card p-1.5 shadow-[0_16px_34px_rgba(20,40,30,0.14),0_0_0_1px_var(--ws-line)]"
           data-testid="report-history"
         >
-          <p className="flex items-center gap-1.5 px-2 pt-1 pb-1.5 text-[11.5px] text-ws-muted-fg">
+          <p className="flex items-center gap-1.5 px-2 pt-1 pb-1.5 text-xs text-ws-muted-fg">
             <History aria-hidden className="size-3.5" />
             {t('report.history')}
           </p>

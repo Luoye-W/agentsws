@@ -211,7 +211,7 @@ export function TitleMenuItem({
       {Icon === undefined ? null : <Icon aria-hidden className="size-3.5 shrink-0" />}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {hint === undefined ? null : (
-        <span className="ml-auto max-w-[45%] shrink-0 truncate text-[11px] text-ws-muted-fg">
+        <span className="ml-auto max-w-[45%] shrink-0 truncate text-xs text-ws-muted-fg">
           {hint}
         </span>
       )}
@@ -224,7 +224,7 @@ export function TitleMenuSeparator(): ReactNode {
 }
 
 export function TitleMenuLabel({ children }: { children: ReactNode }): ReactNode {
-  return <p className="px-2 pt-1.5 pb-0.5 text-[11px] text-ws-muted-fg">{children}</p>
+  return <p className="px-2 pt-1.5 pb-0.5 text-xs text-ws-muted-fg">{children}</p>
 }
 
 /* ── 顶栏右边那排的一颗图标 ──────────────────────────────────────────── */

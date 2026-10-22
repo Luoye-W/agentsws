@@ -70,16 +70,14 @@ function SourceRow({ row, onRemove }: { row: PrWatchSourceRow; onRemove: () => v
           failed ? 'bg-ws-bad' : row.status === 'ok' ? 'bg-ws-good' : 'bg-ws-muted-fg/40',
         )}
       />
-      <span className="shrink-0 text-[11px] text-ws-muted-fg">
-        {t(`prwatch.group.${row.group}`)}
-      </span>
+      <span className="shrink-0 text-xs text-ws-muted-fg">{t(`prwatch.group.${row.group}`)}</span>
       <span className="min-w-0 truncate text-ws-body">{row.label}</span>
       {row.every_hours < 24 ? (
-        <span className="shrink-0 text-[11px] text-ws-muted-fg">{t('prwatch.boosted')}</span>
+        <span className="shrink-0 text-xs text-ws-muted-fg">{t('prwatch.boosted')}</span>
       ) : null}
       <span
         className={cn(
-          'ml-auto shrink-0 text-[11px] ws-num',
+          'ml-auto shrink-0 text-xs ws-num',
           failed ? 'text-ws-bad' : 'text-ws-muted-fg',
         )}
       >
@@ -157,7 +155,7 @@ export function PrWatchSources({
           {view?.summary ?? t('prwatch.empty')}
         </span>
         {view?.next_run_at === undefined ? null : (
-          <span className="text-[11px] text-ws-muted-fg">
+          <span className="text-xs text-ws-muted-fg">
             {t('prwatch.next', { when: whenLabel(view.next_run_at, t) })}
           </span>
         )}

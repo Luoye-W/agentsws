@@ -63,11 +63,11 @@ function SkillRow({
         <span className={cn('min-w-0 flex-1 truncate text-sm', skill.excluded && 'line-through')}>
           {skillLabel(skill, lang)}
         </span>
-        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+        <span className="shrink-0 font-mono text-ws-tiny text-muted-foreground">
           v{skill.version}
         </span>
       </div>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {t('rail.skills.overlays', { count: skill.overlays.length })}
       </p>
       <div className="mt-1 flex flex-wrap gap-1">
@@ -98,10 +98,7 @@ function SkillRow({
         </Button>
       </div>
       {promote.data === undefined ? null : (
-        <p
-          className="mt-1 text-[11px] text-muted-foreground"
-          data-testid="rail-skill-promote-result"
-        >
+        <p className="mt-1 text-xs text-muted-foreground" data-testid="rail-skill-promote-result">
           {promote.data.accepted ? t('memory.promote.ok') : promote.data.reason}
         </p>
       )}

@@ -109,7 +109,7 @@ export function GeoGrid({
                 <td className="max-w-[22rem] px-3 py-2.5">
                   <span className="line-clamp-2">{row.prompt_text}</span>
                   {row.branded === true ? (
-                    <span className="text-[11px] text-ws-muted-fg">{t('geo.grid.branded')}</span>
+                    <span className="text-xs text-ws-muted-fg">{t('geo.grid.branded')}</span>
                   ) : null}
                 </td>
                 {grid.platforms.map((p) => {
@@ -128,7 +128,7 @@ export function GeoGrid({
                             onClick={() => open(c)}
                           >
                             {many ? (
-                              <span className="text-[10px] text-ws-muted-fg">{c.market}</span>
+                              <span className="text-ws-tiny text-ws-muted-fg">{c.market}</span>
                             ) : null}
                             <CellMark cell={c} />
                           </button>

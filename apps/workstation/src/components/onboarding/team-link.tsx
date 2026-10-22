@@ -34,7 +34,7 @@ function Dot({ on }: { on: boolean }): React.ReactNode {
       aria-hidden
       className={cn(
         'inline-block size-1.5 shrink-0 rounded-full',
-        on ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+        on ? 'bg-ws-good' : 'bg-muted-foreground/40',
       )}
     />
   )

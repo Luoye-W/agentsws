@@ -192,7 +192,7 @@ export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNod
       )}
       {plan.model_first ? (
         <div
-          className="flex items-start justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3"
+          className="flex items-start justify-between gap-3 rounded-md border border-ws-warn/40 bg-ws-warn-bg p-3"
           data-testid="onboarding-plan-model"
         >
           <div>

@@ -93,7 +93,7 @@ function Consistency({ q, assignment }: { q: GeoQualityView; assignment: string 
           : (['site', 'web-ops', 'pr'] as const).map((o) => {
               const n = c.findings.filter((f) => f.owner === o).length
               return n === 0 ? null : (
-                <WsTag key={o} className="h-[18px] px-1.5 text-[11px]">
+                <WsTag key={o} className="h-[18px] px-1.5 text-xs">
                   {t(`geo.owner.${o}`)} {n}
                 </WsTag>
               )
@@ -220,7 +220,7 @@ export function GeoQuality({
                   <li key={`${b.answer_id}_${b.field}`} className="flex flex-col gap-0.5">
                     <span className="flex items-center gap-1.5">
                       <WsTag
-                        className={`h-[18px] px-1.5 text-[11px] ${b.verdict === 'outdated' ? 'bg-ws-warn-bg text-ws-warn' : 'bg-ws-bad-bg text-ws-bad'}`}
+                        className={`h-[18px] px-1.5 text-xs ${b.verdict === 'outdated' ? 'bg-ws-warn-bg text-ws-warn' : 'bg-ws-bad-bg text-ws-bad'}`}
                       >
                         {t(`geo.field.${b.field}`)} · {t(`geo.q.${b.verdict}`)}
                       </WsTag>
@@ -269,9 +269,7 @@ export function GeoQuality({
                 </span>
                 <span className="ws-num ml-auto shrink-0 text-xs text-ws-muted-fg">
                   {r.status === 'done' && r.advice !== undefined ? (
-                    <WsTag className="h-[18px] px-1.5 text-[11px]">
-                      {t(`geo.advice.${r.advice}`)}
-                    </WsTag>
+                    <WsTag className="h-[18px] px-1.5 text-xs">{t(`geo.advice.${r.advice}`)}</WsTag>
                   ) : (
                     t('geo.q.recheck.wait', {
                       d: r.due.slice(5),

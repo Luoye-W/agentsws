@@ -60,7 +60,7 @@ function Empty({ text }: { text: string }): ReactNode {
 }
 
 function Meta({ children }: { children: ReactNode }): ReactNode {
-  return <span className="ml-auto shrink-0 text-[11px] text-ws-muted-fg ws-num">{children}</span>
+  return <span className="ml-auto shrink-0 text-xs text-ws-muted-fg ws-num">{children}</span>
 }
 
 /* ── 报表 ───────────────────────────────────────────────────────────── */

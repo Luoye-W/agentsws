@@ -458,7 +458,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                 badge={isDefault(subProvider) ? t('models.default_badge') : undefined}
                 status={
                   <span
-                    className="inline-flex items-center gap-1 rounded-full bg-ws-good-bg px-2 py-0.5 text-[11px] font-medium text-ws-good"
+                    className="inline-flex items-center gap-1 rounded-full bg-ws-good-bg px-2 py-0.5 text-xs font-medium text-ws-good"
                     data-slot="status"
                   >
                     <span aria-hidden className="size-1.5 rounded-full bg-current" />
@@ -613,7 +613,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                 : t('models.pricing.refresh')}
             </Button>
           </div>
-          <p className="text-[11px] text-muted-foreground" data-slot="status">
+          <p className="text-xs text-muted-foreground" data-slot="status">
             {pricing.data?.refreshed_at === undefined
               ? t('models.pricing.builtin')
               : t('models.pricing.refreshed_at', { at: pricing.data.refreshed_at.slice(0, 10) })}
@@ -621,14 +621,12 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
           {priceRefresh === null ? null : (
             <ul className="flex flex-col gap-0.5" data-testid="model-pricing-result">
               {priceRefresh.reason === undefined ? null : (
-                <li className="text-[11px] text-ws-warn">{priceRefresh.reason}</li>
+                <li className="text-xs text-ws-warn">{priceRefresh.reason}</li>
               )}
               {priceRefresh.vendors.map((v) => (
                 <li
                   key={v.id}
-                  className={
-                    v.ok ? 'text-[11px] text-muted-foreground' : 'text-[11px] text-ws-warn'
-                  }
+                  className={v.ok ? 'text-xs text-muted-foreground' : 'text-xs text-ws-warn'}
                 >
                   {v.ok
                     ? t('models.pricing.vendor_ok', { label: v.label, n: v.models })
@@ -703,7 +701,7 @@ function Block({
       <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-ws-ink">
         {title}
         {count === undefined || count === 0 ? null : (
-          <span className="ws-num rounded-full bg-ws-surface px-1.5 text-[11px] font-medium text-ws-muted-fg">
+          <span className="ws-num rounded-full bg-ws-surface px-1.5 text-ws-tiny font-medium text-ws-muted-fg">
             {count}
           </span>
         )}
@@ -781,7 +779,7 @@ function SourceShell({
           <span className="truncate text-sm font-medium text-ws-ink">{title}</span>
           {badge === undefined ? null : (
             <span
-              className="rounded-full border border-ws-brand/40 px-1.5 text-[10.5px] leading-4 font-medium text-ws-brand-ink"
+              className="rounded-full border border-ws-brand/40 px-1.5 text-xs leading-4 font-medium text-ws-brand-ink"
               data-testid="model-default-badge"
             >
               {badge}
@@ -850,13 +848,13 @@ function ProviderRow({
           <InfoTip
             text={provider.base_url}
             testId="model-row-model"
-            className="shrink-0 rounded-md bg-ws-surface px-1.5 py-px font-mono text-[11px] text-ws-muted-fg"
+            className="shrink-0 rounded-md bg-ws-surface px-1.5 py-px font-mono text-xs text-ws-muted-fg"
           >
             {provider.model}
           </InfoTip>
           {provider.from_env === true ? (
             <span
-              className="shrink-0 rounded-md bg-ws-surface px-1.5 py-px text-[10.5px] text-ws-muted-fg"
+              className="shrink-0 rounded-md bg-ws-surface px-1.5 py-px text-xs text-ws-muted-fg"
               data-slot="badge"
               data-testid="model-from-env"
             >
@@ -866,7 +864,7 @@ function ProviderRow({
           {/* WP274：只用来生图的那一条（在「生图」那一块加的）：不挂文字模型、不在这里测 */}
           {provider.image_only === true ? (
             <span
-              className="shrink-0 rounded-md bg-ws-surface px-1.5 py-px text-[10.5px] text-ws-muted-fg"
+              className="shrink-0 rounded-md bg-ws-surface px-1.5 py-px text-xs text-ws-muted-fg"
               data-slot="badge"
               data-testid="model-image-only"
               title={t('models.image.no_test')}
@@ -915,7 +913,7 @@ function ProviderRow({
       (result === undefined || testing || (result.ok && !fresh)) ? null : (
         <div className="flex flex-col gap-2">
           {provider.active ? null : (
-            <p className="text-[11px] text-destructive" data-testid="model-inactive">
+            <p className="text-xs text-destructive" data-testid="model-inactive">
               {provider.inactive_reason ?? t('models.inactive')}
             </p>
           )}
@@ -924,8 +922,8 @@ function ProviderRow({
             <p
               className={
                 result.ok
-                  ? 'flex items-center gap-1 text-[11px] text-ws-good'
-                  : 'flex items-center gap-1 text-[11px] text-destructive'
+                  ? 'flex items-center gap-1 text-xs text-ws-good'
+                  : 'flex items-center gap-1 text-xs text-destructive'
               }
               data-slot="status"
               data-testid="model-test-result"
@@ -1181,7 +1179,7 @@ function BudgetInput({
   onCommit: (value: number | undefined) => void
 }): React.ReactNode {
   return (
-    <label className="flex flex-col gap-1 text-[11px]">
+    <label className="flex flex-col gap-1 text-xs">
       <span className="text-muted-foreground">{label}</span>
       <input
         className="rounded-md border bg-background px-2 py-1 text-xs"
@@ -1399,7 +1397,7 @@ function AddRow({
             <label
               key={`${p.kind}:${p.plan_label ?? p.label}`}
               className={cn(
-                'inline-flex cursor-pointer items-center rounded-full border px-2.5 py-0.5 text-[11px] transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
+                'inline-flex cursor-pointer items-center rounded-full border px-2.5 py-0.5 text-xs transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
                 i === planIndex
                   ? 'border-ws-brand/60 bg-ws-brand-soft/40 text-ws-brand-ink'
                   : 'border-ws-line text-ws-muted-fg hover:border-ws-muted-fg/50 hover:text-ws-ink',

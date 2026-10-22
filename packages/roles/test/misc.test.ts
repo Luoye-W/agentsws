@@ -93,7 +93,23 @@ describe('effectiveConfig 前置校验', () => {
   it('refuses an assignment granted at an older major version (05 §3)', () => {
     expect(() =>
       effectiveConfig({ assignment: { ...assignment, role_version: '1.0.0' }, role }),
-    ).toThrow(/re-confirm/)
+    ).toThrow(/升级了，点一下确认就能接着用/)
+    // WP462：拦下时带上出确认卡要的几格，不出英文、不出分配号
+    try {
+      effectiveConfig({ assignment: { ...assignment, role_version: '1.0.0' }, role })
+    } catch (err) {
+      expect(err).toBeInstanceOf(RoleError)
+      expect((err as RoleError).code).toBe('conflict')
+      expect((err as RoleError).message).not.toMatch(/[a-z]{4,}/)
+      expect((err as RoleError).details).toEqual({
+        reason: 'role_major_upgraded',
+        assignment_id: assignment.id,
+        role_id: role.id,
+        role_name: role.name.zh,
+        from: '1.0.0',
+        to: role.version,
+      })
+    }
     // 同 major 的小版本升级不需要重新确认（报的是当前加载的那一版）
     expect(
       effectiveConfig({ assignment: { ...assignment, role_version: '2.0.1' }, role }).role_version,

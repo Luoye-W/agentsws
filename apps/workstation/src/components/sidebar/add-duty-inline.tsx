@@ -118,7 +118,7 @@ export function AddDutyInline({
                 data-testid="rail-add-duty-role"
                 data-role={r.id}
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors hover:bg-muted',
+                  'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs transition-colors hover:bg-muted',
                   on && 'border-primary bg-primary/10 [--ia:var(--ws-brand)]',
                 )}
                 onClick={() => {

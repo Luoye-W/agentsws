@@ -53,7 +53,7 @@ export function MarketingTag(): ReactNode {
       data-slot="status"
       title={hint}
       data-hint={hint}
-      className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[6px] bg-ws-surface px-1.5 text-[11px] text-ws-muted-fg"
+      className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[6px] bg-ws-surface px-1.5 text-xs text-ws-muted-fg"
     >
       <Megaphone aria-hidden className="size-3" />
       {t('messages.promo.tag')}

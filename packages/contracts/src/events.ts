@@ -425,6 +425,9 @@ export type KnownEventType =
   // WP295（docs/95 §5）：出厂默认等级改过的动作，还停在旧默认值、没人动过的分配启动时迁到新默认值。
   // payload：分配 id、人、职责 id、动作 id、旧等级、新等级。
   | 'assignment.automation_default_migrated'
+  // WP462：职责升了大版本，分配跟着接上。payload：分配 id、人、职责 id、怎么接的（就地重确认 / 拆分补发）、
+  // 旧版本、新版本、自动还是人点的、登记表里那个词、补发那条接的是哪条原分配。
+  | 'assignment.role_major_upgraded'
   // WP55（48 §4 L3 #2–#5）：客服安全边界四件套。payload 一律只有结论与计数，
   // 正文、relay 地址、凭据永不进日志。
   /** Amazon 24h 响应线的三档（提醒 / 升级 / 闭账）。 */

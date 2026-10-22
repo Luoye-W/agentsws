@@ -279,7 +279,28 @@ export interface PositionSummary {
   tile_ids: string[]
   range: RangeName
   show_tiles: boolean
+  /** WP462：这条职责升了大版本，要人点一下确认才接着用（老服务端没有这一格）。 */
+  needs_reconfirm?: RoleReconfirm
 }
+
+/** WP462：确认卡要的那几格。 */
+export interface RoleReconfirm {
+  reason: 'role_major_upgraded'
+  assignment_id: string
+  role_id: string
+  role_name: string
+  from: string
+  to: string
+}
+
+/** WP462：确认这条分配接着用升级后的职责（只能确认自己的）。 */
+export const reconfirmAssignment = (
+  id: string,
+): Promise<{ assignment_id: string; unchanged?: boolean }> =>
+  api<{ assignment_id: string; unchanged?: boolean }>(
+    `/v1/assignments/${encodeURIComponent(id)}/reconfirm`,
+    { method: 'POST', body: {}, assignment: id },
+  )
 
 export interface DeckCounts {
   total: number

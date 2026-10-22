@@ -387,7 +387,7 @@ export function ChatWidgetSettings(): React.ReactNode {
             </Button>
             {testResult !== undefined ? (
               <span
-                className={testResult.ok ? 'text-xs text-green-700' : 'text-xs text-destructive'}
+                className={testResult.ok ? 'text-xs text-ws-good' : 'text-xs text-destructive'}
                 data-slot="status"
               >
                 {testResult.detail}

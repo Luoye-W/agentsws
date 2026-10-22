@@ -62,7 +62,7 @@ export function resetMessageFocus(): void {
 function Section({ title, children }: { title: string; children: ReactNode }): ReactNode {
   return (
     <section className="flex flex-col gap-1.5">
-      <h3 className="text-[11px] font-medium text-muted-foreground">{title}</h3>
+      <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
       {children}
     </section>
   )
@@ -155,7 +155,7 @@ export function MailAssistantPanel(): ReactNode {
           <WsAvatar name={data.sender.name ?? data.sender.address} id={data.sender.address} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[13px]">{data.sender.name ?? data.sender.address}</div>
-            <div className="truncate text-[11px] text-muted-foreground">{data.sender.address}</div>
+            <div className="truncate text-xs text-muted-foreground">{data.sender.address}</div>
           </div>
           <StatusPill tone="neutral">
             {t('rail.mail.history', { count: data.sender.history_count })}
@@ -196,7 +196,7 @@ export function MailAssistantPanel(): ReactNode {
         </Button>
       </Section>
 
-      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+      <p className="flex items-center gap-1 text-xs text-muted-foreground">
         <Mail aria-hidden className="size-3" />
         {t('rail.mail.footnote')}
       </p>

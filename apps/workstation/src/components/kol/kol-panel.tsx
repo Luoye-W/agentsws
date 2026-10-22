@@ -644,13 +644,13 @@ function CreatorDetail({
               }}
             />
             {defaults.data?.source === 'brand_profile' ? (
-              <p className="text-[11px] text-muted-foreground" data-testid="kol-outreach-prefilled">
+              <p className="text-xs text-muted-foreground" data-testid="kol-outreach-prefilled">
                 {t('kol.detail.outreach.prefilled')}
               </p>
             ) : null}
             {defaults.data?.mailbox_connected === false ? (
               <p
-                className="flex flex-wrap items-center gap-1 text-[11px] text-[var(--ws-warn)]"
+                className="flex flex-wrap items-center gap-1 text-xs text-[var(--ws-warn)]"
                 data-testid="kol-outreach-no-mailbox"
               >
                 {t('kol.detail.outreach.no_mailbox')}
@@ -678,7 +678,7 @@ function CreatorDetail({
                 <>
                   <div className="text-xs font-medium">{draft.subject}</div>
                   <Textarea className="mt-1 text-xs" readOnly rows={6} value={draft.body} />
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {draft.auto_approved === true
                       ? t('kol.detail.outreach.auto')
                       : t('kol.detail.outreach.queued')}
@@ -689,7 +689,7 @@ function CreatorDetail({
                     })}
                   </p>
                   {draft.needs_mailbox === true ? (
-                    <p className="mt-1 text-[11px] text-[var(--ws-warn)]">
+                    <p className="mt-1 text-xs text-[var(--ws-warn)]">
                       {t('kol.detail.outreach.no_mailbox')}
                     </p>
                   ) : null}
@@ -917,7 +917,7 @@ function Collaborations({
                         </span>
                         {c.sandbox === true ? (
                           <span
-                            className="rounded bg-[var(--ws-warn-bg)] px-1 text-[10px] text-[var(--ws-ink)]"
+                            className="rounded bg-[var(--ws-warn-bg)] px-1 text-xs text-[var(--ws-ink)]"
                             data-testid="kol-collab-sandbox"
                           >
                             演练
@@ -926,7 +926,7 @@ function Collaborations({
                         {/* WP416：建合作那张卡还没人点头——点「不要」这一行就没了 */}
                         {c.awaiting_approval === true ? (
                           <span
-                            className="rounded bg-ws-surface px-1 text-[10px] text-ws-muted-fg"
+                            className="rounded bg-ws-surface px-1 text-xs text-ws-muted-fg"
                             data-testid="kol-collab-awaiting"
                           >
                             {t('kol.collab.awaiting')}
@@ -1288,7 +1288,7 @@ function ImportAndCampaign({
                   </div>
                   {/* 灰着的东西要说得出为什么（05 §4：一次 campaign 不并集权限） */}
                   {group.reason === undefined ? null : (
-                    <p className="text-[11px] text-muted-foreground" data-testid="kol-campaign-why">
+                    <p className="text-xs text-muted-foreground" data-testid="kol-campaign-why">
                       {group.reason}
                     </p>
                   )}

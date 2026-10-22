@@ -16,7 +16,7 @@ function OriginBadge({ origin }: { origin: 'authored' | 'learned' }): React.Reac
   return (
     <Badge
       variant={origin === 'learned' ? 'default' : 'outline'}
-      className="text-[11px]"
+      className="text-xs"
       data-origin={origin}
     >
       {t(`skills.origin.${origin}`)}
@@ -29,7 +29,7 @@ function OverlayRow({ overlay }: { overlay: SkillOverlayView }): React.ReactNode
   return (
     <div className="rounded-md border p-2">
       <div className="flex items-center gap-2">
-        <Badge variant="secondary" className="text-[11px]">
+        <Badge variant="secondary" className="text-xs">
           {t(`skills.tier.${overlay.tier}`)}
         </Badge>
         <span className="text-xs text-muted-foreground">
@@ -46,7 +46,7 @@ function OverlayRow({ overlay }: { overlay: SkillOverlayView }): React.ReactNode
                 <span className="block text-muted-foreground">{op.body}</span>
               )}
               {op.learned_from === undefined ? null : (
-                <span className="block text-[11px] text-muted-foreground">
+                <span className="block text-xs text-muted-foreground">
                   {t('skills.learned_from')} · {op.learned_from.at.slice(0, 10)} ·{' '}
                   {op.learned_from.lessons.length}
                 </span>
@@ -81,7 +81,7 @@ export function SkillDetails({
           {t('skills.base_tier')} {t(`skills.tier.${skill.tier}`)}
         </span>
         {skill.excluded ? (
-          <Badge variant="outline" className="text-[11px]">
+          <Badge variant="outline" className="text-xs">
             {t('skills.excluded')}
           </Badge>
         ) : null}
@@ -104,7 +104,7 @@ export function SkillDetails({
             .filter((s) => s.heading.trim() !== '')
             .map((s) => (
               <li key={s.id} className="flex items-center gap-1">
-                <Badge variant="outline" className="text-[11px]">
+                <Badge variant="outline" className="text-xs">
                   {s.heading}
                 </Badge>
                 {s.origin === 'learned' ? <OriginBadge origin="learned" /> : null}
@@ -148,13 +148,13 @@ export function SkillCard({
         </CardTitle>
         <div className="flex items-center gap-2">
           {skill.excluded ? (
-            <Badge variant="outline" className="text-[11px]">
+            <Badge variant="outline" className="text-xs">
               {t('skills.excluded')}
             </Badge>
           ) : null}
           <Badge
             variant={skill.pending_proposals > 0 ? 'default' : 'secondary'}
-            className="text-[11px]"
+            className="text-xs"
           >
             {skill.pending_proposals > 0
               ? `${t('skills.pending')} ${skill.pending_proposals}`
@@ -177,7 +177,7 @@ export function SkillCard({
           <ul className="mt-1 flex flex-wrap gap-1">
             {skill.sections.map((s) => (
               <li key={s.id} className="flex items-center gap-1">
-                <Badge variant="outline" className="text-[11px]">
+                <Badge variant="outline" className="text-xs">
                   {s.heading}
                 </Badge>
                 {s.origin === 'learned' ? <OriginBadge origin="learned" /> : null}

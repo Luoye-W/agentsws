@@ -1011,6 +1011,7 @@ export type {
   ReportSnapshotMeta,
   ReportStorePort,
   RequestContext,
+  RoleReconfirmView,
   RolesPort,
   SavedReport,
   ScheduleActor,

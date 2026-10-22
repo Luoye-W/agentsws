@@ -252,9 +252,7 @@ function BeforeAfter({ before, after }: { before: unknown; after: unknown }): Re
   return (
     <div className="grid grid-cols-2 gap-2.5" data-testid="deck-before-after">
       <div className="rounded-[10px] bg-ws-surface p-2.5">
-        <div className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
-          {t('deck.before')}
-        </div>
+        <div className="text-xs tracking-wider text-ws-muted-fg uppercase">{t('deck.before')}</div>
         <div className="ws-num mt-1 space-y-0.5 text-[13px]">
           {b.map(([k, v]) => (
             <div key={`b:${k}:${v}`} className="truncate">
@@ -264,7 +262,7 @@ function BeforeAfter({ before, after }: { before: unknown; after: unknown }): Re
         </div>
       </div>
       <div className="rounded-[10px] bg-ws-good-bg p-2.5">
-        <div className="text-[11px] tracking-wider text-ws-good uppercase">{t('deck.after')}</div>
+        <div className="text-xs tracking-wider text-ws-good uppercase">{t('deck.after')}</div>
         <div className="ws-num mt-1 space-y-0.5 text-[13px]">
           {a.map(([k, v]) => (
             <div key={`a:${k}:${v}`} className="truncate">

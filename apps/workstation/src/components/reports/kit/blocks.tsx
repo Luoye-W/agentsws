@@ -90,7 +90,7 @@ export function KpiCell({
               full: m.format === 'currency' && compact !== true,
             })}
           </p>
-          <p className="flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ws-faint">
+          <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ws-faint">
             {d === undefined ? null : <Delta {...d} />}
             {m.previous !== undefined && days !== undefined ? (
               <span data-slot="data">
@@ -104,7 +104,7 @@ export function KpiCell({
       ) : (
         <>
           <p className="ws-display mt-1 mb-0.5 text-[22px] leading-tight text-ws-faint">—</p>
-          <p className="truncate text-[11.5px] text-ws-warn" data-slot="status">
+          <p className="truncate text-xs text-ws-warn" data-slot="status">
             {m.status === 'not_connected'
               ? t('report.kpi.need', { name: m.need?.label ?? '' })
               : (m.note ?? t('report.kpi.empty'))}
@@ -276,7 +276,7 @@ export function RankBars({ data }: { data: RankPayload }): ReactNode {
             <span className="flex min-w-0 items-center gap-1.5 text-ws-ink">
               <span className="truncate">{r.label}</span>
               {r.tag === undefined ? null : (
-                <span className="inline-flex h-4 items-center rounded-[4px] bg-ws-tint px-1 text-[10.5px] font-semibold text-ws-brand-ink">
+                <span className="inline-flex h-4 items-center rounded-[4px] bg-ws-tint px-1 text-xs font-semibold text-ws-brand-ink">
                   {r.tag}
                 </span>
               )}
@@ -355,7 +355,7 @@ export function ShareBar({ data }: { data: SharePayload }): ReactNode {
               key={p.key}
               title={`${p.label} ${pct}%`}
               className={cn(
-                'ws-display grid min-w-6 place-items-center overflow-hidden text-[11.5px] font-semibold whitespace-nowrap',
+                'ws-display grid min-w-6 place-items-center overflow-hidden text-xs font-semibold whitespace-nowrap',
                 SHARE_TONE[p.tone],
               )}
               style={{ flexGrow: p.value, flexBasis: 0 }}
@@ -385,7 +385,7 @@ export function TilesGrid({ data }: { data: TilesPayload }): ReactNode {
     <div className="grid grid-cols-2 gap-2.5" data-testid="report-tiles">
       {data.items.map((it) => (
         <div key={it.label} className="rounded-[10px] bg-ws-surface px-3 py-2.5">
-          <p className="text-[11.5px] text-ws-muted-fg">{it.label}</p>
+          <p className="text-xs text-ws-muted-fg">{it.label}</p>
           <p
             className={cn(
               'ws-display text-[19px]',
@@ -416,7 +416,7 @@ export function DataTable({ data }: { data: TablePayload }): ReactNode {
               <th
                 key={c.key}
                 className={cn(
-                  'border-b border-ws-line pb-2 text-[11.5px] font-medium whitespace-nowrap text-ws-muted-fg',
+                  'border-b border-ws-line pb-2 text-xs font-medium whitespace-nowrap text-ws-muted-fg',
                   c.align === 'right' ? 'pl-2.5 text-right' : 'text-left',
                 )}
               >
@@ -476,7 +476,7 @@ export function DataTable({ data }: { data: TablePayload }): ReactNode {
                   body = (
                     <span className="block min-w-0">
                       <span className="block truncate">{String(v ?? '')}</span>
-                      <span className="block text-[11.5px] text-ws-muted-fg">{row.sub}</span>
+                      <span className="block text-xs text-ws-muted-fg">{row.sub}</span>
                     </span>
                   )
                 else body = v === null || v === undefined ? '—' : String(v)

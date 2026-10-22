@@ -68,14 +68,11 @@ export function NoModelBanner({
 
   return (
     <p
-      className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+      className="flex items-start gap-2 rounded-lg border border-ws-warn/40 bg-ws-warn-bg px-3 py-2 text-sm"
       data-testid="no-model-banner"
       role="status"
     >
-      <TriangleAlert
-        className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
-        aria-hidden
-      />
+      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-ws-warn" aria-hidden />
       <span>
         {t('models.banner')}{' '}
         <button

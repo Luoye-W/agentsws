@@ -79,7 +79,7 @@ export function MiniMonth({
       <div className="grid grid-cols-7 justify-items-center gap-0.5">
         {weekdays.map((w, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: 星期名会重（英文两个 T、两个 S），下标才是它的位置
-          <span key={`${w}${i}`} className="text-[10.5px] text-ws-muted-fg">
+          <span key={`${w}${i}`} className="text-xs text-ws-muted-fg">
             {w}
           </span>
         ))}
@@ -97,7 +97,7 @@ export function MiniMonth({
               onClick={() => {
                 onPick(d)
               }}
-              className={`ws-num inline-flex size-[26px] items-center justify-center rounded-full text-[11.5px] ${
+              className={`ws-num inline-flex size-[26px] items-center justify-center rounded-full text-xs ${
                 isAnchor
                   ? 'bg-ws-brand font-semibold text-ws-brand-fg'
                   : isToday

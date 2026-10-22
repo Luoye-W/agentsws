@@ -63,7 +63,7 @@ export function GeoRankTable({ rank }: { rank: RankMetricsView }): ReactNode {
                 <td className="px-3 py-2.5">
                   {r.keyword}
                   {many ? (
-                    <span className="ml-1 text-[11px] text-ws-muted-fg">
+                    <span className="ml-1 text-xs text-ws-muted-fg">
                       {r.market} · {t(`geo.watch.device.${r.device}`)}
                     </span>
                   ) : null}

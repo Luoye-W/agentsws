@@ -79,13 +79,13 @@ export function RecallCards({
               {c.summary === '' ? null : (
                 <span className="line-clamp-2 text-[12px] text-ws-muted-fg">{c.summary}</span>
               )}
-              <span className="flex flex-wrap gap-x-2 text-[11px] text-ws-muted-fg">
+              <span className="flex flex-wrap gap-x-2 text-xs text-ws-muted-fg">
                 <span>{formatDate(c.last_activity, lang)}</span>
                 {reasons.slice(0, 2).map((r) => (
                   <span key={r}>· {r}</span>
                 ))}
               </span>
-              <span className="text-[11.5px] text-ws-brand-ink">
+              <span className="text-xs text-ws-brand-ink">
                 {restored ? t('free_chat.recall.restored') : t('free_chat.recall.restore')}
               </span>
             </button>

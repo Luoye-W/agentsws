@@ -179,9 +179,9 @@ export function DataSourceRouteControl({
           </div>
         )
       })}
-      {note === undefined ? null : <p className="text-[11px] text-muted-foreground">{t(note)}</p>}
+      {note === undefined ? null : <p className="text-xs text-muted-foreground">{t(note)}</p>}
       {save.error === null || save.error === undefined ? null : (
-        <p className="text-[11px] text-destructive">{save.error.message}</p>
+        <p className="text-xs text-destructive">{save.error.message}</p>
       )}
     </div>
   )
@@ -226,7 +226,7 @@ export function ReadonlyBrowserBadge({
           })}`
   return (
     <span
-      className="flex items-center gap-1 text-[11px] text-muted-foreground"
+      className="flex items-center gap-1 text-xs text-muted-foreground"
       data-testid="readonly-browser-status"
       data-state={s.state}
     >
@@ -320,7 +320,7 @@ export function ByoSourceCard({ channel }: { channel: string }): React.ReactNode
         <Hint text={`${t('data.byo.compliance')} ${t('data.byo.format')}`} testId="byo-hint" />
       </p>
       {list.error === null ? null : (
-        <p role="alert" className="text-[11px] text-destructive" data-testid="byo-source-error">
+        <p role="alert" className="text-xs text-destructive" data-testid="byo-source-error">
           {apiErrorText(list.error, t)}
         </p>
       )}
@@ -355,7 +355,7 @@ export function ByoSourceCard({ channel }: { channel: string }): React.ReactNode
       </div>
       {result === undefined ? null : (
         <p
-          className="text-[11px] text-muted-foreground"
+          className="text-xs text-muted-foreground"
           data-testid="byo-source-result"
           data-slot="status"
         >

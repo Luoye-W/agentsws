@@ -35,6 +35,9 @@ step "内部文档守卫" node scripts/check-no-internal-docs.mjs
 #   超过 20 行只提醒（这里从不拦）；真要合，PR 上标 content-fix。
 step "冻结内容守卫（只提醒）" node scripts/check-content-freeze.mjs --base "$base"
 
+# 2quater. 视觉档位守卫（WP461 / 决策 1446）：新写的字号、圆角、颜色只用规范里的档位；旧的在豁免清单里，只减不增
+step "视觉档位守卫" node scripts/check-ui-tokens.mjs
+
 # 3. 测试：只跑「改过的包」自己的测试，并限制并发。
 #    （vitest --changed 在本仓会因为某个包按目录路径引用资源而建图失败，所以按包选。
 #     依赖它的下游包靠上面的增量 tsc 兜类型；行为回归留给合并关口的全量。）

@@ -212,6 +212,7 @@ import {
   type PersonaBrandContext,
   personaTextIn,
   type RangeExpanded,
+  type RoleMajorUpgradeRecord,
   type RoleStore,
   rangeTargetOfProduct,
   renderBrandContext,
@@ -2176,6 +2177,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ...(migrated.split_from === undefined ? {} : { split_from: migrated.split_from }),
       },
     })
+  }
+
+  // WP462（beta.5 真机）：职责升了大版本（WP446 把「内容与搜索」2.x 拆成「内容与博客」3.0.0 +「SEO 与 GEO」），
+  // 老分配还记着旧大版本 → `effectiveConfig` 拦下 → 以前整个首页 409。启动时按登记表自动接上：只收窄的就地
+  // 重确认、登记过的拆分给同一个人补发拆出去的那条；没登记 / 放宽的不动（界面出确认卡）。每一条留痕。
+  // 幂等，与上面那一段同一条理由每次起进程都跑得起。补发那条要跟原分配安放在同一个岗位：岗位面
+  // （`createOrg`）在后面才建，所以先记下来，建岗位面时照着补（见 `heirPlacements`）。
+  const heirPlacements: { heir: AssignmentId; of: AssignmentId }[] = []
+  const recordMajorUpgrade = (up: RoleMajorUpgradeRecord): void => {
+    appendEvent({
+      schema_version: 1,
+      workspace_id: up.workspace_id,
+      type: 'assignment.role_major_upgraded',
+      actor:
+        up.via === 'auto' ? { kind: 'system', id: 'server' } : { kind: 'person', id: up.person_id },
+      correlation: { trace_id: `tr_role_major_${up.assignment_id}` },
+      payload: {
+        assignment_id: up.assignment_id,
+        person_id: up.person_id,
+        role_id: up.role_id,
+        kind: up.kind,
+        from: up.from,
+        to: up.to,
+        via: up.via,
+        ...(up.reason === undefined ? {} : { reason: up.reason }),
+        ...(up.heir_of === undefined ? {} : { heir_of: up.heir_of }),
+      },
+    })
+  }
+  for (const up of roles.assignments.upgradeMajors()) {
+    recordMajorUpgrade(up)
+    if (up.heir_of !== undefined) heirPlacements.push({ heir: up.assignment_id, of: up.heir_of })
   }
 
   // WP295（docs/95 §5）：出厂默认等级改过的动作（红人开发信 L2 → L1），还停在旧默认值、没人动过的
@@ -11461,6 +11494,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     effectiveConfig: (id) => roles.effectiveConfig(id),
     getAssignment: (id) => roles.assignments.get(id),
     listAssignments: (person_id, filter) => roles.assignments.listByPerson(person_id, filter ?? {}),
+    // WP462：确认卡上点了「确认」——接到新版本、留痕（定时跟着分配变化即时对一遍，见 onAssignmentChanged）
+    reconfirmAssignment: (id) => {
+      const up = roles.assignments.reconfirm(id)
+      if (up === undefined) return undefined
+      recordMajorUpgrade(up)
+      return { role_id: up.role_id, from: up.from, to: up.to }
+    },
   }
 
   /*
@@ -11491,6 +11531,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     workspace_id: workspace.id,
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
+    // WP462：拆分补发的那几条安放到原分配所在的岗位
+    majorUpgradeHeirs: heirPlacements,
     brandName: () => brandNameOfWorkspace(workspace.id),
     // WP271：① ② 里建分配不挑范围 = 整个品牌（组织在下面才装配好，用到时才取）
     mode: () => organizations.modeOf(workspace.id),

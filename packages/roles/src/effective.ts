@@ -12,6 +12,7 @@ import type {
 } from '@agentsws/contracts'
 import { DEFAULT_WEB_LIMITS } from '@agentsws/contracts'
 import { KIND_RISK, resolveMandate } from '@agentsws/core'
+import { isStaleMajor, type RoleUpgradeNeeded, roleUpgradeText } from './major-upgrades.js'
 import {
   type EffectiveAction,
   type EffectiveAutomation,
@@ -105,12 +106,19 @@ export function effectiveConfig(input: EffectiveConfigInput): EffectiveConfig {
       `assignment ${assignment.id} was revoked at ${assignment.revoked_at}`,
     )
   // 05 §3：Role 升 major 后要重新确认，不能拿旧分配继续用新定义。
-  const major = (v: string) => v.split('.')[0]
-  if (major(role.version) !== major(assignment.role_version))
-    throw new RoleError(
-      'conflict',
-      `role ${role.id} is at ${role.version} but assignment ${assignment.id} was granted at ${assignment.role_version}; re-confirm the assignment`,
-    )
+  // WP462：拦下时说人话、带上出确认卡要的几格（`details`）；只收窄 / 登记过的拆分由宿主启动时
+  // 自动重确认（`assignments.upgradeMajors()`），到这里还对不上的才要人点一下。
+  if (isStaleMajor(assignment, role)) {
+    const details: RoleUpgradeNeeded = {
+      reason: 'role_major_upgraded',
+      assignment_id: assignment.id,
+      role_id: role.id,
+      role_name: role.name.zh,
+      from: assignment.role_version,
+      to: role.version,
+    }
+    throw new RoleError('conflict', roleUpgradeText(role.name.zh), details)
+  }
 
   const connected = new Set(input.connected ?? [])
   const missing = role.connectors.filter((c) => c.required && !connected.has(c.kind))

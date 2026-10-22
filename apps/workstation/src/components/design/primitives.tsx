@@ -169,7 +169,7 @@ export function WsAvatar({
       data-testid="ws-avatar"
       title={name}
       className={cn(
-        'inline-flex size-[26px] items-center justify-center rounded-full text-[11px] font-semibold',
+        'inline-flex size-[26px] items-center justify-center rounded-full text-xs font-semibold',
         TONE_PILL[resolved],
         className,
       )}

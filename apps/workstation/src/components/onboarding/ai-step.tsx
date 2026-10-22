@@ -372,7 +372,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
         >
           <Cloud aria-hidden className="size-4 shrink-0" />
           <span className="font-medium">{t('onboarding.ai.official')}</span>
-          <span className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]">
+          <span className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-xs">
             {t('onboarding.ai.official.bonus')}
           </span>
         </button>
@@ -477,7 +477,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                     data-testid={`ai-own-plan-${slugOf(tpl)}`}
                     data-picked={slugOf(tpl) === slugOf(template)}
                     className={cn(
-                      'rounded-full border px-2 py-0.5 text-[11px]',
+                      'rounded-full border px-2 py-0.5 text-xs',
                       slugOf(tpl) === slugOf(template)
                         ? 'border-primary text-foreground'
                         : 'text-ws-muted-fg',
@@ -559,7 +559,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                     data-testid={`ai-ds-mode-${mode}`}
                     data-picked={dsMode === mode}
                     className={cn(
-                      'rounded-full border px-2 py-0.5 text-[11px]',
+                      'rounded-full border px-2 py-0.5 text-xs',
                       dsMode === mode ? 'border-primary text-foreground' : 'text-ws-muted-fg',
                     )}
                     onClick={() => {

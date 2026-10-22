@@ -130,7 +130,7 @@ function RuleRow({
           </div>
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground" data-testid="role-rule-meta">
+      <p className="text-xs text-muted-foreground" data-testid="role-rule-meta">
         {who === '' ? null : t(edited ? 'role_rules.edited_by' : 'role_rules.by', { who })}
         {rule.source_title === undefined ? null : (
           <>
@@ -150,7 +150,7 @@ function RuleRow({
         )}
       </p>
       {error === null ? null : (
-        <p role="alert" className="text-[11px] text-destructive">
+        <p role="alert" className="text-xs text-destructive">
           {error}
         </p>
       )}

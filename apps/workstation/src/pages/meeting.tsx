@@ -43,7 +43,7 @@ export function canRecord(): boolean {
 function SourceBadge({ source }: { source: MeetingRecord['source'] }): React.ReactNode {
   const { t } = useApp()
   return (
-    <Badge variant="outline" className="text-[11px]">
+    <Badge variant="outline" className="text-xs">
       {t(`meeting.source.${source}`)}
     </Badge>
   )
@@ -64,11 +64,11 @@ function RecordRow({
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex items-center gap-2">
           <SourceBadge source={record.source} />
-          <Badge variant="secondary" className="text-[11px]">
+          <Badge variant="secondary" className="text-xs">
             {t(`meeting.record.status.${record.status}`)}
           </Badge>
           {record.consent.notice_given ? null : (
-            <Badge variant="outline" className="text-[11px]">
+            <Badge variant="outline" className="text-xs">
               {t('meeting.record.no_notice')}
             </Badge>
           )}
@@ -115,12 +115,12 @@ function OutputsColumns({
     label: string,
   ): React.ReactNode =>
     send.sent.has(item_id) ? (
-      <span className="text-[11px] text-muted-foreground">{t('meeting.card.sent')}</span>
+      <span className="text-xs text-muted-foreground">{t('meeting.card.sent')}</span>
     ) : (
       <Button
         size="sm"
         variant="outline"
-        className="h-6 px-2 text-[11px]"
+        className="h-6 px-2 text-xs"
         disabled={send.busy}
         onClick={() => {
           send({ record_id: rid, kind, item_id })
@@ -149,7 +149,7 @@ function OutputsColumns({
         decisions.map((d) => (
           <div key={d.id} className="rounded-md bg-muted/40 p-2">
             <p>{d.text}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">「{d.provenance.quote}」</p>
+            <p className="mt-1 text-xs text-muted-foreground">「{d.provenance.quote}」</p>
           </div>
         )),
       )}
@@ -159,15 +159,15 @@ function OutputsColumns({
         todos.map((todo) => (
           <div key={todo.id} className="rounded-md bg-muted/40 p-2">
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-[11px]">
+              <Badge variant="secondary" className="text-xs">
                 {t(`meeting.speech.${todo.speech_state}`)}
               </Badge>
               <span className="min-w-0 truncate">{todo.text}</span>
             </div>
             {todo.assignee_hint === undefined ? null : (
-              <p className="mt-1 text-[11px] text-muted-foreground">→ {todo.assignee_hint}</p>
+              <p className="mt-1 text-xs text-muted-foreground">→ {todo.assignee_hint}</p>
             )}
-            <p className="mt-1 text-[11px] text-muted-foreground">「{todo.provenance.quote}」</p>
+            <p className="mt-1 text-xs text-muted-foreground">「{todo.provenance.quote}」</p>
             <div className="mt-1.5">
               {sendButton(todo.rid, 'claim', todo.id, t('meeting.card.claim'))}
             </div>
@@ -180,7 +180,7 @@ function OutputsColumns({
         boundaries.map((b) => (
           <div key={b.id} className="rounded-md bg-muted/40 p-2">
             <p>{b.question}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">{b.answer}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{b.answer}</p>
             <div className="mt-1.5">
               {sendButton(b.rid, 'policy_change', b.id, t('meeting.card.policy'))}
             </div>
@@ -193,7 +193,7 @@ function OutputsColumns({
         knowledge.map((k) => (
           <div key={k.id} className="rounded-md bg-muted/40 p-2">
             <p>{k.statement}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               {k.hold_reasons.length === 0
                 ? t('meeting.knowledge.auto')
                 : t('meeting.knowledge.hold')}
@@ -451,7 +451,7 @@ export function MeetingPage(): React.ReactNode {
       </Card>
 
       {card === null ? null : (
-        <Card className="border-amber-500/50">
+        <Card className="border-ws-warn/50">
           <CardHeader>
             <CardTitle className="text-sm">{card.title}</CardTitle>
           </CardHeader>

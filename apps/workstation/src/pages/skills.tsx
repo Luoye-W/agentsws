@@ -65,7 +65,7 @@ export function SkillsPage(): React.ReactNode {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium">{p.title}</span>
-                  <Badge variant="secondary" className="text-[11px]">
+                  <Badge variant="secondary" className="text-xs">
                     {t('skills.proposal.hits')} {p.hits}
                   </Badge>
                 </div>

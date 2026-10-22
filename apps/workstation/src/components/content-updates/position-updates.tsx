@@ -60,7 +60,7 @@ function Column({
 }) {
   return (
     <div className="min-w-0 flex-1 rounded-md bg-ws-surface p-2">
-      <p className={cn('mb-1 text-[11px] font-medium text-ws-muted-fg', tone)}>{label}</p>
+      <p className={cn('mb-1 text-xs font-medium text-ws-muted-fg', tone)}>{label}</p>
       <p className="whitespace-pre-wrap break-words text-[12px] text-ws-body">{text ?? '—'}</p>
     </div>
   )

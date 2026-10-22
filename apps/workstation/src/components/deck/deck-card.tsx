@@ -443,7 +443,7 @@ export function DeckCardView({
             <WsAvatar
               name={t(`deck.proposer.${card.detail.proposer.kind}`)}
               tone={card.detail.proposer.kind === 'agent' ? 'good' : 'neutral'}
-              className="size-[22px] text-[10px]"
+              className="size-[22px] text-xs"
             />
           )}
         </span>

@@ -21,8 +21,8 @@ const Tag = ({ children, tone }: { children: React.ReactNode; tone: 'brand' | 'm
   <span
     className={
       tone === 'brand'
-        ? 'rounded-full bg-ws-brand px-1.5 py-px text-[11px] text-ws-brand-fg'
-        : 'rounded-full bg-ws-tint px-1.5 py-px text-[11px] text-ws-muted-fg'
+        ? 'rounded-full bg-ws-brand px-1.5 py-px text-xs text-ws-brand-fg'
+        : 'rounded-full bg-ws-tint px-1.5 py-px text-xs text-ws-muted-fg'
     }
   >
     {children}

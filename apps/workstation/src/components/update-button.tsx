@@ -195,7 +195,7 @@ export function UpdateButton(): React.ReactNode {
         <view.Icon aria-hidden className={cn('size-4 shrink-0', view.spin && 'animate-spin')} />
         <span className="flex-1 truncate">{view.label}</span>
         {status.state === 'downloading' && status.phase === undefined && status.percent > 0 ? (
-          <span className="ws-num text-[11px] text-ws-muted-fg" data-testid="update-percent">
+          <span className="ws-num text-ws-tiny text-ws-muted-fg" data-testid="update-percent">
             {status.percent}%
           </span>
         ) : null}

@@ -777,7 +777,7 @@ export function MessagesPage(): ReactNode {
           </nav>
 
           <div className="flex flex-col gap-1">
-            <div className="px-2.5 text-[11px] tracking-wider text-ws-muted-fg uppercase">
+            <div className="px-2.5 text-xs tracking-wider text-ws-muted-fg uppercase">
               {t('messages.labels')}
             </div>
             <div className="flex flex-wrap gap-1 px-1.5">
@@ -802,7 +802,7 @@ export function MessagesPage(): ReactNode {
 
           {list.length > 1 ? (
             <div className="flex flex-col gap-1">
-              <div className="px-2.5 text-[11px] tracking-wider text-ws-muted-fg uppercase">
+              <div className="px-2.5 text-xs tracking-wider text-ws-muted-fg uppercase">
                 {t('messages.accounts')}
               </div>
               <AccountPicker
@@ -834,7 +834,7 @@ export function MessagesPage(): ReactNode {
             >
               {t('messages.backfill')}
             </button>
-            <span className="px-2.5 text-[11px] text-ws-muted-fg">
+            <span className="px-2.5 text-xs text-ws-muted-fg">
               {t('messages.backfill.since', {
                 date: formatDateTime(list[0]?.backfill_floor ?? '', lang),
               })}
@@ -902,10 +902,7 @@ export function MessagesPage(): ReactNode {
               </div>
 
               {searching && filters.pending !== true ? (
-                <span
-                  className="px-1 text-[11px] text-ws-muted-fg"
-                  data-testid="messages-search-all"
-                >
+                <span className="px-1 text-xs text-ws-muted-fg" data-testid="messages-search-all">
                   {t('messages.search.all')}
                 </span>
               ) : null}
@@ -1321,9 +1318,9 @@ function ThreadRow({
             {who?.name ?? who?.email ?? ''}
           </span>
           {row.count > 1 ? (
-            <span className="ws-num shrink-0 text-[11px] text-ws-muted-fg">{row.count}</span>
+            <span className="ws-num shrink-0 text-ws-tiny text-ws-muted-fg">{row.count}</span>
           ) : null}
-          <span className="shrink-0 text-[11px] text-ws-muted-fg">
+          <span className="shrink-0 text-xs text-ws-muted-fg">
             {formatDateTime(row.last_at, lang)}
           </span>
         </span>
@@ -1383,9 +1380,9 @@ function MessageCard({
           <div className="truncate text-[13px] font-medium">
             {message.from.name ?? message.from.email}
           </div>
-          <div className="truncate text-[11px] text-ws-muted-fg">{message.from.email}</div>
+          <div className="truncate text-xs text-ws-muted-fg">{message.from.email}</div>
         </div>
-        <span className="shrink-0 text-[11px] text-ws-muted-fg">
+        <span className="shrink-0 text-xs text-ws-muted-fg">
           {formatDateTime(message.date, lang)}
         </span>
         <button
@@ -1552,7 +1549,7 @@ function ClaimTag({ row }: { row: MessageThreadSummary }): ReactNode {
   if (row.claim === 'unclaimed')
     return (
       <span
-        className="text-[11px] text-ws-warn"
+        className="text-xs text-ws-warn"
         data-testid="messages-claim-tag"
         data-claim="unclaimed"
       >
@@ -1563,7 +1560,7 @@ function ClaimTag({ row }: { row: MessageThreadSummary }): ReactNode {
   const cards = row.open_card_count ?? 0
   return (
     <span
-      className="truncate text-[11px] text-ws-brand-ink"
+      className="truncate text-xs text-ws-brand-ink"
       data-testid="messages-claim-tag"
       data-claim="handed"
     >

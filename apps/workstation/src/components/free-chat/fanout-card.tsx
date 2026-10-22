@@ -94,7 +94,7 @@ function Row({
         ) : null}
         <span
           className={cn(
-            'mt-0.5 shrink-0 rounded px-1.5 py-px text-[11px]',
+            'mt-0.5 shrink-0 rounded px-1.5 py-px text-xs',
             item.kind === 'task'
               ? 'bg-ws-tint text-ws-brand-ink'
               : 'bg-ws-surface text-ws-muted-fg',
@@ -120,7 +120,7 @@ function Row({
           </span>
         )}
         {item.due === undefined ? null : (
-          <span className="shrink-0 text-[11px] text-ws-warn">
+          <span className="shrink-0 text-xs text-ws-warn">
             {t('fanout.due', { due: item.due })}
           </span>
         )}
@@ -228,7 +228,7 @@ export function FanoutCard({
         </span>
         {plan.status === 'proposed' ? null : (
           <span
-            className="ml-auto shrink-0 rounded-full bg-ws-surface px-2 py-px text-[11px] text-ws-muted-fg"
+            className="ml-auto shrink-0 rounded-full bg-ws-surface px-2 py-px text-xs text-ws-muted-fg"
             data-testid="fanout-status"
           >
             {t(plan.status === 'sent' ? 'fanout.sent' : 'fanout.dismissed')}

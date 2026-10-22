@@ -440,7 +440,7 @@ function OwnAsinsRow({
         {editing ? null : (
           <button
             type="button"
-            className="shrink-0 rounded-md border border-ws-line px-1.5 py-0.5 text-[11px] text-ws-muted-fg hover:bg-ws-surface"
+            className="shrink-0 rounded-md border border-ws-line px-1.5 py-0.5 text-xs text-ws-muted-fg hover:bg-ws-surface"
             data-testid="alst-own-edit"
             onClick={() => {
               setValue(own.map((o) => o.asin).join('，'))

@@ -69,7 +69,7 @@ export function AssistantNoteActions({ card }: { card: KnowledgeCardRow }): Reac
             {t('knowledge.note.cancel')}
           </Button>
           {failed === null ? null : (
-            <span className="text-[11px] text-destructive">{failed.message}</span>
+            <span className="text-xs text-destructive">{failed.message}</span>
           )}
         </div>
       </form>
@@ -101,7 +101,7 @@ export function AssistantNoteActions({ card }: { card: KnowledgeCardRow }): Reac
         <Trash2 aria-hidden />
       </Button>
       {failed === null ? null : (
-        <span className="text-[11px] text-destructive" data-testid="assistant-note-error">
+        <span className="text-xs text-destructive" data-testid="assistant-note-error">
           {failed.message}
         </span>
       )}

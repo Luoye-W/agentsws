@@ -112,7 +112,7 @@ export function CapabilitySourceSwitch({
       {!connected && !useOurs ? (
         // 会扣钱的提示：一眼可见（36 §7）
         <p
-          className="text-[11px] text-muted-foreground"
+          className="text-xs text-muted-foreground"
           data-testid="capability-source-nudge"
           data-slot="status"
         >
@@ -121,7 +121,7 @@ export function CapabilitySourceSwitch({
       ) : null}
       {useOurs ? (
         <p
-          className="text-[11px] text-muted-foreground"
+          className="text-xs text-muted-foreground"
           data-testid="capability-source-billing"
           data-slot="status"
         >
@@ -129,7 +129,7 @@ export function CapabilitySourceSwitch({
         </p>
       ) : null}
       {save.error === null || save.error === undefined ? null : (
-        <p className="text-[11px] text-destructive">{save.error.message}</p>
+        <p className="text-xs text-destructive">{save.error.message}</p>
       )}
     </div>
   )

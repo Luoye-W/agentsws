@@ -262,7 +262,7 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
             <Icon className="mr-1.5 size-3.5" aria-hidden />
             {label}
             {active === id ? (
-              <span className="ml-1.5 text-[10px] opacity-80">{t('storage.in_use')}</span>
+              <span className="ml-1.5 text-xs opacity-80">{t('storage.in_use')}</span>
             ) : null}
           </Button>
         ))}
@@ -412,7 +412,7 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
                 if (r === undefined) return null
                 return (
                   <li key={key} data-ok={r.ok ? 'true' : 'false'}>
-                    <span className={r.ok ? 'text-emerald-600' : 'text-destructive'}>
+                    <span className={r.ok ? 'text-ws-good' : 'text-destructive'}>
                       {r.ok ? '✓' : '✗'} {t(`storage.${key}`)}
                     </span>
                     <span className="ml-1 text-muted-foreground">{r.detail ?? r.reason}</span>
@@ -479,8 +479,8 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
             <dl className="mt-2 grid gap-1">
               {view.env.map((row) => (
                 <div key={row.name} className="flex flex-wrap gap-2">
-                  <dt className="font-mono text-[11px]">{row.name}</dt>
-                  <dd className="font-mono text-[11px] text-muted-foreground break-all">
+                  <dt className="font-mono text-ws-tiny">{row.name}</dt>
+                  <dd className="font-mono text-ws-tiny text-muted-foreground break-all">
                     {row.value}
                   </dd>
                 </div>

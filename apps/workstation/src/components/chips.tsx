@@ -92,7 +92,7 @@ export function FactChip({
       <Quote className="size-3 shrink-0 opacity-60" aria-hidden />
       <span className="truncate">{text}</span>
       {when === undefined ? null : (
-        <span className="shrink-0 rounded border px-1 text-[10px]" data-testid="fact-chip-as-of">
+        <span className="shrink-0 rounded border px-1 text-xs" data-testid="fact-chip-as-of">
           {t('chip.fact.as_of', { at: when })}
         </span>
       )}

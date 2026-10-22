@@ -477,7 +477,7 @@ export function OwnSubQueue({ assignment }: { assignment: string }): ReactNode {
           >
             <h5 className="flex items-center gap-1.5 px-1 text-xs font-medium text-ws-muted-fg">
               {t(`ownsub.group.${g}`)}
-              <span className="rounded-full bg-ws-surface px-1.5 text-[11px]">{rows.length}</span>
+              <span className="rounded-full bg-ws-surface px-1.5 text-xs">{rows.length}</span>
             </h5>
             <ul className="flex flex-col gap-1.5">
               {rows.map((item) => (

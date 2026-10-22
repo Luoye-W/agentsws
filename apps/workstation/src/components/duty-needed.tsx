@@ -34,7 +34,7 @@ export function DutyNeeded({
         role="status"
         data-testid={testid}
         data-kind={kind}
-        className="text-[11px] text-muted-foreground"
+        className="text-xs text-muted-foreground"
       >
         {line}{' '}
         <Link

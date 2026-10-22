@@ -34,9 +34,23 @@ import {
 } from './backend.js'
 import { effectiveConfig as effectiveConfigPure, riskClassOf } from './effective.js'
 import { ROLE_ID_ALIASES, ROLE_ID_SPLITS, resolveRoleId } from './load.js'
+import {
+  autoUpgradable,
+  heirsOf,
+  isStaleMajor,
+  majorOf,
+  majorUpgradePath,
+  ROLE_MAJOR_UPGRADES,
+  type RoleMajorUpgrade,
+  type RoleUpgradeNeeded,
+} from './major-upgrades.js'
 import { assertTighterOverrides } from './overrides.js'
 import { compilePolicies as compilePoliciesPure, createPolicyEngine } from './policy.js'
-import { applyPosition as applyPositionPure, buildAssignment } from './position.js'
+import {
+  applyPosition as applyPositionPure,
+  buildAssignment,
+  initialAutomationState,
+} from './position.js'
 import {
   dedupeRanges,
   expandRanges,
@@ -266,6 +280,28 @@ export interface RoleMigration {
   split_from?: AssignmentId
 }
 
+/**
+ * WP462：一条分配跟着职责升大版本接上的记录（调用方拿它记 `assignment.role_major_upgraded`）。
+ *
+ * - `reconfirmed`：原分配就地记到新版本（id 不变：待办、卡、定时、安放都跟着它）；
+ * - `heir_granted`：拆分出去的那一条给同一个人补发的（`heir_of` = 原分配）。
+ */
+export interface RoleMajorUpgradeRecord {
+  assignment_id: AssignmentId
+  person_id: PersonId
+  workspace_id: WorkspaceId
+  role_id: RoleId
+  kind: 'reconfirmed' | 'heir_granted'
+  /** `reconfirmed`：原来记的版本；`heir_granted`：原分配当时的职责与版本（`dtc.content@2.0.0`）。 */
+  from: string
+  to: string
+  /** 怎么接上的：`auto` = 只收窄 / 登记过的拆分，启动时自动；`person` = 人在确认卡上点的。 */
+  via: 'auto' | 'person'
+  /** 登记表里那一行的 `reason`（人点的没有）。 */
+  reason?: string
+  heir_of?: AssignmentId
+}
+
 export interface AssignmentApi {
   create(input: CreateAssignmentInput): Assignment
   applyPosition(
@@ -299,6 +335,22 @@ export interface AssignmentApi {
    * `assignment_created`）一律不动。幂等：迁过的 reason 变了，再跑一遍什么也不发生。
    */
   migrateAutomationDefaults(filter?: { workspace_id?: WorkspaceId }): AutomationDefaultMigration[]
+  /**
+   * WP462：职责升了大版本、分配还记着旧大版本的，按 {@link ROLE_MAJOR_UPGRADES} 自动接上——
+   * 只收窄权限的就地重确认；登记过的拆分再给同一个人补发拆出去的那几条（他已经有了就不补）。
+   * 没登记 / 放宽权限的**不动**（界面上出确认卡，人点了走 {@link reconfirm}）。
+   * 幂等：接上过的版本对上了，再跑一遍什么也不发生；补发那条的 id 由（原分配 × 职责）派生，
+   * 撤掉过的也不再补。
+   */
+  upgradeMajors(
+    filter?: { workspace_id?: WorkspaceId },
+    table?: readonly RoleMajorUpgrade[],
+  ): RoleMajorUpgradeRecord[]
+  /**
+   * WP462：人在确认卡上点了「确认」——把这条分配记到职责现在的版本。
+   * 已撤销的不给确认（`conflict`）；版本本来就对得上的原样返回、不记录（`undefined`）。
+   */
+  reconfirm(id: AssignmentId): RoleMajorUpgradeRecord | undefined
   /** 44：整个工作区活着的分配（算范围下推 / 品牌影响面时用）。 */
   listByWorkspace(
     workspace: WorkspaceId,
@@ -327,6 +379,11 @@ export interface RoleStore {
   productLines: ProductLineApi
   /** 05 §4：单个 Assignment 的有效配置，不并集。 */
   effectiveConfig(id: AssignmentId, options?: { connected?: Iterable<string> }): EffectiveConfig
+  /**
+   * WP462：这条分配是不是卡在「职责升了大版本、要重新确认」上（是就回出确认卡要的那几格）。
+   * 列岗位 / 首页这类一次读很多条的地方先问它，一条对不上只影响那一条。可选：别的实现不用改。
+   */
+  staleMajor?(id: AssignmentId): RoleUpgradeNeeded | undefined
   compilePolicies(id: AssignmentId): PolicyRow[]
   can(id: AssignmentId, domain: DataDomain, op: Operation, request: AccessRequest): boolean
   /**
@@ -719,6 +776,38 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
       ),
   }
 
+  /**
+   * WP462：把一条分配接到 `role` 现在的版本上，写成 id 为 `id` 的那一条。
+   *
+   * 留下的：人、品牌、范围、挂的品牌、授予人与授予时间、**新定义里还有的动作**的自动化等级与采纳率、
+   * 额度收紧。去掉的：新定义里已经没有的动作（它们的等级与额度覆盖留着也没人读，只会让人看糊涂）。
+   * 新定义里新出现的动作按出厂初始等级起步（和新建分配一样）。
+   */
+  const carryOver = (from: Assignment, role: RoleDefinitionFull, id: AssignmentId): Assignment => {
+    const at = options.clock.now()
+    const fresh = initialAutomationState(role, at)
+    const automation_state: Assignment['automation_state'] = {}
+    for (const actionId of Object.keys(fresh)) {
+      const kept = from.automation_state[actionId]
+      const base = kept ?? fresh[actionId]
+      if (base !== undefined) automation_state[actionId] = structuredClone(base)
+    }
+    const actionIds = new Set(role.actions.map((a) => a.id))
+    const overrides = Object.fromEntries(
+      Object.entries(from.mandate_overrides ?? {}).filter(([k]) => actionIds.has(k)),
+    )
+    const next: Assignment = {
+      ...structuredClone(from),
+      id,
+      role_id: role.id,
+      role_version: role.version,
+      automation_state,
+    }
+    if (Object.keys(overrides).length === 0) delete next.mandate_overrides
+    else next.mandate_overrides = structuredClone(overrides)
+    return next
+  }
+
   const assignments: AssignmentApi = {
     create(input) {
       const role = roles.require(input.role_id)
@@ -952,6 +1041,89 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
       }
       return out
     },
+    upgradeMajors(filter, table = ROLE_MAJOR_UPGRADES) {
+      const out: RoleMajorUpgradeRecord[] = []
+      for (const assignment of backend.listAssignments(
+        filter?.workspace_id === undefined ? {} : { workspace_id: filter.workspace_id },
+      )) {
+        if (assignment.revoked_at !== undefined) continue
+        const role = roleMap.get(assignment.role_id)
+        if (role === undefined || !isStaleMajor(assignment, role)) continue
+        const path = majorUpgradePath(
+          role.id,
+          majorOf(assignment.role_version),
+          majorOf(role.version),
+          table,
+        )
+        if (!autoUpgradable(path) || path === undefined) continue
+        const heirs = heirsOf(path).map((id) => ({ id, role: roleMap.get(id) }))
+        // 拆出去的那条定义没加载就整条跳过（宁可不接也不接一半：内容少了、SEO 却没补上）
+        if (heirs.some((h) => h.role === undefined)) continue
+        const reason = path.map((s) => s.reason).join('+')
+        /*
+         * **先补发、后改版本**（与 `splitRoleIds` 同一条理由）：中途断电重跑时，原分配还记着旧版本
+         * → 看到补发那条已经在了就跳过 → 再改版本。反过来的话，改完版本就再也认不出它要补发什么。
+         */
+        for (const { id: heirId, role: heirRole } of heirs) {
+          if (heirRole === undefined) continue
+          const id = mintId(canonicalJson({ major_split_from: assignment.id, role: heirId }))
+          if (backend.getAssignment(id) !== undefined) continue
+          // 他在这个品牌里已经担着这一条（新版本里自己加的）：不补第二条
+          const already = backend
+            .listAssignments({
+              workspace_id: assignment.workspace_id,
+              person_id: assignment.person_id,
+              role_id: heirId,
+            })
+            .some((a) => a.revoked_at === undefined)
+          if (already) continue
+          persist(carryOver(assignment, heirRole, id))
+          out.push({
+            assignment_id: id,
+            person_id: assignment.person_id,
+            workspace_id: assignment.workspace_id,
+            role_id: heirId,
+            kind: 'heir_granted',
+            from: `${assignment.role_id}@${assignment.role_version}`,
+            to: heirRole.version,
+            via: 'auto',
+            reason,
+            heir_of: assignment.id,
+          })
+        }
+        persist(carryOver(assignment, role, assignment.id))
+        out.push({
+          assignment_id: assignment.id,
+          person_id: assignment.person_id,
+          workspace_id: assignment.workspace_id,
+          role_id: role.id,
+          kind: 'reconfirmed',
+          from: assignment.role_version,
+          to: role.version,
+          via: 'auto',
+          reason,
+        })
+      }
+      return out
+    },
+    reconfirm(id) {
+      const found = assignments.require(id)
+      if (found.revoked_at)
+        throw new RoleError('conflict', `这条分配在 ${found.revoked_at} 撤销了，不能再确认`)
+      const role = roleFor(found)
+      if (found.role_version === role.version) return undefined
+      persist(carryOver(found, role, found.id))
+      return {
+        assignment_id: found.id,
+        person_id: found.person_id,
+        workspace_id: found.workspace_id,
+        role_id: role.id,
+        kind: 'reconfirmed',
+        from: found.role_version,
+        to: role.version,
+        via: 'person',
+      }
+    },
     listByWorkspace(workspace, filter) {
       return backend.listAssignments({ ...filter, workspace_id: workspace })
     },
@@ -997,6 +1169,20 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
                 [],
             }),
       })
+    },
+    staleMajor(id) {
+      const assignment = backend.getAssignment(id)
+      if (assignment === undefined || assignment.revoked_at !== undefined) return undefined
+      const role = roles.get(assignment.role_id)
+      if (role === undefined || !isStaleMajor(assignment, role)) return undefined
+      return {
+        reason: 'role_major_upgraded',
+        assignment_id: assignment.id,
+        role_id: role.id,
+        role_name: role.name.zh,
+        from: assignment.role_version,
+        to: role.version,
+      }
     },
     compilePolicies(id) {
       const assignment = assignments.require(id)

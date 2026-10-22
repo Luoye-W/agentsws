@@ -187,9 +187,7 @@ export function WorkSection({
             <div className="flex flex-col gap-2">
               {data.duties.length > 1 ? (
                 <fieldset>
-                  <legend className="px-2 text-[11px] text-ws-muted-fg">
-                    {t('pos2.filter.duty')}
-                  </legend>
+                  <legend className="px-2 text-xs text-ws-muted-fg">{t('pos2.filter.duty')}</legend>
                   {data.duties.map((d) => (
                     <PopOption
                       key={d.role_id}
@@ -205,9 +203,7 @@ export function WorkSection({
                 </fieldset>
               ) : null}
               <fieldset>
-                <legend className="px-2 text-[11px] text-ws-muted-fg">
-                  {t('pos2.filter.group')}
-                </legend>
+                <legend className="px-2 text-xs text-ws-muted-fg">{t('pos2.filter.group')}</legend>
                 {POSITION_WORK_GROUPS.map((g) => (
                   <PopOption
                     key={g}
@@ -222,9 +218,7 @@ export function WorkSection({
                 ))}
               </fieldset>
               <fieldset>
-                <legend className="px-2 text-[11px] text-ws-muted-fg">
-                  {t('pos2.filter.due')}
-                </legend>
+                <legend className="px-2 text-xs text-ws-muted-fg">{t('pos2.filter.due')}</legend>
                 {DUE_FILTERS.map((d) => (
                   <PopOption
                     key={d}
@@ -239,9 +233,7 @@ export function WorkSection({
                 ))}
               </fieldset>
               <fieldset>
-                <legend className="px-2 text-[11px] text-ws-muted-fg">
-                  {t('pos2.filter.source')}
-                </legend>
+                <legend className="px-2 text-xs text-ws-muted-fg">{t('pos2.filter.source')}</legend>
                 {POSITION_WORK_SOURCES.map((s) => (
                   <PopOption
                     key={s}
