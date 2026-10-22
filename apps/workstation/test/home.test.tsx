@@ -126,6 +126,8 @@ const getPositions = vi.fn(async () => ({
 
 const modeState: { orgs: (typeof SOLO_ORG)[]; pool: unknown[] } = { orgs: [], pool: [] }
 const inboxState = { view: inboxView() }
+/** WP469：首页「今天 N 件待办」那一行读的待办 */
+const todoState: { todos: unknown[] } = { todos: [] }
 
 function LocationProbe(): React.ReactNode {
   const loc = useLocation()
@@ -143,6 +145,7 @@ vi.mock('@/lib/api', async () => {
     listOrganizations: async () => modeState.orgs,
     listClaimPool: async () => ({ pool: modeState.pool }),
     getInbox: async () => inboxState.view,
+    listTodos: async (q = '') => ({ todos: q.includes('done') ? [] : todoState.todos }),
   }
 })
 
@@ -247,6 +250,46 @@ describe('WP438 首页四块（决策 1332）', () => {
     expect(screen.queryByTestId('home-decide-all')).toBeNull()
     fireEvent.click(line)
     await screen.findByTestId('inbox-landed')
+  })
+
+  it('WP469：收件箱那一行下面是「今天 N 件待办 · 下一件 … · 还有 N 件没排期」，点了去日历与待办', async () => {
+    const later = new Date()
+    later.setHours(23, 0, 0, 0)
+    const base = {
+      schema_version: 1,
+      workspace_id: 'ws_1',
+      owner: 'p_1',
+      source: 'manual',
+      status: 'open',
+      cards: [],
+      runs: [],
+      created_at: later.toISOString(),
+      updated_at: later.toISOString(),
+    }
+    todoState.todos = [
+      {
+        ...base,
+        id: 't1',
+        title: '回复 Leo 的合作邮件',
+        horizon: 'today',
+        scheduled: {
+          start: later.toISOString(),
+          end: new Date(later.getTime() + 3_600_000).toISOString(),
+        },
+      },
+      { ...base, id: 't2', title: '给 Maya 回报价', horizon: 'today', due: later.toISOString() },
+      { ...base, id: 't3', title: '写新品页文案', horizon: 'week' },
+    ]
+    try {
+      renderWithProviders(<HomePage />)
+      const line = await screen.findByTestId('home-todo-line')
+      expect(line.getAttribute('href')).toBe('/planner')
+      expect(screen.getByTestId('home-todo-count').textContent).toBe('今天 2 件待办')
+      expect(line.textContent).toContain('下一件 23:00 回复 Leo 的合作邮件')
+      expect(line.textContent).toContain('还有 1 件没排期')
+    } finally {
+      todoState.todos = []
+    }
   })
 
   it('WP459：收件箱清空了，那一行照实说', async () => {

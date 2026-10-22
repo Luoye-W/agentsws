@@ -141,6 +141,18 @@ export {
   type WorkExtraEventType,
   type WorkOptions,
 } from './service.js'
+// WP469（决策 1522）：「帮我排进空档」的纯函数（候选，不写）
+export {
+  busySpans,
+  estimateTodoMinutes,
+  LIVE_BUFFER_MIN,
+  proposeSlots,
+  SLOT_OPTIONS_MAX,
+  SLOT_STEP_MIN,
+  slotStarts,
+  WORK_END_MIN,
+  WORK_START_MIN,
+} from './slots.js'
 export {
   createSqliteWorkStore,
   SqliteWorkStore,

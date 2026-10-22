@@ -218,9 +218,11 @@ export function buildCalendar(input: CalendarInput): CalendarItem[] {
   for (const m of input.meetings ?? [])
     out.push(m.drag === undefined ? { ...m, drag: 'propose' } : m)
   for (const t of input.todos) {
-    if (!isOpen(t)) continue
+    // WP469（决策 1524）：做完的只在要了 `include_done` 时上日历，拖不动（那是做过的事，不是计划）
+    const done = t.status === 'done' && input.range.include_done === true
+    if (!isOpen(t) && !done) continue
     const item = todoCalendarItem(t)
-    if (item !== undefined) out.push(item)
+    if (item !== undefined) out.push(done ? { ...item, drag: 'readonly' } : item)
   }
   for (const task of input.tasks ?? []) {
     const item = taskCalendarItem(task)

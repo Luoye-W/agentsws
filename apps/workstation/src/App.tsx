@@ -28,7 +28,7 @@ import { useBrandLink } from '@/lib/brand-link'
 import { connectRealtime } from '@/lib/realtime'
 import { BrandAssetsPage } from '@/pages/brand-assets'
 import { BrandDesignPage } from '@/pages/brand-design'
-import { CalendarPage } from '@/pages/calendar'
+import { CalTodoPage, CalTodoRedirect } from '@/pages/cal-todo'
 // WP333（决策 584）：一张卡自己的页面（个人微信卡片链接）
 import { CardPage } from '@/pages/card'
 // WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒
@@ -53,7 +53,6 @@ import { OnboardingPage, onboardingSkipped } from '@/pages/onboarding'
 import { PeoplePage, PersonPage } from '@/pages/people'
 import { PositionPage } from '@/pages/position'
 import { SkillsPage } from '@/pages/skills'
-import { TodosPage } from '@/pages/todos'
 
 /** WP456-T2：组件一览（`/ui-kit`，左栏不放入口；单独一块，平时不下载）。 */
 const UiKitPage = lazy(() => import('@/pages/ui-kit'))
@@ -240,8 +239,13 @@ function Workspace(): ReactNode {
         <Route path="/matters/:id" element={<MatterPage />} />
         {/* WP333（决策 584）：个人微信卡片里的链接 `/cards/<卡号>`，打开就是那一张 */}
         <Route path="/cards/:id" element={<CardPage />} />
-        <Route path="/todos" element={<TodosPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
+        {/*
+          WP469（决策 1521 / 1526）：待办与日历合成一页「日历与待办」（`/planner`，页头切「清单 / 日历」）。
+          老地址留着、转到对应那一面：岗位页「在日历里看」、通知、⌘K、老聊天记录里都有这两个地址。
+        */}
+        <Route path="/planner" element={<CalTodoPage />} />
+        <Route path="/todos" element={<CalTodoRedirect face="list" />} />
+        <Route path="/calendar" element={<CalTodoRedirect face="calendar" />} />
         {/*
           WP113（63 §1）：`/goals` **留着**。左栏入口换成「消息」之后目标收进
           待办页的一个 tab（`/todos?tab=goals`），但这条路由还在——⌘K 搜得到、

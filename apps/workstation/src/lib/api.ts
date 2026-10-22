@@ -72,6 +72,7 @@ import type {
   SenderRuleList,
   TeamSubscriptionView,
   Todo,
+  TodoSlotResult,
   BattleReport as WorkBattleReport,
 } from '@agentsws/contracts'
 import type {
@@ -1315,6 +1316,12 @@ export const listTodos = (query = ''): Promise<TodosData> => api<TodosData>(`/v1
 export const createTodo = (input: {
   title: string
   due?: string
+  /** WP469：「周五 14:00 …」一建就排上（第三档） */
+  scheduled?: { start: string; end: string }
+  /** WP469：什么日子都没写就进「本周」 */
+  horizon?: 'backlog' | 'week' | 'today'
+  /** WP469（决策 1521）：从收件箱哪一行记的（`card:…` / `mail:…`） */
+  from_inbox?: string
   matter_id?: string
   /** 主题对象（订单 / 客户 / 会议 / 店铺）——撞车第一把钥匙 */
   refs?: { type: string; id: string }[]
@@ -1390,7 +1397,15 @@ export const dropTodo = (id: string): Promise<{ todo: Todo }> =>
 
 export const updateTodo = (
   id: string,
-  patch: { title?: string; due?: string | null; horizon?: 'backlog' | 'week' | 'today' },
+  patch: {
+    title?: string
+    due?: string | null
+    horizon?: 'backlog' | 'week' | 'today'
+    /** WP469：一次换档（拖到某个钟点 / 全天 / 拖回「还没排期的」） */
+    scheduled?: { start: string; end: string } | null
+    /** WP469：日历上把做完的勾掉 = 回到 open */
+    status?: 'open' | 'done'
+  },
 ): Promise<{ todo: Todo }> =>
   api(`/v1/todos/${encodeURIComponent(id)}`, { method: 'PUT', body: patch })
 
@@ -1412,11 +1427,30 @@ export const delegateTodo = (id: string, brief?: string): Promise<{ todo: Todo }
  * `sources` 是逗号分隔的图层名，**不传 = 全部**——日历那一页要全部，因为图层开关
  * 旁边那个数字得把关掉的层也数出来。
  */
-export const getCalendar = (from: string, to: string, sources?: string): Promise<CalendarData> =>
+export const getCalendar = (
+  from: string,
+  to: string,
+  sources?: string,
+  /** WP469（决策 1524）：做完的待办也要（划掉、变淡） */
+  done?: boolean,
+): Promise<CalendarData> =>
   api<CalendarData>(
     `/v1/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-      (sources === undefined || sources === '' ? '' : `&sources=${encodeURIComponent(sources)}`),
+      (sources === undefined || sources === '' ? '' : `&sources=${encodeURIComponent(sources)}`) +
+      (done === true ? '&done=true' : ''),
   )
+
+/**
+ * WP469（决策 1522）：「帮我排进空档」——几件没日子的待办各找空档。**只给候选**：
+ * 人点「采用」才走 {@link updateTodo} 写 `scheduled`。
+ */
+export const proposeTodoSlots = (input: {
+  todo_ids: string[]
+  from: string
+  to: string
+  tz_offset_minutes?: number
+}): Promise<TodoSlotResult> =>
+  api<TodoSlotResult>('/v1/todos/slots', { method: 'POST', body: input })
 
 export const getTodayPlan = (): Promise<PlanData> => api<PlanData>('/v1/plans/today')
 

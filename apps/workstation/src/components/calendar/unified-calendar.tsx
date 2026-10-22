@@ -31,13 +31,16 @@ import { createDragAndDropPlugin } from '@schedule-x/drag-and-drop'
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react'
 import { createResizePlugin } from '@schedule-x/resize'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { getDragging, setDragging } from '@/components/cal-todo/drag-state'
+import { TODO_DRAG_TYPE } from '@/components/cal-todo/todo-row'
 import { GoButton, StatusPill, WsCard } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getCalendar, rescheduleSocialPost, scheduleTodo } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { type DropTarget, dropWord, type Ghost } from '@/lib/cal-todo'
 import {
   ALL_DAY_MAX,
   foldAllDay,
@@ -54,7 +57,7 @@ import {
   LAYERS,
   serializeLayers,
 } from '@/lib/calendar-layers'
-import { displayEnd, eventContent, writeBackEnd } from '@/lib/calendar-view'
+import { displayEnd, eventContent, ghostContent, writeBackEnd } from '@/lib/calendar-view'
 import './unified-calendar.css'
 
 /** 浏览器自己那个时区。日界线在服务端按工作区时区切，这里只管画。 */
@@ -82,6 +85,12 @@ const DAY_MS = 86_400_000
  */
 const HOUR_PX = 52
 const DAY_HOURS = 12
+/** 时间格从几点画起（分钟；和 `dayBoundaries` 同一个数） */
+const DAY_START_MIN = 8 * 60
+/** 拖到时间格里按半小时对齐 */
+const DROP_STEP_MIN = 30
+/** 「帮我排进空档」的虚线块：事件 id 前缀 */
+const GHOST_PREFIX = 'ghost_'
 
 /** 这一屏要问服务端的窗口：把当前视图前后各放宽一点，翻一页不必立刻再请求。 */
 export function windowFor(view: CalendarView, anchor: Date): { from: Date; to: Date } {
@@ -122,15 +131,46 @@ function fromSx(value: Temporal.ZonedDateTime | Temporal.PlainDate, tz: string):
  * WP456-T5：格子里画什么由我们给（`_customContent`）——图层色细条 + 标题 + 「9:00 · 社媒排期」；
  * 只有一个时刻的按 1 小时高画（`displayEnd`），否则标题挤成一行只剩三四个字。
  */
-function toEvent(item: CalendarItem, tz: string, layerName: string): CalendarEvent {
+function toEvent(
+  item: CalendarItem,
+  tz: string,
+  layerName: string,
+  /**
+   * WP469：待办那几条怎么画——`checkLabel` 给了就带勾选框；`native` = 用浏览器自己的拖放换档
+   * （能拖到全天 / 时间格 / 拖回左边），库自己那套拖动对它关掉（拉长拉短照旧）。
+   */
+  todo?: { checkLabel: string; native: boolean },
+): CalendarEvent {
+  const isTodo = item.source === 'todo'
+  const done = isTodo && item.status === 'done'
+  const native = isTodo && todo?.native === true
+  const options =
+    item.drag !== 'reschedule'
+      ? { disableDND: true, disableResize: true }
+      : native
+        ? { disableDND: true, ...(item.all_day ? { disableResize: true } : {}) }
+        : undefined
   const base = {
     id: item.id,
     title: item.title,
     calendarId: item.source,
     ...(item.notes === undefined ? {} : { description: item.notes.join('\n') }),
     // 只读的那几层连"拖起来"这一下都不给：拖起来再回弹比拖不动更让人以为是坏了
-    ...(item.drag === 'reschedule' ? {} : { _options: { disableDND: true, disableResize: true } }),
-    _customContent: eventContent(item, { color: LAYER_COLOR[item.source], layerName }),
+    ...(options === undefined && !done
+      ? {}
+      : {
+          _options: {
+            ...(options ?? {}),
+            ...(done ? { additionalClasses: ['ws-ev-is-done'] } : {}),
+          },
+        }),
+    _customContent: eventContent(item, {
+      color: LAYER_COLOR[item.source],
+      layerName,
+      ...(isTodo && todo !== undefined
+        ? { todo: { checkLabel: todo.checkLabel, drag: native } }
+        : {}),
+    }),
   }
   if (item.all_day) {
     const d = toPlainDate(item.start, tz)
@@ -169,6 +209,71 @@ export interface UnifiedCalendarProps {
    * 会被它悄悄换成日视图（WP456-T5 截图时发现）；整页的视图由页头那个分段说了算。
    */
   responsive?: boolean
+  /** WP469（决策 1524）：做完的待办也画（划掉、变淡） */
+  includeDone?: boolean
+  /**
+   * WP469（决策 1522）：待办拖到哪儿了（时间格某个钟点 / 全天 / 月格某天）。给了它，待办那几条
+   * 改用浏览器自己的拖放（库自己那套拖动只能在同一种格子里挪，跨不了全天和时间格）。
+   */
+  onTodoDrop?(todo_id: string, target: DropTarget): void
+  /** WP469：格子里待办前面那个勾选框（打勾 = 做完；做完的再点 = 取消） */
+  onTodoCheck?(todo_id: string, done: boolean): void
+  /** WP469（决策 1522）：「帮我排进空档」的虚线候选块 */
+  ghosts?: readonly Ghost[]
+  onGhost?(todo_id: string, act: 'take' | 'swap'): void
+  /** WP469：日历卡顶上那一条（「本周要做 · 还有 N 件没排日子」/ AI 找好空档那一条） */
+  top?: ReactNode
+}
+
+/** 拖到一半：落在哪、那一格画在哪（屏幕坐标）、提示跟着手。 */
+interface DropHover {
+  target: DropTarget
+  box: { left: number; top: number; width: number; height: number }
+  x: number
+  y: number
+}
+
+/** 手底下是哪一格：时间格某个钟点 / 全天那一格 / 月格某天 / 周表头某天。 */
+export function dropTargetAt(
+  el: Element | null,
+  y: number,
+  minutes: number,
+): Omit<DropHover, 'x' | 'y'> | undefined {
+  if (el === null) return undefined
+  const col = el.closest('[data-time-grid-date]')
+  if (col !== null) {
+    const day = col.getAttribute('data-time-grid-date') ?? ''
+    const r = col.getBoundingClientRect()
+    const span = DAY_HOURS * 60
+    const frac = r.height > 0 ? (y - r.top) / r.height : 0
+    const raw = DAY_START_MIN + Math.floor((frac * span) / DROP_STEP_MIN) * DROP_STEP_MIN
+    const at = Math.min(Math.max(raw, DAY_START_MIN), DAY_START_MIN + span - DROP_STEP_MIN)
+    return {
+      target: { kind: 'time', day, minutes: at },
+      box: {
+        left: r.left,
+        width: r.width,
+        top: r.top + ((at - DAY_START_MIN) / span) * r.height,
+        height: (Math.min(minutes, span) / span) * r.height,
+      },
+    }
+  }
+  const cell =
+    el.closest('[data-date-grid-date]') ??
+    el.closest('.sx__month-grid-day[data-date]') ??
+    el.closest('[data-date]')
+  if (cell === null) return undefined
+  const day = cell.getAttribute('data-date-grid-date') ?? cell.getAttribute('data-date') ?? ''
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) return undefined
+  const r = cell.getBoundingClientRect()
+  return {
+    target: {
+      kind: 'day',
+      day,
+      ...(cell.classList.contains('sx__month-grid-day') ? { keepClock: true } : {}),
+    },
+    box: { left: r.left, top: r.top, width: r.width, height: r.height },
+  }
 }
 
 /**
@@ -197,6 +302,21 @@ const MORE_PALETTE = {
   colorName: 'more',
   lightColors: { main: 'transparent', container: 'transparent', onContainer: 'var(--ws-muted-fg)' },
   darkColors: { main: 'transparent', container: 'transparent', onContainer: 'var(--ws-muted-fg)' },
+}
+
+/** 「帮我排进空档」的虚线块：底色只是一层淡品牌色，框在 CSS 里画成虚线。 */
+const GHOST_PALETTE = {
+  colorName: 'ghost',
+  lightColors: {
+    main: 'transparent',
+    container: 'color-mix(in srgb, var(--ws-tint) 55%, transparent)',
+    onContainer: 'var(--ws-ink)',
+  },
+  darkColors: {
+    main: 'transparent',
+    container: 'color-mix(in srgb, var(--ws-tint) 55%, transparent)',
+    onContainer: 'var(--ws-ink)',
+  },
 }
 
 /**
@@ -232,6 +352,12 @@ export function UnifiedCalendar({
   onPickDate,
   heightClass = 'h-[70vh]',
   responsive = true,
+  includeDone = false,
+  onTodoDrop,
+  onTodoCheck,
+  ghosts,
+  onGhost,
+  top,
 }: UnifiedCalendarProps): React.ReactNode {
   const { t, theme, lang } = useApp()
   const client = useQueryClient()
@@ -245,8 +371,15 @@ export function UnifiedCalendar({
   const sources = fetchLayers === undefined ? undefined : serializeLayers(fetchLayers)
 
   const calendar = useQuery({
-    queryKey: ['calendar', range.from.toISOString(), range.to.toISOString(), sources ?? 'all'],
-    queryFn: () => getCalendar(range.from.toISOString(), range.to.toISOString(), sources),
+    queryKey: [
+      'calendar',
+      range.from.toISOString(),
+      range.to.toISOString(),
+      sources ?? 'all',
+      includeDone ? 'done' : 'open',
+    ],
+    queryFn: () =>
+      getCalendar(range.from.toISOString(), range.to.toISOString(), sources, includeDone),
   })
 
   /** 这一屏画的是哪些（渠道过滤 + 图层过滤；两者都在客户端做，勾一下不重新请求）。 */
@@ -322,6 +455,8 @@ export function UnifiedCalendar({
   /** 回调里要读最新的 state / mutation，但日历只建一次，所以统统走 ref。 */
   const handlers = useRef({ moveTodo, moveSocial, setNote, setPicked, setMoreDay, t, onPickDate })
   handlers.current = { moveTodo, moveSocial, setNote, setPicked, setMoreDay, t, onPickDate }
+  /** 刚点在勾选框 / 虚线块按钮上：库随后那一下「点了这条」不打开小卡 */
+  const quietUntil = useRef(0)
 
   const controls = useMemo(() => createCalendarControlsPlugin(), [])
 
@@ -355,9 +490,12 @@ export function UnifiedCalendar({
       calendars: {
         ...Object.fromEntries(LAYERS.map((l) => [l, layerPalette(l)])),
         more: MORE_PALETTE,
+        ghost: GHOST_PALETTE,
       },
       callbacks: {
         onEventClick: (event) => {
+          if (Date.now() < quietUntil.current) return
+          if (String(event.id).startsWith(GHOST_PREFIX)) return
           const day = moreDayOf(String(event.id))
           if (day !== undefined) {
             handlers.current.setPicked(undefined)
@@ -418,15 +556,159 @@ export function UnifiedCalendar({
     ],
   )
 
+  const todoOpts = useMemo(
+    () =>
+      onTodoCheck === undefined && onTodoDrop === undefined
+        ? undefined
+        : { checkLabel: t('todos.done'), native: onTodoDrop !== undefined },
+    [onTodoCheck, onTodoDrop, t],
+  )
+  /** WP469：虚线候选块（只在日 / 周视图里画：月格没有钟点）。 */
+  const ghostEvents = useMemo((): CalendarEvent[] => {
+    if (ghosts === undefined || (view !== 'week' && view !== 'day')) return []
+    return ghosts.flatMap((g) => {
+      const opt = g.options[g.at]
+      if (opt === undefined) return []
+      return [
+        {
+          id: `${GHOST_PREFIX}${g.todo_id}`,
+          title: g.title,
+          calendarId: 'ghost',
+          start: toZoned(opt.start, tz),
+          end: toZoned(opt.end, tz),
+          _options: { disableDND: true, disableResize: true, additionalClasses: ['ws-ghost-ev'] },
+          _customContent: {
+            timeGrid: ghostContent({
+              todo_id: g.todo_id,
+              title: g.title,
+              start: opt.start,
+              end: opt.end,
+              take: t('caltodo.ai.take'),
+              swap: t('caltodo.ai.swap'),
+              canSwap: g.options.length > 1,
+            }),
+          },
+        },
+      ]
+    })
+  }, [ghosts, view, tz, t])
+
   // 事件变了：换一份进去（不重建日历，否则滚动位置与正在拖的那一下都没了）
   useEffect(() => {
     app?.events.set([
-      ...fold.shown.map((i) => toEvent(i, tz, t(`calendar.source.${i.source}`))),
+      ...fold.shown.map((i) => toEvent(i, tz, t(`calendar.source.${i.source}`), todoOpts)),
       ...[...fold.hidden].map(([day, rest]) =>
         moreEvent(day, t('calendar.more', { n: rest.length }), view === 'month', tz),
       ),
+      ...ghostEvents,
     ])
-  }, [app, fold, tz, t, view])
+  }, [app, fold, tz, t, view, todoOpts, ghostEvents])
+
+  /* ── WP469：浏览器拖放（待办换档）、格子里的勾选框、虚线块的两颗钮 ── */
+  const [hover, setHover] = useState<DropHover | undefined>()
+  const [draggingId, setDraggingId] = useState<string | undefined>()
+  const todoDrop = useRef(onTodoDrop)
+  todoDrop.current = onTodoDrop
+  const hostHandlers =
+    onTodoDrop === undefined && onTodoCheck === undefined && onGhost === undefined
+      ? {}
+      : {
+          onClickCapture: (e: React.MouseEvent) => {
+            const el = e.target as HTMLElement
+            const check = el.closest('[data-todo-check]')
+            if (check !== null && onTodoCheck !== undefined) {
+              e.stopPropagation()
+              e.preventDefault()
+              quietUntil.current = Date.now() + 400
+              onTodoCheck(
+                check.getAttribute('data-todo-check') ?? '',
+                check.getAttribute('data-done') !== 'true',
+              )
+              return
+            }
+            const ghost = el.closest('[data-ghost-act]')
+            if (ghost !== null && onGhost !== undefined) {
+              e.stopPropagation()
+              e.preventDefault()
+              quietUntil.current = Date.now() + 400
+              const act = ghost.getAttribute('data-ghost-act') === 'swap' ? 'swap' : 'take'
+              onGhost(ghost.getAttribute('data-ghost') ?? '', act)
+            }
+          },
+          onKeyDownCapture: (e: React.KeyboardEvent) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return
+            const check = (e.target as HTMLElement).closest('[data-todo-check]')
+            if (check === null || onTodoCheck === undefined) return
+            e.preventDefault()
+            e.stopPropagation()
+            onTodoCheck(
+              check.getAttribute('data-todo-check') ?? '',
+              check.getAttribute('data-done') !== 'true',
+            )
+          },
+          onPointerDownCapture: (e: React.PointerEvent) => {
+            const el = e.target as HTMLElement
+            if (el.closest('[data-todo-check]') !== null || el.closest('[data-ghost-act]') !== null)
+              quietUntil.current = Date.now() + 800
+          },
+          onDragStart: (e: React.DragEvent) => {
+            const el = (e.target as HTMLElement).closest('[data-todo-drag]')
+            if (el === null) return
+            const id = el.getAttribute('data-todo-drag') ?? ''
+            const item = [...byId.current.values()].find(
+              (i) => i.source === 'todo' && i.ref.id === id,
+            )
+            const minutes =
+              item === undefined || item.all_day || item.end === undefined
+                ? 60
+                : Math.max(15, Math.round((Date.parse(item.end) - Date.parse(item.start)) / 60_000))
+            e.dataTransfer.setData(TODO_DRAG_TYPE, id)
+            e.dataTransfer.setData('text/plain', id)
+            e.dataTransfer.effectAllowed = 'move'
+            setDragging({ id, minutes })
+            setDraggingId(id)
+          },
+          onDragEnd: () => {
+            setDragging(undefined)
+            setDraggingId(undefined)
+            setHover(undefined)
+          },
+          onDragOver: (e: React.DragEvent) => {
+            if (todoDrop.current === undefined) return
+            if (!e.dataTransfer.types.includes(TODO_DRAG_TYPE)) return
+            const at = dropTargetAt(e.target as Element, e.clientY, getDragging()?.minutes ?? 60)
+            if (at === undefined) {
+              setHover(undefined)
+              return
+            }
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            setHover((prev) =>
+              prev !== undefined &&
+              JSON.stringify(prev.target) === JSON.stringify(at.target) &&
+              Math.abs(prev.x - e.clientX) < 6 &&
+              Math.abs(prev.y - e.clientY) < 6
+                ? prev
+                : { ...at, x: e.clientX, y: e.clientY },
+            )
+          },
+          onDragLeave: (e: React.DragEvent) => {
+            const next = e.relatedTarget as Node | null
+            if (next === null || !(e.currentTarget as Node).contains(next)) setHover(undefined)
+          },
+          onDrop: (e: React.DragEvent) => {
+            const sink = todoDrop.current
+            if (sink === undefined) return
+            const id = e.dataTransfer.getData(TODO_DRAG_TYPE) || getDragging()?.id || ''
+            const at = dropTargetAt(e.target as Element, e.clientY, getDragging()?.minutes ?? 60)
+            setHover(undefined)
+            setDragging(undefined)
+            setDraggingId(undefined)
+            if (id === '' || at === undefined) return
+            e.preventDefault()
+            sink(id, at.target)
+          },
+        }
   const hiddenOfDay = moreDay === undefined ? undefined : fold.hidden.get(moreDay)
   const todayKey = Temporal.Now.plainDateISO(tz).toString()
 
@@ -455,6 +737,30 @@ export function UnifiedCalendar({
       </p>
     )
 
+  const hostEl = (
+    <div
+      className={`sx-host min-w-0 ${heightClass}`}
+      data-testid="calendar-host"
+      data-view={view}
+      data-count={items.length}
+      data-framed={top === undefined ? undefined : 'true'}
+      // 全天区左边那格写「全天」（库不画这个字；CSS 用 content 取这个变量）
+      style={{ '--ws-allday-label': JSON.stringify(t('calendar.all_day')) } as React.CSSProperties}
+      {...hostHandlers}
+    >
+      {/*
+        WP456-T5：周视图里今天那一列整列一层淡品牌色（示意稿；日视图只有一列，不用标）。库只在表头上标「今天」，
+        时间格那一列没有类名可认，所以按日期点名——日期是我们自己算的，不是外来的字。
+      */}
+      <style>{`.sx-host[data-view="week"] [data-time-grid-date="${todayKey}"]{background-color:var(--ws-cal-today-col)}${
+        draggingId === undefined
+          ? ''
+          : `.sx-host [data-todo-drag="${draggingId.replace(/[^\w-]/gu, '')}"]{opacity:.35}`
+      }`}</style>
+      <ScheduleXCalendar calendarApp={app} />
+    </div>
+  )
+
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2" data-testid="unified-calendar">
       {layers.length === 0 ? (
@@ -462,23 +768,38 @@ export function UnifiedCalendar({
           {t('calendar.layers.none')}
         </p>
       ) : null}
-      <div
-        className={`sx-host min-w-0 ${heightClass}`}
-        data-testid="calendar-host"
-        data-view={view}
-        data-count={items.length}
-        // 全天区左边那格写「全天」（库不画这个字；CSS 用 content 取这个变量）
-        style={
-          { '--ws-allday-label': JSON.stringify(t('calendar.all_day')) } as React.CSSProperties
-        }
-      >
-        {/*
-          WP456-T5：周视图里今天那一列整列一层淡品牌色（示意稿；日视图只有一列，不用标）。库只在表头上标「今天」，
-          时间格那一列没有类名可认，所以按日期点名——日期是我们自己算的，不是外来的字。
-        */}
-        <style>{`.sx-host[data-view="week"] [data-time-grid-date="${todayKey}"]{background-color:var(--ws-cal-today-col)}`}</style>
-        <ScheduleXCalendar calendarApp={app} />
-      </div>
+      {top === undefined ? (
+        hostEl
+      ) : (
+        <div className="ws-card flex min-w-0 flex-col overflow-hidden" data-testid="calendar-frame">
+          {top}
+          {hostEl}
+        </div>
+      )}
+      {hover === undefined ? null : (
+        <>
+          <div
+            aria-hidden
+            data-testid="calendar-drop-box"
+            className="pointer-events-none fixed z-40 rounded-md border-2 border-ws-brand bg-ws-tint/60"
+            style={{
+              left: hover.box.left + 2,
+              top: hover.box.top,
+              width: Math.max(0, hover.box.width - 4),
+              height: Math.max(18, hover.box.height),
+            }}
+          />
+          <div
+            role="status"
+            data-testid="calendar-drop-hint"
+            className="pointer-events-none fixed z-50 max-w-72 rounded-lg bg-ws-ink px-3 py-2 text-xs text-ws-card shadow-ws"
+            style={{ left: hover.x + 14, top: hover.y + 18 }}
+          >
+            <div className="font-semibold">{dropWord(hover.target, new Date(), lang)}</div>
+            <div className="opacity-80">{t('caltodo.drop.more')}</div>
+          </div>
+        </>
+      )}
 
       {/* 拖完之后那句话。不是 toast：它常常要人读完（撞车说明就在里面） */}
       {note === undefined ? null : (
@@ -507,6 +828,14 @@ export function UnifiedCalendar({
           onClose={() => {
             setPicked(undefined)
           }}
+          {...(onTodoDrop === undefined || picked.source !== 'todo' || picked.status === 'done'
+            ? {}
+            : {
+                onUnschedule: () => {
+                  setPicked(undefined)
+                  onTodoDrop(picked.ref.id, { kind: 'rail', horizon: 'week' })
+                },
+              })}
         />
       )}
     </div>
@@ -580,9 +909,12 @@ function MoreCard({
 function EventCard({
   item,
   onClose,
+  onUnschedule,
 }: {
   item: CalendarItem
   onClose: () => void
+  /** WP469：待办「不排了」= 放回「还没排期的」（拖回左边的键盘版） */
+  onUnschedule?: () => void
 }): React.ReactNode {
   const { t } = useApp()
   const navigate = useNavigate()
@@ -621,6 +953,16 @@ function EventCard({
               ? t('calendar.open_position')
               : t('calendar.open_in_matter')}
           </Link>
+        )}
+        {onUnschedule === undefined ? null : (
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={onUnschedule}
+            data-testid="calendar-unschedule"
+          >
+            {t('caltodo.unschedule')}
+          </Button>
         )}
         <Button size="xs" variant="ghost" onClick={onClose}>
           {t('calendar.event.later')}

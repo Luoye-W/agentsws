@@ -59,6 +59,9 @@ const ALLOWED_KEYS = [
   // 图层不是"哪些事存在"，是"这一屏现在画哪几类"；丢了最坏的结果是下次打开回默认三层。
   'agentsws.calendar.layers',
   'agentsws.calendar.view',
+  // WP469：「日历与待办」上次看的那一面、日历上画不画做完的待办（纯界面偏好）
+  'agentsws.cal_todo.face',
+  'agentsws.calendar.done',
   // WP351：「消息 → 网站聊天」每段访客对话在这台电脑上看到了哪一刻（会话 id → 时间）——
   // 只用来画未读小点，没有一个字的对话内容；丢了最坏是每段再亮一次点。
   'agentsws.site_chat.seen',

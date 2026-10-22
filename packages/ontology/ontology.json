@@ -162,7 +162,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "e718f29988f4e6e18985bf0393b313b0",
+  "source_digest": "2c56d92224eefc15fa63627e9055ff9b",
   "objects": [
     {
       "id": "ad",
@@ -5282,6 +5282,12 @@
         },
         {
           "name": "origin.alert_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin.inbox_item",
           "type": "string",
           "sensitivity": "internal",
           "optional": true

@@ -36,6 +36,7 @@ import type {
   ReviewPeriodKind,
   Todo,
   TodoHorizon,
+  TodoSlotResult,
   TodoStatus,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -240,6 +241,13 @@ const CreateTodoBody = z.object({
   collision_target: z.string().min(1).optional(),
   /** 选「我这个不一样」必须写一句区别 */
   distinct_reason: z.string().max(500).optional(),
+  /** WP469：「周五 14:00 拍样品」这种带钟点的，一建就排上（第三档） */
+  scheduled: Slot.optional(),
+  /**
+   * WP469（决策 1521）：从收件箱那一行「记成待办」（`card:<审批项>` / `mail:<会话>`）。
+   * 同一行记过、还没做完的不再建第二条，直接回那一条。
+   */
+  from_inbox: z.string().min(1).max(300).optional(),
 })
 
 const ClaimBody = z.object({ position_id: z.string().min(1).optional() })
@@ -253,9 +261,27 @@ const UpdateTodoBody = z.object({
   horizon: z.enum(HORIZON).optional(),
   due: z.string().min(1).nullable().optional(),
   goal_id: z.string().min(1).nullable().optional(),
+  /**
+   * WP469（决策 1522）：一次换档——拖到某个钟点给 `scheduled`、拖到「全天」给 `due` 并 `scheduled: null`、
+   * 拖回「还没排期的」两样都 `null` 再给 `horizon`。和 `/schedule` 那条一样写 `Todo.scheduled`，只是能和别的字段一起改。
+   */
+  scheduled: Slot.nullable().optional(),
 })
 
 const ScheduleBody = z.object({ scheduled: Slot.nullable() })
+
+/** WP469（决策 1522）：「帮我排进空档」——几件没日子的待办，在 [from, to) 里各找空档（只给候选，不写）。 */
+const SlotsBody = z.object({
+  todo_ids: z.array(z.string().min(1)).min(1).max(30),
+  from: z.string().min(1),
+  to: z.string().min(1),
+  tz_offset_minutes: z
+    .number()
+    .int()
+    .min(-14 * 60)
+    .max(14 * 60)
+    .optional(),
+})
 
 const DelegateBody = z.object({
   assignment_id: z.string().min(1).optional(),
@@ -445,8 +471,18 @@ export interface WorkPort {
 
   calendar(
     actor: WorkActor,
-    range: { from: string; to: string; sources?: readonly CalendarSource[] },
+    range: {
+      from: string
+      to: string
+      sources?: readonly CalendarSource[]
+      /** WP469（决策 1524）：做完的待办也要 */
+      include_done?: boolean
+    },
   ): MaybePromise<CalendarItem[]>
+  /**
+   * WP469（决策 1522）：「帮我排进空档」的候选（不写任何东西）。不给 = 这个部署没有这件事（路由回 `not_implemented`）。
+   */
+  proposeSlots?(actor: WorkActor, input: z.infer<typeof SlotsBody>): MaybePromise<TodoSlotResult>
 
   todayPlan(actor: WorkActor, refresh: boolean): MaybePromise<DailyPlan>
   decidePlan(
@@ -1164,6 +1200,31 @@ export function workRoutes(): Route[] {
     route(
       {
         method: 'post',
+        path: '/v1/todos/slots',
+        operationId: 'proposeTodoSlots',
+        summary: '帮我排进空档：几件没日子的待办各找一个空档（只给候选，人点采用才写，WP469）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: SlotsBody,
+        returns: '{ proposals: TodoSlotProposal[], unplaced: TodoId[] }',
+      },
+      async (c, deps) => {
+        const input = await body(c, SlotsBody)
+        if (!Number.isFinite(Date.parse(input.from)) || !Number.isFinite(Date.parse(input.to)))
+          throw new ApiError('invalid_input', 'from / to 必须是 ISO8601 时间')
+        if (Date.parse(input.to) <= Date.parse(input.from))
+          throw new ApiError('invalid_input', 'to 必须晚于 from')
+        const port = workOf(deps)
+        if (port.proposeSlots === undefined)
+          throw new ApiError('not_implemented', '这个部署没有「帮我排进空档」')
+        return ok(c, await port.proposeSlots(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'post',
         path: '/v1/todos/:id/delegate',
         operationId: 'delegateTodo',
         summary: '委托给 Agent：在这个事项里接着做（起 Run，问题回来成卡片）',
@@ -1221,6 +1282,11 @@ export function workRoutes(): Route[] {
             in: 'query',
             description: '图层，逗号分隔；**不传 = 全部**（WP74，37 §2.5）',
           },
+          {
+            name: 'done',
+            in: 'query',
+            description: 'true = 做完的待办也要（划掉、变淡；WP469 决策 1524）',
+          },
         ],
         returns: '{ items: CalendarItem[], from, to, sources? }',
       },
@@ -1232,11 +1298,13 @@ export function workRoutes(): Route[] {
         if (Date.parse(to) <= Date.parse(from))
           throw new ApiError('invalid_input', 'to 必须晚于 from')
         const sources = parseSources(c.req.query('sources'))
+        const done = c.req.query('done') === 'true' || c.req.query('done') === '1'
         return ok(c, {
           items: await workOf(deps).calendar(actorOf(c), {
             from,
             to,
             ...(sources === undefined ? {} : { sources }),
+            ...(done ? { include_done: true } : {}),
           }),
           from,
           to,

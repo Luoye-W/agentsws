@@ -53,6 +53,7 @@ import {
   planSummary,
   planTitle,
   poolItemOf,
+  proposeSlots,
   type QueryRunner,
   type ReviewDuplicate,
   reviewSummary,
@@ -557,11 +558,29 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
      * 带上 `collision` 才放行：`join` 加进对方的事项、`handoff` 交给对方、`force` 要写一句区别。
      */
     createTodo: (actor, input) => {
+      const { from_inbox, ...rest } = input
+      /**
+       * WP469（决策 1521）：收件箱那一行「记成待办」。同一行记过、还没做完的直接回那一条（不建第二条）；
+       * 新建的记下是从哪一行来的（收件箱按它把那一行收起来），来自卡的也记 `card_id`、来源算 `card`。
+       */
+      if (from_inbox !== undefined) {
+        const same = work
+          .listTodos({ owner: actor.person_id, status: ['open', 'doing', 'blocked'] })
+          .find((t) => t.origin?.inbox_item === from_inbox)
+        if (same !== undefined) return same
+      }
+      const card_id = from_inbox?.startsWith('card:') === true ? from_inbox.slice(5) : undefined
       try {
         return work.createTodoChecked({
-          ...input,
+          ...rest,
           owner: actor.person_id,
           position_id: actor.assignment_id,
+          ...(from_inbox === undefined
+            ? {}
+            : {
+                origin: { inbox_item: from_inbox, ...(card_id === undefined ? {} : { card_id }) },
+                ...(card_id === undefined ? {} : { source: 'card' as const }),
+              }),
         }).todo
       } catch (err) {
         throw labelCandidates(err, (id) => options.label({ type: 'person', id }) ?? id)
@@ -627,6 +646,31 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         { person_id: actor.person_id },
         await sourcesFor(actor, range, cards, range.sources),
       )
+    },
+
+    /**
+     * WP469（决策 1522）：「帮我排进空档」。空档按这个人日历上已有的事算（会议、排了钟点的待办），
+     * 不碰别人的日历；只给候选，什么都不写。
+     */
+    async proposeSlots(actor, input) {
+      const cards = await cardsOf(actor)
+      const range = { from: input.from, to: input.to }
+      const items = work.calendar(
+        range,
+        { person_id: actor.person_id },
+        await sourcesFor(actor, range, cards, ['meeting', 'todo']),
+      )
+      const todos = input.todo_ids
+        .map((id) => work.getTodo(id))
+        .filter((t): t is Todo => t !== undefined && t.owner === actor.person_id)
+      return proposeSlots({
+        todos,
+        items,
+        from: input.from,
+        to: input.to,
+        now: work.now(),
+        tz_offset_minutes: input.tz_offset_minutes ?? work.tz_offset_minutes,
+      })
     },
 
     async todayPlan(actor, refresh) {

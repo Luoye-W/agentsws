@@ -65,7 +65,7 @@ describe('左栏（WP43 §1 图标）', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')
     const links = Array.from(nav.querySelectorAll('a'))
-    // WP342（决策 853）：左栏只剩 随便聊 / 首页 / 消息 / 待办 / 日历 + 岗位（+ 公司模式的「我的代理」）；
+    // WP342（决策 853）：左栏只剩 随便聊 / 首页 / 消息 / 待办 / 日历 + 岗位（WP469：待办 + 日历合成「日历与待办」）（+ 公司模式的「我的代理」）；
     // 会议 / 知识库 / 技能 / 岗位与品牌 / 连接 / 消息渠道 / 设置收进了账号菜单
     // （WP234：「公司设置与授权」是负责人身份，不在左栏「岗位」里）
     const hrefs = links.map((a) => a.getAttribute('href'))
@@ -79,7 +79,8 @@ describe('左栏（WP43 §1 图标）', () => {
       '/settings',
     ])
       expect(hrefs).not.toContain(gone)
-    expect(links.length).toBeGreaterThanOrEqual(6)
+    // WP469：待办与日历合成一格「日历与待办」，左栏少一格
+    expect(links.length).toBeGreaterThanOrEqual(5)
     expect(nav.textContent).not.toContain('公司设置与授权')
     for (const link of links) {
       expect(link.querySelector('svg'), `「${link.textContent ?? ''}」少了图标`).not.toBeNull()
@@ -92,13 +93,17 @@ describe('左栏（WP43 §1 图标）', () => {
    * 钉两件事：顺序是 首页 / 消息 / 待办 / 日历，而且 `/goals` **不在左栏里**了
    * （路由还在、⌘K 还搜得到、待办页有一个 tab——那几条各自有自己的用例）。
    */
-  it('左栏顺序：首页 / 我的助理 / 消息 / 待办 / 日历；目标不在左栏里了', () => {
+  it('左栏顺序：首页 / 我的助理 / 收件箱 / 日历与待办；目标不在左栏里了', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')
     const hrefs = Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href'))
     // WP188（Luoye 09-29）：「随便聊」在最上面；WP343 改名「我的助理」（`/assistant`）
     // WP433（Luoye 10-20 问题 1）：「首页」放到最上面
-    expect(hrefs.slice(0, 5)).toEqual(['/', '/assistant', '/messages', '/todos', '/calendar'])
+    // WP469（决策 1521）：待办与日历合成一格「日历与待办」（`/planner`）
+    expect(hrefs.slice(0, 4)).toEqual(['/', '/assistant', '/messages', '/planner'])
+    expect(screen.getByTestId('nav-cal-todo').textContent).toContain('日历与待办')
+    expect(hrefs).not.toContain('/todos')
+    expect(hrefs).not.toContain('/calendar')
     expect(screen.getByTestId('nav-free-chat').textContent).toBe('助理')
     expect(hrefs).not.toContain('/goals')
   })
