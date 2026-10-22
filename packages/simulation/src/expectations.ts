@@ -943,7 +943,8 @@ export function checkExpectations(
       if (want.picks !== undefined && !matchNumeric(lanes.length, want.picks))
         problems.push(`卡上 ${lanes.length} 件（期望 ${String(want.picks)}）`)
       if (want.fix_before_write === true) {
-        const order = ['fix_page', 'site_handoff', 'pr_handoff', 'new_page']
+        // WP448：合并（两页抢词）也是改现有的页，排在交出去之前
+        const order = ['fix_page', 'merge', 'site_handoff', 'pr_handoff', 'new_page']
         const idx = lanes.map((l) => order.indexOf(l))
         if (idx.some((v, i) => i > 0 && v < (idx[i - 1] ?? 0)))
           problems.push(`顺序不是先修再写：${lanes.join(' → ')}`)

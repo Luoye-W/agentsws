@@ -199,8 +199,14 @@ describe('59 §3 四条职责各看自己那几块', () => {
       // WP381：网站技术体检（AI 爬虫、原始 HTML）
       'site.health.crawlers',
       'site.health.raw_html',
+      // WP448：技术体检交来的活
+      'site.health.tech',
     ])
-    expect(idsOf('site.shopify-theme')).toEqual(['site.theme.copies', 'site.theme.pending'])
+    expect(idsOf('site.shopify-theme')).toEqual([
+      'site.theme.copies',
+      'site.theme.pending',
+      'site.theme.tech',
+    ])
     expect(idsOf('site.shopify-email')).toEqual(['site.email.templates', 'site.email.pending'])
     expect(idsOf('site.shopify-apps')).toEqual(['site.apps.installed', 'site.apps.pending'])
   })

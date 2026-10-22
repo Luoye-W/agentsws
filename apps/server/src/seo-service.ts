@@ -15,6 +15,9 @@
  *    - 跳转 / 规范网址 / 没收录 → 开一件交给「建站」的事项；站外提及 → 开一件交给「公关」的事项。
  * 2. **每周**（默认周一 16:30，WP388；看上一周）：按页面收入小结（`weekly_revenue`）+ AI 平台可见度（`weekly_geo`）；
  *    站点门面（llms.txt / 结构化数据 / AI 爬虫）开**一次**交给建站的事项。
+ * 2bis. **WP448**：每周一次抢词检测（Search Console 查询 × 页面；`weekly_cannibalization` 报告卡），严重的那几组进
+ *    「今天值得动的 5 件事」走 `merge` 车道（保留哪页、另一页出内链改动卡或交建站跳转）；`decaying` 那一件带分诊
+ *    （刷新 / 查询变了 / 合并 / 下线）；改版回归的「注意 / 知道一下」进当天简报一行。
  * 3. **发布前质检**（`gatePublish`）：账本 stage 之前的改写口——没过就改回草稿、拉回 L1、
  *    卡上逐句说明。
  *
@@ -38,6 +41,7 @@ import type {
   ClaimRulesView,
   Clock,
   ContentClaimRule,
+  DriftRun,
   EventEnvelope,
   FactCard,
   GeoAnswerDetail,
@@ -67,6 +71,8 @@ import type {
   ProvenanceState,
   RoleId,
   SearchDataPort,
+  SeoCannibalizationGroup,
+  SeoCannibalizationPayload,
   SeoDailyPayload,
   SeoPick,
   SeoTopicPayload,
@@ -88,6 +94,8 @@ import {
   checkContentQuality,
   competitorId,
   DEFAULT_MODEL_DRAFTS_PER_DAY,
+  detectCannibalization,
+  driftCounts,
   estimateLine,
   evidenceText,
   type FactLike,
@@ -95,6 +103,7 @@ import {
   type LandingConversion,
   type LandingOrder,
   marketName,
+  mergePairKey,
   pageBodyText,
   pageRevenue,
   parseSeoDraft,
@@ -189,6 +198,8 @@ export interface SeoServiceOptions {
    * 不给 / 回 `undefined`（没连店、没读到）= 周报那一格不出。永不让周报失败。
    */
   aiTraffic?: () => Promise<AiTrafficSummary | undefined>
+  /** WP448：最近一次改版回归（「注意 / 知道一下」进当天简报一行；严重的另由告警卡与交建站）。 */
+  drift?: () => DriftRun | undefined
   clock: Clock
   random(): number
   approvals: ApprovalBus
@@ -464,6 +475,9 @@ export function topicWriter(holderOf: (role_id: RoleId) => SeoActor | undefined)
 const STATE_FILE = 'seo-state.json'
 /** 同一件事交出去之后多久内不再重复开（天）。 */
 const HANDOFF_QUIET_DAYS = 14
+/** WP448：抢词每几天查一次；同一对页「合并」落过之后几天内不再进 5 件事。 */
+const CANNIBALIZATION_EVERY_DAYS = 7
+const MERGE_QUIET_DAYS = 28
 const DAY_MS = 86_400_000
 /**
  * WP321：新的一轮估算 → 老面板那一格的形状（`GeoCostEstimate`，问题 × 平台 × 市场；积分 / 周 = 一轮）。
@@ -527,6 +541,12 @@ interface SeoState {
   model_drafts?: { date: string; calls: number }
   /** WP169：翻过的买家问题（语言 → 原句 → 译句）；每个问题每种语言只翻一次。 */
   translations?: Record<string, Record<string, string>>
+  /** WP448：上一次抢词检测（每周一次）。 */
+  cannibalization?: { at: string; groups: SeoCannibalizationGroup[] }
+  /** WP448：哪几对页的「合并」已经落过（页对 → 日期；4 周内不再进 5 件事）。 */
+  merge_landed?: Record<string, string>
+  /** WP448：哪一次改版回归已经进过简报。 */
+  drift_reported?: string
 }
 
 const rec = (v: unknown): Record<string, unknown> =>
@@ -1163,10 +1183,16 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       }
       case 'site_handoff': {
         const site = options.holderOf('site.shopify-build')
+        // WP448：掉量分诊判「该下线」——交建站定一个最相关的页加跳转
+        const retire = pick.triage?.verdict === 'retire'
         const id = openMatter(`site|${pick.page ?? pick.query}`, {
           kind: 'project',
-          title: `交建站：${page?.title ?? pick.page ?? pick.query}${INDEX_WORDS[page?.index_status ?? ''] ?? ''}`,
-          summary: `SEO 与 GEO 每日判断转来：${body}\n需要处理跳转 / 规范网址 / 收录（301 或 308，不用 307），处理完在 Search Console 请求重新收录。`,
+          title: retire
+            ? `下线这页并加跳转：${page?.title ?? pick.page ?? pick.query}`
+            : `交建站：${page?.title ?? pick.page ?? pick.query}${INDEX_WORDS[page?.index_status ?? ''] ?? ''}`,
+          summary: retire
+            ? `SEO 与 GEO 掉量分诊转来：${body}\n定一个最相关的页（同主题的文章或对应商品 / 合集），用「改跳转」把这页跳过去（301），再在后台把这页隐藏。`
+            : `SEO 与 GEO 每日判断转来：${body}\n需要处理跳转 / 规范网址 / 收录（301 或 308，不用 307），处理完在 Search Console 请求重新收录。`,
           pinned: pinOf(pick.page, page),
           entry: 'position',
           position_template_id: 'site',
@@ -1178,6 +1204,68 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         return id === undefined
           ? { kind: 'none', note: '这件两周内已经交过建站了' }
           : { kind: 'matter', id }
+      }
+      case 'merge': {
+        // WP448：两页抢同一组词——保留哪页、另一页怎么处理（合并后跳过去交建站 / 内链改动卡 + 改写角度）
+        const g = pick.merge
+        if (g === undefined) return { kind: 'none', note: '没有抢词那一组的数据' }
+        const keep = g.keep
+        const losers = g.pages.filter((p) => p.url !== keep)
+        const lose = losers[0]
+        if (lose === undefined) return { kind: 'none', note: '只剩一页，不用合并' }
+        const pair = mergePairKey(g)
+        const state = loadState()
+        saveState({
+          ...state,
+          merge_landed: { ...(state.merge_landed ?? {}), [pair]: clock.now() },
+        })
+        const pathOf = (u: string): string => {
+          try {
+            return new URL(u).pathname
+          } catch {
+            return u
+          }
+        }
+        if (g.action === 'redirect') {
+          const site = options.holderOf('site.shopify-build')
+          const lines = losers.map((p) => `${pathOf(p.url)} → ${pathOf(keep)}`)
+          const id = openMatter(`merge|${pair}`, {
+            kind: 'project',
+            title: `合并抢词的页：${pathOf(lose.url)} 并进 ${pathOf(keep)}`,
+            summary: [
+              `SEO 与 GEO 判断转来：${body}`,
+              `先把 ${losers.map((p) => pathOf(p.url)).join('、')} 里还有用的段落并进 ${pathOf(keep)}（要写的交内容与博客），再加跳转。`,
+              '可以直接出「改跳转」卡的清单（旧路径 → 新路径）：',
+              ...lines,
+            ].join('\n'),
+            pinned: pinOf(
+              lose.url,
+              pages.find((p) => p.url === lose.url),
+            ),
+            entry: 'position',
+            position_template_id: 'site',
+            role_id: 'site.shopify-build',
+            ...(site === undefined
+              ? {}
+              : { position_id: site.assignment_id, participants: [site.person_id] }),
+          })
+          return id === undefined
+            ? { kind: 'none', note: '这件两周内已经交过建站了' }
+            : { kind: 'matter', id }
+        }
+        const from = pages.find((p) => p.url === lose.url)
+        const id = await stageFix(
+          actor,
+          'internal_link_edit',
+          { type: targetTypeOf(from), id: lose.url },
+          { url: lose.url, ...(from?.title === undefined ? {} : { title: from.title }) },
+          { links: [{ to: keep, anchor: pick.query }] },
+          `合并抢词：从「${from?.title ?? pathOf(lose.url)}」链到保留的那页`,
+          `${body}\n这一页再改写成别的角度（标题与开头避开「${pick.query}」），让搜索引擎知道该排哪一页。`,
+        )
+        return id === undefined
+          ? { kind: 'none', note: '这条改动没提上去（额度或门禁）' }
+          : { kind: 'change', id }
       }
       case 'pr_handoff': {
         const pr = options.holderOf('pr.forums') ?? options.holderOf('pr.reddit')
@@ -1260,6 +1348,82 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
 
   const date = (): string => clock.now().slice(0, 10)
   const skipped = '没人持有「SEO 与 GEO」这条职责，这一轮不跑'
+
+  /**
+   * WP448：每周一次抢词检测（跟着早上那一轮读到的行算，距上次满 7 天才算；出一张 `weekly_cannibalization` 报告卡）。
+   * 回严重、且 4 周内没落过的那几组（进今天的 5 件事）。
+   */
+  const cannibalizationMerges = async (
+    actor: SeoActor,
+    rows: readonly GscRow[] | undefined,
+    brand: SeoBrandInfo,
+  ): Promise<SeoCannibalizationGroup[]> => {
+    if (rows === undefined || rows.length === 0) return []
+    const last = loadState().cannibalization
+    const due =
+      last === undefined ||
+      Date.parse(clock.now()) - Date.parse(last.at) >=
+        CANNIBALIZATION_EVERY_DAYS * DAY_MS - 3_600_000
+    if (due) {
+      const groups = detectCannibalization(rows, { brand_terms: signalOptions(brand).brand_terms })
+      saveState({ ...loadState(), cannibalization: { at: clock.now(), groups } })
+      const critical = groups.filter((g) => g.severity === 'critical').length
+      const payload: SeoCannibalizationPayload = {
+        variant: 'weekly_cannibalization',
+        week_of: date(),
+        gsc: 'connected',
+        groups: groups.slice(0, 20),
+        notes:
+          groups.length === 0
+            ? ['这周没有两页抢同一组词。']
+            : [
+                `严重的 ${String(critical)} 组进「今天值得动的 5 件事」（每天最多两件）；其余列在这里，自己定要不要动。`,
+              ],
+      }
+      await report(
+        actor,
+        'weekly_cannibalization',
+        date(),
+        `抢词检测（${date()}）`,
+        groups.length === 0
+          ? '这周没有两页抢同一组词。'
+          : groups
+              .slice(0, 5)
+              .map(
+                (g) =>
+                  `${g.severity === 'critical' ? '严重' : g.severity === 'high' ? '高' : '中'}：${g.suggestion}`,
+              )
+              .join('\n'),
+        payload,
+      )
+      emit('seo.weekly_cannibalization', actor.assignment_id, {
+        groups: groups.length,
+        critical,
+      })
+    }
+    const landed = loadState().merge_landed ?? {}
+    const quiet = (pair: string): boolean => {
+      const at = landed[pair]
+      return (
+        at !== undefined && Date.parse(clock.now()) - Date.parse(at) < MERGE_QUIET_DAYS * DAY_MS
+      )
+    }
+    return (loadState().cannibalization?.groups ?? []).filter(
+      (g) => g.severity === 'critical' && !quiet(mergePairKey(g)),
+    )
+  }
+
+  /** WP448：改版回归的那一行简报（每一次只进一回）。 */
+  const driftNote = (): string | undefined => {
+    const d = options.drift?.()
+    if (d === undefined || d.findings.length === 0) return undefined
+    const state = loadState()
+    if (state.drift_reported === d.id) return undefined
+    saveState({ ...state, drift_reported: d.id })
+    const c = driftCounts(d.findings)
+    const which = d.trigger.label ?? (d.trigger.kind === 'weekly' ? '每周例行' : '改版')
+    return `改版回归（${which}，${(d.finished_at ?? d.started_at).slice(0, 10)}）：严重 ${String(c.critical)}、注意 ${String(c.warning)}、知道一下 ${String(c.info)}——看面板「改版回归」。`
+  }
 
   /* ── WP321：监测（关注设置、每周一轮、指标、变化大才出卡）——引擎在 `./geo-monitor.ts` ── */
 
@@ -1839,6 +2003,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const brand = await brandOf(consoleRead.pages)
       // WP166：搜索结果页人群核对按每个目标市场分别看（面板上关掉的市场不看）
       const { probing } = await probeMarketsOf()
+      // WP448：每周抢词里严重的几组（不进六个信号，走 merge 车道）
+      const merges = await cannibalizationMerges(actor, consoleRead.rows, brand).catch(() => [])
       const payload: SeoDailyPayload = await buildDaily({
         rows: consoleRead.rows,
         pages: consoleRead.pages,
@@ -1851,7 +2017,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         languages: Object.fromEntries(probing.map((m) => [m.toLowerCase(), languageOf(m, brand)])),
         our_domains: brand.domains,
         date: date(),
+        ...(merges.length === 0 ? {} : { merges }),
       })
+      const drift = driftNote()
+      if (drift !== undefined) payload.notes.push(drift)
       if (consoleRead.error !== undefined) payload.notes.unshift(consoleRead.error.slice(0, 160))
       if (consoleRead.note !== undefined) payload.notes.unshift(consoleRead.note.slice(0, 160))
       const counts = { changes: 0, topics: 0, matters: 0 }
