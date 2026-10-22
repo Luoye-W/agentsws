@@ -80,7 +80,7 @@ export function LayerMemory({
                 <span className="text-sm font-medium">{e.heading ?? e.skill}</span>
                 {/* 06 §3.4：学来的段在界面上有标记 */}
                 {e.origin === 'learned' ? (
-                  <span className="inline-flex items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-xs">
+                  <span className="inline-flex items-center gap-1 rounded-sm border bg-muted px-1.5 py-0.5 text-xs">
                     <Sparkles className="size-3" aria-hidden />
                     {t('memory.learned')}
                   </span>

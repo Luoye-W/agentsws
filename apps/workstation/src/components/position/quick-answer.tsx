@@ -179,7 +179,7 @@ export function QuickAnswer({
             <SafeMarkdown
               text={lead}
               variant="reply"
-              className="text-[15px] leading-[1.7] text-ws-ink"
+              className="text-[14px] leading-[1.7] text-ws-ink"
               testId="quick-answer-lead"
             />
           )}

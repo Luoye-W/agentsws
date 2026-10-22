@@ -395,7 +395,7 @@ export function ModelPicker({
           data-testid={testId}
           data-model={current.id}
           {...(stale === undefined ? {} : { 'data-stale': value })}
-          className="relative inline-flex h-[30px] max-w-[260px] items-center gap-1.5 rounded-full px-2 text-[12.5px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
+          className="relative inline-flex h-[30px] max-w-[260px] items-center gap-1.5 rounded-full px-2 text-[13px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
           onClick={() => {
             setOpen((o) => !o)
           }}
@@ -636,7 +636,7 @@ function PickerRow({
         {price?.discount === undefined ? null : (
           <span
             data-testid={`${testId}-discount`}
-            className="rounded bg-ws-warn-bg px-1 text-xs text-ws-warn"
+            className="rounded-sm bg-ws-warn-bg px-1 text-xs text-ws-warn"
             title={price.discount.tip}
           >
             {price.discount.text}
@@ -677,7 +677,7 @@ function CapTag({
       title={tip}
       data-hint={tip}
       className={cn(
-        'rounded px-1 text-xs leading-4',
+        'rounded-sm px-1 text-xs leading-4',
         warn ? 'bg-ws-warn-bg text-ws-warn' : 'bg-muted text-muted-foreground',
       )}
     >

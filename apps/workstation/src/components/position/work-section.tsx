@@ -115,7 +115,7 @@ export function WorkSection({
       data-view={quick?.id ?? view}
     >
       <div className="flex items-center gap-2">
-        <h3 className="ws-display text-[17px]">{t('pos2.work.title')}</h3>
+        <h3 className="ws-display text-base">{t('pos2.work.title')}</h3>
         {data === undefined ? null : (
           <span className="ws-num text-xs text-ws-muted-fg" data-testid="work-count">
             {t('pos2.work.count', { n: total })}

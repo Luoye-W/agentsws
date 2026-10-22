@@ -52,7 +52,7 @@ function Num({
 }): ReactNode {
   return (
     <div
-      className="flex flex-col gap-0.5 rounded-[10px] bg-ws-surface px-2.5 py-2"
+      className="flex flex-col gap-0.5 rounded-lg bg-ws-surface px-2.5 py-2"
       data-testid={testId}
     >
       <span className="text-xs text-ws-muted-fg">{label}</span>
@@ -112,7 +112,7 @@ export function AdsOverview({ assignment }: { assignment: string }): ReactNode {
       {rows.length === 0 ? (
         <p className="text-xs text-ws-muted-fg">{t('adsov.empty')}</p>
       ) : (
-        <table className="w-full text-left text-[12.5px]" data-testid="ads-overview-campaigns">
+        <table className="w-full text-left text-[13px]" data-testid="ads-overview-campaigns">
           <thead className="text-xs text-ws-muted-fg">
             <tr>
               <th className="py-1 font-normal">{t('adsov.col.name')}</th>

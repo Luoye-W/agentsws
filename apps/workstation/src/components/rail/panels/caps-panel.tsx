@@ -157,7 +157,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
         {/* WP421（真机 #12 / 自查 general）：版本号与「内置只读」不上屏；只有本公司的副本标一下 */}
         {view.source === 'bundled' ? null : (
           <span
-            className="rounded border px-1 py-0.5 text-xs text-muted-foreground"
+            className="rounded-sm border px-1 py-0.5 text-xs text-muted-foreground"
             data-testid="caps-source"
           >
             {t('rail.caps.custom')}

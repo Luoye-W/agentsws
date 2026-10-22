@@ -56,7 +56,7 @@ export function ThinkingControl({
         data-testid={`${testId}-thinking`}
         data-toggle
         data-effort={now}
-        className="inline-flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2 text-[12.5px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
+        className="inline-flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2 text-[13px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
       >
         <Brain aria-hidden className="size-3.5" />
         <span>{t('model.pick.thinking')}</span>
@@ -154,7 +154,7 @@ function LevelsControl({
         data-testid={`${testId}-thinking`}
         data-level={current.level}
         data-effort={current.effort}
-        className="inline-flex h-[30px] items-center gap-1 rounded-full px-2 text-[12.5px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
+        className="inline-flex h-[30px] items-center gap-1 rounded-full px-2 text-[13px] text-ws-muted-fg hover:bg-muted hover:text-ws-ink"
         onClick={() => {
           setOpen((o) => !o)
         }}

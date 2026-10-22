@@ -34,7 +34,7 @@ export function AutopilotStrip({ assignment }: { assignment: string }): React.Re
       {rows.map((s) => (
         <div
           key={s.scope_id}
-          className="flex flex-wrap items-center gap-2 rounded-[10px] bg-ws-surface px-3 py-1.5 text-[13px]"
+          className="flex flex-wrap items-center gap-2 rounded-lg bg-ws-surface px-3 py-1.5 text-[13px]"
           data-testid="autopilot-row"
           data-on={s.on ? 'true' : 'false'}
         >

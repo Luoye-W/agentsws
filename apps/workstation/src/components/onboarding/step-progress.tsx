@@ -55,7 +55,7 @@ export function StepProgress({
               />
               <span
                 className={cn(
-                  'flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] leading-none',
+                  'flex size-5 shrink-0 items-center justify-center rounded-full border text-ws-tiny leading-none',
                   state === 'done' && 'border-primary bg-primary text-primary-foreground',
                   state === 'current' && 'border-primary text-primary',
                   state === 'todo' && 'border-border text-muted-foreground',

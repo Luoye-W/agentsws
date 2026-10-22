@@ -241,7 +241,7 @@ export function MatterHandoffBar({
   if (mine !== undefined && mine.handoff.from === me)
     return (
       <div
-        className="mt-2 flex items-center gap-2 text-[12.5px] text-ws-muted-fg"
+        className="mt-2 flex items-center gap-2 text-[13px] text-ws-muted-fg"
         data-testid="matter-handoff-waiting"
       >
         <span>{t('handoff.waiting', { name: mine.to_label })}</span>

@@ -76,7 +76,7 @@ function Chip({
         type="button"
         aria-label={`${label} ${text}`}
         onClick={onRemove}
-        className="rounded hover:bg-ws-line"
+        className="rounded-sm hover:bg-ws-line"
       >
         <X className="size-3" aria-hidden />
       </button>

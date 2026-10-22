@@ -137,7 +137,7 @@ export function BrandDesignPage(): React.ReactElement {
     <div className="flex flex-col gap-4" data-testid="design-md-page">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h1 className="font-semibold text-lg">{t('design.md.title')}</h1>
+          <h1 className="font-semibold text-base">{t('design.md.title')}</h1>
           <p className="flex max-w-xl items-center gap-1 text-sm text-ws-muted-fg">
             {t('design.md.subtitle')}
             <Hint text={t('design.md.subtitle.hint')} />

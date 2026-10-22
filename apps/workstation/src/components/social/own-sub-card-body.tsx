@@ -43,7 +43,7 @@ export function OwnSubCardBody({ payload }: { payload: Record<string, unknown> }
         </b>
       </div>
       <blockquote
-        className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
+        className="rounded-lg bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
         data-testid="deck-own-sub-original"
         aria-label={t('ownsub.card.original')}
       >

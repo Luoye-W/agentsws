@@ -317,7 +317,7 @@ function JobLine({ job }: { job: PlatformCliJob }): React.ReactNode {
           <span className="text-xs text-muted-foreground">
             {t('platform_cli.job.user_code_hint')}
           </span>
-          <span className="font-mono text-lg font-semibold tracking-widest select-all">
+          <span className="font-mono text-base font-semibold tracking-widest select-all">
             {job.user_code}
           </span>
           <button

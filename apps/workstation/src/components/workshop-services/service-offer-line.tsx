@@ -53,7 +53,7 @@ export function ServiceOfferLine({
   })
   if (state === 'declined')
     return (
-      <p className="mt-2 text-[12.5px] text-ws-muted-fg" data-testid="service-offer-declined">
+      <p className="mt-2 text-[13px] text-ws-muted-fg" data-testid="service-offer-declined">
         {t('svc.offer.declined')}
       </p>
     )

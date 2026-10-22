@@ -99,7 +99,7 @@ export function BrandBackgroundBadge({
             data-bg-state={background.state}
             data-errors={background.errors}
             className={cn(
-              'inline-flex shrink-0 items-center gap-1 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'inline-flex shrink-0 items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
               className,
             )}
           >

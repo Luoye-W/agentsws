@@ -98,14 +98,14 @@ function PinPopover({
     <div
       role="dialog"
       aria-label={t('report.pin.where')}
-      className="absolute bottom-[52px] left-3 z-10 w-[300px] rounded-[14px] bg-ws-card p-3.5 shadow-[0_16px_34px_rgba(20,40,30,0.14),0_0_0_1px_var(--ws-line)]"
+      className="absolute bottom-[52px] left-3 z-10 w-[300px] rounded-lg bg-ws-card p-3.5 shadow-[0_16px_34px_rgba(20,40,30,0.14),0_0_0_1px_var(--ws-line)]"
       data-testid="pin-popover"
     >
-      <h4 className="mb-2.5 text-[13.5px] font-semibold">{t('report.pin.where')}</h4>
+      <h4 className="mb-2.5 text-[13px] font-semibold">{t('report.pin.where')}</h4>
       {option('position', info.name ?? result.suggest.position, t('report.pin.position_panel'))}
       {duty === undefined ? null : option('duty', duty.role_name, t('report.pin.duty_panel'))}
       <p className="mt-2.5 mb-1 text-xs text-ws-muted-fg">{t('report.pin.how_often')}</p>
-      <div className="inline-flex rounded-[9px] bg-ws-secondary p-0.5">
+      <div className="inline-flex rounded-md bg-ws-secondary p-0.5">
         {REFRESH.map((r) => (
           <button
             key={r}
@@ -113,7 +113,7 @@ function PinPopover({
             aria-pressed={refresh === r}
             data-testid={`pin-refresh-${r}`}
             className={cn(
-              'rounded-[7px] px-2.5 py-[3px] text-[12px]',
+              'rounded-md px-2.5 py-[3px] text-[12px]',
               refresh === r
                 ? 'bg-ws-card font-semibold text-ws-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
                 : 'text-ws-muted-fg',
@@ -129,7 +129,7 @@ function PinPopover({
       <div className="mt-3 flex justify-end gap-2">
         <button
           type="button"
-          className="h-[26px] rounded-[7px] px-2.5 text-[12px] text-ws-muted-fg hover:bg-ws-secondary"
+          className="h-[26px] rounded-md px-2.5 text-[12px] text-ws-muted-fg hover:bg-ws-secondary"
           onClick={onCancel}
         >
           {t('report.pin.cancel')}
@@ -138,7 +138,7 @@ function PinPopover({
           type="button"
           data-testid="pin-confirm"
           disabled={pin.isPending}
-          className="h-[26px] rounded-[7px] bg-ws-brand px-2.5 text-[12px] font-medium text-ws-brand-fg disabled:opacity-60"
+          className="h-[26px] rounded-md bg-ws-brand px-2.5 text-[12px] font-medium text-ws-brand-fg disabled:opacity-60"
           onClick={() => {
             pin.mutate()
           }}
@@ -208,7 +208,7 @@ export function ReportCompose({
         <div
           role="status"
           data-testid="pin-toast"
-          className="mx-auto mt-3 flex items-center gap-2.5 rounded-[10px] bg-ws-ink px-3.5 py-2 text-[13px] text-ws-paper shadow-[0_16px_34px_rgba(20,40,30,0.14)]"
+          className="mx-auto mt-3 flex items-center gap-2.5 rounded-lg bg-ws-ink px-3.5 py-2 text-[13px] text-ws-paper shadow-[0_16px_34px_rgba(20,40,30,0.14)]"
         >
           <Check aria-hidden className="size-4" />
           {t('report.pin.toast', {
@@ -251,7 +251,7 @@ export function ReportCompose({
               className="flex flex-col gap-2.5 text-[14px] text-ws-body"
               data-testid="compose-answer"
             >
-              <ul className="flex flex-col gap-1 text-[12.5px] text-ws-muted-fg">
+              <ul className="flex flex-col gap-1 text-[13px] text-ws-muted-fg">
                 {result.reads.map((r) => (
                   <li key={r} className="flex items-center gap-1.5">
                     <Check aria-hidden className="size-3.5" />
@@ -312,7 +312,7 @@ export function ReportCompose({
             aria-label={t('report.compose.input')}
             placeholder={t('report.compose.placeholder')}
             data-testid="compose-input"
-            className="w-full resize-none bg-transparent text-[14.5px] text-ws-ink outline-none placeholder:text-ws-faint"
+            className="w-full resize-none bg-transparent text-[14px] text-ws-ink outline-none placeholder:text-ws-faint"
             onChange={(e) => {
               setText(e.target.value)
             }}
@@ -345,7 +345,7 @@ export function ReportCompose({
               <button
                 key={ex}
                 type="button"
-                className="h-7 rounded-full px-[11px] text-[12.5px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:bg-ws-card hover:text-ws-ink"
+                className="h-7 rounded-full px-[11px] text-[13px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:bg-ws-card hover:text-ws-ink"
                 onClick={() => {
                   setText(`${PREFIX}${ex}`)
                   input.current?.focus()

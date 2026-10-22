@@ -297,6 +297,30 @@ describe('WP188 随便聊：一轮对话', () => {
     expect(opened).toEqual([])
   })
 
+  it('WP456-T8（§3.7）：输入框是岗位页那一个完整对话框（贴底居中）；右上是图标钮 + tooltip', async () => {
+    renderPage()
+    const dock = await screen.findByTestId('composer-dock')
+    expect(dock.dataset.variant).toBe('full')
+    expect(within(dock).getByTestId('matter-say')).toBeDefined()
+    expect(within(dock).getByTestId('free-chat-input')).toBeDefined()
+    // 框外不再有「联网搜索」「用公司资料回答」两颗描边小标
+    expect(screen.queryByTestId('free-chat-web-toggle')).toBeNull()
+    expect(screen.queryByTestId('free-chat-knowledge-toggle')).toBeNull()
+    const memory = screen.getByTestId('assistant-memory')
+    expect(memory.textContent).toBe('')
+    expect(memory.getAttribute('title')).toBe('记忆')
+    // 「+」里：附资料、加图、联网、公司资料
+    await userEvent.click(screen.getByTestId('matter-attach'))
+    const menu = await screen.findByTestId('composer-plus-menu')
+    for (const id of [
+      'composer-plus-doc',
+      'composer-plus-image',
+      'composer-plus-web',
+      'composer-plus-knowledge',
+    ])
+      expect(within(menu).getByTestId(id)).toBeDefined()
+  })
+
   it('选了看不了图的模型：「+」里的加图是灰的', async () => {
     // 默认就是看不了图的那一条（下拉怎么选见上面那条用例）
     state.models = { ...MODELS, default: 'agentsws/deepseek-flash' }

@@ -56,7 +56,7 @@ const isKnown = (name: string): name is Renderer => (RENDERERS as readonly strin
 function ScalarBlock({ payload }: { payload: ScalarResult }): React.ReactNode {
   const { lang } = useApp()
   return (
-    <div className="ws-display text-[30px] leading-none">
+    <div className="ws-display text-[28px] leading-none">
       {formatValue(
         payload.value,
         payload.currency === undefined ? 'count' : 'money',
@@ -212,10 +212,7 @@ function TableBlock({
   return (
     <div>
       <div className={dense ? 'overflow-x-auto' : '-mx-4 overflow-x-auto'}>
-        <table
-          className={dense ? 'w-full text-[12px]' : 'w-full text-[13.5px]'}
-          data-testid={testId}
-        >
+        <table className={dense ? 'w-full text-[12px]' : 'w-full text-[13px]'} data-testid={testId}>
           <thead>
             {/* WP96 画布：表头是浅灰底、**没有下边框**，靠底色分区 */}
             <tr className="bg-ws-surface text-left text-xs font-medium text-ws-muted-fg">
@@ -225,7 +222,7 @@ function TableBlock({
                   <th
                     key={c.key}
                     scope="col"
-                    className={`${dense ? 'px-1.5 py-1.5' : 'px-4 py-3'} first:rounded-l-[10px] last:rounded-r-[10px] ${c.align === 'right' ? 'text-right' : ''}`}
+                    className={`${dense ? 'px-1.5 py-1.5' : 'px-4 py-3'} first:rounded-l-lg last:rounded-r-lg ${c.align === 'right' ? 'text-right' : ''}`}
                   >
                     {col === undefined ? (
                       c.label
@@ -358,11 +355,11 @@ function ConversionBlock({ payload }: { payload: TableResult }): React.ReactNode
           {metrics.map((m) => (
             <div
               key={m.label}
-              className="flex flex-col gap-0.5 rounded-[10px] bg-ws-surface px-3 py-2"
+              className="flex flex-col gap-0.5 rounded-lg bg-ws-surface px-3 py-2"
               data-testid="conversion-metric"
             >
               <dt className="text-xs text-ws-muted-fg">{m.label}</dt>
-              <dd className="ws-num text-lg font-semibold">
+              <dd className="ws-num text-base font-semibold">
                 {formatValue(m.value, m.format ?? 'count', lang, m.currency ?? 'USD')}
               </dd>
             </div>
@@ -372,7 +369,7 @@ function ConversionBlock({ payload }: { payload: TableResult }): React.ReactNode
       {state === 'ready' && payload.rows.length > 0 ? <TableBlock payload={payload} /> : null}
       {state !== 'ready' && payload.footer !== undefined ? (
         <p
-          className="rounded-[10px] border border-dashed border-ws-line px-3 py-3 text-sm text-ws-muted-fg"
+          className="rounded-lg border border-dashed border-ws-line px-3 py-3 text-sm text-ws-muted-fg"
           data-testid="conversion-empty"
         >
           {payload.footer.text}
@@ -620,7 +617,7 @@ export function BlockCard({
       className="flex flex-col gap-3.5 p-[18px]"
     >
       <div className="flex items-start gap-2">
-        <h3 className="ws-display flex-1 text-[15px]">{block.title}</h3>
+        <h3 className="ws-display flex-1 text-[14px]">{block.title}</h3>
         {rerun === undefined ? null : <RerunButton rerun={rerun} assignment={assignment} />}
         {block.report_url === undefined ? null : (
           <a

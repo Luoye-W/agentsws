@@ -145,7 +145,7 @@ export function ImChannelsPage({ part }: { part?: ImChannelsPart } = {}): ReactN
   return (
     <div className="flex flex-col gap-6" data-im-part={part}>
       <div hidden={part !== undefined}>
-        <h1 className="flex items-center gap-3 text-xl font-semibold">
+        <h1 className="flex items-center gap-3 text-[22px] font-semibold">
           {t('im.title')}
           <TutorialLink slug="im-channels" className="font-normal" />
         </h1>

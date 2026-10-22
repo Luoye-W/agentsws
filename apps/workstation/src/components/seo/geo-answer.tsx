@@ -49,7 +49,7 @@ function Highlighted({
         data-entity={p.entity}
         data-testid={p.entity === 'ours' ? 'geo-mark-ours' : 'geo-mark-rival'}
         className={cn(
-          'rounded px-0.5',
+          'rounded-sm px-0.5',
           p.entity === 'ours' ? 'bg-ws-good-bg text-ws-good' : 'bg-ws-warn-bg text-ws-warn',
         )}
       >
@@ -82,7 +82,7 @@ function Timeline({ history }: { history: GeoAnswerDetail['history'] }): ReactNo
               className="flex flex-col items-center gap-0.5"
               data-state={h.state}
             >
-              <span className="ws-num h-3 text-[10px] text-ws-good">{h.rank ?? ''}</span>
+              <span className="ws-num h-3 text-ws-tiny text-ws-good">{h.rank ?? ''}</span>
               <span
                 className={cn(
                   'inline-block size-2.5 rounded-full',

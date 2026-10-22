@@ -304,7 +304,7 @@ export function ToolboxTab({
               return (
                 <div
                   key={key}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-1.5"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-sm border px-2 py-1.5"
                 >
                   <div className="flex flex-col">
                     <span className="text-sm">
@@ -359,7 +359,7 @@ export function ToolboxTab({
                   key={e.id}
                   data-testid="toolbox-entry"
                   className={cn(
-                    'flex flex-col gap-1 rounded border px-3 py-2',
+                    'flex flex-col gap-1 rounded-sm border px-3 py-2',
                     flagged.has(e.id) && 'border-ws-warn/60 bg-ws-warn-bg',
                   )}
                 >

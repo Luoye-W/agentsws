@@ -205,7 +205,7 @@ export function SiteChatSourceItem({
       data-active={active ? 'true' : undefined}
       aria-pressed={active}
       className={cn(
-        'flex items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left text-[13px]',
+        'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px]',
         active
           ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
           : 'text-ws-body hover:bg-sidebar-accent/60',
@@ -340,7 +340,7 @@ export function SiteChatView({
                     data-testid="chat-conversation"
                     data-session={s.id}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[13px]',
+                      'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px]',
                       selected === s.id
                         ? 'bg-sidebar-accent font-medium'
                         : 'hover:bg-sidebar-accent/60',
@@ -392,7 +392,7 @@ export function SiteChatView({
               {t('messages.back')}
             </button>
             {session === undefined ? null : <SiteChatBand session={session} workHref={workHref} />}
-            <h1 className="text-[15px] font-semibold">
+            <h1 className="text-[14px] font-semibold">
               {session?.visitor_display ?? session?.external_session_id}
             </h1>
             <ul className="flex flex-col gap-1.5">

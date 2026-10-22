@@ -216,7 +216,7 @@ export function ExtensionPairingCode(props: { assignment?: string | undefined })
         </div>
       ) : (
         <div className="flex flex-col gap-2" data-testid="extension-code">
-          <div className="font-mono text-4xl tracking-[0.35em] text-[var(--ws-ink)]">
+          <div className="font-mono text-[28px] tracking-[0.35em] text-[var(--ws-ink)]">
             {pairing.code}
           </div>
           {secondsLeft(pairing.shown_at, now) > 0 ? (

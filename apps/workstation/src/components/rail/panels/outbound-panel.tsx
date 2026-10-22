@@ -139,7 +139,7 @@ function RecordRow({ record: r }: { record: OutboundRecord }): ReactNode {
             href={r.link}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center rounded text-ws-muted-fg hover:text-ws-ink focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex items-center rounded-sm text-ws-muted-fg hover:text-ws-ink focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={r.link}
             title={r.link}
           >

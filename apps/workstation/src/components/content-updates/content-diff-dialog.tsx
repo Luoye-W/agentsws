@@ -31,7 +31,7 @@ function Block({
   return (
     <div className="flex min-w-0 flex-col gap-1" data-testid={testId}>
       <span className="text-xs text-ws-muted-fg">{label}</span>
-      <p className="max-h-56 overflow-auto rounded-[10px] bg-ws-surface p-2.5 text-[13px] leading-5 whitespace-pre-wrap">
+      <p className="max-h-56 overflow-auto rounded-lg bg-ws-surface p-2.5 text-[13px] leading-5 whitespace-pre-wrap">
         {text === '' ? '—' : text}
       </p>
     </div>
@@ -77,7 +77,7 @@ export function ContentDiffDialog({
               data-testid="content-diff-section"
             >
               <div className="flex items-center gap-2">
-                <span className={`rounded px-1.5 py-0.5 text-xs ${CHANGE_TONE[s.change]}`}>
+                <span className={`rounded-sm px-1.5 py-0.5 text-xs ${CHANGE_TONE[s.change]}`}>
                   {t(`content_updates.diff.${s.change}`)}
                 </span>
                 <span className="text-sm font-medium">

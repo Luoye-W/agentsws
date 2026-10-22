@@ -201,7 +201,7 @@ export function TeamBotCard({
     <Card data-testid={`im-${channel}`}>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="flex items-center gap-1.5 text-base">
-          <BrandIcon provider={spec.icon} size={20} className="rounded" />
+          <BrandIcon provider={spec.icon} size={20} className="rounded-sm" />
           {t(spec.title)}
           <Hint text={t(spec.what)} testId={`im-${channel}-what`} />
           <TutorialLink slug={spec.slug} className="font-normal" />
@@ -362,7 +362,7 @@ export function BindRow({ channel, bound }: { channel: ImTeamChannel; bound: boo
       {code !== null ? (
         <p className="flex items-center gap-1 text-sm" data-slot="status">
           {t('im.team.bind.send')}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono" data-slot="data">
+          <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono" data-slot="data">
             {t('im.team.bind.cmd', { code })}
           </code>
           <Hint text={t('im.team.bind.expires')} />

@@ -51,7 +51,7 @@ export function DutyNeeded({
       role="status"
       data-testid={testid}
       data-kind={kind}
-      className="flex max-w-xl flex-col gap-3 rounded-[10px] border border-ws-line bg-ws-card p-4 text-sm"
+      className="flex max-w-xl flex-col gap-3 rounded-lg border border-ws-line bg-ws-card p-4 text-sm"
     >
       <p className="flex items-start gap-2 font-medium">
         <ScanSearch aria-hidden className="mt-0.5 size-4 shrink-0 text-ws-muted-fg" />

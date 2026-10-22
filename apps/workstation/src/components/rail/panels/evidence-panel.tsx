@@ -103,7 +103,7 @@ export function EvidencePanel(): ReactNode {
             {citations.map((c) => (
               <li
                 key={`quote:${c.fact_card_id}`}
-                className="rounded-[10px] bg-ws-surface p-2 text-[12px] leading-5 text-ws-body"
+                className="rounded-lg bg-ws-surface p-2 text-[12px] leading-5 text-ws-body"
               >
                 「{c.quote}」
               </li>

@@ -156,7 +156,7 @@ export function GeoBoard({ assignment }: { assignment: string }): ReactNode {
   return (
     <section className="flex flex-col gap-4" data-testid="geo-board">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="ws-display text-[17px]">{t('geo.title')}</h3>
+        <h3 className="ws-display text-base">{t('geo.title')}</h3>
         <Hint text={t('geo.title.hint')} />
         {view?.week === undefined ? null : (
           <span className="text-xs text-ws-muted-fg" data-slot="status">

@@ -30,10 +30,10 @@ export function GeoRankTable({ rank }: { rank: RankMetricsView }): ReactNode {
         <Hint text={t('geo.rank.est.hint')} />
       </h4>
       <div className="-mx-1 overflow-x-auto">
-        <table className="w-full text-[13.5px]">
+        <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-ws-surface">
-              <th scope="col" className={`${TH} rounded-l-[10px]`}>
+              <th scope="col" className={`${TH} rounded-l-lg`}>
                 {t('geo.rank.keyword')}
               </th>
               <th scope="col" className={`${TH} text-right`}>
@@ -45,7 +45,7 @@ export function GeoRankTable({ rank }: { rank: RankMetricsView }): ReactNode {
               <th scope="col" className={TH}>
                 {t('geo.rank.aio')}
               </th>
-              <th scope="col" className={`${TH} rounded-r-[10px] text-right`}>
+              <th scope="col" className={`${TH} rounded-r-lg text-right`}>
                 <span className="inline-flex items-center gap-1">
                   {t('geo.rank.gsc')}
                   <Hint text={t('geo.rank.gsc.hint')} />
@@ -132,7 +132,7 @@ export function GeoSites({ view }: { view: GeoMetricsView }): ReactNode {
             <li key={s.domain} className="border-b border-ws-line last:border-0">
               <button
                 type="button"
-                className="flex w-full items-center gap-2 py-2 text-left text-[13.5px] hover:bg-ws-surface"
+                className="flex w-full items-center gap-2 py-2 text-left text-[13px] hover:bg-ws-surface"
                 aria-expanded={expanded}
                 disabled={pages.length === 0}
                 data-testid="geo-site"

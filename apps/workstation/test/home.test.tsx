@@ -360,6 +360,49 @@ describe('WP438 首页四块（决策 1332）', () => {
     expect(design.textContent).toContain('还没开工')
   })
 
+  it('WP456-T8（§3.13）：节标题 / 分段切换 / 一行提醒 / 列表组用共用件；「还没开工」整卡可点、卡上没有按钮', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/positions/:id" element={<LocationProbe />} />
+      </Routes>,
+    )
+    await screen.findAllByTestId('home-key-card')
+    const home = screen.getByTestId('home')
+    expect(home.querySelectorAll('.ws-sec-head').length).toBeGreaterThanOrEqual(2)
+    expect(home.querySelector('[data-slot="segmented"]')).not.toBeNull()
+    expect(screen.getByTestId('home-key-missing').getAttribute('data-slot')).toBe('status')
+    expect(screen.getByTestId('home-lines').getAttribute('data-slot')).toBe('list-group')
+    // 首页不出现任何决定卡（决策 1497）
+    expect(home.querySelector('.ws-dcard')).toBeNull()
+    expect(screen.queryByTestId('deck-card')).toBeNull()
+    const design = document.querySelector(
+      '[data-testid="position-card"][data-position="design"]',
+    ) as HTMLElement
+    expect(design.querySelector('button')).toBeNull()
+    expect(design.className).toContain('ws-card')
+    expect(design.getAttribute('role')).toBe('link')
+    fireEvent.click(design)
+    expect(await screen.findByTestId('probe')).toBeDefined()
+  })
+
+  it('WP456-T8：关键数字对不上岗位时不写内部 id（同一岗位开了几份时取第一份）', async () => {
+    getReportsOverview.mockImplementationOnce(async (range: string) => ({
+      ...overview(range),
+      key: [
+        {
+          position: 'social-media',
+          report_id: 'social-media.account',
+          metric: metric({ key: 'engagement', label: '互动', format: 'count', value: 0 }),
+        },
+      ],
+    }))
+    renderWithProviders(<HomePage />)
+    const card = (await screen.findAllByTestId('home-key-card'))[0] as HTMLElement
+    expect(card.textContent).toContain('互动')
+    expect(card.textContent).not.toContain('social-media')
+  })
+
   it('WP437（Luoye 10-21）：首页只有底部那个简易对话框（半透明悬浮），顶上那颗「有什么要我做的？」没了', async () => {
     const { container } = renderWithProviders(<HomePage />)
     await screen.findAllByTestId('home-key-card')

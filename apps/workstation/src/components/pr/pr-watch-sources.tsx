@@ -86,7 +86,7 @@ function SourceRow({ row, onRemove }: { row: PrWatchSourceRow; onRemove: () => v
       {failed && row.last_error !== undefined ? <Hint text={row.last_error} /> : null}
       <button
         type="button"
-        className="shrink-0 rounded p-0.5 text-ws-muted-fg opacity-0 hover:text-ws-bad group-hover:opacity-100 focus:opacity-100"
+        className="shrink-0 rounded-sm p-0.5 text-ws-muted-fg opacity-0 hover:text-ws-bad group-hover:opacity-100 focus:opacity-100"
         aria-label={t('prwatch.remove')}
         data-testid="prwatch-remove"
         onClick={onRemove}
