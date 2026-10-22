@@ -3,7 +3,7 @@
  * 只把最外面那一跳（上游 HTTP）换成回放。钉住：
  * - 下拉里列出已配的来源、默认是「设置 → 模型」那一个；
  * - 说一句 → SSE 一段段回来，会话与话存在本机；
- * - 联网只在开时挂 `web_search`；搜索走替身，照 WP179 记 `model.usage{web_search}` 与 `web.searched`；
+ * - 联网搜得了就一直挂 `web_search`（WP470），开关只在末尾附加里说；搜索走替身，照 WP179 记 `model.usage{web_search}` 与 `web.searched`；
  * - **不产生事项、运行与卡片**；
  * - 「Agents 工坊（用积分）」模板不让填 key（`auth: 'cloud'`）。
  */
@@ -28,7 +28,10 @@ const fetch: FetchLike = async (url, init) => {
     typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {}
   if (url.endsWith('/chat/completions')) upstream.push(body)
   // WP343：助理的只读 / 派活工具总挂着——这里只在挂了 web_search 时才去搜
+  // WP470：web_search 搜得了就一直挂着；联网关着时末尾附加里说「没开」——听话的模型不搜
+  const webOff = JSON.stringify(body.messages ?? []).includes('没开「联网搜索」')
   const toolsOffered =
+    !webOff &&
     Array.isArray(body.tools) &&
     (body.tools as { function?: { name?: string } }[]).some(
       (t) => t.function?.name === 'web_search',
@@ -143,11 +146,14 @@ describe('WP188 /v1/free-chat 端到端', () => {
     const got = await frames(res)
     expect(got.map((f) => f.type)).toEqual(['start', 'delta', 'delta', 'delta', 'done'])
     expect(upstream[0]?.stream).toBe(true)
-    // WP343：联网没开就不挂 web_search（助理那五个工具照挂）
+    // WP470：搜得了就一直挂 web_search（工具清单不随联网开关变，按名字排；助理那几个工具照挂）；开关关着时末尾附加里说一句别搜
     const offered = ((upstream[0]?.tools ?? []) as { function: { name: string } }[]).map(
       (t) => t.function.name,
     )
-    expect(offered).not.toContain('web_search')
+    expect(offered).toContain('web_search')
+    expect(offered).toEqual([...offered].sort())
+    const said = ((upstream[0]?.messages ?? []) as { content?: unknown }[]).at(-1)
+    expect(String(said?.content)).toContain('没开「联网搜索」')
     const listed = await data<{ role: string; text: string }[]>(
       await call('GET', `/v1/free-chat/sessions/${session.id}/messages`),
     )
@@ -163,7 +169,7 @@ describe('WP188 /v1/free-chat 端到端', () => {
     expect(sessions[0]?.title).toBe('在吗')
   })
 
-  it('联网开着：只在这时挂 web_search；搜到的来源回到界面；照 WP179 记用量与审计', async () => {
+  it('联网开着：web_search 能搜；搜到的来源回到界面；照 WP179 记用量与审计', async () => {
     const ws = server.bootstrap.workspace.id
     const before = server.kernel.eventLog.readSync({ workspace_id: ws }).length
     const session = await data<FreeChatSessionView>(
