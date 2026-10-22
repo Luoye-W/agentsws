@@ -124,8 +124,9 @@ describe('WP329 Reddit 写的计划', () => {
       redditWritePlan({ ...comment, write: { kind: 'comment', post: 'abc' } }).steps[0],
     ).toEqual({
       op: 'goto',
-      // WP445：一律新版 www.reddit.com
+      // WP445：一律新版 www.reddit.com；WP467：带上帖子 id（已经开着这个帖子就地填）
       url: 'https://www.reddit.com/comments/abc/',
+      post: 'abc',
     })
   })
 

@@ -11,6 +11,7 @@
  * - 横条：Reddit 这条路中性色、「草稿已填好，请检查后自己点发送」；广告那边照旧「AI 正在操作」。
  */
 import type { PanelCard, PanelSnapshot, PanelWrite } from '@agentsws/browser-action'
+import { SOFT_MISS_LABEL } from '@agentsws/browser-action'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -227,10 +228,10 @@ describe('WP445 横条：Reddit 这条路是中性的「草稿已填好」', () 
         title: 'x',
         step: 6,
         of: 6,
-        label: '对不上页面：草稿在侧边栏里点「复制草稿」，自己粘贴、点发送',
+        label: SOFT_MISS_LABEL,
         assist: true,
       }),
-    ).toContain('对不上页面')
+    ).toBe(SOFT_MISS_LABEL)
     const doc = document.implementation.createHTMLDocument('r')
     renderBanner(
       doc,

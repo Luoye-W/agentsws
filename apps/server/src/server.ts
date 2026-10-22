@@ -801,7 +801,7 @@ import {
   roleRulesFileIn,
 } from './role-rules.js'
 import { DEEPSEEK_ACCOUNT_NEED } from './run-blocked.js'
-import { readRunBrowser } from './run-browser.js'
+import { readRunAssignment, readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
 import { repairStuckRuns } from './run-repair.js'
 import {
@@ -8179,6 +8179,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const page = await fetchPage(doFetch, url)
         return page.ok ? { html: page.html } : undefined
       },
+      /*
+       * WP449：发布前引用核查打开引用页——同一口抓取（只 GET、不带凭据、认得出是我们的 UA）；robots 不让抓的
+       * 不抓。打不开把原因带回来（404 / 被挡 / 超时），卡上照实写。
+       */
+      citationFetch: async (url) => {
+        const doFetch = (options.brandIntakeFetch ?? globalThis.fetch) as BrandIntakeFetch
+        let target: URL
+        try {
+          target = new URL(url)
+        } catch {
+          return { ok: false, reason: '网址写得不对' }
+        }
+        const disallow = await fetchRobots(doFetch, target.origin).catch(() => [] as string[])
+        if (isDisallowed(target.pathname, disallow))
+          return { ok: false, reason: '对方的 robots.txt 不让机器读这一页，请人点开核一下' }
+        const page = await fetchPage(doFetch, url)
+        return page.ok
+          ? { ok: true, html: page.html }
+          : { ok: false, reason: page.reason ?? `没取到（${page.status}）` }
+      },
+      // WP449：引用核查上限与「好不好被 AI 引用」的建议线读「内容与博客」那条职责
+      contentThresholds: () => roles.roles.get('dtc.content')?.thresholds ?? {},
       /*
        * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
        * 抓取，只抓自家域名）。
@@ -15875,6 +15897,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 等不等人接管"，服务端不为它多存一张表（`run-browser.ts`）。
        */
       runBrowser: (actor, run_id) => readRunBrowser(eventLogPort, actor.workspace_id, run_id),
+      // WP468（决策 1478）：这次运行是哪条分配发起的——没有 event_log.read 的分配只能看自己发起的那次
+      runAssignment: (actor, run_id) => readRunAssignment(eventLogPort, actor.workspace_id, run_id),
     },
     /*
      * WP95（36 §11，`sidebar-compare` #11）：一条变更改了哪几个文件、哪几行。

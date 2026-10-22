@@ -33,7 +33,13 @@ export interface ActionPage {
   url(): Promise<string>
   goto(url: string): Promise<{ finalUrl: string }>
   look(): Promise<PageLook>
-  waitFor(selector: string, timeoutMs: number): Promise<boolean>
+  /** WP467：`reveal` = 等的时候先把这一个滚到眼前（只滚不点；没实现就不滚）。 */
+  waitFor(selector: string, timeoutMs: number, options?: { reveal?: string }): Promise<boolean>
+  /**
+   * WP467：当前标签页**已经在这个 Reddit 帖子上**（`need` 给了还要它在页面上）——就地用这一页，不跳转。
+   * 回 `true` = 用这一页（页面脚本已经放好）；`false` = 照常打开。没实现 = 一律照常打开。
+   */
+  stay?(post: string, need?: string): Promise<boolean>
   click(selector: string): Promise<DomOpResult>
   /** WP432：`highlight` = 填完把框描一圈、滚到眼前。 */
   fill(selector: string, value: string, options?: { highlight?: boolean }): Promise<DomOpResult>
@@ -135,7 +141,7 @@ export function stepLabel(step: ActionStep): string {
 }
 
 /** WP432：软步骤对不上时横条上那一句（不乱点，交给人粘贴）。 */
-export const SOFT_MISS_LABEL = '对不上页面：草稿在侧边栏里点「复制草稿」，自己粘贴、点发送'
+export const SOFT_MISS_LABEL = 'Reddit 的评论框没找到，可能改版了——先复制粘贴发，插件照样记'
 
 const isSoft = (step: ActionStep): boolean =>
   (step.op === 'wait' || step.op === 'click' || step.op === 'fill') && step.soft === true
@@ -249,10 +255,16 @@ export async function runAction(
   async function doStep(step: ActionStep): Promise<ActionResult | undefined> {
     switch (step.op) {
       case 'goto': {
+        // WP467：用户已经开着这个帖子（插件挑的就是那个标签页）——不跳转，就地填
+        if (step.post !== undefined && page.stay !== undefined) {
+          if (await page.stay(step.post, step.need)) return pageCheck()
+        }
         await page.goto(step.url)
         return pageCheck()
       }
       case 'click':
+        // WP467：框已经展开着（用户先点过）就不再点
+        if (step.unless !== undefined && (await page.count(step.unless)) > 0) return undefined
         return fromDom(await page.click(step.selector))
       case 'fill':
         return fromDom(
@@ -263,11 +275,12 @@ export async function runAction(
           ),
         )
       case 'wait': {
-        const ok = await page.waitFor(
-          step.selector,
-          step.timeout_ms ?? hooks.waitTimeoutMs ?? DEFAULT_WAIT_MS,
-        )
-        if (ok) return undefined
+        const limit = step.timeout_ms ?? hooks.waitTimeoutMs ?? DEFAULT_WAIT_MS
+        const ok =
+          step.reveal === undefined
+            ? await page.waitFor(step.selector, limit)
+            : await page.waitFor(step.selector, limit, { reveal: step.reveal })
+        if (ok || step.optional === true) return stoppedMeanwhile()
         const halted = stoppedMeanwhile()
         if (halted !== undefined) return halted
         const stop = await pageCheck()

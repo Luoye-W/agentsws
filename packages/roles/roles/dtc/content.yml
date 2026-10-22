@@ -17,7 +17,7 @@
 #    不算草稿——新页面选题批了也照这条分批发，一天推十篇到店里会把订阅的人推走，
 #    也会让一堆页面卡在"已发现、未收录"（文章《how we 47x'd our SEO》的教训）。
 id: dtc.content
-version: 3.0.0
+version: 3.1.0
 domain: dtc
 name: { zh: 内容与博客, en: Content & Blog }
 description: 写博客与页面：起草、发布、发布前质检、品牌口吻；选题批了由这里写
@@ -76,8 +76,17 @@ automation:
     demotion_triggers: [guardrail_hit, manual]
 
 # 写东西照品牌话术（SEO 判断的技能 `seo-judgment` 搬去了「SEO 与 GEO」）
+# WP449（docs/109 §5.1 #5）：给别的市场写版本（译完再本地化）——按需，品牌档案里配了多市场才用得上
 skills:
   - { name: brand-voice, tier: open, load: always }
+  - { name: content-localize, tier: open, load: on_demand }
+
+# WP449（docs/109 §5.1 #6 / #7）：发布前质检的两格
+thresholds:
+  # 引用核查：每篇最多打开几个引用页（超了只查前几个，卡上注明）
+  citation_check_max_links: 10
+  # 「好不好被 AI 引用」低于这个分，才把建议写到发布卡上（只是建议，不挡发布）
+  ai_citability_advice_below: 70
 
 home_blocks:
   # 51 §2.2 面板：草稿队列、待发布、近 30 天发布与流量
@@ -120,7 +129,8 @@ grounding:
   # 19：写文之前先查事实卡——正文里的价格、参数、政策必须指得回某一张卡
   - {
       name: facts_before_writing,
-      intent_terms: [写文章, 写一篇, 博客, 页面, FAQ, 活动页, 多语言, blog, article, landing page],
+      intent_terms:
+        [写文章, 写一篇, 博客, 页面, FAQ, 活动页, 多语言, 翻译, 本地化, 对比页, blog, article, landing page, localize, translate],
       cue_terms: [价格, 尺寸, 材质, 保修, 退换, 配送, warranty, shipping, return],
       tool: search_policies,
       prefetch: true,
@@ -159,6 +169,11 @@ task_examples:
     title: { zh: "选题批了就写", en: "Write once a topic is approved" }
     description: "SEO 与 GEO 那边批了一个新页面选题。"
     expected_output: "一件「写这一页」的事项落到你这里：初稿照选题里的查询与证据写，发布照每天 2 篇的额度分批发。"
+  # WP449：品牌档案里配了说别的语言的市场才用得上
+  - id: market_version
+    title: { zh: "给另一个市场出一版", en: "A version for another market" }
+    description: "品牌档案里有德国市场，想把一篇英文博客做成德语版。"
+    expected_output: "一篇德语稿：单位、货币、称呼按德国写，关键词按当地重挑，数字仍只引事实卡；发布前自动查一遍市场写法与引用，发出去要你点一下。"
 
 # WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
 # 查资料的职责默认挂；客服类不挂（不让客服回复夹网页内容）。

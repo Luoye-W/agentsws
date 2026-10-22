@@ -21,6 +21,8 @@ import type {
   Iso8601,
 } from '@agentsws/contracts'
 import { extractFigures } from '@agentsws/core'
+import { contentBlocks, contentSentences } from './content-text.js'
+import { factFigureVariants, figureMatchesValue, figureValues } from './localize.js'
 
 /**
  * 默认的违规宣称规则表（知识库里还没有 `content_rule` 卡时用）。
@@ -141,8 +143,52 @@ function matches(rule: ContentClaimRule, sentence: string): boolean {
   return sentence.toLowerCase().includes(rule.pattern.toLowerCase())
 }
 
+/** 外链（`http(s)://`，不是我们自己的域名）——这句里的数交给引用核查去查。 */
+function hasExternalLink(links: readonly string[], ourDomains: readonly string[]): boolean {
+  return links.some((href) => {
+    if (!/^https?:\/\//i.test(href)) return false
+    let host: string
+    try {
+      host = new URL(href).hostname.toLowerCase().replace(/^www\./, '')
+    } catch {
+      return false
+    }
+    return !ourDomains.some((d) => {
+      const o = d
+        .toLowerCase()
+        .replace(/^https?:\/\//, '')
+        .replace(/\/.*$/, '')
+        .replace(/^www\./, '')
+      return o !== '' && (host === o || host.endsWith(`.${o}`))
+    })
+  })
+}
+
+/**
+ * 事实卡里的数「认不认得」这个数：先按字面（`3,200` = `3200`）；给了 `language`（给另一个市场的版本）
+ * 再按数值认——德语 `10.000` / `4,5`、换成公制的 `15,5 cm`（卡上写 `6.1 inch`）都算同一个数（WP449）。
+ */
+export function figureKnown(
+  facts: readonly FactLike[],
+  language?: string,
+): (figure: string) => boolean {
+  const keys = new Set(facts.flatMap((f) => extractFigures(f.statement).map(figureKey)))
+  if (language === undefined) return (fig) => keys.has(figureKey(fig))
+  const values = facts.flatMap((f) => [
+    ...extractFigures(f.statement).flatMap((x) => figureValues(x, 'en')),
+    ...factFigureVariants(f.statement),
+  ])
+  return (fig) => keys.has(figureKey(fig)) || figureMatchesValue(fig, language, values)
+}
+
 /**
  * 跑一遍质检。`rules` 不给（知识库里没有规则卡）就用默认表，并在结果里记 `rules_from: 'default'`。
+ *
+ * WP449 起逐句看的是**去过标签的正文**（HTML / Markdown 都认，链接里的网址不再被当成正文里的数），
+ * 另有两个可选项：
+ * - `language`：这篇是给另一个市场的版本（`de`）——数按那种语言的写法读、认换算成公制的数；
+ * - `linkedFiguresChecked: true`：带外链的句子里的数交给引用核查（调用方会去打开那一页查），这里不报「没出处」；
+ *   `ourDomains` 是我们自己的域名（链到自己的页不算出处）。
  */
 export function checkContentQuality(input: {
   body: string
@@ -150,13 +196,17 @@ export function checkContentQuality(input: {
   facts: readonly FactLike[]
   rules?: readonly ContentClaimRule[]
   now: Iso8601
+  language?: string
+  linkedFiguresChecked?: boolean
+  ourDomains?: readonly string[]
 }): ContentQualityResult {
   const rules =
     input.rules !== undefined && input.rules.length > 0 ? input.rules : DEFAULT_CLAIM_RULES
-  const known = new Set(input.facts.flatMap((f) => extractFigures(f.statement).map(figureKey)))
+  const known = figureKnown(input.facts, input.language)
   const issues: ContentQualityIssue[] = []
-  const text = [input.title ?? '', input.body].filter((t) => t.trim() !== '').join('\n')
-  for (const sentence of splitSentences(text)) {
+  const title = input.title !== undefined && input.title.trim() !== '' ? input.title : undefined
+  const sentences = contentSentences(contentBlocks(input.body, title))
+  for (const { text: sentence, links } of sentences) {
     for (const rule of rules)
       if (matches(rule, sentence))
         issues.push({
@@ -166,9 +216,11 @@ export function checkContentQuality(input: {
         })
     const figures = extractFigures(sentence)
     if (figures.length === 0) continue
+    if (input.linkedFiguresChecked === true && hasExternalLink(links, input.ourDomains ?? []))
+      continue
     const lower = sentence.toLowerCase()
     for (const fig of figures) {
-      if (known.has(figureKey(fig))) continue
+      if (known(fig)) continue
       const about = input.facts.find(
         (f) =>
           (f.terms ?? []).some((t) => t.trim() !== '' && lower.includes(t.toLowerCase())) &&

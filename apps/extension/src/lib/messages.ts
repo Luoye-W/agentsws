@@ -85,6 +85,18 @@ export type ExtensionMessage =
   | { type: 'panel-open'; job: string; text?: string; title?: string; windowId?: number }
   /** 「不发了」。 */
   | { type: 'panel-drop'; job: string; reason?: string }
+  /* ── WP467：人自己发出去了，帮我记一下（只加）──────────────────────── */
+  /**
+   * 「我发了，帮我记一下」：贴那一条的链接（`link`），或「认最近一条」（插件读这个帖子里当前登录的号最新发的那一条）。
+   * `card` = 还没批的卡（记下 = 在插件里批 + 记已发）；`job` = 批过的那一条。
+   */
+  | {
+      type: 'panel-sent'
+      job?: string
+      card?: { id: string; version: number }
+      how: 'link' | 'latest'
+      link?: string
+    }
 
 /** 面板与设置页共用的那一份状态。**全是事实，没有一个推断**。 */
 export interface ExtensionStatus {

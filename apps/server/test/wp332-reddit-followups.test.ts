@@ -141,9 +141,11 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
     expect(job?.id).toBe(view.job_id)
     expect(job?.approval_id).toBe('ap_1')
     expect(job?.plan.allow.values).toEqual(['Hi Alice'])
-    expect(job?.plan.steps[0]).toEqual({
+    expect(job?.plan.steps[0]).toMatchObject({
       op: 'goto',
       url: 'https://www.reddit.com/r/ivraxr/comments/abc/s/c1/',
+      // WP467：带上帖子 id（已经开着这个帖子就地填）
+      post: 'abc',
     })
     m.actions.result(job?.id as string, {
       outcome: 'done',

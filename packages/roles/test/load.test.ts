@@ -257,7 +257,7 @@ describe('loadPosition (05 §2)', () => {
   it('`dtc.content` 内容与博客：草稿 L2、发布 L1、每天两篇；搜索那一半不在这里', () => {
     const role = loadBundledRole('dtc.content')
     expect(role.name).toEqual({ zh: '内容与博客', en: 'Content & Blog' })
-    expect(role.version).toBe('3.0.0')
+    expect(role.version).toBe('3.1.0')
     expect(role.actions.map((a) => a.id)).toEqual(['stage_publish_post', 'stage_listing_edit'])
     expect(role.actions[0]?.mandate.caps).toMatchObject({ max_posts_per_day: 2 })
     // 上限 L2 —— 草稿够得着自动；发布那一半由 guardrail 每次拉回人审
@@ -272,7 +272,15 @@ describe('loadPosition (05 §2)', () => {
     ])
     expect(role.grounding?.map((g) => g.name)).toEqual(['facts_before_writing'])
     expect(Object.keys(role.thresholds ?? {}).filter((k) => /^(seo|geo)_/.test(k))).toEqual([])
-    expect(role.skills.map((k) => k.name)).toEqual(['brand-voice'])
+    // WP449：多市场版本按需挂上；发布前质检的两格阈值
+    expect(role.skills.map((k) => [k.name, k.load])).toEqual([
+      ['brand-voice', 'always'],
+      ['content-localize', 'on_demand'],
+    ])
+    expect(role.thresholds).toEqual({
+      citation_check_max_links: 10,
+      ai_citability_advice_below: 70,
+    })
     expect(role.connectors.map((c) => c.kind)).toEqual(['shop'])
   })
 

@@ -17,6 +17,7 @@ import {
   hostOfUrl,
   type PageLook,
   type PostedHit,
+  redditPostIdOf,
   type SheetFile,
 } from '@agentsws/browser-action'
 import type { AdsDomRequest, AdsDomResponse, BannerState } from './dom-messages'
@@ -70,8 +71,34 @@ const GRANT_SLICE_MS = 2_000
 export const ASK_GRANT = '点右上角插件图标，允许截图'
 const NO_CAPTURE = '截图没被浏览器允许（要点一下右上角的插件图标）。已停下，没往下做。'
 
+/**
+ * WP467：标签页出事时那几句话按**是哪一种活**说（Luoye 10-22：回帖失败卡上写着「广告后台那个标签页被关掉了」——
+ * 这一层原来是给广告写的，Reddit 的活借用了它的话）。
+ */
+export interface TabWording {
+  closed: string
+  closedNoShot: string
+  notOnSite: string
+}
+
+export function tabWording(platform: string): TabWording {
+  if (platform === 'reddit')
+    return {
+      closed: '原帖那个标签页被关掉了',
+      closedNoShot: '原帖那个标签页被关掉了，没截到图。',
+      notOnSite: '当前页面不在 Reddit 上，不截。',
+    }
+  return {
+    closed: '广告后台那个标签页被关掉了',
+    closedNoShot: '广告后台那个标签页被关掉了，没截到图。',
+    notOnSite: '当前页面不在广告后台，不截。',
+  }
+}
+
 export interface TabPageOptions {
   driver: TabDriver
+  /** WP467：这件活是哪一家的（出事时的话按它说；不给按广告后台）。 */
+  platform?: string
   /** 这件活的白名单站点（截图前再核一次）。 */
   hosts: readonly string[]
   /** 横条当前的样子（截图后恢复用）。 */
@@ -81,13 +108,16 @@ export interface TabPageOptions {
 }
 
 export class TabPage implements ActionPage {
-  constructor(private readonly o: TabPageOptions) {}
+  private readonly say: TabWording
+  constructor(private readonly o: TabPageOptions) {
+    this.say = tabWording(o.platform ?? 'ads')
+  }
 
   private async ready(): Promise<void> {
     const d = this.o.driver
     for (let waited = 0; waited < LOAD_TIMEOUT_MS; waited += POLL_MS) {
       const f = await d.facts()
-      if (f === undefined) throw new Error('广告后台那个标签页被关掉了')
+      if (f === undefined) throw new Error(this.say.closed)
       if (f.status === 'complete') break
       await d.sleep(POLL_MS)
     }
@@ -149,8 +179,39 @@ export class TabPage implements ActionPage {
     }
   }
 
-  async waitFor(selector: string, timeoutMs: number): Promise<boolean> {
+  /**
+   * WP467：插件挑的这个标签页已经在这个 Reddit 帖子上（用户自己开着的原帖页）——不跳转，把页面脚本放进去就地用；
+   * `need` 给了还要它在页面上（回某条评论时那一条）。白名单外的站不算。
+   */
+  async stay(post: string, need?: string): Promise<boolean> {
+    const f = await this.o.driver.facts()
+    if (f === undefined || !hostMatches(hostOfUrl(f.url), this.o.hosts)) return false
+    let path = ''
+    try {
+      path = new URL(f.url).pathname
+    } catch {
+      return false
+    }
+    // 只看路径（本地假页面也认）；主机已经过了白名单
+    if (redditPostIdOf(path) !== post) return false
+    await this.ready()
+    if (need !== undefined && (await this.count(need)) === 0) return false
+    return true
+  }
+
+  async waitFor(
+    selector: string,
+    timeoutMs: number,
+    options?: { reveal?: string },
+  ): Promise<boolean> {
+    let revealed = options?.reveal === undefined
     for (let waited = 0; ; waited += POLL_MS) {
+      // WP467：先把那一个滚到眼前（新版 Reddit 的评论按钮行滚到看得见才长出来）；还没加载出来就下一眼再滚
+      if (!revealed && options?.reveal !== undefined)
+        revealed =
+          (await this.o.driver
+            .dom({ type: 'ads-dom', op: 'reveal', selector: options.reveal })
+            .catch(() => false)) === true
       if ((await this.count(selector)) > 0) return true
       if (waited >= timeoutMs || this.o.stopped?.() === true) return false
       await this.o.driver.sleep(POLL_MS)
@@ -208,9 +269,8 @@ export class TabPage implements ActionPage {
   }): Promise<{ ok: true; png_base64: string } | { ok: false; why: string }> {
     const d = this.o.driver
     const f = await d.facts()
-    if (f === undefined) return { ok: false, why: '广告后台那个标签页被关掉了，没截到图。' }
-    if (!hostMatches(hostOfUrl(f.url), this.o.hosts))
-      return { ok: false, why: '当前页面不在广告后台，不截。' }
+    if (f === undefined) return { ok: false, why: this.say.closedNoShot }
+    if (!hostMatches(hostOfUrl(f.url), this.o.hosts)) return { ok: false, why: this.say.notOnSite }
     if (!f.active) await d.activate()
     const first = await this.shoot(f.windowId)
     // WP316（决策 600 C）：可选截图（止损）截不到就算了，不请人点图标、不多等

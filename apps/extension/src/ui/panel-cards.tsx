@@ -6,12 +6,15 @@
 import type { PanelPost, PanelStage, PanelWrite } from '@agentsws/browser-action'
 import { useState } from 'react'
 import { stageTone, writeLine, writeTone } from '@/lib/panel/format'
+import { SentBox } from './panel-desk'
 import { IconCheck, IconClock, IconExternal, IconX } from './panel-icons'
 import { PanelPosts, type PostActions } from './panel-posts'
 import { StageLine } from './panel-progress'
 
 export interface CardActions {
   refill(job: string): Promise<string | undefined>
+  /** WP467：「我发了，帮我记一下」（贴链接 / 认最近一条）。 */
+  sent?(job: string, how: 'link' | 'latest', link?: string): Promise<string | undefined>
 }
 
 export function WriteRow(props: {
@@ -54,8 +57,20 @@ export function WriteRow(props: {
             void props.copy?.(w.text ?? '').then((ok) => setMsg(ok ? '草稿已复制' : '没复制上'))
           }}
         >
-          复制草稿
+          复制
         </button>
+      ) : null}
+      {/* WP467：正在等你点发送 / 没发出去的：你自己发了、插件没认出来，就在这里记一下 */}
+      {(w.state === 'filling' || w.state === 'queued' || w.state === 'failed') &&
+      w.record_id === undefined &&
+      props.canAct &&
+      props.actions.sent !== undefined ? (
+        <SentBox
+          canLatest={w.kind !== 'submit'}
+          sent={(how, link) =>
+            props.actions.sent?.(w.job_id, how, link) ?? Promise.resolve(undefined)
+          }
+        />
       ) : null}
       {w.state === 'failed' && w.can_refill === true && props.canAct ? (
         <button

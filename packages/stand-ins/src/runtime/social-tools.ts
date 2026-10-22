@@ -88,6 +88,8 @@ export const SOCIAL_WORK_TOOL_DEFS: readonly ToolDef[] = [
       'mode=reply：回巡查里的某一条（item_id 来自 list_reddit_pending；起草前读整串、品牌号已回过的不起草、口吻没定先要人定）。' +
       'mode=post：在某个版发一条新帖——points 必须是用户自己说的要点（用户没给要点就先问，不要替他编）；' +
       '可以带你写好的 title 和 text（不带就按要点起草一份）；价格、时效、参数只写事实卡里有的。' +
+      // WP468（决策 1510）：新版 Reddit 的评论框是富文本，Markdown 记号会照原样发出去
+      '自己写 title / text 时写纯文字：不写 Markdown 记号（**、[字](链接)、# 标题），链接直接写完整网址，分段用空行。' +
       '卡上会带这个版的版规原文；禁不禁推广由人看了原文自己判。',
     input_schema: {
       type: 'object',
@@ -107,7 +109,11 @@ export const SOCIAL_WORK_TOOL_DEFS: readonly ToolDef[] = [
         },
         points: { type: 'string', description: 'mode=post：用户给的要点（原话）' },
         title: { type: 'string', description: 'mode=post：标题（不给就按要点起一个）' },
-        text: { type: 'string', description: '你写好的正文（不给就由起草那一步写）' },
+        text: {
+          type: 'string',
+          description:
+            '你写好的正文（纯文字，不写 Markdown；链接写完整网址；不给就由起草那一步写）',
+        },
         reason: { type: 'string', description: '为什么要回 / 发（写在卡上给人看）' },
       },
       required: ['mode'],

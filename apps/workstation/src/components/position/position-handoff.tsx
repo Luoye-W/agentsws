@@ -19,7 +19,6 @@
  *
  * **WP437（Luoye 10-21）**：挪到中栏底部居中、悬浮在内容之上——页面把它放在内容最后（根加 `DOCK_PAGE`）。
  */
-import { Send } from 'lucide-react'
 import { useState } from 'react'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { MatterComposer } from '@/components/matter/matter-composer'
@@ -27,7 +26,6 @@ import { useAttachedDocs } from '@/components/matter/use-attached-docs'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { ComposerDock } from '@/components/shell/composer-dock'
 import { Button } from '@/components/ui/button'
-import { Hint } from '@/components/ui/hint'
 import { HandoffError } from '@/components/work/handoff-error'
 import { usePositionOpen } from '@/components/work/use-position-open'
 import type { PositionInstanceData } from '@/lib/api'
@@ -165,7 +163,7 @@ export function PositionHandoff({
   /*
    * WP437（Luoye 10-21）：对话框挪到**中栏底部居中**、悬浮在内容之上（`ComposerDock`）；这个组件放在页面内容的最后。
    * 框上面贴着：当场回答（问了一句就在框上面答，能滚、右上角关）、老服务端的「走哪条职责」、
-   * 快捷按钮（开始对话后收起）、没发出去那句话。新岗位（`hero`）那句「先交给它第一件事」也在框上面。
+   * 快捷按钮（开始对话后收起）、没发出去那句话。（Luoye 10-22：框上面不再放「交给它第一件事」标题和说明。）
    */
   return (
     <ComposerDock
@@ -205,18 +203,6 @@ export function PositionHandoff({
               </div>
             </fieldset>
           )}
-          {hero ? (
-            <div className="flex flex-col gap-1 px-1" data-testid="position-handoff-hero">
-              <h2 className="ws-display flex items-center gap-2 text-[17px]">
-                <Send className="size-4 text-ws-brand" aria-hidden />
-                {t('pos2.handoff.first')}
-              </h2>
-              <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                {t('pos2.handoff.first.note')}
-                <Hint text={t('position.entry.hint')} />
-              </p>
-            </div>
-          ) : null}
           {/*
             WP372（决策 1019）：快捷按钮按状态现出（看新报表 / 等你的对话 / 去连接 + 这个岗位自己的提示），
             最多 6 个，点了直接打开那张卡或直接发出去；开始对话后收起。
