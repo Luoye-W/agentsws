@@ -106,7 +106,9 @@ async function main() {
         (await first.getByTestId('notify-item-urgent').textContent())?.trim() === '紧急',
         '铃铛：紧急那条带「紧急」',
       )
-      const alerts = await page.locator('[data-testid="notify-item"][data-category="alert"]').count()
+      const alerts = await page
+        .locator('[data-testid="notify-item"][data-category="alert"]')
+        .count()
       check(alerts >= 2, `铃铛：告警 ${alerts} 条（一紧急一普通）`)
       await page.waitForTimeout(800)
       const panel = await page.getByTestId('notify-panel').boundingBox()
