@@ -74,7 +74,15 @@ export interface MessageRuleProposeData {
 /** 像在说「以后某类信怎么处理」。 */
 const MAIL_WORDS = /信|邮件|来信|通知|推销|开发信|发件人|邮箱|聊天|消息/
 const RULE_WORDS =
-  /别烦我|不用管|打(个)?标签|告诉我一声|都告诉我|提醒我|进(今天的)?简报|交给.{1,8}(?:处理|管|办)?|以后.{0,20}都|一律|起草|婉拒/
+  /别烦我|不用管|打(个)?标签|告诉我一声|都告诉我|提醒我|进(今天的)?简报|交给.{1,8}(?:处理|管|办)?|以后.{0,20}都|一律/
+/**
+ * 「起草 / 婉拒」只有说的是**一类**信（都 / 一律 / 以后 / 每封 / 凡是）才算规矩；「这封红人回信起草回复、先别发」
+ * 是一次性的起草任务，不抢（int/1026：WP232 起草卡测试撞出来的）。
+ */
+const DRAFT_RULE_WORDS = /起草|婉拒/
+const CLASS_WORDS = /都|一律|以后|每封|凡是|所有/
+const isRuleSentence = (l: string): boolean =>
+  MAIL_WORDS.test(l) && (RULE_WORDS.test(l) || (DRAFT_RULE_WORDS.test(l) && CLASS_WORDS.test(l)))
 
 /**
  * stub 的岔口：工具面里有这个工具、话里像是在给一类来信定规矩，就调一次 propose_message_rule
@@ -93,7 +101,7 @@ export function messageRuleBranch(
     .map((l) => l.trim())
     .filter((l) => l !== '')
     .reverse()
-    .find((l) => MAIL_WORDS.test(l) && RULE_WORDS.test(l))
+    .find(isRuleSentence)
   if (said === undefined) return undefined
   return { tool: PROPOSE_MESSAGE_RULE_TOOL, input: { instruction: said.slice(0, 1000) } }
 }

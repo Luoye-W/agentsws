@@ -64,5 +64,11 @@ describe('stub 的消息规则剧本', () => {
       messageRuleBranch(req(link, [...MESSAGE_RULE_TOOL_NAMES, ...RECORD_SINK_TOOL_NAMES]), link),
     ).toBeUndefined()
     expect(messageRuleBranch(req('今天的广告花了多少'), '今天的广告花了多少')).toBeUndefined()
+    // 一次性的起草任务不是规矩；说的是一类信才是
+    const once = '红人英文回信，起草回复\n帮我起草一封回复，先别发，给我看稿。'
+    expect(messageRuleBranch(req(once), once)).toBeUndefined()
+    expect(
+      messageRuleBranch(req('合作邀约的来信都客气地婉拒'), '合作邀约的来信都客气地婉拒')?.tool,
+    ).toBe('propose_message_rule')
   })
 })
