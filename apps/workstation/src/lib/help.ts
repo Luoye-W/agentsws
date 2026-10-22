@@ -176,7 +176,8 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'my-assistant': { positions: [], roles: [] },
   'site-health': {
     positions: ['web-ops', 'site', 'dtc-ops'],
-    roles: ['dtc.store', 'site.shopify-build', 'dtc.seo'],
+    // WP448：主题也看技术体检（模板里的标签与速度交到它那里）
+    roles: ['dtc.store', 'site.shopify-build', 'site.shopify-theme', 'dtc.seo'],
   },
   'workshop-services': { positions: [], roles: [] },
   'ads-export': {
