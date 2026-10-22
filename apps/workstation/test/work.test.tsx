@@ -577,7 +577,9 @@ describe('事项页（37 §2.2b：唯一的上下文容器）', () => {
     expect(screen.queryByTestId('matter-summary')).toBeNull()
     // 有未决的卡 → 状态「等你批」
     expect(screen.getByTestId('matter-state').textContent).toBe('等你批')
-    expect(screen.getByTestId('matter-participant').getAttribute('title')).toBe('李默')
+    // WP456-T3（§3.3）：状态是一颗状态药丸；参与者只在多于一个人时出（一个人不画头像）
+    expect(screen.getByTestId('matter-state').className).toContain('ws-pill')
+    expect(screen.queryByTestId('matter-participant')).toBeNull()
     // 待办有才出：灰字行尾「1 个待办」，点开就地展开
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
     await user.click(screen.getByTestId('matter-todos-chip'))
