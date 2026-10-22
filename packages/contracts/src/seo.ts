@@ -66,6 +66,12 @@ export type SeoSignalId =
   | 'wrong_intent'
   | 'ai_mode'
 
+/**
+ * WP448：卡上一件事的来源——六个信号之一，或每周抢词检测（`cannibalization`，**不算**每日六个信号，
+ * `signal_counts` 里也没有它；只有 `merge` 车道那几件是它）。
+ */
+export type SeoPickSignal = SeoSignalId | 'cannibalization'
+
 export const SEO_SIGNALS: readonly SeoSignalId[] = [
   'almost_there',
   'no_clicks',
@@ -147,7 +153,8 @@ export interface SeoSerpCheck {
 export interface SeoPick {
   /** 1 起算，就是卡上的顺序（先修再写）。 */
   rank: number
-  signal: SeoSignalId
+  /** WP448：`merge` 车道那几件是 `cannibalization`（每周抢词检测），其余都是六个信号之一。 */
+  signal: SeoPickSignal
   query: string
   /** 现有页面（没有专门页面的 `untargeted` 也可能有一页"顺带排上"的）。 */
   page?: string

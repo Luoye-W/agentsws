@@ -10,13 +10,22 @@
 import type {
   GscRow,
   SearchDataPort,
+  SeoCannibalizationGroup,
   SeoDailyPayload,
   SeoPick,
   SeoSerpCheck,
   SitePage,
 } from '@agentsws/contracts'
+import { mergePick } from './cannibalization.js'
 import { marketName } from './geo.js'
-import { DAILY_PICKS, type PickDraft, rankDrafts, toPick } from './picks.js'
+import {
+  DAILY_PICKS,
+  LANE_ORDER,
+  mergePairKey,
+  type PickDraft,
+  rankDrafts,
+  toPick,
+} from './picks.js'
 import { judgeSerpCrowd } from './serp.js'
 import { countSignals, detectSignals, type SignalOptions } from './signals.js'
 
@@ -52,7 +61,15 @@ export interface DailyInput {
   languages?: Readonly<Record<string, string>>
   our_domains: readonly string[]
   date: string
+  /**
+   * WP448：每周抢词检测里严重的那几组（还没处理过的）——进今天的 5 件，走 `merge` 车道。
+   * 不算每日六个信号（`signal_counts` 里没有它），每天最多 {@link MAX_MERGE_PICKS} 件。
+   */
+  merges?: readonly SeoCannibalizationGroup[]
 }
+
+/** WP448：抢词每天最多占几件（先修再写：别让合并把改页面挤光）。 */
+export const MAX_MERGE_PICKS = 2
 
 /**
  * 算今天那张卡。
@@ -80,8 +97,20 @@ export async function buildDaily(input: DailyInput): Promise<SeoDailyPayload> {
   let serpBudget = MAX_SERP_CHECKS_PER_DAY * Math.max(1, markets.length)
   const picks: SeoPick[] = []
   let skippedNote = false
+  // WP448：每周抢词里严重的几组先占位（同一对页每日判断里已经有「该合并」的，不重复）
+  const fromDrafts = new Set(
+    drafts.flatMap((d) => (d.merge === undefined ? [] : [mergePairKey(d.merge)])),
+  )
+  const merges = (input.merges ?? [])
+    .filter((g) => {
+      const k = mergePairKey(g)
+      if (fromDrafts.has(k)) return false
+      fromDrafts.add(k)
+      return true
+    })
+    .slice(0, MAX_MERGE_PICKS)
   for (const d of drafts) {
-    if (picks.length >= DAILY_PICKS) break
+    if (picks.length + merges.length >= DAILY_PICKS) break
     const pick = toPick(d, picks.length + 1)
     if (d.lane === 'new_page') {
       const checked = await checkNewPage(d, pick, input, markets, status.configured, serpBudget)
@@ -96,6 +125,15 @@ export async function buildDaily(input: DailyInput): Promise<SeoDailyPayload> {
       }
     }
     picks.push(pick)
+  }
+  // 抢词那几件按车道插进去（先修再写的顺序不乱），重新编号
+  if (merges.length > 0) {
+    const all = [...picks, ...merges.map((g) => mergePick(g, 0))]
+    const ordered = all
+      .map((p, i) => ({ p, i }))
+      .sort((a, b) => LANE_ORDER[a.p.lane] - LANE_ORDER[b.p.lane] || a.i - b.i)
+      .map(({ p }, n) => ({ ...p, rank: n + 1 }))
+    picks.splice(0, picks.length, ...ordered)
   }
   if (picks.length === 0) notes.push('六个信号今天一个都没响，没有值得动的——不硬凑。')
   return {

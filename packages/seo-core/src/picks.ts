@@ -14,6 +14,8 @@
  */
 import type {
   GscRow,
+  SeoCannibalizationGroup,
+  SeoDecayTriageResult,
   SeoEvidence,
   SeoFixKind,
   SeoLane,
@@ -21,10 +23,13 @@ import type {
   SeoSignalId,
   SitePage,
 } from '@agentsws/contracts'
+import { triageDecay } from './cannibalization.js'
+import { pageKindOf } from './google.js'
 import {
   intentsCompatible,
   normalizeQuery,
   pageIntent,
+  pageKey,
   pageTargets,
   queryIntent,
   type SignalHit,
@@ -38,9 +43,11 @@ export const DAILY_PICKS = 5
 /** 车道的先后：能改现有页面的排前面（先修再写）。 */
 export const LANE_ORDER: Record<SeoLane, number> = {
   fix_page: 0,
-  site_handoff: 1,
-  pr_handoff: 2,
-  new_page: 3,
+  // WP448：两页抢词也是「改现有的页」，排在交出去之前
+  merge: 1,
+  site_handoff: 2,
+  pr_handoff: 3,
+  new_page: 4,
 }
 
 /**
@@ -121,12 +128,76 @@ export interface PickDraft {
   suggestion: string
   /** `internal_link_edit`：从哪一页链过来（点击最多的那一页）。 */
   link_from?: string
+  /** WP448：`decaying` 的分诊（刷新 / 查询变了 / 该合并 / 该下线）。 */
+  triage?: SeoDecayTriageResult
+  /** WP448：分诊判「该合并」时的那一组（走 `merge` 车道）。 */
+  merge?: SeoCannibalizationGroup
+}
+
+/**
+ * WP448：`decaying` 那一件按分诊改走法——刷新照旧加小节；查询变了改标题与开头；该合并走 `merge` 车道
+ * （保留在涨的那页）；该下线交建站（定一个最相关的页加跳转）。分诊结果原样挂在这一件上（证据数字都在）。
+ */
+function routeDecay(base: PickDraft, triage: SeoDecayTriageResult): PickDraft {
+  const q = base.row.query
+  const pct = Math.abs(base.row.clicks_prev_week === undefined ? 0 : (weekOverWeek(base.row) ?? 0))
+  const head = `点击比上周少了 ${pct}%。`
+  switch (triage.verdict) {
+    case 'refresh':
+      return { ...base, triage }
+    case 'query_shift':
+      return {
+        ...base,
+        fix: 'page_seo_edit',
+        triage,
+        suggestion: `${head}${triage.reason}`,
+      }
+    case 'retire': {
+      const { fix: _fix, ...rest } = base
+      return { ...rest, lane: 'site_handoff', triage, suggestion: `${head}${triage.reason}` }
+    }
+    case 'merge': {
+      const other = triage.evidence.other_page ?? base.row.page
+      const keepClicks = triage.evidence.other_page_clicks ?? 0
+      const kind = pageKindOf(base.row.page)
+      const group: SeoCannibalizationGroup = {
+        key: normalizeQuery(q),
+        severity: 'high',
+        queries: [q],
+        pages: [
+          { url: other, clicks: keepClicks, impressions: 0, position: 0 },
+          {
+            url: base.row.page,
+            clicks: base.row.clicks,
+            impressions: base.row.impressions,
+            position: base.row.position,
+          },
+        ],
+        keep: other,
+        action: kind === 'article' || kind === 'page' ? 'redirect' : 'differentiate',
+        suggestion: `${head}${triage.reason}`,
+      }
+      const { fix: _fix, ...rest } = base
+      return { ...rest, lane: 'merge', triage, merge: group, suggestion: group.suggestion }
+    }
+  }
 }
 
 /**
  * 一次命中 → 车道与建议。`strongPage` 是这批数据里点击最多的那一页（内链从它链出去）。
+ * WP448：给了 `rows`（这批全部行）时，`decaying` 那一件先分诊再定走法（{@link routeDecay}）。
  */
-export function routeHit(hit: SignalHit, strongPage: string | undefined): PickDraft {
+export function routeHit(
+  hit: SignalHit,
+  strongPage: string | undefined,
+  rows?: readonly GscRow[],
+): PickDraft {
+  const routed = routeHitBase(hit, strongPage)
+  if (hit.signal !== 'decaying' || rows === undefined || routed.lane !== 'fix_page') return routed
+  return routeDecay(routed, triageDecay(hit.row, rows))
+}
+
+function routeHitBase(hit: SignalHit, strongPage: string | undefined): PickDraft {
   const { row, page, signal } = hit
   const q = row.query
   const base = { signal, row, ...(page === undefined ? {} : { page }) }
@@ -226,7 +297,7 @@ export function rankDrafts(hits: readonly SignalHit[], rows: readonly GscRow[]):
   const better = (a: PickDraft, b: PickDraft): boolean =>
     SIGNAL_ORDER[a.signal] < SIGNAL_ORDER[b.signal]
   for (const h of hits) {
-    const d = routeHit(h, strong)
+    const d = routeHit(h, strong, rows)
     const k = normalizeQuery(h.row.query)
     const prev = byQuery.get(k)
     if (prev === undefined || better(d, prev)) byQuery.set(k, d)
@@ -241,6 +312,12 @@ export function rankDrafts(hits: readonly SignalHit[], rows: readonly GscRow[]):
   const seen = new Set<string>()
   const out: PickDraft[] = []
   for (const d of sorted) {
+    // WP448：同一对页的「该合并」只出一件
+    if (d.lane === 'merge' && d.merge !== undefined) {
+      const key = `merge|${mergePairKey(d.merge)}`
+      if (seen.has(key)) continue
+      seen.add(key)
+    }
     if (d.lane === 'fix_page' && d.fix !== undefined) {
       const key = `${fixTarget(d)}|${d.fix}`
       if (seen.has(key)) continue
@@ -249,6 +326,14 @@ export function rankDrafts(hits: readonly SignalHit[], rows: readonly GscRow[]):
     out.push(d)
   }
   return out
+}
+
+/** WP448：一组抢词按「哪几页」认（同一对页不管从哪个词来都算同一件）。 */
+export function mergePairKey(g: Pick<SeoCannibalizationGroup, 'pages'>): string {
+  return g.pages
+    .map((p) => pageKey(p.url))
+    .sort()
+    .join('|')
 }
 
 /**
@@ -271,5 +356,7 @@ export function toPick(d: PickDraft, rank: number): SeoPick {
     ...(d.fix === undefined ? {} : { fix: d.fix }),
     ...(d.link_from === undefined ? {} : { link_from: d.link_from }),
     suggestion: d.suggestion,
+    ...(d.triage === undefined ? {} : { triage: d.triage }),
+    ...(d.merge === undefined ? {} : { merge: d.merge }),
   }
 }
