@@ -23,6 +23,7 @@ import type {
   ReasoningEffort,
 } from '@agentsws/contracts'
 import { REASONING_EFFORTS } from '@agentsws/contracts'
+import { promptCacheKeyOf } from '../feature.js'
 import { GatewayError } from '../types.js'
 import { anthropicProviderError } from './anthropic-compatible.js'
 import { type PiAssistantLike, piToolNames, readPiAssistant, toPiContext } from './anthropic-pi.js'
@@ -338,6 +339,8 @@ export function piRouteProvider(options: PiRouteOptions): ModelProvider {
               ? { type: 'function', name: forced }
               : { type: 'function', function: { name: forced } }
       const seed = req.seed
+      // WP473：缓存分组键（工作区 + 职责，或调用方给的段；只发哈希）——OpenAI 本家据此带 `prompt_cache_key`
+      const sessionId = promptCacheKeyOf(req.meta)
       const stream = streamSimple(
         model as never,
         normalizeContext(context as never) as never,
@@ -349,6 +352,7 @@ export function piRouteProvider(options: PiRouteOptions): ModelProvider {
           ...(req.max_output_tokens === undefined ? {} : { maxTokens: req.max_output_tokens }),
           ...(effort === undefined ? {} : { reasoning: effort }),
           ...(toolChoice === undefined ? {} : { toolChoice }),
+          ...(sessionId === undefined ? {} : { sessionId }),
           // 以前这条通道发过的 `seed` 照发（官方协议不管它；只在 Chat Completions 那种上发）
           ...(seed === undefined || api !== 'openai-completions'
             ? {}

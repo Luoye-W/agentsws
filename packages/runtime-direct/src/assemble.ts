@@ -10,6 +10,7 @@ import {
   DRAFT_TOOL_DESCRIPTION,
   MCP_TOOL_DEF_BY_NAME,
   outputToolNames,
+  runStaticPrefixCount,
   STAGE_REFUND_TOOL,
 } from '@agentsws/stand-ins'
 
@@ -91,6 +92,11 @@ export interface DirectPrompt {
   hash: string
   /** 22 §2 缓存纪律：静态前缀字节稳定，两次装配必然相同。 */
   static_prefix_hash: string
+  /**
+   * WP473：静态前缀（岗位说明 + 技能索引 + 登记表）之后打的断点——每次补全都交给网关，
+   * 网关记的前缀指纹只算这几条（后面的上下文每次可能都变）。
+   */
+  cache_breakpoints: number[]
   total_tokens: number
 }
 
@@ -116,11 +122,13 @@ export function assembleDirect(req: RunRequest): DirectPrompt {
   const merged = [...withMcpDefs(base.tools), ...outputToolDefs(req)]
   const rank = new Map(orderTools(merged.map((t) => t.name)).map((n, i) => [n, i]))
   const tools = merged.sort((a, b) => (rank.get(a.name) ?? 0) - (rank.get(b.name) ?? 0))
+  const cache_breakpoints = [Math.min(runStaticPrefixCount(req), base.messages.length)]
   return {
     messages: base.messages,
     tools,
     hash: assemblePromptHash(req),
-    static_prefix_hash: staticPrefixHash(base.messages, tools),
+    static_prefix_hash: staticPrefixHash(base.messages, tools, cache_breakpoints),
+    cache_breakpoints,
     total_tokens: estimateInputTokens(base.messages, tools, 4),
   }
 }

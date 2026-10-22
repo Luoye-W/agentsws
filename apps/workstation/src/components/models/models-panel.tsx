@@ -649,16 +649,34 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   <th className="py-1 text-left font-normal">{t('models.usage.purpose')}</th>
                   <th className="py-1 text-right font-normal">{t('models.usage.calls')}</th>
                   <th className="py-1 text-right font-normal">{t('models.usage.tokens')}</th>
+                  <th className="py-1 text-right font-normal">
+                    <span className="inline-flex items-center justify-end gap-1">
+                      {t('models.usage.cache')}
+                      <Hint text={t('models.usage.cache.hint')} />
+                    </span>
+                  </th>
                   <th className="py-1 text-right font-normal">{t('models.usage.cost')}</th>
                 </tr>
               </thead>
               <tbody>
                 {usage.data.rows.map((row) => (
-                  <tr key={row.purpose} className="border-b border-ws-line last:border-0">
-                    <td className="py-1">{t(`models.purpose.${row.purpose}`)}</td>
+                  <tr
+                    key={`${row.purpose}:${row.feature ?? ''}`}
+                    className="border-b border-ws-line last:border-0"
+                    data-testid="model-usage-row"
+                    data-feature={row.feature}
+                  >
+                    <td className="py-1">
+                      {row.feature === undefined
+                        ? t(`models.purpose.${row.purpose}`)
+                        : t(`models.feature.${row.feature}`)}
+                    </td>
                     <td className="py-1 text-right tabular-nums">{row.calls}</td>
                     <td className="py-1 text-right tabular-nums">
                       {(row.input_tokens + row.output_tokens).toLocaleString()}
+                    </td>
+                    <td className="py-1 text-right tabular-nums" data-testid="model-usage-cache">
+                      {cacheRateText(row)}
                     </td>
                     <td className="py-1 text-right tabular-nums">{row.cost_base.toFixed(4)}</td>
                   </tr>
@@ -683,6 +701,16 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
       </Fold>
     </div>
   )
+}
+
+/**
+ * WP473（docs/116 §6 D）：这一行的输入里有多少命中了缓存——`cached_tokens / input_tokens`，取整到百分之一。
+ * 没有输入（只有向量 / 转写之类）显示「—」。
+ */
+export function cacheRateText(row: { input_tokens: number; cached_tokens: number }): string {
+  if (!(row.input_tokens > 0)) return '—'
+  const ratio = Math.min(Math.max(row.cached_tokens, 0), row.input_tokens) / row.input_tokens
+  return `${Math.round(ratio * 100)}%`
 }
 
 /** 一块：标题（+ 问号 + 个数）在上，内容在下。 */

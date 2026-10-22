@@ -137,7 +137,8 @@ export interface FreeChatOptions {
   /** 官方积分那一条：按这次的用量估多少积分（以云上账单为准）；估不出就 `undefined`。 */
   credits?(
     model: string,
-    usage: { input_tokens: number; output_tokens: number },
+    /** WP473：`cached_tokens` = 这一轮命中缓存的输入（按命中价估）。 */
+    usage: { input_tokens: number; output_tokens: number; cached_tokens?: number },
   ): number | undefined
   /**
    * WP207：找回归档的对话 / 任务（只读）。**这个人有归档的事时**才把 `find_archived_work` 挂给模型；
@@ -1193,12 +1194,15 @@ async function answer(
     purpose: 'free_chat' as const,
     // WP362：用 ChatGPT 订阅答时按人取那个人自己的订阅
     person_id: actor.person_id,
+    // WP473：助理按段分缓存组（同一段每轮开头一样）；只发哈希，见 `promptCacheKeyOf`
+    ...(opts.here === undefined ? {} : { cache_scope: `assistant_segment:${opts.here.seg.id}` }),
   }
 
   let text = ''
   let searches = 0
   const sources: FreeChatSource[] = []
-  const usage = { input_tokens: 0, output_tokens: 0 }
+  // WP473：命中缓存的也记下（官方积分那一条按命中价估，与云上结算同一口径）
+  const usage = { input_tokens: 0, output_tokens: 0, cached_tokens: 0 }
   let stopped = false
   // WP425：这一轮从自己的 AI 切到了工坊积分（第一次切的那一跳带回来；同一轮后面的补全网关直接走工坊积分）
   let switched: ModelSourceSwitch | undefined
@@ -1231,6 +1235,7 @@ async function answer(
         switched = out.source_switch
         sink({ type: 'notice', text: out.source_switch.message })
       }
+      usage.cached_tokens += out.usage.cached_tokens
       usage.input_tokens += out.usage.input_tokens
       usage.output_tokens += out.usage.output_tokens
       cached.tokens += out.usage.cached_tokens ?? 0
@@ -1369,7 +1374,12 @@ async function answer(
     ...(recalled.length === 0 ? {} : { recalled: recalled.map(publicHit) }),
     ...(dispatches.length === 0 ? {} : { dispatches }),
     ...(fanout === undefined ? {} : { fanout }),
-    usage: { ...usage, ...(credits === undefined ? {} : { credits }) },
+    // 给界面的照旧只有输入 / 输出（命中数只拿来估积分）
+    usage: {
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      ...(credits === undefined ? {} : { credits }),
+    },
     ...(sources.length === 0 ? {} : { sources }),
     ...(citations === undefined || citations.length === 0 ? {} : { citations }),
     ...(candidates.length === 0 ? {} : { archived_candidates: candidates }),
@@ -1664,15 +1674,20 @@ async function recallOnce(
 export function chatCredits(
   pricing: { entries: readonly PricingEntry[] } | undefined,
   model: string,
-  usage: { input_tokens: number; output_tokens: number },
+  usage: { input_tokens: number; output_tokens: number; cached_tokens?: number },
 ): number | undefined {
   const entry = pricing?.entries.find((e) => e.capability === 'ai.chat')
   if (entry === undefined) return undefined
   const price = entry.models?.find((m) => m.model === model)
+  // WP473：命中缓存的那部分按命中价（`cached`，没写按 `in`）——与云上扣积分同一个式子，以前一律按全价估高了
+  const cached = Math.min(Math.max(usage.cached_tokens ?? 0, 0), usage.input_tokens)
   // WP364（决策 958）：折扣只是说明，三格单价本身就是实收价——不再乘折扣（与云上结算同一个口径）
   const raw =
     price === undefined
       ? (entry.credits_per_unit * (usage.input_tokens + usage.output_tokens)) / 1000
-      : (usage.input_tokens * price.in + usage.output_tokens * price.out) / 1000
+      : ((usage.input_tokens - cached) * price.in +
+          cached * (price.cached ?? price.in) +
+          usage.output_tokens * price.out) /
+        1000
   return Math.round(raw * 10_000) / 10_000
 }

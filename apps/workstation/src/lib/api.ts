@@ -2723,8 +2723,22 @@ export interface ModelAiSourceView {
   fallback_to_cloud: boolean
 }
 
+/** WP473：「运行」按功能拆开的那一格（服务端 `ModelFeature`）。 */
+export type ModelFeatureName =
+  | 'position_run'
+  | 'support_chat'
+  | 'email_auto_reply'
+  | 'seo'
+  | 'b2b'
+  | 'ads'
+  | 'social'
+  | 'assistant'
+  | 'other'
+
 export interface ModelUsageRow {
   purpose: ModelPurposeName
+  /** WP473：`purpose = run` 的行按功能拆开；别的 purpose 没有这一格。 */
+  feature?: ModelFeatureName
   calls: number
   input_tokens: number
   output_tokens: number

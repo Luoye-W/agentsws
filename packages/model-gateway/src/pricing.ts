@@ -21,14 +21,34 @@ export function priceFor(prices: PriceTable, ref: ModelRef): PriceEntry {
   return entry
 }
 
-/** input_tokens 含 cached_tokens；未命中缓存的部分按 in 计价，命中部分按 cached 计价。 */
+/**
+ * WP473：写进缓存的那部分按输入价的几倍收（Anthropic 官方：5 分钟缓存写入 = 1.25 倍）。
+ * 只有报得出「写了多少」的 provider（Anthropic 兼容口）才给 `cache_write_tokens`，别家不受影响。
+ */
+export const CACHE_WRITE_MULTIPLIER = 1.25
+
+/**
+ * input_tokens 含 cached_tokens（命中）与 cache_write_tokens（写缓存）；
+ * 命中部分按 cached 计价，写缓存部分按 in × {@link CACHE_WRITE_MULTIPLIER}，其余按 in。
+ */
 export function costOf(
   price: PriceEntry,
-  usage: Pick<CompletionUsage, 'input_tokens' | 'output_tokens' | 'cached_tokens'>,
+  usage: Pick<CompletionUsage, 'input_tokens' | 'output_tokens' | 'cached_tokens'> &
+    Partial<Pick<CompletionUsage, 'cache_write_tokens'>>,
 ): number {
-  const cached = Math.min(usage.cached_tokens, usage.input_tokens)
-  const fresh = Math.max(usage.input_tokens - cached, 0)
-  return (fresh * price.in + cached * price.cached + usage.output_tokens * price.out) / 1_000_000
+  const cached = Math.min(Math.max(usage.cached_tokens, 0), usage.input_tokens)
+  const written = Math.min(
+    Math.max(usage.cache_write_tokens ?? 0, 0),
+    Math.max(usage.input_tokens - cached, 0),
+  )
+  const fresh = Math.max(usage.input_tokens - cached - written, 0)
+  return (
+    (fresh * price.in +
+      written * price.in * CACHE_WRITE_MULTIPLIER +
+      cached * price.cached +
+      usage.output_tokens * price.out) /
+    1_000_000
+  )
 }
 
 export function estimateInputTokens(

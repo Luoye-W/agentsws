@@ -24,6 +24,7 @@ import type {
 } from '@agentsws/contracts'
 import { NO_VISION_REASON } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
+import { featureOf } from './feature.js'
 import { unavailableImageProvider } from './images.js'
 import type { BudgetCtx, CapSpec, Reservation } from './ledger.js'
 import { BudgetLedger } from './ledger.js'
@@ -286,6 +287,8 @@ class Gateway implements ModelGatewayApi {
     audio?: TranscriptionAudioDigest,
     netRetries?: ProviderNetTry[],
   ): void {
+    // WP473：哪个功能在用（用量页把「运行」按它拆开；显式给的优先，没给按 purpose / run_id 认）
+    const feature = featureOf(meta)
     this.usageRecords.push({
       at,
       workspace_id: meta.workspace_id,
@@ -298,6 +301,7 @@ class Gateway implements ModelGatewayApi {
       output_tokens: usage.output_tokens,
       cached_tokens: usage.cached_tokens,
       cost_base: usage.cost_base,
+      feature,
     })
     const payload: ModelUsagePayload = {
       model,
@@ -310,6 +314,10 @@ class Gateway implements ModelGatewayApi {
       cost_base: usage.cost_base,
       static_prefix_hash: staticPrefix,
       duration_ms: durationMs,
+      feature,
+      ...(usage.cache_write_tokens === undefined || usage.cache_write_tokens === 0
+        ? {}
+        : { cache_write_tokens: usage.cache_write_tokens }),
       // 21 §1「秘密从不进」的音频版：只记摘要，字节与转写正文永不进事件日志
       ...(audio === undefined ? {} : { audio }),
       // WP243：成了之前重发过——也记下来（「重发要看得见」）
@@ -719,6 +727,10 @@ class Gateway implements ModelGatewayApi {
             output_tokens: raw.usage.output_tokens,
             cached_tokens: raw.usage.cached_tokens,
             cost_base: costOf(priceFor(this.opts.policy.prices, ref), raw.usage),
+            // WP473：写缓存那部分（Anthropic 系）照带，记进用量
+            ...(raw.usage.cache_write_tokens === undefined || raw.usage.cache_write_tokens === 0
+              ? {}
+              : { cache_write_tokens: raw.usage.cache_write_tokens }),
           }
           this.ledger.settle(reservation, usage.cost_base)
           this.record(
