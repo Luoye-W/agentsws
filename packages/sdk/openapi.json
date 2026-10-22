@@ -59586,6 +59586,17 @@
                         "type": "boolean"
                       }
                     }
+                  },
+                  "alert": {
+                    "type": "object",
+                    "properties": {
+                      "inbox": {
+                        "type": "boolean"
+                      },
+                      "system": {
+                        "type": "boolean"
+                      }
+                    }
                   }
                 }
               }

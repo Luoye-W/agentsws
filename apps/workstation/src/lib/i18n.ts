@@ -596,9 +596,7 @@ const zh: Table = {
   'nav.settings': '设置',
   'home.queue': '今日卡片队列',
   'home.queue.empty': '队列清空了。今天没有需要你决定的事。',
-  'home.alerts': '告警',
   // ── WP96：只有要人决定的才是卡；这两样改成面板块 ─────────────────────
-  'panel.alerts.hint': '不用你决定，看见就行；要处理的那一步会另出一张卡',
   'panel.reports': '报表',
   'panel.reports.hint': '日报、报告与上线检查单 · 看完即过，没有要批的东西',
   'home.digest': '每日摘要',
@@ -4999,9 +4997,7 @@ const en: Table = {
   'nav.settings': 'Settings',
   'home.queue': "Today's cards",
   'home.queue.empty': 'Queue is clear. Nothing needs you today.',
-  'home.alerts': 'Alerts',
   // ── WP96: only decisions are cards; these two became panel blocks ────
-  'panel.alerts.hint': 'Nothing to decide — the follow-up action gets its own card',
   'panel.reports': 'Reports',
   'panel.reports.hint': 'Daily reports, reports and launch checklists · read and move on',
   'home.digest': 'Daily digest',

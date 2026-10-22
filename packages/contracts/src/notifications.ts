@@ -22,6 +22,11 @@ export type NotificationCategory =
   | 'outbound'
   /** WP441（docs/108 §5.6）：消息规则「告诉我一声」、今天的简报。 */
   | 'messages'
+  /**
+   * WP466（决策 1311）：原来首页告警区那几样（店铺日报异常、广告改动、改版回归、目标市场校正、
+   * 退役模型换了……）——服务端 `system_alert` 系统卡，现在每张一条进铃铛。
+   */
+  | 'alert'
 
 export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'team',
@@ -31,6 +36,7 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'update',
   'outbound',
   'messages',
+  'alert',
 ]
 
 /** 保留多少天（按最后一次更新算）。 */
@@ -58,6 +64,10 @@ export interface InboxNotification {
   read_at?: Iso8601
   /** 这一条要不要同时弹系统通知（来的那一刻按本人设置算好）。 */
   system: boolean
+  /**
+   * WP466：紧急档（店铺日报异常、改版回归·严重……）。没读时排在最上面、红点；没有这一格 = 普通。
+   */
+  urgent?: boolean
 }
 
 /** 发一条通知要给的东西。 */
@@ -69,6 +79,8 @@ export interface NotificationInput {
   href?: string
   /** 同一件事的键（不给 = 每次都是新的一条）。 */
   key?: string
+  /** WP466：紧急档（见 {@link InboxNotification.urgent}）。 */
+  urgent?: boolean
 }
 
 /** 一类通知的两个开关。 */
@@ -83,7 +95,7 @@ export type NotificationPrefs = Record<NotificationCategory, NotificationChannel
 
 /**
  * 默认：站内全开；系统通知只开「有人等你 / 东西坏了」的几类——同事、连接、积分。
- * 任务跑完、岗位更新只进铃铛（不打扰）。
+ * 任务跑完、岗位更新只进铃铛（不打扰）。告警这一类「系统」开着也只弹紧急档的那几条。
  */
 export const DEFAULT_NOTIFICATION_PREFS: Readonly<NotificationPrefs> = {
   team: { inbox: true, system: true },
@@ -95,6 +107,8 @@ export const DEFAULT_NOTIFICATION_PREFS: Readonly<NotificationPrefs> = {
   outbound: { inbox: true, system: true },
   // WP441：消息规则的「告诉我一声」与简报——默认只进铃铛，不弹系统通知
   messages: { inbox: true, system: false },
+  // WP466：告警——系统通知只弹紧急档的（店铺日报异常、改版回归·严重）；普通的只进铃铛
+  alert: { inbox: true, system: true },
 }
 
 /** 合并默认值与人改过的（缺的类别用默认；站内关了系统也算关）。 */

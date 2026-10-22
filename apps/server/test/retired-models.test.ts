@@ -245,7 +245,7 @@ describe('WP294 · 提醒那一行', () => {
   })
 })
 
-describe('WP294 · 真服务进程：重启后首页告警区出这一行', () => {
+describe('WP294 · 真服务进程：重启后出这一行（WP466 起在铃铛里）', () => {
   it('老用户存着 gpt-5.4 → 重启 → 首页一行；自己改了模型就退场', async () => {
     const dir = tempDir()
     const boot = () =>
@@ -302,10 +302,41 @@ describe('WP294 · 真服务进程：重启后首页告警区出这一行', () =
     expect(got.map((a) => a.title)).toEqual(['ChatGPT 订阅的 gpt-5.4 停用了，已换成 gpt-5.5'])
     expect(got[0]?.detail.payload.open_path).toBe('/settings?tab=models')
 
+    // WP466：首页不再单出告警区——同一行在铃铛里（告警一类、普通档，点了去设置页模型那一块）
+    type Bell = {
+      items: {
+        category: string
+        text: string
+        href?: string
+        urgent?: boolean
+        read_at?: string
+        system: boolean
+      }[]
+      unread: number
+    }
+    const bell = async (view: 'unread' | 'all') =>
+      (await call('GET', `/v1/notifications?view=${view}`)).json.data as unknown as Bell
+    const rung = (await bell('unread')).items.filter((n) => n.category === 'alert')
+    expect(rung).toEqual([
+      expect.objectContaining({
+        text: 'ChatGPT 订阅的 gpt-5.4 停用了，已换成 gpt-5.5',
+        href: '/settings?tab=models',
+        system: false,
+      }),
+    ])
+    expect(rung[0]?.urgent).toBeUndefined()
+    // 再问一次不加一条、不加计数
+    expect((await bell('unread')).items.filter((n) => n.category === 'alert')).toHaveLength(1)
+
     const picked = await call('PUT', '/v1/settings/models/subscription/openai-codex/model', {
       model: 'gpt-5.6-sol',
     })
     expect(picked.status).toBe(200)
     expect(await alerts()).toEqual([])
+    // 卡退场了：铃铛那条收成已读（「全部」里还在）
+    expect((await bell('unread')).items.filter((n) => n.category === 'alert')).toEqual([])
+    const after = (await bell('all')).items.filter((n) => n.category === 'alert')
+    expect(after).toHaveLength(1)
+    expect(after[0]?.read_at).toBeDefined()
   })
 })

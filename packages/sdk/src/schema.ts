@@ -52679,6 +52679,10 @@ export interface operations {
             inbox?: boolean
             system?: boolean
           }
+          alert?: {
+            inbox?: boolean
+            system?: boolean
+          }
         }
       }
     }

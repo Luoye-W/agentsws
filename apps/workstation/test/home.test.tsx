@@ -96,6 +96,8 @@ const overview = (range: string): ReportsOverview => ({
   ],
 })
 
+/** WP466：接口里照旧带着系统卡（原首页告警区）——首页不该把它们画出来。 */
+const homeAlerts: { cards: ReturnType<typeof draftCard>[] } = { cards: [] }
 const getHome = vi.fn(async () =>
   homeData({
     queue: [
@@ -104,6 +106,7 @@ const getHome = vi.fn(async () =>
       draftCard({ id: 'c', title: '第三件' }),
       draftCard({ id: 'd', title: '第四件' }),
     ],
+    alerts: homeAlerts.cards,
   }),
 )
 const getReportsOverview = vi.fn(async (range: string) => overview(range))
@@ -191,6 +194,29 @@ describe('WP438 首页四块（决策 1332）', () => {
       'queue',
     ])
       expect(screen.queryByTestId(id), id).toBeNull()
+  })
+
+  it('WP466（决策 1311）：首页没有单独的告警区——系统卡在右上铃铛里，「要你定」也不收它', async () => {
+    homeAlerts.cards = [
+      draftCard({
+        id: 'al_store',
+        kind: 'system_alert',
+        layout: 'aftermath',
+        priority_band: 'P2',
+        title: '昨天销售额比前一天掉了 90%',
+      }),
+    ]
+    try {
+      renderWithProviders(<HomePage />)
+      const box = await screen.findByTestId('home-decide')
+      await screen.findAllByTestId('home-key-card')
+      expect(screen.queryByTestId('alerts')).toBeNull()
+      expect(screen.queryByTestId('alert-block')).toBeNull()
+      expect(box.textContent).not.toContain('掉了 90%')
+      expect(document.body.textContent).not.toContain('掉了 90%')
+    } finally {
+      homeAlerts.cards = []
+    }
   })
 
   it('要你定：最多 3 条，每条一行带「看看」；右上「全部」去待办', async () => {

@@ -9,9 +9,11 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { SitePage } from '@agentsws/contracts'
+import type { PersonId, SitePage, WorkspaceId } from '@agentsws/contracts'
+import type { DeckCard } from '@agentsws/deck'
 import { renderSiteHealthAnswer } from '@agentsws/stand-ins'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { alertNotificationOf } from '../src/alert-notifications.js'
 import { driftAlertCards } from '../src/seo-drift-alerts.js'
 import { createSiteHealthService, type SiteHealthServiceOptions } from '../src/site-health.js'
 import { siteHealthQueryData } from '../src/site-health-tools.js'
@@ -266,6 +268,13 @@ describe('WP448 改版回归（服务端）', () => {
     expect((cards[0]?.detail.payload as Record<string, unknown> | undefined)?.open_path).toBe(
       '/matters/mat_1',
     )
+    // int/1026（WP466）：这张真出的卡进铃铛就是一条「告警」·紧急，点了去交给建站的那件事
+    expect(
+      alertNotificationOf(cards[0] as DeckCard, {
+        workspace_id: 'ws_1' as WorkspaceId,
+        person_id: 'p_seo' as PersonId,
+      }),
+    ).toMatchObject({ category: 'alert', urgent: true, href: '/matters/mat_1' })
     // 没担这两条的人看不到；7 天后自己消失
     expect(driftAlertCards({ view, now: '2026-10-23T11:00:00.000Z' })).toEqual([])
     expect(

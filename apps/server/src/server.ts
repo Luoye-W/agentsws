@@ -4976,7 +4976,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       googleReads.invalidate()
     })
     /*
-     * WP169：店铺校正改了目标市场 → 给工作区所有者的那条通知（首页告警区一行，点开到设置页
+     * WP169：店铺校正改了目标市场 → 给工作区所有者的那条通知（WP466 起铃铛里一条、原首页告警区，点开到设置页
      * 公司档案）。照 36 §2.2b「`system_alert` → 通知 + 告警块」那条现成的路走，不是卡。
      */
     const storeMarketsNotices = createStoreMarketsNotices({
@@ -4985,7 +4985,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     /*
      * WP294（决策 375）：ChatGPT 订阅存着的退役模型（gpt-5.4 / gpt-5.4-mini）启动时换成了 gpt-5.5 →
-     * 首页告警区一行（照 WP169 同一条路，不是卡）。两处来源：本人的订阅选择（按人）、这个品牌
+     * 铃铛里一条（WP466，原首页告警区；照 WP169 同一条路，不是卡）。两处来源：本人的订阅选择（按人）、这个品牌
      * 模型设置里那条订阅（大家共用，谁打开都看得到）；同一对「从 → 到」只出一行。
      * 模型装配在下面才建好，这里先占位、建好后填上。
      */
@@ -5058,7 +5058,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     /** WP238：取数路由走得通哪一级（云客户端在下面才建好，这里先占位、建好后填上）。 */
     const readLevelHolder: { of?: (route: string) => DataSourceLevel | undefined } = {}
-    /** WP418：日报装配比 `workData` 晚一步建（它要 `workData` 取面板），告警区只同步看一眼。 */
+    /** WP418：日报装配比 `workData` 晚一步建（它要 `workData` 取面板），告警（铃铛同步那一下）只同步看一眼。 */
     let storeDigestRef: StoreDigest | undefined
     const workData: WorkstationDataSource = {
       ...baseWorkData,
@@ -10950,7 +10950,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP429：演示世界里铃铛里放几条（截图看得出样子）
   if (mount !== undefined) {
     const owner = (await identity.getWorkspace(workspace.id))?.owner_id
-    if (owner !== undefined) seedDemoNotifications(notifications, workspace.id, owner, clock.now())
+    if (owner !== undefined) {
+      // WP466：铃铛里那条演示用的店铺日报异常，点了去店铺管理的职责页
+      const store = roles.assignments
+        .listByPerson(owner, { workspace_id: workspace.id })
+        .find((a) => a.revoked_at === undefined && a.role_id === 'dtc.store')
+      seedDemoNotifications(notifications, workspace.id, owner, clock.now(), {
+        ...(store === undefined
+          ? {}
+          : { store: `/positions/${encodeURIComponent(store.id)}/duties/dtc.store` }),
+      })
+    }
   }
   if (mount !== undefined) {
     seedDemoKol(boot.kol, clock.now())

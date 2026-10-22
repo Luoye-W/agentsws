@@ -1,5 +1,5 @@
 /**
- * WP316：广告改动要人知道 / 要人点的那几件，进首页告警区（`system_alert` → 通知 + 告警块，36 §2.2b）。
+ * WP316：广告改动要人知道 / 要人点的那几件，出一张系统卡（`system_alert`，36 §2.2b）；WP466 起每张在铃铛里一条。
  *
  * - **等你确认**：平台预览好了（插件横条上也有同一对按钮）；
  * - **退回 / 交给你 / 读回对不上**：24 小时内的，说一句、点「去处理」到职责页那一块（截图、平台原话、撤销都在那里）。
@@ -64,7 +64,14 @@ export function adsNoticeCards(input: {
       available_actions: actions,
       action_labels: labelsFor('system_alert', actions),
       detail: {
-        payload: { kind: 'ads_change', change_id: row.change_id, open_path: where.href },
+        payload: {
+          kind: 'ads_change',
+          change_id: row.change_id,
+          open_path: where.href,
+          // WP466：铃铛按这两格分紧急档（没做成 / 读回对不上 / 等你确认）
+          state: row.state,
+          ...(readbackBad ? { readback_ok: false } : {}),
+        },
         precheck: {},
         citations: [],
         links: { children: [] },
