@@ -17,6 +17,7 @@ import { legalDocumentUrl, passwordStrength } from '@agentsws/contracts'
 import { AlertCircle, Eye, EyeOff, Loader2, MailCheck } from 'lucide-react'
 import { type FormEvent, useId, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
+import { Segmented } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -297,7 +298,7 @@ export function CloudAuthForm({
   const legal = (doc: 'terms' | 'privacy') => (
     <button
       type="button"
-      className="text-primary underline-offset-2 hover:underline"
+      className="ws-link"
       data-testid={`${p}-${doc}`}
       onClick={() => {
         openExternal(legalDocumentUrl(doc, locale))
@@ -307,31 +308,23 @@ export function CloudAuthForm({
     </button>
   )
 
-  const pill = (on: boolean) =>
-    cn(
-      'rounded-full border px-2.5 py-0.5 text-xs',
-      on ? 'border-primary text-foreground' : 'text-ws-muted-fg',
-    )
-
   return (
     <div className="flex flex-col gap-2" data-testid={`${p}-auth`} data-tab={tab} data-step={step}>
-      <div className={cn('flex flex-wrap gap-1.5', refresh && 'hidden')} role="tablist">
-        {(['signup', 'login'] as const).map((k) => (
-          <button
-            key={k}
-            type="button"
-            role="tab"
-            aria-selected={tab === k}
-            data-testid={`${p}-tab-${k}`}
-            className={pill(tab === k)}
-            onClick={() => {
-              switchTab(k)
-            }}
-          >
-            {t(`cauth.tab.${k}`)}
-          </button>
-        ))}
-      </div>
+      {/* WP456-T6（§2.6 第 11 条）：「注册新账号 / 已有账号，登录」换成全站那一种分段切换 */}
+      <Segmented
+        kind="tabs"
+        label={t('cauth.tab.label')}
+        className={cn('self-start', refresh && 'hidden')}
+        value={tab}
+        options={(['signup', 'login'] as const).map((k) => ({
+          value: k,
+          label: t(`cauth.tab.${k}`),
+          testId: `${p}-tab-${k}`,
+        }))}
+        onChange={(k) => {
+          switchTab(k)
+        }}
+      />
 
       {step === 'code' ? (
         <form className="flex flex-col gap-2" onSubmit={onCode} data-testid={`${p}-code-form`}>

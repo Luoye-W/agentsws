@@ -6,8 +6,11 @@
  *
  * WP235：只出现在「你们的岗位」上，作用在**真在做的那几条职责**上（模板只算有人做的），
  * 目标也只列「你们的岗位」。合并时可以给合并后的岗位起名（预填按职责建议，如「Reddit 运营」）。
+ *
+ * WP456-T6（WP456 §3.8）：设置 → 岗位与职责里这三个入口进了岗位行的「⋯」——那边给 `mode` + `onModeChange`
+ * （受控），这里就不画自己那一排按钮，只画选中那一种的小表单。
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PickToggle } from '@/components/onboarding/pick-toggle'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
@@ -17,9 +20,22 @@ import type { OrgPositionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { dutiesInUse, suggestMergedName } from '@/lib/org-positions'
 
-type Mode = 'merge' | 'split' | 'move'
+export type ReshapeMode = 'merge' | 'split' | 'move'
+type Mode = ReshapeMode
 
 const SELECT = 'h-8 rounded-md border bg-background px-2 text-sm'
+/** 三张小表单的底：浅灰内块（不加边框）。 */
+const FORM = 'rounded-lg bg-ws-surface p-3'
+
+/** 这个岗位能做哪几样（只有底座职责的「普通成员」没东西可并；少于两条拆不了）。 */
+export function reshapeModes(position: OrgPositionView, others: OrgPositionView[]): ReshapeMode[] {
+  const duties = dutiesInUse(position)
+  const out: ReshapeMode[] = []
+  if (others.length > 0 && duties.length > 0) out.push('merge')
+  if (duties.length >= 2) out.push('split')
+  if (others.length > 0 && duties.length > 0) out.push('move')
+  return out
+}
 
 export function PositionReshape({
   position,
@@ -28,6 +44,8 @@ export function PositionReshape({
   onMerge,
   onMoveDuty,
   onSplit,
+  mode: controlled,
+  onModeChange,
 }: {
   position: OrgPositionView
   /** 能合并 / 移过去的别的岗位（WP235：只是「你们的岗位」，不含它自己）。 */
@@ -37,9 +55,18 @@ export function PositionReshape({
   onMerge(into: string, name: string): void
   onMoveDuty(role_id: string, to: string): void
   onSplit(input: { name: string; role_ids: string[] }): void
+  /** WP456-T6：受控——入口在外面（「⋯」里），这里只画表单。 */
+  mode?: ReshapeMode | undefined
+  onModeChange?(mode: ReshapeMode | undefined): void
 }): React.ReactNode {
   const { t, lang } = useApp()
-  const [mode, setMode] = useState<Mode | undefined>(undefined)
+  const [own, setOwn] = useState<Mode | undefined>(undefined)
+  const isControlled = onModeChange !== undefined
+  const mode = isControlled ? controlled : own
+  const setMode = (next: Mode | undefined): void => {
+    if (isControlled) onModeChange(next)
+    else setOwn(next)
+  }
   const [target, setTarget] = useState('')
   const [duty, setDuty] = useState('')
   const [name, setName] = useState('')
@@ -49,70 +76,80 @@ export function PositionReshape({
     const into = others.find((o) => o.id === id)
     return into === undefined ? '' : suggestMergedName(position, into, lang === 'en' ? 'en' : 'zh')
   }
-  const open = (next: Mode): void => {
-    setMode(mode === next ? undefined : next)
+  const reset = (next: Mode | undefined): void => {
     const first = others[0]?.id ?? ''
     setTarget(first)
     setDuty(duties[0]?.role_id ?? '')
     setName(next === 'merge' ? suggest(first) : '')
     setPicked([])
   }
+  const open = (next: Mode): void => {
+    setMode(mode === next ? undefined : next)
+    reset(next)
+  }
+  // 受控时入口在外面：换了一种就把表单清成那一种的预填
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在外面换了模式时重填，别的变化不该冲掉正在填的
+  useEffect(() => {
+    if (isControlled) reset(controlled)
+  }, [controlled, isControlled])
   const done = (): void => {
     setMode(undefined)
   }
 
   return (
     <div className="flex flex-col gap-2" data-testid="position-reshape">
-      <div className="flex flex-wrap items-center gap-1">
-        {/* 只有底座职责的岗位（「普通成员」）没东西可并 */}
-        {others.length === 0 || duties.length === 0 ? null : (
-          <Button
-            size="xs"
-            variant="ghost"
-            data-testid="position-merge"
-            aria-expanded={mode === 'merge'}
-            onClick={() => {
-              open('merge')
-            }}
-          >
-            {t('org.positions.merge')}
-          </Button>
-        )}
-        {duties.length < 2 ? null : (
-          <Button
-            size="xs"
-            variant="ghost"
-            data-testid="position-split"
-            aria-expanded={mode === 'split'}
-            onClick={() => {
-              open('split')
-            }}
-          >
-            {t('org.positions.split')}
-          </Button>
-        )}
-        {others.length === 0 || duties.length === 0 ? null : (
-          <Button
-            size="xs"
-            variant="ghost"
-            data-testid="position-move"
-            aria-expanded={mode === 'move'}
-            onClick={() => {
-              open('move')
-            }}
-          >
-            {t('org.positions.move')}
-          </Button>
-        )}
-        <Hint text={t('org.positions.reshape.hint')} />
-      </div>
+      {isControlled ? null : (
+        <div className="flex flex-wrap items-center gap-1">
+          {/* 只有底座职责的岗位（「普通成员」）没东西可并 */}
+          {others.length === 0 || duties.length === 0 ? null : (
+            <Button
+              size="xs"
+              variant="ghost"
+              data-testid="position-merge"
+              aria-expanded={mode === 'merge'}
+              onClick={() => {
+                open('merge')
+              }}
+            >
+              {t('org.positions.merge')}
+            </Button>
+          )}
+          {duties.length < 2 ? null : (
+            <Button
+              size="xs"
+              variant="ghost"
+              data-testid="position-split"
+              aria-expanded={mode === 'split'}
+              onClick={() => {
+                open('split')
+              }}
+            >
+              {t('org.positions.split')}
+            </Button>
+          )}
+          {others.length === 0 || duties.length === 0 ? null : (
+            <Button
+              size="xs"
+              variant="ghost"
+              data-testid="position-move"
+              aria-expanded={mode === 'move'}
+              onClick={() => {
+                open('move')
+              }}
+            >
+              {t('org.positions.move')}
+            </Button>
+          )}
+          <Hint text={t('org.positions.reshape.hint')} />
+        </div>
+      )}
 
       {mode === 'merge' ? (
         <div
-          className="flex flex-wrap items-center gap-2 rounded-md border p-2"
+          className={`flex flex-wrap items-center gap-2 ${FORM}`}
           data-testid="position-merge-form"
         >
-          <span className="text-xs text-muted-foreground">{t('org.positions.merge.into')}</span>
+          <span className="text-xs text-ws-muted-fg">{t('org.positions.merge.into')}</span>
           <select
             aria-label={t('org.positions.merge.into')}
             data-testid="position-merge-target"
@@ -155,10 +192,7 @@ export function PositionReshape({
       ) : null}
 
       {mode === 'split' ? (
-        <div
-          className="flex flex-col gap-2 rounded-md border p-2"
-          data-testid="position-split-form"
-        >
+        <div className={`flex flex-col gap-2 ${FORM}`} data-testid="position-split-form">
           <Input
             aria-label={t('org.positions.split.name')}
             placeholder={t('org.positions.split.name')}
@@ -211,7 +245,7 @@ export function PositionReshape({
 
       {mode === 'move' ? (
         <div
-          className="flex flex-wrap items-center gap-2 rounded-md border p-2"
+          className={`flex flex-wrap items-center gap-2 ${FORM}`}
           data-testid="position-move-form"
         >
           <select
@@ -229,7 +263,7 @@ export function PositionReshape({
               </option>
             ))}
           </select>
-          <span className="text-xs text-muted-foreground">→</span>
+          <span className="text-xs text-ws-muted-fg">→</span>
           <select
             aria-label={t('org.positions.move.to')}
             data-testid="position-move-target"

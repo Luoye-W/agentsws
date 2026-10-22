@@ -16,7 +16,12 @@ import type {
   MessageSuggest,
   MessageTriage,
 } from '@agentsws/contracts'
-import { MESSAGE_KINDS, NOTICE_KINDS } from '@agentsws/contracts'
+import {
+  MESSAGE_GUESS_FLOOR,
+  MESSAGE_GUESS_SURE,
+  MESSAGE_KINDS,
+  NOTICE_KINDS,
+} from '@agentsws/contracts'
 
 /** 认得这个值吗（模型回的、入参带的都先过它）。 */
 export function isMessageKind(value: unknown): value is MessageKind {
@@ -128,4 +133,52 @@ export function suggestFor(
   if (input.kind === 'billing_system' && input.needs_reply) return { action: 'self' }
   if (isNoticeKind(input.kind)) return { action: 'notice' }
   return { action: 'self' }
+}
+
+/**
+ * WP459（决策 1498）：**AI 猜得出岗位就直接交过去**。
+ *
+ * 模型分拣的一封要回的信，AI 头号建议是「交给 X」（同 {@link suggestFor}，X 得开着）且把握不低于
+ * {@link MESSAGE_GUESS_FLOOR}：
+ * - X 是客服 / 红人 / B2B（63 那三条路）→ `route` 改成那条路（照常交接）；
+ * - 其余岗位 → `route` 留 `inbox`，`suggested_position` = X，由服务进程走「交给这个岗位一件事」；
+ * - 两种都记 `ai_hand`；把握不到 {@link MESSAGE_GUESS_SURE} 的标 `guessed`（界面「AI 猜的 · 改」）。
+ *
+ * 不动的：规则层判的（线程归并、发件人规则、消息规则、自动信头——那些本来就有主）、急停只跑了规则的、
+ * 不用回的、AI 建议「我自己回 / 只是通知」的（只能本人定）、把握太低的（猜不出）。纯函数。
+ */
+export function withAiHand(
+  triage: MessageTriage,
+  positions: readonly MessagePositionOption[],
+): MessageTriage {
+  if (triage.by !== 'model' || triage.route !== 'inbox' || !triage.needs_reply) return triage
+  if (triage.ai_hand !== undefined || triage.rule_route !== undefined) return triage
+  if (triage.kind_by === 'sender_rule' || triage.kind_by === 'user') return triage
+  const kind = kindOfLegacy(triage, triage.labels, triage.route)
+  const confidence = Math.max(0, Math.min(1, triage.kind_confidence ?? triage.confidence))
+  if (confidence < MESSAGE_GUESS_FLOOR) return triage
+  const s = suggestFor(
+    {
+      kind: kind.kind,
+      needs_reply: triage.needs_reply,
+      suggested_position: triage.suggested_position,
+      suggested_route: triage.suggested_route,
+    },
+    positions,
+  )
+  if (s.action !== 'hand' || s.position === undefined) return triage
+  const guessed = confidence < MESSAGE_GUESS_SURE
+  const ai_hand = { position_id: s.position, confidence, guessed }
+  const route = routeOfPosition(s.position)
+  const note = guessed
+    ? `AI 猜的：交给 ${s.position}（把握 ${Math.round(confidence * 100)}%）`
+    : `AI 交给 ${s.position}`
+  const { suggested_route: _r, ...rest } = triage
+  if (route !== undefined) return { ...rest, route, ai_hand, reasons: [...triage.reasons, note] }
+  return {
+    ...rest,
+    suggested_position: s.position,
+    ai_hand,
+    reasons: [...triage.reasons, note],
+  }
 }

@@ -21,6 +21,7 @@ import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 
 import { openExternal } from '@/components/connections/bridge'
 // WP60（49 §6 / 48 L7）：在线值守的切档向导（这一档底下那一格）
 import { StandbyWizard } from '@/components/connections/standby-wizard'
+import { Segmented } from '@/components/design'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -235,38 +236,39 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
         </dl>
       )}
 
-      {/* 三个按钮 */}
-      <fieldset className="mt-3 flex flex-wrap gap-2 border-0 p-0">
-        <legend className="sr-only">{t('storage.title')}</legend>
-        {(
+      {/* 三个按钮——WP456-T6（§2.6 第 11 条）：全站那一种分段切换（原来是主按钮 / 描边按钮轮换） */}
+      <Segmented
+        className="mt-3"
+        label={t('storage.title')}
+        value={selected}
+        options={(
           [
             { id: 'local', icon: HardDrive, label: t('storage.tier.local') },
             { id: 'byo_cloud', icon: Cloud, label: t('storage.tier.byo') },
             { id: 'managed', icon: Server, label: t('storage.tier.managed') },
           ] as const
-        ).map(({ id, icon: Icon, label }) => (
-          <Button
-            key={id}
-            type="button"
-            size="sm"
-            variant={selected === id ? 'default' : 'outline'}
-            data-testid={`storage-tier-${id}`}
-            aria-pressed={selected === id}
-            onClick={() => {
-              setChoice(id)
-              setTestResult(null)
-              setSaved(null)
-              setError(null)
-            }}
-          >
-            <Icon className="mr-1.5 size-3.5" aria-hidden />
-            {label}
-            {active === id ? (
-              <span className="ml-1.5 text-xs opacity-80">{t('storage.in_use')}</span>
-            ) : null}
-          </Button>
-        ))}
-      </fieldset>
+        ).map(({ id, icon: Icon, label }) => ({
+          value: id,
+          // 「正在用」是中文：不用计数那一档（11 只给数字），12 号灰字跟在后面
+          label:
+            active === id ? (
+              <>
+                {label}
+                <span className="text-xs text-ws-faint">{t('storage.in_use')}</span>
+              </>
+            ) : (
+              label
+            ),
+          icon: <Icon className="size-3.5" aria-hidden />,
+          testId: `storage-tier-${id}`,
+        }))}
+        onChange={(id) => {
+          setChoice(id)
+          setTestResult(null)
+          setSaved(null)
+          setError(null)
+        }}
+      />
 
       {/* WP43 ③：原来一整段「数据在哪、人多了怎么办」压成一行，其余进问号 */}
       {selected === 'local' ? (

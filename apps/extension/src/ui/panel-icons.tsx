@@ -1,6 +1,6 @@
 /**
  * WP413：侧边栏用的几个小图标（内联 SVG，`currentColor`；不引图标库——插件包要小、不远程加载任何东西）。
- * 形状照工作台用的 lucide 那几个画（勾 / 钟 / 叹号 / 叉 / 外链 / 齿轮 / 收件箱 / 笔）。
+ * 形状照工作台用的 lucide 那几个画（勾 / 钟 / 叹号 / 叉 / 外链 / 齿轮 / 收件箱 / 笔 / 提示 / 箭头）；笔画 1.75（WP456 §2.6 第 12 条）。
  */
 type P = { className?: string }
 
@@ -10,7 +10,7 @@ const Svg = (props: P & { children: React.ReactNode }): React.ReactNode => (
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="2"
+    strokeWidth="1.75"
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
@@ -76,5 +76,27 @@ export const IconPen = (p: P): React.ReactNode => (
   <Svg {...p}>
     <path d="M12 20h9" />
     <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+  </Svg>
+)
+
+/** WP456-T7：一行提醒里的「提示」图标。 */
+export const IconInfo = (p: P): React.ReactNode => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 16v-4M12 8h.01" />
+  </Svg>
+)
+
+/** WP456-T7：整行可点时右边那个「›」。 */
+export const IconRight = (p: P): React.ReactNode => (
+  <Svg {...p}>
+    <path d="m9 18 6-6-6-6" />
+  </Svg>
+)
+
+/** WP456-T7：展开的那一张卡头右边的「⌄」（点了收起）。 */
+export const IconUp = (p: P): React.ReactNode => (
+  <Svg {...p}>
+    <path d="m18 15-6-6-6 6" />
   </Svg>
 )

@@ -211,7 +211,7 @@ function filtersOf(c: { req: { query(name: string): string | undefined } }): Dec
  * 一个工作区一天不会有两万条这四类事件；真到那个量级，多出来的只会让四个数偏小，
  * 不会算错别的东西。
  */
-async function todaysReport(
+export async function todaysReport(
   deps: GatewayDeps,
   workspace_id: string,
   tz_offset_minutes: number,

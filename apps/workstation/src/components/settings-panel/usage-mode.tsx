@@ -101,10 +101,9 @@ export function UsageModePicker(): ReactNode {
               data-mode={m}
               data-current={current}
               className={cn(
-                'flex min-h-36 flex-col justify-between gap-4 rounded-xl border p-4 transition-colors',
-                current
-                  ? 'border-ws-brand/70 bg-ws-brand-soft/30 ring-1 ring-ws-brand/25'
-                  : 'border-ws-line bg-ws-card',
+                // WP456-T6（§2.5「卡不加边框」）：无边框 + 卡阴影；选中的那张品牌浅底 + 一圈品牌色
+                'flex min-h-36 flex-col justify-between gap-4 rounded-xl p-4 transition-colors',
+                current ? 'bg-ws-brand-soft/30 ring-1 ring-ws-brand/40' : 'bg-ws-card shadow-ws',
               )}
             >
               <div className="flex flex-col gap-3">
@@ -184,7 +183,7 @@ function ModeAction({ action }: { action: Action }): ReactNode {
       return (
         <Button
           size="sm"
-          variant="outline"
+          variant="secondary"
           className="w-fit"
           data-testid="mode-switch"
           onClick={action.run}
@@ -195,7 +194,13 @@ function ModeAction({ action }: { action: Action }): ReactNode {
     case 'blocked':
       return (
         <span className="flex items-center gap-1.5">
-          <Button size="sm" variant="outline" className="w-fit" disabled data-testid="mode-switch">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="w-fit"
+            disabled
+            data-testid="mode-switch"
+          >
             {t('mode.switch')}
           </Button>
           <Hint text={action.why} testId="mode-why" />

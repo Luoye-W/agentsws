@@ -88,7 +88,7 @@ async function main() {
       page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
       await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 90_000 })
       await page.getByTestId('home').waitFor({ timeout: 30_000 })
-      await page.getByTestId('home-decide').waitFor({ timeout: 30_000 })
+      await page.getByTestId('home-inbox-line').waitFor({ timeout: 30_000 })
       await page.waitForTimeout(1200)
       check((await page.getByTestId('alerts').count()) === 0, '首页：没有单独的告警区')
       check((await page.getByTestId('alert-block').count()) === 0, '首页：没有告警块')

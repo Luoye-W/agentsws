@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process'
+import { join } from 'node:path'
 import { defineConfig } from 'wxt'
 import { EXTENSION_PUBLIC_KEY } from './src/lib/identity'
 
@@ -42,6 +44,19 @@ export default defineConfig({
   // 与 `tsconfig.json` 的 paths、工作台那边的写法完全一致，不用再配一遍 alias。
   srcDir: 'src',
   modules: ['@wxt-dev/module-react'],
+  /**
+   * WP456-T7：构建前先从工作台的 `index.css` 重出插件的令牌（`src/ui/tokens.css`），插件和工作台永远是同一套数。
+   * `wxt build`（含桌面打包直接调 wxt 那一路）与 `wxt` 开发都会先走这一步；脚本不改动就不写文件。
+   */
+  hooks: {
+    'build:before': (wxt) => {
+      execFileSync(
+        process.execPath,
+        [join(wxt.config.root, '..', '..', 'scripts', 'gen-extension-tokens.mjs')],
+        { stdio: 'inherit' },
+      )
+    },
+  },
   outDir: 'build',
   manifest: {
     name: 'Agents 工坊助手',

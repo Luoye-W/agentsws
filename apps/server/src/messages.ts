@@ -81,6 +81,7 @@ import {
   triageMessage,
   undoableDeletedRules,
   userVerdict,
+  withAiHand,
 } from '@agentsws/channels'
 import type {
   ApprovalItem,
@@ -103,6 +104,7 @@ import type {
   MessageFollowUpRow,
   MessageFollowUpSettings,
   MessageFollowUpSettingsPatch,
+  MessageGuessRow,
   MessageImagesReport,
   MessageKind,
   MessageKindInput,
@@ -113,6 +115,8 @@ import type {
   MessageOverview,
   MessagePositionOption,
   MessageRecord,
+  MessageRehandInput,
+  MessageRehandResult,
   MessageRoute,
   MessageSendInput,
   MessageSendResult,
@@ -326,6 +330,17 @@ export interface MessagesOptions {
    * 不给 = 数不出，界面不挂这句。
    */
   openCards?(): Promise<readonly { thread_id?: string; matter_id?: string }[]>
+  /**
+   * WP459（决策 1498）：改判时**撤掉原岗位还没批的卡**（指着这条会话 / 这几件事项的）。回撤了几张。
+   * 不给 = 撤不了（改判照样换主人，界面照实说撤了 0 张）。
+   */
+  withdrawCards?(input: {
+    thread_id: string
+    matter_ids: readonly string[]
+    reason: string
+    /** 改判的人（他的队列也看一遍）。 */
+    person_id: PersonId
+  }): Promise<number>
   /** WP212：一次纠正（没勾「以后都这样」的改判 / 改岗位）进学习回路（24 §3 的 lesson 池）。 */
   onCorrection?(correction: MessageCorrection): void
   /**
@@ -882,7 +897,22 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
           logQuiet('follow_up_inbound_failed', record.account, e)
         }
         const promised = promisedReplyAt(record.text, record.date, options.tzOffsetMinutes?.() ?? 0)
-        return promised === undefined ? verdict : { ...verdict, promised_reply_at: promised }
+        const dated = promised === undefined ? verdict : { ...verdict, promised_reply_at: promised }
+        // WP459（决策 1498）：AI 猜得出岗位就直接交过去（把握不够的标「AI 猜的」）；猜不出 / 只能你定的留在收件箱
+        // 63 那三条路得真开着（职责在、这只邮箱收这类信）才算这个岗位开着——不然交过去也接不住
+        const open = (route: 'support' | 'kol' | 'b2b'): boolean =>
+          route === 'support'
+            ? supportEnabled()
+            : route === 'kol'
+              ? kolEnabled()
+              : b2bEnabledFor(record.account)
+        return withAiHand(
+          dated,
+          positionOptions().map((p) => {
+            const route = routeOfPosition(p.id)
+            return route === undefined ? p : { ...p, open: p.open && open(route) }
+          }),
+        )
       }),
     /**
      * 交给客服 / 红人那一路；那一侧不接就回 `false`——于是信不挪、留在收件箱里可见。
@@ -1266,6 +1296,11 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
    * 交不出去（岗位关了、那人名下没这个岗位的职责）就留在没人接的里，主按钮仍是那个岗位。
    */
   const autoHand = async (record: MessageRecord, triage: MessageTriage): Promise<void> => {
+    // WP459（决策 1498）：AI 交给 63 那三条路之外的岗位——在这里交（那三条路由分拣直接交）
+    if (triage.ai_hand !== undefined) {
+      await aiHand(record, triage.ai_hand.position_id)
+      return
+    }
     const position_id = triage.suggested_position
     // WP441：消息规则定了「交给 X」（63 那三条路之外的岗位）也在这里交——规则就是人表过态了
     const byMessageRule =
@@ -1309,6 +1344,46 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         route: 'position',
         handed_off: true,
         by: byMessageRule ? 'message_rule' : 'sender_rule',
+        position_id,
+        account: maskAddress(record.account),
+        ...(out.matter_id === undefined ? {} : { matter_id: out.matter_id }),
+      },
+    })
+  }
+
+  /** WP459：AI 交给某个岗位（「交给这个岗位一件事」那一路）。交不出去就留在收件箱，主按钮仍是那个岗位。 */
+  const aiHand = async (record: MessageRecord, position_id: string): Promise<void> => {
+    if (routeOfPosition(position_id) !== undefined) return
+    const person = options.position?.()?.person_id
+    if (person === undefined) return
+    const out = await handToPosition(record, position_id, person)
+    if (!out.accepted) return
+    const at = clock.now()
+    await store.update(record.id, {
+      handled: {
+        as: 'position',
+        position_id,
+        ...(out.matter_id === undefined ? {} : { matter_id: out.matter_id }),
+        by: person,
+        at,
+        by_ai: true,
+      },
+      ...(out.matter_id === undefined
+        ? {}
+        : { linked: { type: 'matter' as const, id: out.matter_id } }),
+    })
+    options.appendEvent({
+      schema_version: 1,
+      workspace_id,
+      type: 'messages.route_confirmed',
+      actor: { kind: 'system', id: 'triage' },
+      subject: { type: 'message', id: record.id },
+      correlation: { trace_id: `tr_msgai_${record.id}_${at}` },
+      // 63 §10：没有正文、地址遮过
+      payload: {
+        route: 'position',
+        handed_off: true,
+        by: 'ai_guess',
         position_id,
         account: maskAddress(record.account),
         ...(out.matter_id === undefined ? {} : { matter_id: out.matter_id }),
@@ -1360,6 +1435,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     row: MessageRecord,
     patch: Partial<Pick<SenderRule, 'route' | 'kind' | 'position'>>,
     by: PersonId,
+    source: 'user' | 'ai' = 'user',
   ): Promise<SenderRule> => {
     const id = `rule_${sha256(`${workspace_id}|${row.from.email}`).slice(0, 16)}`
     const prior = (await store.senderRules()).find((r) => r.id === id)
@@ -1370,8 +1446,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       labels: prior?.labels ?? [...row.labels],
       by,
       created_at: clock.now(),
-      // WP439：人教的盖过 AI 自己学的（docs/108 §5.2「人的优先」）
-      source: 'user',
+      // WP439：人教的盖过 AI 自己学的（docs/108 §5.2「人的优先」）；WP459：改判两次 AI 自己记的是 `ai`
+      source,
       ...patch,
     }
     await store.putSenderRule(rule)
@@ -2234,6 +2310,217 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       if (input.as !== 'notice') return { message: next }
       const writeback = await readForNotice(next)
       return { message: (await store.get(id)) ?? next, writeback }
+    },
+
+    /**
+     * WP459（决策 1498 / 1504）：**改判**「AI 猜的」——交给别的岗位 / 我自己处理 / 只是通知。
+     *
+     * 先把信交给新主人（交不出去就什么都不改，原岗位照旧在办）；交出去之后撤掉原岗位还没批的卡、
+     * 关掉那件事项。一封信同一时刻只有一个主人（v1 §1.3）。
+     * 不勾「以后都交给 X」时，同一个发件人第二次被改判到同一个岗位，AI 自己记住（`source: 'ai'`，规则面板能撤）。
+     */
+    async rehand(
+      actor: MessageActor,
+      id: string,
+      input: MessageRehandInput,
+    ): Promise<MessageRehandResult> {
+      await ensureSeeded()
+      const row = await requireMessage(id)
+      const thread = await store.thread(row.thread_id)
+      const before = aggregateThreads(thread)[0]
+      const from = before?.handed_to
+      if (input.to === 'position') {
+        const target = input.position_id
+        if (target === undefined) throw new ApiError('invalid_input', '要交给哪个岗位？没给岗位。')
+        if (target === from)
+          return { message: row, withdrawn: 0, handed_off: true, position_id: target }
+        const option = positionOptions().find((p) => p.id === target)
+        if (option === undefined || !option.open)
+          return {
+            message: row,
+            withdrawn: 0,
+            handed_off: false,
+            refused: `${option?.name_zh ?? target}岗位没开，开了才能交。`,
+          }
+      }
+      // 原主人名下的事项（交新主人之前记下：新主人可能接着用同一条会话开新的）
+      const oldMatters = [
+        ...new Set(
+          thread.flatMap((m) => [
+            ...(m.linked?.type === 'matter' ? [m.linked.id] : []),
+            ...(m.handled?.matter_id === undefined ? [] : [m.handled.matter_id]),
+          ]),
+        ),
+      ]
+      let handed: MessageConfirmRouteResult | undefined
+      let next: MessageRecord = row
+      if (input.to === 'position') {
+        const confirm = port.confirmRoute
+        if (confirm === undefined) throw new ApiError('not_implemented', '这里改判不了')
+        handed = await confirm(actor, row.id, {
+          route: 'position',
+          position_id: input.position_id,
+          ...(input.remember_sender === true ? { remember_sender: true } : {}),
+        })
+        if (!handed.handed_off)
+          return {
+            message: handed.message,
+            withdrawn: 0,
+            handed_off: false,
+            ...(handed.refused === undefined ? {} : { refused: handed.refused }),
+          }
+        next = handed.message
+      } else {
+        const at = clock.now()
+        const triage: MessageTriage | undefined =
+          row.triage === undefined
+            ? undefined
+            : (() => {
+                const { ai_hand: _a, suggested_route: _r, ...rest } = row.triage
+                return { ...rest, route: 'inbox' as const, by: 'user' as const }
+              })()
+        next =
+          (await store.update(row.id, {
+            route: 'inbox',
+            ...(triage === undefined ? {} : { triage }),
+            handled: { as: input.to, by: actor.person_id, at },
+          })) ?? row
+        if (input.to === 'notice') await readForNotice(next)
+        next = (await store.get(row.id)) ?? next
+      }
+      // 同一条会话里别的信也还挂在原来那条路上（客服 / 红人 / B2B）：收回到收件箱，主人只认新的这一个
+      for (const m of thread) {
+        if (m.id === row.id || m.route === 'inbox') continue
+        if (input.to === 'position' && routeOfPosition(input.position_id ?? '') === m.route)
+          continue
+        await store.update(m.id, { route: 'inbox' })
+      }
+      suggester.invalidate(row.id)
+      const keep = new Set(handed?.matter_id === undefined ? [] : [handed.matter_id])
+      const stale = oldMatters.filter((m) => !keep.has(m))
+      let withdrawn = 0
+      try {
+        withdrawn =
+          (await options.withdrawCards?.({
+            thread_id: row.thread_id,
+            matter_ids: stale,
+            reason: 'message_rehand',
+            person_id: actor.person_id,
+          })) ?? 0
+      } catch (e) {
+        logQuiet('rehand_withdraw_failed', row.account, e)
+      }
+      for (const matter_id of stale) {
+        try {
+          options.work?.closeMatter(matter_id, { unfinished: 'close_all', by: actor.person_id })
+        } catch (e) {
+          logQuiet('rehand_close_matter_failed', row.account, e)
+        }
+      }
+      // 决策 1504：同一个发件人改判到同一个岗位第二次 → AI 自己记住（人教过的不动）
+      let rule = handed?.rule
+      let learned = false
+      if (
+        input.to === 'position' &&
+        input.remember_sender !== true &&
+        input.position_id !== undefined
+      ) {
+        const sender = row.from.email.trim().toLowerCase()
+        const prior = (await store.senderRules()).find(
+          (r) => r.sender.trim().toLowerCase() === sender,
+        )
+        if (prior === undefined || prior.source === 'ai') {
+          const corrections = (await store.corrections?.(500)) ?? []
+          let times = 0
+          for (const c of corrections) {
+            if (c.field !== 'position' || c.to !== input.position_id) continue
+            const m = c.message_id === row.id ? row : await store.get(c.message_id)
+            if (m?.from.email.trim().toLowerCase() === sender) times += 1
+          }
+          if (times >= 2 && prior?.position !== input.position_id) {
+            const route = routeOfPosition(input.position_id)
+            rule = await rememberSender(
+              row,
+              {
+                position: input.position_id,
+                ...(route === undefined ? {} : { route }),
+                kind: kindOfLegacy(row.triage, row.labels, row.route).kind,
+              },
+              actor.person_id,
+              'ai',
+            )
+            learned = true
+          }
+        }
+      }
+      const at = clock.now()
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'messages.rehanded',
+        actor: { kind: 'person', id: actor.person_id },
+        subject: { type: 'message', id: row.id },
+        correlation: { trace_id: `tr_msgrehand_${row.id}_${at}` },
+        // 63 §10：没有正文、地址遮过
+        payload: {
+          ...(from === undefined ? {} : { from }),
+          to: input.to === 'position' ? (input.position_id ?? '') : input.to,
+          withdrawn,
+          learned,
+          account: maskAddress(row.account),
+        },
+      })
+      return {
+        message: next,
+        withdrawn,
+        handed_off: true,
+        ...(input.to === 'position' && input.position_id !== undefined
+          ? { position_id: input.position_id }
+          : {}),
+        ...(rule === undefined ? {} : { rule }),
+        ...(learned ? { learned: true } : {}),
+      }
+    },
+
+    /**
+     * WP459：最近 7 天 AI 猜着交给岗位的那几封（收件箱认「AI 猜的 · 改」；简报只数今天的）。
+     */
+    async guessed(): Promise<{ rows: MessageGuessRow[] }> {
+      await ensureSeeded()
+      const since = Date.parse(clock.now()) - 7 * 24 * 3_600_000
+      const all = await store.list({ limit: 100_000 })
+      const threads = aggregateThreads(all).filter(
+        (t) => t.ai_hand?.guessed === true && Date.parse(t.last_at) >= since,
+      )
+      const cards = await waitingCards()
+      const matterOf = (m: MessageRecord): string | undefined =>
+        m.handled?.matter_id ?? (m.linked?.type === 'matter' ? m.linked.id : undefined)
+      const rows: MessageGuessRow[] = []
+      for (const t of threads) {
+        const ai = t.ai_hand
+        if (ai === undefined) continue
+        const m = all.find((x) => x.id === ai.message_id)
+        if (m === undefined) continue
+        const open =
+          cards.length === 0
+            ? 0
+            : cardsOf(
+                all.filter((x) => x.thread_id === t.thread_id),
+                cards,
+              ).open_card_count
+        rows.push({
+          message_id: m.id,
+          thread_id: t.thread_id,
+          subject: m.subject,
+          from: m.from,
+          position_id: ai.position_id,
+          confidence: ai.confidence,
+          at: m.date,
+          ...(open > 0 ? { open_card_count: open } : {}),
+          ...(matterOf(m) === undefined ? {} : { matter_id: matterOf(m) as string }),
+        })
+      }
+      return { rows: rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)) }
     },
 
     /** WP212：「只是通知」整捆「知道了」。 */
