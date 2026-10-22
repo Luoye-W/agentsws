@@ -27,6 +27,7 @@ export const ROUTE_TEMPLATES = [
   '/cards/:id',
   '/todos',
   '/calendar',
+  '/planner',
   '/goals',
   '/messages',
   '/inbox',
