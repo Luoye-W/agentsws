@@ -12,6 +12,7 @@
 
 import { XIcon } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { GroupLabel, SectionHeader } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -116,9 +117,10 @@ function SettingsBody({
                 if (inGroup.length === 0) return null
                 return (
                   <div key={g} className="pt-3" data-testid={`settings-group-${g}`}>
-                    <p className="truncate px-2 pb-1 text-xs font-medium text-ws-muted-fg">
-                      {groupLabel(g)}
-                    </p>
+                    {/* WP456-T6（§3.8 P2）：分组名 12/600 灰字（共用的 GroupLabel） */}
+                    <GroupLabel className="min-w-0 px-2 pb-1">
+                      <span className="truncate">{groupLabel(g)}</span>
+                    </GroupLabel>
                     {inGroup.map((s) => (
                       <NavButton
                         key={s.def.id}
@@ -184,8 +186,9 @@ function NavButton({
       aria-current={active ? 'page' : undefined}
       data-testid={`settings-nav-${section.def.id}`}
       className={cn(
-        'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ws-body hover:bg-ws-line/60',
-        active && 'bg-ws-card font-medium text-ws-ink shadow-ws',
+        // WP456-T6（§3.8 P2）：每行 30 高、13 号字，28 项一屏放得下；悬停一层 `--ws-hover`
+        'flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-left text-ws-ui text-ws-body hover:bg-ws-hover',
+        active && 'bg-ws-card font-medium text-ws-ink shadow-ws hover:bg-ws-card',
       )}
       ref={(el) => {
         // 直接开到靠下的一节（团队那几节）时，左栏也滚到它
@@ -238,11 +241,20 @@ function SectionPane({
       data-testid="settings-pane"
       data-section={section.def.id}
     >
-      <header className="sticky top-0 z-10 flex items-start gap-3 border-b border-ws-line bg-popover/95 py-3 pr-3 pl-6 backdrop-blur">
-        <div className="min-w-0 flex-1 pt-2">
-          <h2 className="text-base font-semibold text-ws-ink">{section.title}</h2>
+      {/*
+        WP456-T6（§2.3 / §3.8）：节的页头——标题 16/600（设置里的节标题这一档）+ 一行 13 灰字；
+        不再画下边线（示意稿 6），滚动时靠半透明底和内容分开
+      */}
+      <header
+        className="sticky top-0 z-10 flex items-start gap-3 bg-popover/95 pt-5 pr-4 pb-4 pl-6 backdrop-blur"
+        data-slot="page-header"
+      >
+        <div className="min-w-0 flex-1">
+          <h2 className="text-ws-title font-semibold text-ws-ink" data-slot="title">
+            {section.title}
+          </h2>
           {single === undefined || single.def.heading === true ? null : (
-            <p className="mt-0.5 text-[12.5px] text-ws-muted-fg">{single.desc}</p>
+            <p className="mt-0.5 text-ws-ui text-ws-muted-fg">{single.desc}</p>
           )}
         </div>
         <DialogClose asChild>
@@ -256,7 +268,7 @@ function SectionPane({
           </Button>
         </DialogClose>
       </header>
-      <div className="flex flex-col divide-y divide-ws-line px-6 pb-10">
+      <div className="flex flex-col divide-y divide-ws-line px-6 pb-10" data-slot="settings-items">
         {section.items.map((i) => (
           <div
             key={i.def.id}
@@ -269,9 +281,10 @@ function SectionPane({
             )}
           >
             {i.def.heading === true ? (
-              <div className="pb-2">
-                <h3 className="text-sm font-medium text-ws-ink">{i.title}</h3>
-                <p className="mt-0.5 text-[12.5px] text-ws-muted-fg">{i.desc}</p>
+              <div className="pt-2 pb-2">
+                {/* WP456-T6：节里的小标题用共用的节标题（14/600），说明一行 13 灰字 */}
+                <SectionHeader as="h3" title={i.title} />
+                <p className="text-ws-ui text-ws-muted-fg">{i.desc}</p>
               </div>
             ) : null}
             {i.def.render(ctx)}

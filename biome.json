@@ -21,7 +21,8 @@
       "!**/release",
       "!apps/desktop/vendor",
       "!apps/extension/build",
-      "!apps/extension/.wxt"
+      "!apps/extension/.wxt",
+      "!apps/extension/src/ui/tokens.css"
     ]
   },
   "formatter": {

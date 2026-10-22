@@ -30,6 +30,7 @@ import {
 } from './i18n-google-alerts'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
+import { INBOX_EN, INBOX_ZH } from './i18n-inbox'
 import { LAYOUT_EN, LAYOUT_ZH } from './i18n-layout'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
@@ -1019,8 +1020,8 @@ const zh: Table = {
   'messages.ai.triage.by.user': '人手挪的',
   'messages.ai.failed': 'AI 助手这会儿出不来，信照常能回、能归档。',
   // ── WP212：没人接的（docs/88 §3、§4.1）─────────────────────────────────
-  'messages.view.unclaimed': '没人接的',
-  'messages.view.all': '全部',
+  'messages.view.unclaimed': '收件箱',
+  'messages.view.all': '全部信',
   'messages.inbox.headline': '{n} 件没人接 · {m} 件有人办',
   'messages.inbox.headline_empty': '都有人接了',
   'messages.inbox.handed': '已交给岗位',
@@ -1577,7 +1578,7 @@ const zh: Table = {
   'connections.subtitle': '把店铺、邮箱、数据后台接进来。',
   'connections.connected': '已连接',
   'connections.available': '可以连接',
-  'connections.empty': '还什么都没连。下面挑一个开始，不会就点「看教程」。',
+  'connections.empty': '还没连。先连店铺和邮箱，大多数岗位都用得上。',
   'connections.test': '测试',
   'connections.testing': '测试中…',
   'connections.disconnect': '断开',
@@ -2136,7 +2137,7 @@ const zh: Table = {
   'deck.recap.auto_sent': '自动发',
   'deck.recap.intercepted': '待确认',
   // ── WP113（63）：消息——统一收件处 ───────────────────────────────────
-  'nav.messages': '消息',
+  'nav.messages': '收件箱',
   'messages.folders': '文件夹',
   'messages.folder.inbox': '收件箱',
   'messages.folder.support': '客服在处理',
@@ -5441,8 +5442,8 @@ const en: Table = {
   'messages.ai.triage.by.user': 'Moved by a person',
   'messages.ai.failed': "The AI assistant can't load right now — you can still reply and archive.",
   // ── WP212: unclaimed (docs/88 §3, §4.1) ─────────────────────────────
-  'messages.view.unclaimed': 'Unclaimed',
-  'messages.view.all': 'All',
+  'messages.view.unclaimed': 'Inbox',
+  'messages.view.all': 'All mail',
   'messages.inbox.headline':
     '{n} unclaimed, waiting for you to assign; the other {m} are with a position or just notices',
   'messages.inbox.headline_empty':
@@ -5991,7 +5992,8 @@ const en: Table = {
   'connections.subtitle': 'Hook up your store, mailbox and analytics.',
   'connections.connected': 'Connected',
   'connections.available': 'Available',
-  'connections.empty': 'Nothing connected yet. Pick one below; stuck? Open its tutorial.',
+  'connections.empty':
+    'Nothing connected yet. Start with your store and mailbox; most roles use them.',
   'connections.test': 'Test',
   'connections.testing': 'Testing…',
   'connections.disconnect': 'Disconnect',
@@ -6569,7 +6571,7 @@ const en: Table = {
   'deck.recap.auto_sent': 'Auto sent',
   'deck.recap.intercepted': 'Intercepted',
   // ── WP113 (63): Messages — one inbox for everything ─────────────────
-  'nav.messages': 'Messages',
+  'nav.messages': 'Inbox',
   'messages.folders': 'Folders',
   'messages.folder.inbox': 'Inbox',
   'messages.folder.support': 'Support is on it',
@@ -9036,6 +9038,7 @@ const TABLES: Record<Lang, Table> = {
     // WP439：消息页右栏「规则」
     ...MESSAGE_RULES_ZH,
     ...FOLLOW_UP_ZH,
+    ...INBOX_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
@@ -9110,6 +9113,7 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_EN,
     ...MESSAGE_RULES_EN,
     ...FOLLOW_UP_EN,
+    ...INBOX_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...GOOGLE_ALERTS_EN,

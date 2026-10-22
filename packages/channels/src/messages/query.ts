@@ -171,6 +171,7 @@ type ThreadClaim = Pick<
   | 'priority'
   | 'handed_to'
   | 'rule_hits'
+  | 'ai_hand'
 >
 
 /**
@@ -206,8 +207,23 @@ export function claimOfThread(sorted: readonly MessageRecord[]): ThreadClaim {
         : { rule_hits: m.triage.rule_hits }),
     }
   }
-  const handedTo = newestFirst.map(handedPositionOf).find((p) => p !== undefined)
-  if (handedTo !== undefined) return { claim: 'handed', handed_to: handedTo, ...describe(latest) }
+  const handedBy = newestFirst.find((m) => handedPositionOf(m) !== undefined)
+  const handedTo = handedBy === undefined ? undefined : handedPositionOf(handedBy)
+  if (handedBy !== undefined && handedTo !== undefined) {
+    // WP459（决策 1498）：AI 自己交的（人改判过、人点过「交给 X」的没有这一格）
+    const ai = handedBy.triage?.ai_hand
+    const byAi =
+      ai !== undefined &&
+      ai.position_id === handedTo &&
+      handedBy.triage?.by === 'model' &&
+      (handedBy.handled === undefined || handedBy.handled.by_ai === true)
+    return {
+      claim: 'handed',
+      handed_to: handedTo,
+      ...describe(latest),
+      ...(byAi ? { ai_hand: { ...ai, message_id: handedBy.id } } : {}),
+    }
+  }
   // 只有自己发的（已发 / 草稿）：不是来信，不算进没人接 / 已交出去任何一格
   if (latest === undefined) return {}
   const repliedAfter = newestFirst.some(

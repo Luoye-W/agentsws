@@ -4,7 +4,7 @@
  *
  * ① 问候 + 一行概况（「AI 今天替你处理了 N 件，M 件等你定」）。输入框不在这里：首页用 WP437 的
  *    **简易对话框**（底部居中、半透明悬浮），这一页底下留出它的位置；
- * ② 要你定：最多 3 条、按急的排，每条一行（哪个岗位、要定什么、还剩多久、「看看」）；右上「全部」去待办；
+ * ② 收件箱那一行（WP459，决策 1497：首页不再列决策卡，原「要你定」那块与「全部 →」错链一并去掉）；
  * ③ 关键数字：一句话（这一段最值得知道的那件事，由数拼出来）+ 4 个数（按开着的岗位挑、每岗位最多 1 个、
  *    优先挑有数的；决策 1333 甲）。点一个在第三栏打开那份报表。缺连接只写一行，点了就地连；
  * ④ 岗位：每个岗位一张卡——状态、代表数字（这个岗位第一份固定报表的头条数）与走势、在做几件 · 等你几件。
@@ -14,18 +14,18 @@
  *
  * 三种模式（决策 222）：同事互联 / 公司集体时，「正在进行」「待认领」照旧接在最下面（个人模式收起）。
  */
-import type { DeckCard } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, HandHeart, Plug, Plus, Sparkles, Users } from 'lucide-react'
+import { ChevronRight, HandHeart, Inbox, Plug, Plus, Sparkles, Users } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { connectServiceFor } from '@/components/connections/links'
 import { BrandMark, StatusPill, WsCard } from '@/components/design'
 import { SimpleComposer } from '@/components/free-chat/simple-composer'
+import { useInbox } from '@/components/inbox/inbox-model'
 import { deltaOf, fmtValue } from '@/components/reports/kit/format'
 import { Delta, Sparkline, spaced } from '@/components/reports/kit/parts'
 import { openRightPane } from '@/components/reports/right-pane'
-import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
+import { PositionIcon } from '@/components/role-icons/role-icon'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { ComposerDock, DOCK_PAGE } from '@/components/shell/composer-dock'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -43,11 +43,9 @@ import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
 import { getReportsOverview, REPORTS_QUERY, type ReportsOverview } from '@/lib/reports-api'
 import { cn } from '@/lib/utils'
-import { matterUrl } from '@/lib/work'
 
 type KeyRange = '1d' | '7d' | '30d'
 const KEY_RANGES: KeyRange[] = ['1d', '7d', '30d']
-const DECIDE_LIMIT = 3
 
 /** 「下午好」按本机时间（问候只是问候，不进任何数）。 */
 function helloKey(now: Date): string {
@@ -64,41 +62,6 @@ function dateLine(now: Date, lang: 'zh' | 'en'): string {
     return now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' })
   const wd = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()]
   return `${now.getMonth() + 1} 月 ${now.getDate()} 日 周${wd}`
-}
-
-/** 这张卡挂在哪个岗位（按职责找岗位实体）。 */
-function instanceOfRole(
-  instances: readonly PositionInstanceData[],
-  role_id: string,
-): { inst?: PositionInstanceData; role_name?: string } {
-  for (const inst of instances) {
-    const r = inst.roles.find((x) => x.role_id === role_id)
-    if (r !== undefined) return { inst, role_name: r.role_name }
-  }
-  return {}
-}
-
-/** 还剩多久（小胶囊）：到期 2 小时内红、今天内黄、几天的灰；P0 没写到期也算「今天」。 */
-function urgency(
-  card: DeckCard,
-  now: number,
-): { text: string; tone: 'bad' | 'warn' | 'neutral' } | undefined {
-  const due = card.expires_at === undefined ? undefined : Date.parse(card.expires_at)
-  if (due !== undefined && Number.isFinite(due)) {
-    const h = (due - now) / 3_600_000
-    if (h <= 0) return { text: '已到期', tone: 'bad' }
-    if (h <= 6) return { text: `剩 ${Math.max(1, Math.round(h))} 小时`, tone: 'bad' }
-    if (h <= 24) return { text: '今天', tone: 'warn' }
-    return { text: `剩 ${Math.round(h / 24)} 天`, tone: 'neutral' }
-  }
-  if (card.priority_band === 'P0') return { text: '今天', tone: 'warn' }
-  return undefined
-}
-
-const PILL: Record<'bad' | 'warn' | 'neutral', string> = {
-  bad: 'bg-ws-bad-bg text-ws-bad',
-  warn: 'bg-ws-warn-bg text-ws-warn',
-  neutral: 'bg-ws-secondary text-ws-body',
 }
 
 function SectionHead({
@@ -123,119 +86,44 @@ function SectionHead({
   )
 }
 
-// ── ② 要你定 ─────────────────────────────────────────────────────────
+// ── ② 收件箱那一行（WP459，决策 1497）────────────────────────────────
 
-function DecideList({
-  cards,
-  total,
-  instances,
-}: {
-  cards: DeckCard[]
-  total: number
-  instances: readonly PositionInstanceData[]
-}): ReactNode {
+/**
+ * 首页不再列决策卡（原「要你定」那一块去掉，连同指到待办的那条错链）：只留一行「收件箱里 N 件等你 →」，
+ * 带「N 件要紧」和最急的那一件，点了去收件箱（v2 示意 `home-line`）。数和左栏徽标、收件箱是同一份。
+ */
+function InboxLine(): ReactNode {
   const { t } = useApp()
-  const navigate = useNavigate()
-  const now = Date.now()
-  const shown = cards.slice(0, DECIDE_LIMIT)
+  const inbox = useInbox()
+  const view = inbox.data
+  if (view === undefined) return null
+  const n = view.counts.all
   return (
-    <section data-testid="home-decide">
-      <SectionHead
-        title={t('home2.decide')}
-        count={total}
-        right={
-          <Link
-            to="/todos"
-            className="inline-flex items-center gap-1 text-[12.5px] text-ws-muted-fg hover:text-ws-ink"
-            data-testid="home-decide-all"
-          >
-            {t('home2.decide.all')}
-            <ChevronRight aria-hidden className="size-3.5" />
-          </Link>
-        }
-      />
-      {shown.length === 0 ? (
-        <p className="text-[13px] text-ws-muted-fg">{t('home2.decide.empty')}</p>
+    <Link
+      to="/inbox"
+      className="ws-card mt-[30px] flex items-center gap-3 px-[18px] py-3.5 transition-shadow hover:shadow-[var(--ws-shadow-hover)]"
+      data-testid="home-inbox-line"
+    >
+      <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-ws-tint text-ws-brand-ink">
+        <Inbox aria-hidden className="size-4" />
+      </span>
+      <b className="shrink-0 text-[14px] font-semibold text-ws-ink" data-testid="home-inbox-count">
+        {n === 0 ? t('inbox.home.empty') : t('inbox.home.line', { n })}
+      </b>
+      {view.counts.urgent > 0 ? (
+        <StatusPill tone="bad" className="shrink-0" data-testid="home-inbox-urgent">
+          {t('inbox.home.urgent', { n: view.counts.urgent })}
+        </StatusPill>
+      ) : null}
+      {view.brief.top === undefined || view.brief.top === '' ? (
+        <span className="min-w-0 flex-1" />
       ) : (
-        <WsCard className="py-1">
-          <ul>
-            {shown.map((card, i) => {
-              const { inst, role_name } = instanceOfRole(instances, card.role_id)
-              const u = urgency(card, now)
-              return (
-                <li
-                  key={card.id}
-                  className={cn(
-                    'grid cursor-pointer grid-cols-[28px_1fr_auto_auto] items-center gap-3 px-[18px] py-3 hover:bg-ws-surface',
-                    i > 0 && 'border-t border-ws-line',
-                  )}
-                  data-testid="home-decide-row"
-                  data-id={card.id}
-                  onClick={() => {
-                    navigate(matterUrl(card))
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') navigate(matterUrl(card))
-                  }}
-                >
-                  <span className="grid size-7 place-items-center rounded-[8px] bg-ws-tint text-ws-brand-ink">
-                    {inst === undefined ? (
-                      <DutyIcon role_id={card.role_id} size={15} />
-                    ) : (
-                      <PositionIcon
-                        position_id={inst.position_id}
-                        icon={inst.icon}
-                        role_ids={inst.roles.map((r) => r.role_id)}
-                        size={15}
-                      />
-                    )}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-[13.5px] font-medium text-ws-ink">
-                      {card.title}
-                    </span>
-                    <span className="block truncate text-[12px] text-ws-muted-fg">
-                      {[
-                        inst?.name.zh,
-                        role_name !== inst?.name.zh ? role_name : undefined,
-                        card.summary,
-                      ]
-                        .filter((x) => x !== undefined && x !== '')
-                        .join(' · ')}
-                    </span>
-                  </span>
-                  {u === undefined ? (
-                    <span />
-                  ) : (
-                    <span
-                      data-slot="status"
-                      className={cn(
-                        'inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-xs whitespace-nowrap',
-                        PILL[u.tone],
-                      )}
-                    >
-                      <i aria-hidden className="size-1.5 rounded-full bg-current" />
-                      {u.text}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="h-[26px] rounded-[7px] bg-ws-secondary px-2.5 text-[12px] font-medium text-ws-ink hover:brightness-95"
-                    data-testid="home-decide-look"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      navigate(matterUrl(card))
-                    }}
-                  >
-                    {t('home2.decide.look')}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </WsCard>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-ws-muted-fg">
+          {t('inbox.home.top', { title: view.brief.top })}
+        </span>
       )}
-    </section>
+      <ChevronRight aria-hidden className="size-4 shrink-0 text-ws-faint" />
+    </Link>
   )
 }
 
@@ -471,9 +359,18 @@ function PositionTile({
         {icon}
         <b className="truncate text-[14px] font-semibold">{name}</b>
         {inst.open_matters === 0 && inst.pending_cards > 0 ? (
-          <StatusPill tone="warn" className="ml-auto">
-            {t('home2.pos.waiting', { n: inst.pending_cards })}
-          </StatusPill>
+          // WP459：「等你 N 件」点了去收件箱、筛好这个岗位
+          <button
+            type="button"
+            className="ml-auto"
+            data-testid="position-card-waiting"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/inbox?position=${encodeURIComponent(inst.position_id)}`)
+            }}
+          >
+            <StatusPill tone="warn">{t('home2.pos.waiting', { n: inst.pending_cards })}</StatusPill>
+          </button>
         ) : (
           <StatusPill tone="good" className="ml-auto">
             {t('home2.pos.running')}
@@ -564,6 +461,7 @@ export function HomePage(): ReactNode {
   const { solo } = useMode()
   const [range, setRange] = useState<KeyRange>('1d')
   const home = useQuery({ queryKey: ['home', 'yesterday'], queryFn: () => getHome('yesterday') })
+  const inbox = useInbox()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession, retry: false })
   const overview = useQuery({
@@ -613,7 +511,8 @@ export function HomePage(): ReactNode {
           {t('home2.line', {
             date: dateLine(now, lang),
             done,
-            waiting: data.counts.total,
+            // WP459：「几件等你定」和收件箱、左栏徽标同一个数
+            waiting: inbox.data?.counts.all ?? data.counts.total,
           })
             .split(/(\d+)/)
             .map((part, i) =>
@@ -630,8 +529,8 @@ export function HomePage(): ReactNode {
         </p>
       </header>
 
-      {/* ② 要你定（最多 3 条，按急的排） */}
-      <DecideList cards={data.queue} total={data.counts.total} instances={insts} />
+      {/* ② 收件箱那一行（WP459：首页不再列决策卡） */}
+      <InboxLine />
 
       {/* ③ 关键数字：一句话 + 4 个数（点了在第三栏打开那份报表） */}
       <KeyNumbers data={overview.data} range={range} onRange={setRange} instances={insts} />

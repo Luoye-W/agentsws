@@ -487,7 +487,7 @@ describe('WP172：「待确认」里的「这是 B2B」与红卡', () => {
   it('判不准 → 待确认、不挪不落；人点「这是 B2B」→ 落询盘、挪进 BtoBAgents、写事件', async () => {
     const box = new Mailbox()
     box.deliver(1, mime(INQUIRY))
-    const h = assemble({ boxes: [{ address: ME, box }], confidence: 0.4 })
+    const h = assemble({ boxes: [{ address: ME, box }], confidence: 0.3 })
     await h.messages.poll()
     expect(box.where('inq-1')).toBe('INBOX')
     expect(h.store.inquiries()).toHaveLength(0)

@@ -8,12 +8,13 @@
 
 import type { ReportMetricValue } from '@agentsws/deck'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
 import type { ReportsOverview } from '@/lib/reports-api'
 import { draftCard, homeData } from './fixtures'
 import { renderWithProviders } from './helpers'
+import { inboxView } from './inbox-fixtures'
 import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
 
 const instance = (
@@ -124,6 +125,12 @@ const getPositions = vi.fn(async () => ({
 }))
 
 const modeState: { orgs: (typeof SOLO_ORG)[]; pool: unknown[] } = { orgs: [], pool: [] }
+const inboxState = { view: inboxView() }
+
+function LocationProbe(): React.ReactNode {
+  const loc = useLocation()
+  return <span data-testid="probe">{loc.search}</span>
+}
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -135,6 +142,7 @@ vi.mock('@/lib/api', async () => {
     listInProgress: async () => ({ items: [], scope: 'position' }),
     listOrganizations: async () => modeState.orgs,
     listClaimPool: async () => ({ pool: modeState.pool }),
+    getInbox: async () => inboxState.view,
   }
 })
 
@@ -160,11 +168,12 @@ describe('WP438 首页四块（决策 1332）', () => {
     modeState.pool = []
   })
 
-  it('从上到下：问候 → 要你定 → 关键数字 → 岗位', async () => {
+  it('从上到下：问候 → 收件箱那一行 → 关键数字 → 岗位', async () => {
     renderWithProviders(<HomePage />)
     await screen.findAllByTestId('home-key-card')
     await screen.findByTestId('position-cards')
-    const order = ['home-header', 'home-decide', 'home-key', 'position-cards'].map((id) =>
+    await screen.findByTestId('home-inbox-line')
+    const order = ['home-header', 'home-inbox-line', 'home-key', 'position-cards'].map((id) =>
       screen.getByTestId(id),
     )
     for (let i = 1; i < order.length; i += 1)
@@ -177,7 +186,10 @@ describe('WP438 首页四块（决策 1332）', () => {
     })
     // 一行概况：AI 今天处理了几件（自主 12 + 自动发 3）、几件等你定
     expect(screen.getByTestId('home-line').textContent).toContain('处理了 15 件')
-    expect(screen.getByTestId('home-line').textContent).toContain('4 件等你定')
+    // WP459：和收件箱同一个数
+    await waitFor(() => {
+      expect(screen.getByTestId('home-line').textContent).toContain('6 件等你定')
+    })
   })
 
   it('去掉的那些都不在：复盘四格、按职责的数据条、时间轴 / 到期、目标网格、一页纸', async () => {
@@ -196,7 +208,7 @@ describe('WP438 首页四块（决策 1332）', () => {
       expect(screen.queryByTestId(id), id).toBeNull()
   })
 
-  it('WP466（决策 1311）：首页没有单独的告警区——系统卡在右上铃铛里，「要你定」也不收它', async () => {
+  it('WP466（决策 1311）：首页没有单独的告警区——系统卡在右上铃铛里', async () => {
     homeAlerts.cards = [
       draftCard({
         id: 'al_store',
@@ -208,27 +220,55 @@ describe('WP438 首页四块（决策 1332）', () => {
     ]
     try {
       renderWithProviders(<HomePage />)
-      const box = await screen.findByTestId('home-decide')
+      await screen.findByTestId('home-inbox-line')
       await screen.findAllByTestId('home-key-card')
       expect(screen.queryByTestId('alerts')).toBeNull()
       expect(screen.queryByTestId('alert-block')).toBeNull()
-      expect(box.textContent).not.toContain('掉了 90%')
       expect(document.body.textContent).not.toContain('掉了 90%')
     } finally {
       homeAlerts.cards = []
     }
   })
 
-  it('要你定：最多 3 条，每条一行带「看看」；右上「全部」去待办', async () => {
-    renderWithProviders(<HomePage />)
-    const box = await screen.findByTestId('home-decide')
-    expect(within(box).getAllByTestId('home-decide-row')).toHaveLength(3)
-    expect(within(box).getAllByTestId('home-decide-look')).toHaveLength(3)
-    expect(screen.getByTestId('home-decide-all').getAttribute('href')).toBe('/todos')
-    // 挂在哪个岗位：按职责找回岗位名
-    await waitFor(() => {
-      expect(within(box).getAllByTestId('home-decide-row')[0]?.textContent).toContain('客服')
-    })
+  it('WP459（决策 1497）：首页不再列决策卡，只留一行「收件箱里 N 件等你 →」（带要紧件数、最急的一件）', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/inbox" element={<div data-testid="inbox-landed" />} />
+      </Routes>,
+    )
+    const line = await screen.findByTestId('home-inbox-line')
+    expect(line.getAttribute('href')).toBe('/inbox')
+    expect(screen.getByTestId('home-inbox-count').textContent).toBe('收件箱里 6 件等你')
+    expect(screen.getByTestId('home-inbox-urgent').textContent).toContain('2 件要紧')
+    expect(line.textContent).toContain('最急：回信 · Tom Becker')
+    // 原来「要你定」那一块与指到待办的「全部 →」都没了
+    expect(screen.queryByTestId('home-decide')).toBeNull()
+    expect(screen.queryByTestId('home-decide-all')).toBeNull()
+    fireEvent.click(line)
+    await screen.findByTestId('inbox-landed')
+  })
+
+  it('WP459：收件箱清空了，那一行照实说', async () => {
+    inboxState.view = inboxView([])
+    try {
+      renderWithProviders(<HomePage />)
+      expect((await screen.findByTestId('home-inbox-count')).textContent).toBe('收件箱清空了')
+      expect(screen.queryByTestId('home-inbox-urgent')).toBeNull()
+    } finally {
+      inboxState.view = inboxView()
+    }
+  })
+
+  it('WP459：岗位卡上「等你 N 件」点了去收件箱、筛好那个岗位', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/inbox" element={<LocationProbe />} />
+      </Routes>,
+    )
+    fireEvent.click(await screen.findByTestId('position-card-waiting'))
+    expect((await screen.findByTestId('probe')).textContent).toBe('?position=web-ops')
   })
 
   it('关键数字：一句话（粗体照写）+ 每岗位最多 1 个；点一个在第三栏开那份报表', async () => {

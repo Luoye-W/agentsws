@@ -303,8 +303,8 @@ export function TeamChannelCard({
           data-state={state}
           className={
             state === 'grace' || state === 'suspended'
-              ? 'rounded bg-ws-warn-bg px-1.5 py-0.5 text-xs text-ws-warn'
-              : 'rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground'
+              ? 'rounded-sm bg-ws-warn-bg px-1.5 py-0.5 text-xs text-ws-warn'
+              : 'rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground'
           }
         >
           {view === undefined ? t('team.sub.state.none') : teamSubState(t, view)}

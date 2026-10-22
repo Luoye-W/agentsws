@@ -29,7 +29,7 @@
  *   右边那一排见 `RailTopBar`，中间插着外壳给的两个插槽（WP429 的通知铃铛、这一页的设置按钮）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarDays,
   ChevronDown,
@@ -51,7 +51,9 @@ import {
   type ConversationActions,
   ConversationActionsProvider,
 } from '@/components/conversations/actions'
+import { CountBadge } from '@/components/design'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { useInbox } from '@/components/inbox/inbox-model'
 import { useSiteChatUnread } from '@/components/messages/site-chat'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
@@ -77,12 +79,7 @@ import { StandbyBadge } from '@/components/standby-badge'
 import { DemoBadge } from '@/components/ui/demo-badge'
 import { UpdateButton } from '@/components/update-button'
 import { MemoryNotice } from '@/components/work/memory-notice'
-import {
-  listMessageAccounts,
-  type Me,
-  type PositionInstanceData,
-  type PositionSummary,
-} from '@/lib/api'
+import type { Me, PositionInstanceData, PositionSummary } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { desktopChrome, useDesktopChromeTheme } from '@/lib/desktop-chrome'
 import { dutyHref } from '@/lib/duty-href'
@@ -285,25 +282,29 @@ function PositionNav({
 }
 
 /**
- * 左栏「消息」右边那个未读点。
+ * 左栏「收件箱」右边那一格（WP459，决策 1499）：**等你处理的件数**，品牌色数字；清空了就不显示。
  *
- * **是一个点，不是一个数字**（36 减字 / 图形化，WP96 那一轮定的调子）：
- * 未读 132 封时一个红色的 "132" 会让整块左栏看起来像在报警，而它要说的只有
- * "那边有没读的"。数字留给点进去之后的文件夹。
+ * 以前是邮箱「未读」那个点（未读不等于要你管：通知、推销都算未读）。现在数的是收件箱那一条队列——
+ * 各岗位等你批的卡 + 要你判断的信，和点进去看到的「全部 N」同一个数。网站访客的对话有没看过的、
+ * 而队列又是空的时，照旧亮一个点（WP351）。
  *
- * 取不到（没装配消息面 / 一只邮箱都没连）就什么都不画——不报错、不占位。
+ * 取不到（没装配 / 还在取）就什么都不画——不报错、不占位。
  */
-function MessagesUnread(): ReactNode {
-  const accounts = useQuery({
-    queryKey: ['messages', 'accounts'],
-    queryFn: listMessageAccounts,
-    retry: false,
-    staleTime: 60_000,
-  })
-  const unread = (accounts.data?.accounts ?? []).reduce((n, a) => n + a.unread, 0)
-  // WP351：网站访客的对话也是消息——有没看过的也亮这个点
+function InboxCount({ corner = false }: { corner?: boolean }): ReactNode {
+  const inbox = useInbox()
   const siteChat = useSiteChatUnread()
-  if (unread === 0 && !siteChat) return null
+  const n = inbox.data?.counts.all ?? 0
+  if (n > 0)
+    return (
+      <CountBadge
+        n={n}
+        tone="brand"
+        corner={corner}
+        className={corner ? undefined : 'ml-auto'}
+        data-testid="nav-inbox-count"
+      />
+    )
+  if (!siteChat) return null
   return (
     <i
       aria-hidden
@@ -420,7 +421,7 @@ function ShellCorner({
 function pageNameKey(pathname: string): string | undefined {
   if (pathname === '/') return 'nav.home'
   if (pathname.startsWith('/assistant')) return 'nav.free_chat'
-  if (pathname.startsWith('/messages')) return 'nav.messages'
+  if (pathname.startsWith('/messages') || pathname.startsWith('/inbox')) return 'nav.messages'
   if (pathname.startsWith('/todos')) return 'nav.todos'
   if (pathname.startsWith('/calendar')) return 'nav.calendar'
   return SHELL_PAGES.find((p) => pathname === p.to || pathname.startsWith(`${p.to}/`))?.key
@@ -655,8 +656,8 @@ export function AppShell({
                     </IconNavLink>
                     <IconNavLink to="/messages" label={t('nav.messages')} testId="nav-messages">
                       <NavIcon icon={Inbox} />
-                      <span className="absolute top-1.5 right-1.5 flex">
-                        <MessagesUnread />
+                      <span className="absolute top-0.5 right-0.5 flex">
+                        <InboxCount corner />
                       </span>
                     </IconNavLink>
                     <IconNavLink to="/todos" label={t('nav.todos')}>
@@ -713,10 +714,17 @@ export function AppShell({
               一个 tab，`/goals` 路由留着，⌘K 里仍然搜得到。
               顺序：首页 / 消息 / 待办 / 日历。
             */}
-                    <NavLink to="/messages" className={navClass} data-testid="nav-messages">
+                    <NavLink
+                      to="/messages"
+                      // WP459：`/inbox` 是同一页
+                      className={({ isActive }) =>
+                        navClass({ isActive: isActive || pathname.startsWith('/inbox') })
+                      }
+                      data-testid="nav-messages"
+                    >
                       <NavIcon icon={Inbox} />
                       {t('nav.messages')}
-                      <MessagesUnread />
+                      <InboxCount />
                     </NavLink>
                     {/*
               WP351（Luoye 10-16）：左栏不再有「聊天窗」。访客的对话并进「消息」（来源「网站聊天」），
