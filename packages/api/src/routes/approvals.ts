@@ -606,7 +606,7 @@ export function approvalRoutes(): Route[] {
         assignment: true,
         authz: READ,
         params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
-        returns: 'ApprovalItem & { execution_wiring? }',
+        returns: 'ApprovalItem & { execution_wiring?, undo?: ApprovalUndo }',
       },
       async (c, deps) => {
         const p = principalOf(c)
@@ -614,9 +614,12 @@ export function approvalRoutes(): Route[] {
         const item = await mustGet(deps, param(c, 'id'), p.workspace_id)
         // WP415（只加）：这张卡这一步接没接通——单卡页（通知里点进来的那一页）也照实标
         const wiring = deps.executionWiring?.(item)
+        // WP474（只加）：本人刚才那一下还撤不撤得回（一张一张里「刚才：…· 撤回」）
+        const undo = await deps.approvals.undoable?.(item.id, p.person_id)
         return ok(c, {
           ...redactItem(item, p.person_id),
           ...(wiring === undefined ? {} : { execution_wiring: wiring }),
+          ...(undo === undefined ? {} : { undo }),
         })
       },
     ),
@@ -874,6 +877,42 @@ export function approvalRoutes(): Route[] {
           ...optional(claimed, 'todo'),
           ...optional(redraft, 'redraft'),
         })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/approvals/:id/undo',
+        operationId: 'undoApprovalDecision',
+        summary:
+          'WP474：撤回本人刚才那一下——「不要 / 稍后」放回待处理；「通过」只在批准后取消窗口里、真发出去之前',
+        tag: 'approval',
+        auth: 'bearer',
+        assignment: true,
+        authz: DECIDE,
+        params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
+        returns: '{ item: ApprovalItem, undone: "reopen" | "unapprove" }',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        assignmentOf(c)
+        const item = await mustGet(deps, param(c, 'id'), p.workspace_id)
+        const bus = deps.approvals
+        const how = await bus.undoable?.(item.id, p.person_id)
+        const tooLate = (): never => {
+          throw new ApiError('conflict', '撤不回来了：已经发出去了，或者过了撤回的时间', {
+            details: { reason: 'UNDO_CLOSED' },
+          })
+        }
+        if (how === undefined) return tooLate()
+        const back =
+          how.kind === 'reopen'
+            ? await bus.reopen?.call(bus, item.id, p.person_id, { reason: '撤回刚才那一下' })
+            : await bus.unapprove?.call(bus, item.id, p.person_id, {
+                reason: '取消窗口里撤回「通过」',
+              })
+        if (back === undefined) return tooLate()
+        return ok(c, { item: redactItem(back, p.person_id), undone: how.kind })
       },
     ),
     route(

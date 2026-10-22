@@ -141,6 +141,9 @@ export class MemoryTxnStore implements TxnStore {
   isApproved(change_id: string): boolean {
     return this.approved.has(change_id)
   }
+  unmarkApproved(change_id: string): void {
+    this.approved.delete(change_id)
+  }
 
   acquireApplyLock(input: AcquireApplyLockInput): ApplyLock | undefined {
     const held = this.locks.get(input.key)

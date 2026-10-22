@@ -4,6 +4,7 @@ import type {
   ApprovalItem,
   ApprovalKind,
   ApprovalState,
+  ApprovalUndo,
   DecideInput,
   Decision,
   Delivery,
@@ -897,6 +898,95 @@ export class ApprovalBusImpl implements ApprovalBus {
                 ? {}
                 : { followed_from: previous.decision.followed.leader_id }),
             }),
+      },
+      item_id: item.id,
+    })
+    // 重新投给原来那几位收件人（旧令牌已全部作废）
+    await this.route(item)
+    return this.rt.store.getApproval(item.id)
+  }
+
+  /**
+   * WP474（决策 1514）：本人刚才那一下现在还撤不撤得回。
+   * - 「不要 / 稍后」（`rejected` / `deferred`）：随时（同 {@link reopen}）；
+   * - 「通过」：只认要过取消窗口才施行的两种卡、还没开始发、批准时刻 + 窗口之前。
+   */
+  async undoable(id: string, by: PersonId): Promise<ApprovalUndo | undefined> {
+    const item = this.rt.store.getApproval(id)
+    if (item?.decision === undefined || item.decision.by !== by) return undefined
+    if (item.state === 'rejected' || item.state === 'deferred') return { kind: 'reopen' }
+    const until = this.unapproveUntil(item)
+    return until === undefined ? undefined : { kind: 'unapprove', until }
+  }
+
+  /** 「通过」还能撤到哪一刻（撤不了 = `undefined`）。 */
+  private unapproveUntil(item: ApprovalItem): Iso8601 | undefined {
+    if (item.state !== 'approved' && item.state !== 'approved_edited') return undefined
+    if (item.kind !== 'outbound_draft' && item.kind !== 'staged_change') return undefined
+    // 已经在发 / 发过（哪怕失败了）：对外的事撤不回来
+    if (item.apply !== undefined) return undefined
+    const decided = item.decision?.at
+    if (decided === undefined) return undefined
+    if (item.kind === 'staged_change') {
+      const change_id = rec(item.payload).change_id
+      const change = typeof change_id === 'string' ? this.rt.store.getChange(change_id) : undefined
+      if (
+        change === undefined ||
+        (change.status !== 'approved' && change.status !== 'auto_approved')
+      )
+        return undefined
+    }
+    const until = ms(decided) + this.rt.policy.cancel_window_sec * 1000
+    if (ms(this.rt.now()) >= until) return undefined
+    return new Date(until).toISOString()
+  }
+
+  /**
+   * WP474（决策 1514）：「通过」了、还在取消窗口里、还没发的卡放回待处理（一张一张里的「撤回」）。
+   * 执行器在窗口里本来就不施行（`deliverLocked` / `apply` 都先看窗口），所以窗口里撤回不会和施行抢。
+   * 改过再批的退回改之前那一版；改动卡的变更回到 `staged`、批准标记拿掉。原来那次决定进 `approval.reopened`。
+   */
+  async unapprove(
+    id: string,
+    by: PersonId,
+    input: { reason: string },
+  ): Promise<ApprovalItem | undefined> {
+    const item = this.rt.store.getApproval(id)
+    if (item?.decision === undefined || item.decision.by !== by) return undefined
+    if (this.unapproveUntil(item) === undefined) return undefined
+    const previous = { state: item.state, decision: item.decision }
+    const now = this.rt.now()
+    if (item.state === 'approved_edited' && previous.decision.edit_diff !== undefined) {
+      item.payload = previous.decision.edit_diff.before
+      item.execution_snapshot = this.snapshotOf(item, this.contextOf(item))
+    }
+    item.state = 'pending'
+    delete item.decision
+    item.updated_at = now
+    const change_id = rec(item.payload).change_id
+    const change =
+      item.kind === 'staged_change' && typeof change_id === 'string'
+        ? this.rt.store.getChange(change_id)
+        : undefined
+    this.rt.tx(() => {
+      this.rt.store.revokeTokensFor(item.id)
+      this.rt.store.putApproval(item)
+      if (change !== undefined && typeof change_id === 'string') {
+        const { approval: _approval, ...rest } = change
+        this.rt.store.putChange({ ...rest, status: 'staged', updated_at: now })
+        this.rt.store.unmarkApproved?.(change_id)
+      }
+    })
+    await this.rt.emit('approval.reopened', {
+      workspace_id: item.workspace_id,
+      actor: { kind: 'person', id: by },
+      subject: { type: 'approval_item', id: item.id },
+      payload: {
+        by,
+        reason: input.reason,
+        previous_state: previous.state,
+        previous_action: previous.decision.action,
+        in_cancel_window: true,
       },
       item_id: item.id,
     })

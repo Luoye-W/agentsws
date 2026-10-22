@@ -1309,6 +1309,33 @@ export const getApproval = (id: string, assignment?: string): Promise<ApprovalIt
     assignment === undefined ? {} : { assignment },
   )
 
+/** WP474（决策 1514）：本人刚才那一下怎么撤——「不要」随时；「通过」到 `until` 为止（取消窗口）。 */
+export interface ApprovalUndoData {
+  kind: 'reopen' | 'unapprove'
+  until?: string
+}
+
+/** WP474：一张刚处理掉的卡现在什么状态、还撤不撤得回（单卡详情上带 `undo`）。 */
+export const getApprovalUndo = (
+  id: string,
+  assignment?: string,
+): Promise<ApprovalItem & { undo?: ApprovalUndoData }> =>
+  api<ApprovalItem & { undo?: ApprovalUndoData }>(
+    `/v1/approvals/${encodeURIComponent(id)}`,
+    assignment === undefined ? {} : { assignment },
+  )
+
+/** WP474：撤回本人刚才那一下（放回待处理）。过了窗口 / 已经发了回 409。 */
+export const undoApproval = (
+  id: string,
+  assignment?: string,
+): Promise<{ item: ApprovalItem; undone: 'reopen' | 'unapprove' }> =>
+  api(`/v1/approvals/${encodeURIComponent(id)}/undo`, {
+    method: 'POST',
+    body: {},
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
 export const listGoals = (): Promise<GoalsData> => api<GoalsData>('/v1/goals')
 
 export const listTodos = (query = ''): Promise<TodosData> => api<TodosData>(`/v1/todos${query}`)

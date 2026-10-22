@@ -668,4 +668,23 @@ export interface ApprovalBus {
    * 只有那次决定的本人能补；没有决定的卡回 `undefined`。记 `approval.reason_added`（学习信号）。
    */
   annotate?(id: string, by: PersonId, input: { reason: string }): Promise<ApprovalItem | undefined>
+  /**
+   * WP474（决策 1514，只加）：「通过」了、**还在批准后取消窗口里、还没真发出去**的卡放回待处理
+   * （`approved` / `approved_edited` → `pending`）。只认要过取消窗口才施行的两种卡（回信草稿 `outbound_draft`、
+   * 改动 `staged_change`），只认那次决定的本人；改过再批的退回改之前那一版。原来那次决定记进 `approval.reopened`。
+   * 过了窗口、已经在发 / 发了、别人批的、别的种类 → 回 `undefined`、一个字不动。
+   */
+  unapprove?(id: string, by: PersonId, input: { reason: string }): Promise<ApprovalItem | undefined>
+  /**
+   * WP474（决策 1514，只加）：本人刚才那一下现在还撤不撤得回——`reopen`（不要 / 稍后，随时）、
+   * `unapprove`（通过，`until` 之前）。撤不回回 `undefined`。
+   */
+  undoable?(id: string, by: PersonId): Promise<ApprovalUndo | undefined>
+}
+
+/** WP474（决策 1514）：一张卡刚才那一下怎么撤（见 {@link ApprovalBus.undoable}）。 */
+export interface ApprovalUndo {
+  kind: 'reopen' | 'unapprove'
+  /** 「通过」的撤回截止到哪一刻（批准时刻 + 取消窗口）；「不要」没有 */
+  until?: Iso8601
 }
