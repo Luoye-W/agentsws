@@ -1,5 +1,5 @@
 /**
- * WP224（Luoye 10-05）：毛利率事实卡**按职责白名单**才看得到——负责人、店铺管理、投放四条；
+ * WP224（Luoye 10-05）：毛利率事实卡**按职责白名单**才看得到——负责人、店铺管理、投放各平台（决策 1398 起十条）；
  * 客服、社媒、公关、红人这些对外说话的岗位检索不到（过滤下推：检索、list、get 三处都零命中）。
  */
 import { GROSS_MARGIN_SUBJECT_TYPE, GROSS_MARGIN_VISIBLE_ROLES } from '@agentsws/contracts'
@@ -39,9 +39,22 @@ async function seeded(): Promise<{ k: Knowledge; marginId: string }> {
 }
 
 describe('毛利率事实卡：按职责白名单', () => {
-  it('白名单就是负责人、店铺管理、投放四条', () => {
+  it('白名单就是负责人、店铺管理、投放十条（决策 1398 加了 WP447 的六条新平台）', () => {
     expect([...GROSS_MARGIN_VISIBLE_ROLES].sort()).toEqual(
-      ['ads.google', 'ads.meta', 'ads.tiktok', 'ads.x', 'common.owner', 'dtc.store'].sort(),
+      [
+        'ads.google',
+        'ads.meta',
+        'ads.tiktok',
+        'ads.x',
+        'ads.microsoft',
+        'ads.pinterest',
+        'ads.snapchat',
+        'ads.apple',
+        'ads.linkedin',
+        'ads.reddit',
+        'common.owner',
+        'dtc.store',
+      ].sort(),
     )
   })
 
@@ -69,7 +82,14 @@ describe('毛利率事实卡：按职责白名单', () => {
 
   it('投放、店铺、负责人检索得到', async () => {
     const { k, marginId } = await seeded()
-    for (const role of ['ads.meta', 'ads.google', 'dtc.store', 'common.owner']) {
+    for (const role of [
+      'ads.meta',
+      'ads.google',
+      'ads.microsoft',
+      'ads.reddit',
+      'dtc.store',
+      'common.owner',
+    ]) {
       const hits = await k.retrieval.search({ text: '毛利率', actor: as(role) })
       expect(
         hits.hits.map((h) => h.fact_card_id),

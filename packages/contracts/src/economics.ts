@@ -52,7 +52,10 @@ export function grossMarginKey(scope: GrossMarginScope, key?: string): string {
 }
 
 /**
- * 谁检索得到 / 看得到毛利率事实卡（Luoye 10-05 定）：负责人、店铺管理、投放四条。
+ * 谁检索得到 / 看得到毛利率事实卡（Luoye 10-05 定）：负责人、店铺管理、投放各平台。
+ *
+ * 决策 1398（WP460）：WP447 补的六条新平台职责（Microsoft / Pinterest / Snapchat / Apple /
+ * LinkedIn / Reddit）也加进来——它们和老四条一样要看盈亏线，同样只读（职责 yml 里补了知识读权限）。
  *
  * 客服、社媒、公关、红人这些**对外说话**的岗位一律检索不到——毛利率是公司内部的账，
  * 模型拿到了就有可能写进一封回信、一条评论里。按职责白名单做（知识可见范围本来按
@@ -65,6 +68,12 @@ export const GROSS_MARGIN_VISIBLE_ROLES: readonly string[] = [
   'ads.google',
   'ads.tiktok',
   'ads.x',
+  'ads.microsoft',
+  'ads.pinterest',
+  'ads.snapchat',
+  'ads.apple',
+  'ads.linkedin',
+  'ads.reddit',
 ]
 
 /** 「没填毛利率」那一格的去填入口（公司 → 品牌）。 */
