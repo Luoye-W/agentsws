@@ -145,6 +145,12 @@ export interface RailCardDefinition {
   /** 没有完整面板时「显示更多」去哪一页（连接 → 连接页）。 */
   moreHref?: string
   /**
+   * WP456-T3（决策 1448）：**合进清单卡**——只有一行标题、里面没多少东西的卡（产出 / 连接 / 设定 / 工坊服务）
+   * 不各占一张卡，合成看板最底下那一张清单卡，每行「名字 + 右边一句状态 + ›」，点了在第三栏开它的 `panel`
+   * （没有 `panel` 时去 `moreHref`）。清单卡不参与拖动排序。
+   */
+  list?: true
+  /**
    * 标题行的一句摘要与状态点。是 hook（与 `useBadge` 同一条规矩：轻，只读缓存或一个小请求）。
    * 右上角图标上的点也读它——卡上亮什么，图标上就亮什么。图标调用时 `detail` 为假：只要点，摘要要的重请求别发。
    */
@@ -157,7 +163,12 @@ export interface RailCardDefinition {
     icon: LucideIcon
     /** i18n 键（悬停与读屏的那一句）。 */
     label: string
-    onClick(props: RailPanelBodyProps): void
+    /**
+     * 点了做什么。不给时用 {@link intent}：展开这张卡并带上那个意图（「对话」卡头的「+」= 展开 + 开新对话那一格）。
+     */
+    onClick?(props: RailPanelBodyProps): void
+    /** WP456-T3：展开这张卡时带的意图（卡身体自己认，如 `compose`）。 */
+    intent?: string
   }
 }
 
@@ -165,8 +176,10 @@ export interface RailCardDefinition {
 export type CardDot = 'alert' | 'attention'
 
 export interface CardStatus {
-  /** 收起时标题行右边那一句（已经翻译好）。 */
+  /** 收起时标题行右边那一句（已经翻译好）；清单卡那一行右边也是它。 */
   summary?: string
+  /** WP456-T3（规范 §2.6 第 14 条）：卡头标题后面那个灰色计数（「对话 1」）；不给就不画。 */
+  count?: number
   dot?: CardDot
   /** 悬停在状态点 / 图标上说的那一句（「1 个连接要重连」）。 */
   dotLabel?: string
@@ -415,6 +428,11 @@ export function railCardBody(id: string): RailCardBody | undefined {
  * 卡的顺序：先按人记住的那一份（`saved`，里面认不出的 id 跳过），没记过的按默认 `order` 接在后面。
  * 新注册的卡（以后加第六张）因此不会因为人拖过一次就永远找不到。
  */
+/** WP456-T3：这张卡合进了清单卡吗（决策 1448）。 */
+export function isListCard(id: string): boolean {
+  return cards.get(id)?.list === true
+}
+
 export function listRailCards(saved: readonly string[] = []): RailCardDefinition[] {
   const byOrder = [...cards.values()].sort((a, b) => a.order - b.order)
   const known = saved.filter((id, i) => cards.has(id) && saved.indexOf(id) === i)

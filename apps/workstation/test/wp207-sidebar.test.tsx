@@ -232,16 +232,15 @@ describe('WP207 左栏三级「+」', () => {
     // 悬停才出现：平时透明，但仍是一个能 Tab 到的按钮
     expect(addDuty.className).toContain('opacity-0')
     expect(addDuty.className).toContain('focus-visible:opacity-100')
-    const newMatter = screen.getByTestId('rail-new-matter')
-    expect(newMatter.getAttribute('aria-label')).toBe('在「YouTube 红人」下开新对话 / 任务')
-    expect(newMatter.tagName).toBe('BUTTON')
+    // WP456-T3（§3.2）：职责行右边不再挂「+」（开新对话走职责页看板「对话」卡头的「+」）
+    expect(screen.queryByTestId('rail-new-matter')).toBeNull()
   })
 
-  it('不是所有者：看不到新建岗位与加职责的「+」，开新事的「+」照样有', () => {
+  it('不是所有者：看不到新建岗位与加职责的「+」（WP456-T3 起职责行也不挂「+」）', () => {
     renderShell(false)
     expect(screen.queryByTestId('rail-new-position-plus')).toBeNull()
     expect(screen.queryByTestId('rail-add-duty-plus')).toBeNull()
-    expect(screen.getByTestId('rail-new-matter')).toBeDefined()
+    expect(screen.queryByTestId('rail-new-matter')).toBeNull()
   })
 
   it('新建岗位：就地填名字、勾职责（拆过的老职责不列），建完分给自己', async () => {
@@ -299,11 +298,10 @@ describe('WP207 左栏三级「+」', () => {
     ])
   })
 
-  it('职责行「+」（WP372）：跳到这条职责，右侧面板「对话」卡开好新对话那一格，写一句回车 = 交给这条职责', async () => {
+  it('职责页看板「对话」卡头「+」（WP456-T3，原左栏职责行「+」）：开好新对话那一格，写一句回车 = 交给这条职责', async () => {
     const user = userEvent.setup()
-    renderShell(true)
-    // Radix tooltip + 焦点被新开的面板拿走时，jsdom 里 userEvent 的整套指针序列会卡住；点击本身用 fireEvent
-    fireEvent.click(screen.getByTestId('rail-new-matter'))
+    renderShell(true, '/positions/asg_yt/duties/kol.youtube')
+    fireEvent.click(await screen.findByTestId('rail-card-action-conversations'))
     const input = await screen.findByTestId('conv-compose-input')
     await user.type(input, '联系 Jake 要新视频的数据{Enter}')
     await waitFor(() => {
@@ -318,8 +316,8 @@ describe('WP207 左栏三级「+」', () => {
 
 describe('WP259 一句话交给职责：长文本照收（WP372 起在右侧面板「新对话」那一格）', () => {
   it('一大段：标题取第一句…，完整原文作描述（原来截到 200 字）', async () => {
-    renderShell(true)
-    fireEvent.click(screen.getByTestId('rail-new-matter'))
+    renderShell(true, '/positions/asg_yt/duties/kol.youtube')
+    fireEvent.click(await screen.findByTestId('rail-card-action-conversations'))
     const input = await screen.findByTestId('conv-compose-input')
     const text = `联系 Jake 要新视频的数据。${'顺便问他下个月能不能再排一条合作视频，'.repeat(8)}`
     fireEvent.change(input, { target: { value: text } })
@@ -348,7 +346,7 @@ describe('WP207 职责下的对话 / 任务（WP372 起在右侧面板「对话�
     expect(screen.queryByTestId('rail-matter')).toBeNull()
     const card = await openConversations()
     const rows = await within(card).findAllByTestId('conv-link')
-    expect(rows.map((r) => r.textContent)).toEqual([
+    expect(rows.map((r) => r.querySelector('.flex-1')?.textContent)).toEqual([
       '等你批的',
       '做完待看',
       '在跑的那件',
