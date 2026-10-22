@@ -66,6 +66,7 @@ import {
 import { type AdsExportIntake, withIntakeNote } from './ads-data/export-intake.js'
 import { attachedLine, attachmentsBrief, readAssistantFile } from './assistant-files.js'
 import { offsetToTz, reviewWindow } from './schedule.js'
+import { createWorkHoursStore, type WorkHoursStore } from './work-hours.js'
 
 /** 队列上还等着人的状态。 */
 const WAITING_STATES = new Set(['pending', 'in_review'])
@@ -190,6 +191,8 @@ export interface WorkPortOptions {
   duplicates?(kind: 'week' | 'month'): Promise<ReviewDuplicate[]> | ReviewDuplicate[]
   /** WP388：周复盘取数用的时区（品牌目标市场的）；不给 = 工作区时区。 */
   reportTz?(): string
+  /** WP474（决策 1530）：「我的作息」存哪；不给 = 内存档（单测、没有数据目录的装配）。 */
+  workHours?: WorkHoursStore
 }
 
 /**
@@ -254,6 +257,7 @@ function outcomeOf(item: ApprovalItem): CardOutcome {
 }
 
 export function createWorkPort(options: WorkPortOptions): WorkPort {
+  const hours = options.workHours ?? createWorkHoursStore()
   const work = options.work
 
   const cardsOf = async (actor: WorkActor): Promise<ApprovalItem[]> => options.approvals(actor)
@@ -670,8 +674,12 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         to: input.to,
         now: work.now(),
         tz_offset_minutes: input.tz_offset_minutes ?? work.tz_offset_minutes,
+        // WP474（决策 1530）：按本人的作息找空档
+        hours: hours.get(actor.person_id),
       })
     },
+    workHours: (actor) => hours.get(actor.person_id),
+    setWorkHours: (actor, input) => hours.set(actor.person_id, input),
 
     async todayPlan(actor, refresh) {
       const cards = await cardsOf(actor)

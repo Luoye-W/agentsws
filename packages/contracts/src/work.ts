@@ -545,6 +545,16 @@ export interface Todo {
   owner: PersonId
   delegate?: TodoDelegate
   horizon: TodoHorizon
+  /**
+   * WP474（决策 1531，只加）：`horizon` 是哪一刻定下的（建的时候、换档的时候）。
+   * 「本周」= 那一刻所在的周一到周日；跨了周还没做完的读出来标 {@link Todo.carried_over}。老待办没有这一格（看 `updated_at`）。
+   */
+  horizon_at?: Iso8601
+  /**
+   * WP474（决策 1531，只加）：**读的时候算的**，不存——没日子的「本周」待办跨了周还没做完，
+   * 周一自动挪进新的「本周」顶上，清单上标「上周没做完」。
+   */
+  carried_over?: boolean
   /** 截止 → 短期 */
   due?: Iso8601
   /** 排期 → 上日历 */
@@ -698,6 +708,34 @@ export interface TodoSlotResult {
   /** 这一段里实在找不到空档的那几件 */
   unplaced: TodoId[]
 }
+
+/**
+ * WP474（决策 1530，只加）：「我的作息」——**只影响「帮我排进空档」的候选**（设置 → 通用一行，每人一份）。
+ * 默认就是 WP469 写死的那一套：9:00–18:00、不排周末、直播前后各空 30 分钟、不避午饭。
+ */
+export interface WorkHours {
+  /** 上班（本地分钟，9:00 = 540） */
+  start_min: number
+  /** 下班（本地分钟，18:00 = 1080；晚于上班） */
+  end_min: number
+  /** 周末也排 */
+  weekends: boolean
+  /** 直播前后各空多久（分钟，0 = 不空） */
+  live_buffer_min: number
+  /** 避开午饭（12:00–13:00） */
+  avoid_lunch: boolean
+}
+
+export const DEFAULT_WORK_HOURS: WorkHours = {
+  start_min: 9 * 60,
+  end_min: 18 * 60,
+  weekends: false,
+  live_buffer_min: 30,
+  avoid_lunch: false,
+}
+
+/** 午饭那一段（本地分钟）：12:00–13:00。 */
+export const LUNCH_SPAN_MIN = { start: 12 * 60, end: 13 * 60 } as const
 
 // ── 每日计划（37 §2.4 早上）────────────────────────────────────────────
 

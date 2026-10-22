@@ -69,6 +69,7 @@ import { PeopleUsage } from '@/components/settings/people-usage'
 import { RunLimitsSetting } from '@/components/settings/run-limits-setting'
 import { WeeklyReportsCard } from '@/components/settings/weekly-reports-card'
 import { WeeklyReviewCard } from '@/components/settings/weekly-review-card'
+import { WorkHoursSetting } from '@/components/settings/work-hours-setting'
 import { ensureSession } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { type UsageMode, useMode } from '@/lib/mode'
@@ -195,6 +196,14 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
         desc: 'sp.motion.desc',
         keywords: '动画 animation',
         render: () => <MotionRow />,
+      },
+      {
+        // WP474（决策 1530）：只影响「帮我排进空档」的候选
+        id: 'work-hours',
+        title: 'sp.work_hours',
+        desc: 'sp.work_hours.desc',
+        keywords: '作息 工作时间 上班 下班 周末 直播 午饭 午休 空档 排期 hours',
+        render: () => <WorkHoursSetting />,
       },
       {
         // WP426：版本与更新挪到「通用」——网页里也看得到版本（服务端报的）；桌面壳里能检查更新

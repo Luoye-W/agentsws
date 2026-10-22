@@ -112,7 +112,8 @@ function sortKey(t: Todo): number {
 /**
  * 清单分组：今天 / 本周 / 以后（照 `horizon`）+ 做完的。
  * 「今天」那组做完的那几行留到当天结束（划掉、排在最后），再收进「做完的」。
- * 收件箱记过来的排在本周最上面（刚记的那一行要一眼看见）。
+ * 收件箱记过来的排在本周最上面（刚记的那一行要一眼看见）；
+ * WP474（决策 1531）：上周没做完挪过来的（`carried_over`）排在它们之前——周一一打开先看到。
  */
 export function groupForList(open: readonly Todo[], done: readonly Todo[], now: Date): ListGroups {
   const out: ListGroups = { today: [], week: [], later: [], done: [] }
@@ -124,6 +125,9 @@ export function groupForList(open: readonly Todo[], done: readonly Todo[], now: 
   const byTime = (a: Todo, b: Todo): number => sortKey(a) - sortKey(b)
   out.today.sort(byTime)
   out.week.sort((a, b) => {
+    const ca = a.carried_over === true ? 0 : 1
+    const cb = b.carried_over === true ? 0 : 1
+    if (ca !== cb) return ca - cb
     const ia = a.origin?.inbox_item === undefined ? 1 : 0
     const ib = b.origin?.inbox_item === undefined ? 1 : 0
     if (ia !== ib) return ia - ib
@@ -177,8 +181,11 @@ export function listCounts(open: readonly Todo[]): { today: number; week: number
 /** 还没排期的（第一档）：分「本周要做」/「以后」。 */
 export function unscheduled(open: readonly Todo[]): { week: Todo[]; later: Todo[] } {
   const none = open.filter((t) => levelOf(t) === 'undated')
+  // WP474：上周没做完的排在「本周要做」最上面（其余照原来的先后）
+  const carriedFirst = (a: Todo, b: Todo): number =>
+    (a.carried_over === true ? 0 : 1) - (b.carried_over === true ? 0 : 1)
   return {
-    week: none.filter((t) => t.horizon !== 'backlog'),
+    week: none.filter((t) => t.horizon !== 'backlog').sort(carriedFirst),
     later: none.filter((t) => t.horizon === 'backlog'),
   }
 }
