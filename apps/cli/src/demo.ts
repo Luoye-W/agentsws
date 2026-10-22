@@ -26,6 +26,8 @@ import type {
   InboundEvent,
   Iso8601,
   MessageRecord,
+  MessageRule,
+  MessageRuleHit,
   ObjectRef,
   RangeRef,
   RunEvent,
@@ -2369,6 +2371,101 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       },
     ]
     for (const rule of taught) await store.putSenderRule(rule)
+  }
+
+  /*
+   * WP441（docs/108 §5.1）：三条消息规则（右栏「规则」里「消息规则」那一组有东西可看）+ 命中过的几封 +
+   * 今天的简报里攒着的几封。只在第一次种：人删过 / 改过的不再种回来。
+   */
+  if (store.putMessageRule !== undefined && ((await store.messageRules?.()) ?? []).length === 0) {
+    const day = (daysAgo: number): string =>
+      new Date(nowMs - daysAgo * 86_400_000).toISOString().slice(0, 10)
+    const ruleBase = {
+      scope: { kind: 'brand' as const },
+      enabled: true,
+      revision: 1,
+      by: world.roleHolder,
+      updated_by: world.roleHolder,
+      created_at: at(60 * 24 * 9),
+      updated_at: at(60 * 24 * 9),
+    }
+    const rules: MessageRule[] = [
+      {
+        ...ruleBase,
+        id: 'mrule_demo_logistics',
+        name: '物流通知',
+        order: 0,
+        when: { match: 'all', conditions: [{ type: 'from', value: '@shipfast.example' }] },
+        actions: [{ type: 'label', label: 'orders' }, { type: 'digest' }],
+        origin_text: 'ShipFast 发来的物流通知都打个标签、进今天的简报',
+        hit_days: { [day(0)]: 2, [day(2)]: 3, [day(5)]: 2 },
+        last_hit_at: at(90),
+      },
+      {
+        ...ruleBase,
+        id: 'mrule_demo_supplier',
+        name: '供应商来信',
+        order: 1,
+        when: { match: 'all', conditions: [{ type: 'from', value: '@kraft-boxes.example' }] },
+        actions: [{ type: 'label', label: 'suppliers' }, { type: 'digest' }],
+        origin_text: '纸箱供应商的信打上「供应商」、进简报',
+        hit_days: { [day(0)]: 1, [day(7)]: 1 },
+        last_hit_at: at(180),
+      },
+      {
+        ...ruleBase,
+        id: 'mrule_demo_pitch',
+        name: '推销',
+        order: 2,
+        when: {
+          match: 'all',
+          conditions: [
+            {
+              type: 'ai',
+              value: '陌生人发来的推销 / 开发信（找你买服务、代运营、推广合作、工厂报价之类）',
+            },
+          ],
+        },
+        actions: [{ type: 'notify' }],
+        origin_text: '推销的都告诉我',
+        hit_days: { [day(1)]: 2, [day(4)]: 1 },
+        last_hit_at: at(60 * 24),
+      },
+    ]
+    for (const rule of rules) await store.putMessageRule(rule)
+    const hits: [string, MessageRuleHit[]][] = [
+      ['m104', [{ rule_id: 'mrule_demo_logistics', by: 'static', name: '物流通知' }]],
+      ['m116', [{ rule_id: 'mrule_demo_logistics', by: 'static', name: '物流通知' }]],
+      [
+        'm103',
+        [
+          { rule_id: 'mrule_demo_supplier', by: 'static', name: '供应商来信' },
+          { rule_id: 'mrule_demo_pitch', by: 'ai', confidence: 0.62, name: '推销' },
+        ],
+      ],
+    ]
+    for (const [id, ruleHits] of hits) {
+      const row = rows.find((r) => r.id === id)
+      if (row?.triage === undefined) continue
+      await store.update(id, {
+        triage: {
+          ...row.triage,
+          rule_hits: ruleHits,
+          reasons: [...row.triage.reasons, `消息规则：${ruleHits[0]?.name ?? ''}`],
+        },
+      })
+      const digest = ruleHits.filter((h) => h.rule_id !== 'mrule_demo_pitch')
+      await store.putDigestEntry?.({
+        message_id: id,
+        thread_id: row.thread_id,
+        rule_ids: digest.map((h) => h.rule_id),
+        rule_names: digest.map((h) => h.name ?? ''),
+        subject: row.subject,
+        from: row.from.name ?? row.from.email,
+        summary: row.triage.summary || row.subject,
+        at: row.date,
+      })
+    }
   }
 
   // WP172：挪进 BtoBAgents 的那封在 B2B 库里落成了一条询盘（真路径见 `b2b-mail.ts`）

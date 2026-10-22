@@ -28,6 +28,9 @@ import type {
   Clock,
   Matter,
   MatterEvent,
+  MessageRuleList,
+  MessageRuleProposal,
+  MessageRuleProposeInput,
   OutboundRecord,
   PositionInstance,
   PositionWorkView,
@@ -47,6 +50,11 @@ import {
   type AssistantMatterRow,
   type AssistantPositionRow,
   type AssistantSentRow,
+  isAssistantTool,
+  LIST_MESSAGE_RULES_TOOL,
+  MESSAGE_RULE_TOOL_DEFS,
+  MESSAGE_RULE_TOOL_NAMES,
+  PROPOSE_MESSAGE_RULE_TOOL,
 } from '@agentsws/stand-ins'
 import {
   createFanout,
@@ -88,6 +96,14 @@ export interface AssistantDeps {
   writeNotes?: FanoutDeps['writeNotes']
   /** WP357：汇总卡上「撤销」那一批。不给 = 撤不了。 */
   retireNotes?: FanoutDeps['retireNotes']
+  /**
+   * WP441（docs/108 §5.1.2）：一句话写消息规则。给了才挂那两个工具。**转规则用的是人这一轮说的原话**
+   * （`ctx.user_text`），不是模型转述的——规则只能由人的话建。
+   */
+  messageRules?: {
+    propose(actor: FreeChatActor, input: MessageRuleProposeInput): Promise<MessageRuleProposal>
+    list(actor: FreeChatActor): Promise<MessageRuleList>
+  }
 }
 
 export interface AssistantCallResult {
@@ -102,6 +118,8 @@ export interface AssistantCallResult {
 export interface Assistant {
   /** 挂给模型的工具（全仓一份的定义）。 */
   tools(): readonly ToolDef[]
+  /** WP441：这个工具归助理接吗（六个助理工具之外，接了消息规则还有那两个）。 */
+  handles?(name: string): boolean
   /** 系统提示里「你的岗位」那几行（模型据此知道有哪些岗位可派、拿什么名字点）。 */
   promptLines(actor: FreeChatActor): Promise<string[]>
   call(
@@ -381,8 +399,69 @@ export function createAssistant(deps: AssistantDeps): Assistant {
     return { content: json(out), dispatch: view }
   }
 
+  /** WP441：一句话写消息规则（转规则、试跑、出「要建吗」卡；不直接生效）。白名单出参。 */
+  const messageRuleCall = async (
+    actor: FreeChatActor,
+    name: string,
+    input: Record<string, unknown>,
+    user_text: string,
+  ): Promise<AssistantCallResult> => {
+    const rules = deps.messageRules
+    if (rules === undefined) return { content: '这个工具不存在。' }
+    if (name === LIST_MESSAGE_RULES_TOOL) {
+      const list = await rules.list(actor)
+      return {
+        content: json({
+          rules: list.rules.map((r) => ({
+            id: r.id,
+            name: r.name,
+            revision: r.revision,
+            enabled: r.enabled,
+            ...(r.system === undefined
+              ? { said: r.origin_text }
+              : { system: r.system, ...(r.time === undefined ? {} : { time: r.time }) }),
+            hits_30d: r.hits_30d ?? 0,
+          })),
+        }),
+      }
+    }
+    const text = user_text.trim()
+    if (text === '')
+      return {
+        content: json({ ok: false, message: '规则只能由人的话建：这一轮没有用户的原话，不建。' }),
+      }
+    const rule_id =
+      typeof input.rule_id === 'string' && input.rule_id !== '' ? input.rule_id : undefined
+    const revision = typeof input.revision === 'number' ? input.revision : undefined
+    const out = await rules.propose(actor, {
+      text,
+      ...(rule_id === undefined ? {} : { rule_id }),
+      ...(revision === undefined ? {} : { revision }),
+    })
+    if (!out.ok) return { content: json({ ok: false, message: out.message ?? '没转成规则。' }) }
+    return {
+      content: json({
+        ok: true,
+        name: out.draft?.name,
+        plain: out.plain,
+        matched: out.trial?.matched ?? 0,
+        changed: out.trial?.changed.length ?? 0,
+        sample: (out.trial?.sample ?? []).map((x) => x.subject).slice(0, 3),
+        ...(out.trial?.credits === undefined ? {} : { credits: out.trial.credits }),
+        card: out.card_id !== undefined,
+        next: '确认卡已经发到卡片流，用户点「建」才生效；告诉他一行白话和试跑命中几封、改掉去向几封。',
+      }),
+    }
+  }
+
   return {
-    tools: () => ASSISTANT_TOOL_DEFS,
+    tools: () =>
+      deps.messageRules === undefined
+        ? ASSISTANT_TOOL_DEFS
+        : [...ASSISTANT_TOOL_DEFS, ...MESSAGE_RULE_TOOL_DEFS],
+    handles: (name) =>
+      isAssistantTool(name) ||
+      (deps.messageRules !== undefined && MESSAGE_RULE_TOOL_NAMES.includes(name)),
     fanout,
 
     async promptLines(actor) {
@@ -417,6 +496,9 @@ export function createAssistant(deps: AssistantDeps): Assistant {
           return dispatch(actor, input, ctx.user_text)
         case ASSISTANT_FANOUT_TOOL:
           return fanout.plan(actor, input, ctx.source ?? { name: '对话里的一段话', kind: 'human' })
+        case PROPOSE_MESSAGE_RULE_TOOL:
+        case LIST_MESSAGE_RULES_TOOL:
+          return messageRuleCall(actor, call.name, input, ctx.user_text)
         default:
           return { content: '这个工具不存在。' }
       }

@@ -813,7 +813,7 @@ const LABEL_TERMS: readonly [RegExp, string][] = [
 ]
 
 const EMAIL_OR_DOMAIN =
-  /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})|(@?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|co|cn|shop|store|de|uk|fr|jp))\b/i
+  /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})|(@?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|co|cn|shop|store|de|uk|fr|jp|example))\b/i
 
 /** 「推销的」「推广的」这类说法 → AI 条件的那一句。 */
 const PITCH_TERMS = /推销|开发信|陌生.{0,4}(?:合作|推广)|cold|pitch|sales ?pitch/i

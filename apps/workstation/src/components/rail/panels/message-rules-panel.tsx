@@ -133,6 +133,35 @@ export function MessageRulesPanel(): ReactNode {
   const userRules = mrules.filter((r) => r.system === undefined)
   const systemRules = mrules.filter((r) => r.system !== undefined)
 
+  const renderGroup = (g: Group): ReactNode => (
+    <section
+      key={g.id}
+      className="flex flex-col gap-1.5"
+      data-testid="message-rules-group"
+      data-group={g.id}
+    >
+      <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-ws-muted-fg">
+        {t(`message_rules.group.${g.id}`)}
+        <span className="ws-num">{g.rules.length}</span>
+        {g.hint === undefined ? null : <Hint text={g.hint} />}
+      </h3>
+      <ul className="flex flex-col divide-y divide-ws-line rounded-[12px] border border-ws-line bg-ws-card">
+        {g.rules.map((rule) => (
+          <RuleRow
+            key={rule.id}
+            rule={rule}
+            shared={data.shared === true}
+            positions={overview.data?.positions}
+            busy={busy}
+            onDelete={() => {
+              remove.mutate(rule.id)
+            }}
+          />
+        ))}
+      </ul>
+    </section>
+  )
+
   return (
     <div className="flex flex-col gap-4 p-3" data-testid="message-rules-panel">
       <RuleComposer
@@ -176,6 +205,7 @@ export function MessageRulesPanel(): ReactNode {
         </p>
       ) : null}
 
+      {groups.filter((g) => g.id === 'sender').map(renderGroup)}
       {userRules.length === 0 ? null : (
         <MessageRuleGroup
           rules={userRules}
@@ -188,35 +218,7 @@ export function MessageRulesPanel(): ReactNode {
           }}
         />
       )}
-
-      {groups.map((g) => (
-        <section
-          key={g.id}
-          className="flex flex-col gap-1.5"
-          data-testid="message-rules-group"
-          data-group={g.id}
-        >
-          <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-ws-muted-fg">
-            {t(`message_rules.group.${g.id}`)}
-            <span className="ws-num">{g.rules.length}</span>
-            {g.hint === undefined ? null : <Hint text={g.hint} />}
-          </h3>
-          <ul className="flex flex-col divide-y divide-ws-line rounded-[12px] border border-ws-line bg-ws-card">
-            {g.rules.map((rule) => (
-              <RuleRow
-                key={rule.id}
-                rule={rule}
-                shared={data.shared === true}
-                positions={overview.data?.positions}
-                busy={busy}
-                onDelete={() => {
-                  remove.mutate(rule.id)
-                }}
-              />
-            ))}
-          </ul>
-        </section>
-      ))}
+      {groups.filter((g) => g.id !== 'sender').map(renderGroup)}
 
       {systemRules.length === 0 ? null : (
         <SystemRuleGroup

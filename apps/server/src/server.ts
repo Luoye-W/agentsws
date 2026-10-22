@@ -13811,6 +13811,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
       writeNotes: assistantNotes.write,
       retireNotes: assistantNotes.retireMany,
+      // WP441：一句话写消息规则（转规则用人这一轮的原话；只出「要建吗」卡）
+      messageRules: {
+        propose: (actor, input) =>
+          brand.messages.rules.propose(
+            {
+              person_id: actor.person_id,
+              ...(actor.assignment_id === undefined ? {} : { assignment_id: actor.assignment_id }),
+            },
+            input,
+          ),
+        list: async (actor) =>
+          (await brand.messages.port.messageRules?.({
+            workspace_id: ws,
+            person_id: actor.person_id,
+            assignment_id: actor.assignment_id ?? '',
+          })) ?? { rules: [] },
+      },
       open: async (actor, input) => {
         const port = await positionPortFor(ws)
         const out = await port.open(positionActor(actor), input.position_id, {
