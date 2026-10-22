@@ -171,6 +171,8 @@ allowBuilds:
   # CI 与本仓库只跑 `wrangler deploy --dry-run`（那一步只是 esbuild 打包 + 校验配置），
   # 用不到这个几十 MB 的下载，所以写死 false。真要在本机 `wrangler dev` 的人自己 approve 一次。
   workerd: false
+  # WP476：posthog-js 拖进来的 core-js，postinstall 只是打一段捐助广告，不跑
+  core-js: false
 minimumReleaseAgeExclude:
   - '@oomol-lab/connector@1.2.0'
   - electron@44.3.0

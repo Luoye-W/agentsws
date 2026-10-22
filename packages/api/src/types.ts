@@ -129,6 +129,7 @@ import type { SiteHealthPort } from './routes/site-health.js'
 import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
 import type { StoragePort } from './routes/storage.js'
+import type { TelemetrySettingsPort } from './routes/telemetry.js'
 import type { UpdatePausePort } from './routes/update-pause.js'
 import type { WorkPort } from './routes/work.js'
 import type { WorkArchivePort } from './routes/work-archive.js'
@@ -1125,6 +1126,8 @@ export interface GatewayDeps {
   autoMemory?: AutoMemoryPort
   /** WP429：站内通知。没装配时 `/v1/notifications*` 回 not_implemented。 */
   notifications?: NotificationsPort
+  /** WP476：「帮助改进工坊（匿名使用数据）」开关。没装配时 `/v1/settings/telemetry` 回 not_implemented。 */
+  telemetry?: TelemetrySettingsPort
   /**
    * WP136（docs/79）：dsh 场景切换（列 / 建 / 删自建 / 起停网页场景）。
    * 只有本机档装配；没装配时 `/v1/dsh-scenes*` 回 not_implemented。

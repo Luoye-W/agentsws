@@ -13,6 +13,7 @@ import { PageError } from '@/components/page-error'
 import { RoleUpgradeNotice } from '@/components/role-upgrade-notice'
 import { SettingsDialog } from '@/components/settings-panel/settings-dialog'
 import { useSettingsRoute } from '@/components/settings-panel/use-settings-route'
+import { TelemetryRoot } from '@/components/telemetry/telemetry-root'
 import {
   ensureSession,
   getHome,
@@ -220,6 +221,8 @@ function Workspace(): ReactNode {
       {session.data === undefined ? null : <BrandLinkNote brand={session.data.workspace.name} />}
       {/* WP462：职责升了大版本、自动接不上的那几条，就地确认（别的岗位照常） */}
       <RoleUpgradeNotice positions={positions.data.positions} />
+      {/* WP476：匿名使用数据（没配置 / 关了就什么都不加载）+ 第一次那句提示 */}
+      <TelemetryRoot />
       <SettingsDialog target={settings.target} onNavigate={settings.go} onClose={settings.close} />
       {/*
         WP356：设置类的老地址（`/settings*`、`/connections`、`/im-channels`、`/org`）不在这里——

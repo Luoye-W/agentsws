@@ -106,6 +106,7 @@ import { socialRoutes } from './routes/social.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面（切档向导与"接回本机"）
 import { standbyRoutes } from './routes/standby.js'
 import { storageRoutes } from './routes/storage.js'
+import { telemetryRoutes } from './routes/telemetry.js'
 import { updatePauseRoutes } from './routes/update-pause.js'
 import { workRoutes } from './routes/work.js'
 import { workArchiveRoutes } from './routes/work-archive.js'
@@ -256,6 +257,8 @@ export function collectRoutes(): Route[] {
     ...autoMemoryRoutes(),
     // WP429：站内通知（铃铛）与「设置 → 通知」开关
     ...notificationsRoutes(),
+    // WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」
+    ...telemetryRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
     // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）

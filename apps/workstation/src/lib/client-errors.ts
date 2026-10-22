@@ -13,6 +13,8 @@
  * 发不出去就算了（`fetch` 失败吞掉）——记日志这件事本身绝不能再抛错。
  */
 
+import { track } from './telemetry/client'
+
 export type ClientErrorKind = 'boundary' | 'panel' | 'error' | 'rejection' | 'preload'
 
 export interface ClientErrorReport {
@@ -188,6 +190,12 @@ export function reportClientError(
     seen.set(key, now)
     sent += 1
     sender(JSON.stringify(report))
+    // WP476：匿名使用数据里也记一条——只有错误类名、哪一层接住的（报错文字不出门；没配置是空操作）
+    track('client_error', {
+      error_kind: report.kind,
+      error_name: report.name,
+      ...(report.scope === undefined ? {} : { scope: report.scope }),
+    })
     return true
   } catch {
     return false

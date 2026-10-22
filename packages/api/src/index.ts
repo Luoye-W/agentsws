@@ -898,6 +898,8 @@ export {
   type StorageView,
   storageRoutes,
 } from './routes/storage.js'
+// WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」
+export { type TelemetrySettingsPort, telemetryRoutes } from './routes/telemetry.js'
 // WP337：重启并更新前看一眼 / 暂停全部 / 放开
 export {
   type UpdateBusyCounts,

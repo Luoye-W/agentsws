@@ -209,7 +209,9 @@ import {
   createRoleStore,
   ENTRY_CLASSIFY_MAX_OUTPUT,
   hasApprovalFlow,
+  loadBundledPositions,
   loadBundledRole,
+  loadBundledRoles,
   type PersonaBrandContext,
   personaTextIn,
   type RangeExpanded,
@@ -962,6 +964,7 @@ import {
   type TunnelFetch,
   type TunnelSocketFactory,
 } from './team-tunnel.js'
+import { createTelemetry, type Telemetry, type TelemetryFetch } from './telemetry.js'
 import { createThemeToolExecutor } from './theme-tools.js'
 import { createUpdatePause } from './update-pause.js'
 import {
@@ -1536,6 +1539,11 @@ export interface ServerOptions {
    */
   cloudFetch?: CloudFetch & CloudEntryFetch
   /**
+   * WP476：匿名使用数据出门用的 fetch（问 `<地址>/config`、发 `<地址>/batch/`）。生产不传（走全局 fetch，
+   * 且只有 `AGENTSWS_TELEMETRY_HOST` 配了才会用）；测试一律塞替身——测试进程里不塞就整套不发。
+   */
+  telemetryFetch?: TelemetryFetch
+  /**
    * WP228：本机只读浏览器（Reddit「浏览器只读」那一路）。**给了才装**：生产入口（`index.ts`）给 `{}`，
    * 每个品牌各一份、要用时才起无头浏览器；测试塞替身会话 / 假的「文件在不在」。
    * 不给（或 `false`）= 不装，这一路照实「没配」——测试、模拟、演示里 stub 运行时命中 Reddit 的
@@ -1774,6 +1782,8 @@ export interface Server {
   autoMemory: AutoMemory
   /** WP429：站内通知（测试直接发 / 读；界面走 `/v1/notifications*`）。 */
   notifications: NotificationsService
+  /** WP476：匿名使用数据（开关、运行收尾 / 卡片定了这两类服务端事件；测试直接 flush）。 */
+  telemetry: Telemetry
   models: ModelGatewayApi
   txn: Txn
   /** WP323：发出记录与记录去处（测试直接看它；界面走 `/v1/outbound/*`）。 */
@@ -2079,6 +2089,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     options.notifications ??
     createNotifications({ clock, random, dbPath: file('notifications.db') })
 
+  /*
+   * WP476（决策 1590）：匿名使用数据。上报地址只认 `AGENTSWS_TELEMETRY_HOST`（桌面安装包的壳给），项目 key 由
+   * 云上 `/config` 给——缺一样整套不发（开发 / 测试 / 自建默认都是这一档）。服务端只记它才知道的两类：
+   * 一次运行收尾、一张卡被人定了；页面访问 / 按钮 / 前端报错由工作台记。下面几个口子都是现取（装配顺序在后）。
+   */
+  let bundledRoleSet: ReadonlySet<string> | undefined
+  let bundledPositionSet: ReadonlySet<string> | undefined
+  const telemetry = createTelemetry({
+    env,
+    now: () => clock.now(),
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+    ...(options.telemetryFetch === undefined ? {} : { fetch: options.telemetryFetch }),
+    ...(env.AGENTSWS_VERSION === undefined ? {} : { appVersion: env.AGENTSWS_VERSION }),
+    accountId: () =>
+      identity
+        .listOrganizations()
+        .find((o) => identity.brandsOf(o.id).some((w) => w.id === workspace.id))?.cloud_org_id,
+    placeOf: (assignment_id) => {
+      const a = roles.assignments.get(assignment_id)
+      if (a === undefined) return undefined
+      const position_id = cloudPositionOf(a.workspace_id, a.role_id, a.id)
+      return { role_id: a.role_id, ...(position_id === undefined ? {} : { position_id }) }
+    },
+    bundledRoleIds: () => {
+      bundledRoleSet ??= new Set(loadBundledRoles().map((r) => r.id))
+      return bundledRoleSet
+    },
+    bundledPositionIds: () => {
+      bundledPositionSet ??= new Set(loadBundledPositions().map((p) => p.id))
+      return bundledPositionSet
+    },
+  })
+
   // 21 §1：所有模块的事件都进同一条日志；请求内的 trace_id 覆盖模块自造的那个。
   const appendEvent = (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void => {
     const { at: _at, ...rest } = e
@@ -2092,6 +2135,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     // WP429：该告诉谁一声的事进站内通知（不抛、不等）
     notifications.onEvent(e)
+    // WP476：运行收尾记一条匿名使用数据（没配置就是空操作；不抛、不等）
+    telemetry.onEvent(e)
     // WP206：名册变了（加人 / 删人 / 岗位 / 分配 / 刚关联上）→ 各品牌攒一下再把名册推上云
     if (isRosterEvent(e.type))
       for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
@@ -3425,14 +3470,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return officialContent === undefined ? inner : officialContent.wrap(inner)
   }
 
-  const approvals = seoDecided(
-    // WP181：最外一层——`scheduled_task` 卡批了就让那条自动化任务开始、拒了就取消
-    automation.wrap(
-      officialPlugins.wrap(
-        contentWrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
+  const approvals = telemetryDecided(
+    seoDecided(
+      // WP181：最外一层——`scheduled_task` 卡批了就让那条自动化任务开始、拒了就取消
+      automation.wrap(
+        officialPlugins.wrap(
+          contentWrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
+        ),
       ),
+      seoDecidedHook,
     ),
-    seoDecidedHook,
+    telemetry,
   )
   approvalsForContent = approvals
   /*
@@ -16238,6 +16286,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     // WP429：站内通知（铃铛）与「设置 → 通知」开关
     notifications: notifications.port,
+    // WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」
+    telemetry: {
+      get: () => telemetry.view(),
+      set: (patch) => telemetry.update(patch),
+      // 工作台（posthog-js）经本机转发：再过一遍白名单才出门
+      ingest: (input) => telemetry.ingest(input),
+    },
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
@@ -16701,6 +16756,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     learning,
     autoMemory,
     notifications,
+    telemetry,
     models,
     txn,
     outbound: outboundLog,
@@ -16876,6 +16932,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     async close() {
       if (closed) return
       closed = true
+      // WP476：手上没发出去的那一小批发一下就收（没配置是空操作）
+      telemetry.close()
       for (const t of contentTimers) clearTimeout(t)
       if (teamTimer !== undefined) clearInterval(teamTimer)
       await teamRef?.close()
@@ -16943,6 +17001,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   }
   return server
+}
+
+/**
+ * WP476：每张卡被人定了 → 记一条匿名使用数据（只有卡的类型与通过 / 改了再过 / 驳回，没有卡里的任何一个字）。
+ * 与 `seoDecided` 同一个 Proxy 做法；记不记得下都不影响这一次决定本身。
+ */
+function telemetryDecided(bus: ApprovalBus, telemetry: Telemetry): ApprovalBus {
+  return new Proxy(bus, {
+    get(target, prop, receiver) {
+      if (prop !== 'decide') {
+        const value = Reflect.get(target, prop, receiver)
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+      return async (...args: Parameters<ApprovalBus['decide']>): Promise<ApprovalItem> => {
+        const out = await target.decide(...args)
+        telemetry.onCardDecided(out)
+        return out
+      }
+    },
+  })
 }
 
 /**

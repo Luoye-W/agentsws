@@ -146,6 +146,30 @@ export interface ServerSpawnInput {
    * `AGENTSWS_SEARCH_BROWSER_TOKEN` 交给服务进程——它的联网搜索靠这条去开 Google / Bing。远程档不给。
    */
   searchBrowser?: { url: string; token: string }
+  /**
+   * WP476（决策 1590）：匿名使用数据的上报地址（`AGENTSWS_TELEMETRY_HOST`）。只有安装包给（见 `telemetryHostFor`）；
+   * 服务进程没收到这一条就整套不发。
+   */
+  telemetryHost?: string
+}
+
+/**
+ * WP476：官方安装包的匿名使用数据上报地址（自家域名的转发）。与 `@agentsws/contracts` 的 `DEFAULT_TELEMETRY_HOST`
+ * 同一条——壳不依赖契约包，所以这里抄一份，`server-process.test.ts` 核两边一致。
+ */
+export const DEFAULT_TELEMETRY_HOST = 'https://t.agentsws.com'
+
+/**
+ * 给不给服务进程上报地址：外面显式给了就照给（`off` = 关，排查 / 内网用）；没给时**只有打包后的安装包**给默认那条，
+ * 开发期（`pnpm desktop`）一条都不给——开发时不许有数据出门。
+ */
+export function telemetryHostFor(input: {
+  env: Readonly<Record<string, string | undefined>>
+  packaged: boolean
+}): string | undefined {
+  const explicit = input.env.AGENTSWS_TELEMETRY_HOST?.trim()
+  if (explicit !== undefined && explicit !== '') return explicit === 'off' ? undefined : explicit
+  return input.packaged ? DEFAULT_TELEMETRY_HOST : undefined
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
@@ -180,6 +204,7 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
           AGENTSWS_SEARCH_BROWSER_URL: input.searchBrowser.url,
           AGENTSWS_SEARCH_BROWSER_TOKEN: input.searchBrowser.token,
         }),
+    ...(input.telemetryHost === undefined ? {} : { AGENTSWS_TELEMETRY_HOST: input.telemetryHost }),
     // WP218：Windows 上没有 SIGTERM，壳靠关 stdin 请它收尾（见 node-runtime 的 kill）
     AGENTSWS_STOP_ON_STDIN_END: '1',
     ...haltEnv(input.halt),
