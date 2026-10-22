@@ -1018,10 +1018,13 @@ async function seedWorkModel(options: {
     position_id: options.analytics_id,
     note: '文案 + 主图 + 上架，卡在文案',
   })
-  work.splitTodo(launch.id, [
+  const split = work.splitTodo(launch.id, [
     { title: '写新品页文案' },
     { title: '做新品页主图', due: new Date(Date.parse(now) + 3 * DAY_MS).toISOString() },
   ])
+  // WP469：「写新品页文案」是这周要做、还没排日子的（第一档，日历左边「还没排期的」里）
+  const copy = split.children.find((c) => c.title === '写新品页文案')
+  if (copy !== undefined) work.updateTodo(copy.id, { horizon: 'week' })
   work.createTodo({
     title: '把退货政策页重写一遍',
     owner,
@@ -1034,6 +1037,40 @@ async function seedWorkModel(options: {
     position_id: options.aftersales_id,
     scheduled: { start: todayAt(now, 10), end: todayAt(now, 11) },
   })
+
+  /*
+   * WP469（决策 1522）：待办三档各种几条，「日历与待办」两面都有东西看——
+   * 没日子（本周要做 / 以后）、有日子没钟点（那天「全天」）、有钟点（时间格里一块），再加一条昨天做完的（划掉变淡）。
+   */
+  work.createTodo({
+    title: '回复 Leo 的合作邮件',
+    owner,
+    position_id: options.aftersales_id,
+    scheduled: { start: todayAt(now, 15), end: todayAt(now, 16) },
+  })
+  work.createTodo({
+    title: '给 Maya 回报价',
+    owner,
+    position_id: options.aftersales_id,
+    due: todayAt(now, 12),
+  })
+  work.createTodo({
+    title: '拍主图样品',
+    owner,
+    position_id: options.analytics_id,
+    scheduled: { start: todayAt(now, 24 + 14), end: todayAt(now, 24 + 15) },
+  })
+  for (const title of ['整理 3 个红人的寄样清单', '给工厂确认 12 月备货量'])
+    work.createTodo({ title, owner, horizon: 'week' })
+  for (const title of ['把 FAQ 翻成德语', '研究 TikTok Shop 入驻'])
+    work.createTodo({ title, owner, horizon: 'backlog' })
+  const policy = work.createTodo({
+    title: '写退货政策页',
+    owner,
+    position_id: options.aftersales_id,
+    scheduled: { start: todayAt(now, -24 + 15), end: todayAt(now, -24 + 16.5) },
+  })
+  work.complete(policy.id)
 
   // ③ 一个 conversation 事项：就是现在那封 Anna 的信
   const customer = pack.customerByEmail('anna@example.com')
