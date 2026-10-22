@@ -88,9 +88,17 @@ describe('解析：服务进程用桌面壳同一个提取函数读 HTML 原文'
 function fakeBsk(pages: string[], finalUrl = SERP_URL) {
   const calls: string[][] = []
   let i = 0
+  const prepared = new Set<string>()
   const bsk: BskJson = async (args) => {
     calls.push(args)
-    if (args[0] === 'session' && args[1] === 'start') return { session_id: 's1' }
+    if (args[0] === 'session' && args[1] === 'request' && args[3] === '--prepare') {
+      prepared.add(args[2] as string)
+      return { state: 'prepared', request_id: args[2] }
+    }
+    if (args[0] === 'session' && args[1] === 'start') {
+      if (!prepared.has(args[3] as string)) throw new Error('request is not prepared')
+      return { session_id: 's1' }
+    }
     if (args[0] === 'navigate') return { reached: true, url: args.at(-1), final_url: finalUrl }
     if (args[0] === 'get-html') {
       const html = pages[Math.min(i, pages.length - 1)] ?? ''
@@ -130,15 +138,16 @@ describe('读页：BrowserSkill 四个读动作；过渡页隔 1 秒重读、最
     expect(ok.settled).toBe(true)
     expect(serpOfHtml(ok.html, ok.final_url).items).toHaveLength(3)
     expect(slept).toEqual([1_000, 1_000])
-    expect(calls[0]).toEqual(['session', 'start', '--request-id', 'r1', '--no-focus'])
-    expect(calls[1]?.slice(0, 5)).toEqual([
+    expect(calls[0]).toEqual(['session', 'request', 'r1', '--prepare'])
+    expect(calls[1]).toEqual(['session', 'start', '--request-id', 'r1', '--no-focus'])
+    expect(calls[2]?.slice(0, 5)).toEqual([
       'navigate',
       '--session',
       's1',
       '--wait-until',
       'domcontentloaded',
     ])
-    expect(calls[1]?.at(-1)).toBe(SERP_URL)
+    expect(calls[2]?.at(-1)).toBe(SERP_URL)
     // 只用读动作：不点、不填、不跑脚本
     expect(new Set(calls.map((c) => c[0]))).toEqual(new Set(['session', 'navigate', 'get-html']))
     await reader.close()
@@ -498,5 +507,21 @@ describe('告诉用户：每个品牌第一次走这一路时说一句，之后�
     const shell = fakeShell(() => builtinSerp([]))
     const s = setup({ channel: shell.channel })
     expect((await s.search.search('desk lamp')).content).not.toContain(OWN_CHROME_TELL_LINE)
+  })
+})
+
+describe('bsk 0.3.3 的请求编号（真机 10-22 撞到）', () => {
+  it('缺省编号是「过期毫秒:UUID」，十分钟以内过期；先 --prepare 再用同一个编号开窗口', async () => {
+    const { bsk, calls } = fakeBsk([fixture('google-serp.html')])
+    const before = Date.now()
+    const reader = createOwnBrowserReader({ bsk })
+    await reader.serp?.(SERP_URL, { pending: () => false })
+    const id = calls[0]?.[2] ?? ''
+    expect(id).toMatch(/^\d{13}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u)
+    const expiry = Number(id.split(':')[0])
+    expect(expiry).toBeGreaterThan(before)
+    expect(expiry - before).toBeLessThanOrEqual(10 * 60_000)
+    expect(calls[1]).toEqual(['session', 'start', '--request-id', id, '--no-focus'])
+    await reader.close()
   })
 })

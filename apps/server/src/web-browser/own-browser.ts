@@ -16,7 +16,7 @@
  * 读回来如果还是过渡页，隔 1 秒再 `get-html` 一次，最多等 8 秒，再交给调用方解析。
  */
 import { execFile } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import type { BrowserTextRead } from '@agentsws/brand-intake'
 
 /** 跑一次 `bsk <args> --json`，交回解析好的那份 JSON（失败抛错，错里带它自己的那句话）。 */
@@ -133,7 +133,7 @@ export interface OwnBrowserReader {
 
 export interface OwnBrowserReaderOptions {
   bsk: BskJson
-  /** 生成 request-id（测试给固定的）。 */
+  /** 生成 request-id（bsk 要求 `<过期毫秒>:<UUID>`，最长十分钟；测试给固定的）。 */
   newId?(): string
   idleMs?: number
   /** WP455：等过渡页用的（测试给假的）。 */
@@ -145,7 +145,7 @@ export interface OwnBrowserReaderOptions {
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 
 export function createOwnBrowserReader(options: OwnBrowserReaderOptions): OwnBrowserReader {
-  const newId = options.newId ?? (() => `agentsws-${randomBytes(6).toString('hex')}`)
+  const newId = options.newId ?? (() => `${Date.now() + 9 * 60_000}:${randomUUID()}`)
   const idleMs = options.idleMs ?? OWN_BROWSER_IDLE_MS
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const now = options.now ?? (() => Date.now())
@@ -171,8 +171,11 @@ export function createOwnBrowserReader(options: OwnBrowserReaderOptions): OwnBro
   /** 还没开窗口就开一个（后台、不抢焦点）；开不出来回 `undefined`。 */
   const ensureSession = async (): Promise<string | undefined> => {
     if (session === undefined) {
+      // bsk 0.3.3：先登记请求（--prepare）再拿同一个 id 开窗口，否则报「request is not prepared」
+      const id = newId()
+      await options.bsk(['session', 'request', id, '--prepare'], OWN_BROWSER_PAGE_TIMEOUT_MS)
       const started = await options.bsk(
-        ['session', 'start', '--request-id', newId(), '--no-focus'],
+        ['session', 'start', '--request-id', id, '--no-focus'],
         OWN_BROWSER_PAGE_TIMEOUT_MS,
       )
       session = str(started.session_id)
