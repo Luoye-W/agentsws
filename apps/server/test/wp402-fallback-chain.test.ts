@@ -260,7 +260,17 @@ describe('WP402 · 你自己的浏览器（只读）', () => {
     const cmds = b.calls.map((c) => c.slice(0, 2).join(' '))
     expect(cmds.filter((c) => c === 'session start')).toHaveLength(1)
     expect(b.calls[0]).toEqual(['session', 'request', 'req_1', '--prepare'])
-    expect(b.calls[1]).toEqual(['session', 'start', '--request-id', 'req_1', '--no-focus'])
+    expect(b.calls[1]).toEqual([
+      'session',
+      'start',
+      '--request-id',
+      'req_1',
+      '--no-focus',
+      '--width',
+      '400',
+      '--height',
+      '300',
+    ])
     // 只用读的动作：开窗口 / 打开 / 读原文 / 关窗口
     for (const c of b.calls) expect(['session', 'navigate', 'get-html']).toContain(c[0] as string)
     await reader.close()
