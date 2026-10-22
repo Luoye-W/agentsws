@@ -387,7 +387,7 @@ export function ModelForm({
                         type="button"
                         role="option"
                         aria-selected={false}
-                        className="w-full rounded px-2 py-1.5 text-left hover:bg-accent"
+                        className="w-full rounded-sm px-2 py-1.5 text-left hover:bg-accent"
                         onMouseDown={(e) => {
                           e.preventDefault()
                           const el = document.getElementById(`${prefix}-model`)
@@ -713,7 +713,7 @@ function PickerModelsField({
             {shown.map((m) => (
               <label
                 key={m}
-                className="flex items-center gap-2 rounded px-1.5 py-1 font-mono text-xs hover:bg-accent"
+                className="flex items-center gap-2 rounded-sm px-1.5 py-1 font-mono text-xs hover:bg-accent"
                 title={m}
               >
                 <input

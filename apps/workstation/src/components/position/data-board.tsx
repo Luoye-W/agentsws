@@ -177,7 +177,7 @@ export function StoreSections({
     <>
       {(view?.sections ?? []).map((section) => (
         <section key={section.source} data-testid="view-section" data-source={section.source}>
-          <h3 className="ws-display mb-2.5 text-[15px]">{section.label}</h3>
+          <h3 className="ws-display mb-2.5 text-[14px]">{section.label}</h3>
           {section.connected ? (
             <div className="flex flex-col gap-4">
               {section.source === 'gsc' || section.source === 'ga4' ? (
@@ -230,7 +230,7 @@ function MiniTile({ block, range, id }: { block: Block; range: RangeName; id: st
         <Skeleton className="h-6 w-16" />
       ) : (
         <span className="flex flex-wrap items-center gap-1.5">
-          <span className="ws-display ws-num text-[20px] leading-none">
+          <span className="ws-display ws-num text-[22px] leading-none">
             {payload?.value === undefined
               ? '—'
               : formatValue(
@@ -444,7 +444,7 @@ export function DataBoard({
   if (empty && first === undefined)
     return (
       <section className="flex flex-col gap-2" data-testid="data-board" data-empty="true">
-        <h3 className="ws-display text-[17px]">{t('pos2.data.title')}</h3>
+        <h3 className="ws-display text-base">{t('pos2.data.title')}</h3>
         <p className="flex items-center gap-1.5 text-sm text-muted-foreground" data-slot="status">
           <BarChart3 className="size-4" aria-hidden />
           {t('pos2.data.empty')}
@@ -454,7 +454,7 @@ export function DataBoard({
   return (
     <section className="flex flex-col gap-3" data-testid="data-board">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="ws-display text-[17px]">{t('pos2.data.title')}</h3>
+        <h3 className="ws-display text-base">{t('pos2.data.title')}</h3>
         <Hint text={t('pos2.data.hint')} />
         <span className="ml-auto flex items-center gap-1">
           <Segmented

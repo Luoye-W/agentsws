@@ -907,6 +907,16 @@ export const getAutoMemory = (): Promise<{ enabled: boolean }> =>
 export const setAutoMemory = (enabled: boolean): Promise<{ enabled: boolean }> =>
   api<{ enabled: boolean }>('/v1/settings/auto-memory', { method: 'PUT', body: { enabled } })
 
+/** WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」（一台机器一份）。 */
+export type TelemetrySettings = import('@agentsws/contracts').TelemetryView
+export const getTelemetrySettings = (): Promise<TelemetrySettings> =>
+  api<TelemetrySettings>('/v1/settings/telemetry')
+export const putTelemetrySettings = (patch: {
+  enabled?: boolean
+  notice_seen?: boolean
+}): Promise<TelemetrySettings> =>
+  api<TelemetrySettings>('/v1/settings/telemetry', { method: 'PUT', body: patch })
+
 export interface LayerMemoryData {
   tier: string
   scope_id?: string
@@ -1308,6 +1318,35 @@ export const getApproval = (id: string, assignment?: string): Promise<ApprovalIt
     `/v1/approvals/${encodeURIComponent(id)}`,
     assignment === undefined ? {} : { assignment },
   )
+
+/** WP474（决策 1514）：本人刚才那一下怎么撤——「不要」随时；「通过」到 `until` 为止（取消窗口）。 */
+export interface ApprovalUndoData {
+  kind: 'reopen' | 'unapprove'
+  until?: string
+  /** 服务端算好的还剩几秒（按收到那一刻倒数） */
+  seconds_left?: number
+}
+
+/** WP474：一张刚处理掉的卡现在什么状态、还撤不撤得回（单卡详情上带 `undo`）。 */
+export const getApprovalUndo = (
+  id: string,
+  assignment?: string,
+): Promise<ApprovalItem & { undo?: ApprovalUndoData }> =>
+  api<ApprovalItem & { undo?: ApprovalUndoData }>(
+    `/v1/approvals/${encodeURIComponent(id)}`,
+    assignment === undefined ? {} : { assignment },
+  )
+
+/** WP474：撤回本人刚才那一下（放回待处理）。过了窗口 / 已经发了回 409。 */
+export const undoApproval = (
+  id: string,
+  assignment?: string,
+): Promise<{ item: ApprovalItem; undone: 'reopen' | 'unapprove' }> =>
+  api(`/v1/approvals/${encodeURIComponent(id)}/undo`, {
+    method: 'POST',
+    body: {},
+    ...(assignment === undefined ? {} : { assignment }),
+  })
 
 export const listGoals = (): Promise<GoalsData> => api<GoalsData>('/v1/goals')
 

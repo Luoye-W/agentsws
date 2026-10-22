@@ -381,7 +381,7 @@ export function PositionPlanner({
                       draggable
                       data-testid="onboarding-board-duty"
                       data-role={id}
-                      className="inline-flex cursor-grab items-center gap-1 rounded-md border bg-ws-card py-0.5 pr-1 pl-0.5 text-[12.5px] active:cursor-grabbing"
+                      className="inline-flex cursor-grab items-center gap-1 rounded-md border bg-ws-card py-0.5 pr-1 pl-0.5 text-[13px] active:cursor-grabbing"
                       onDragStart={(e) => {
                         e.dataTransfer.setData(DRAG_TYPE, id)
                         e.dataTransfer.effectAllowed = 'move'

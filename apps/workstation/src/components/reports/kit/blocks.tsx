@@ -272,7 +272,7 @@ export function RankBars({ data }: { data: RankPayload }): ReactNode {
     <ul className="flex flex-col gap-[11px]" data-testid="report-rank">
       {data.rows.map((r) => (
         <li key={r.label}>
-          <div className="mb-[5px] flex justify-between gap-2 text-[12.5px]">
+          <div className="mb-[5px] flex justify-between gap-2 text-[13px]">
             <span className="flex min-w-0 items-center gap-1.5 text-ws-ink">
               <span className="truncate">{r.label}</span>
               {r.tag === undefined ? null : (
@@ -310,7 +310,7 @@ export function FunnelBars({ data }: { data: FunnelPayload }): ReactNode {
       {data.steps.map((s) => (
         <li
           key={s.label}
-          className="grid grid-cols-[64px_1fr_58px_52px] items-center gap-2.5 text-[12.5px]"
+          className="grid grid-cols-[64px_1fr_58px_52px] items-center gap-2.5 text-[13px]"
         >
           <span className="truncate text-ws-ink">{s.label}</span>
           <span className="h-[22px] overflow-hidden rounded-[6px] bg-ws-secondary">
@@ -365,7 +365,7 @@ export function ShareBar({ data }: { data: SharePayload }): ReactNode {
           )
         })}
       </div>
-      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[12.5px]" data-slot="data">
+      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]" data-slot="data">
         {data.parts.map((p) => (
           <li key={p.key} className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-ws-body">
@@ -384,7 +384,7 @@ export function TilesGrid({ data }: { data: TilesPayload }): ReactNode {
   return (
     <div className="grid grid-cols-2 gap-2.5" data-testid="report-tiles">
       {data.items.map((it) => (
-        <div key={it.label} className="rounded-[10px] bg-ws-surface px-3 py-2.5">
+        <div key={it.label} className="rounded-lg bg-ws-surface px-3 py-2.5">
           <p className="text-xs text-ws-muted-fg">{it.label}</p>
           <p
             className={cn(
@@ -409,7 +409,7 @@ export function DataTable({ data }: { data: TablePayload }): ReactNode {
   const productish = first === 'product'
   return (
     <div className="-mx-1 overflow-x-auto px-1">
-      <table className="w-full border-collapse text-[12.5px]" data-testid="report-table">
+      <table className="w-full border-collapse text-[13px]" data-testid="report-table">
         <thead>
           <tr>
             {data.columns.map((c) => (
@@ -466,7 +466,7 @@ export function DataTable({ data }: { data: TablePayload }): ReactNode {
                 else if (c.key === first && productish)
                   body = (
                     <span className="flex min-w-0 items-center gap-2.5">
-                      <span className="grid size-7 shrink-0 place-items-center rounded-[7px] bg-ws-secondary text-ws-muted-fg">
+                      <span className="grid size-7 shrink-0 place-items-center rounded-md bg-ws-secondary text-ws-muted-fg">
                         <Package aria-hidden className="size-3.5" />
                       </span>
                       <span className="truncate">{String(v ?? '')}</span>

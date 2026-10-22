@@ -16,6 +16,9 @@
  * WP352（决策 931，Luoye 10-16）：去掉左边会话列表，助理只有**一条连续对话**（老的多条会话第一次打开时按时间拼进来）。
  * 往上滚是完整历史：换了一天中间一行日期，换了话题一条淡线 + 上一个话题的一行小结；顶部搜索（搜以前聊过的原话与小结，
  * 点了跳到那里）；「换个话题」手动切段（说一句「换个话题…」也行）。上下文怎么管在服务端（四层，见 `assistant-thread.ts`）。
+ *
+ * WP456-T8（WP456 §3.7）：只改样子——输入框换成岗位页那一个完整对话框（贴在中栏底部居中），首屏只留
+ * 「有什么要我做的？」（那一整句并进占位字），右上那几颗换成顶栏图标钮。上下文装配（WP470 的缓存顺序）一点没动。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Fragment, useEffect, useRef, useState } from 'react'
@@ -37,6 +40,8 @@ import {
   RecalledRefs,
   TopicDivider,
 } from '@/components/free-chat/thread-bits'
+import { ComposerDock } from '@/components/shell/composer-dock'
+import { TopBarAction } from '@/components/shell/top-bar-slots'
 import { useApp } from '@/lib/app-context'
 import {
   type AssistantHistoryHit,
@@ -500,120 +505,116 @@ function AssistantThreadPage(): React.ReactNode {
   const trailingTopic =
     current?.current && lastRow !== undefined && segOf(lastRow) !== current.id && live === undefined
 
+  const suggestions = (
+    <Suggestions
+      items={assistant.data?.suggestions ?? []}
+      onPick={(text) => {
+        send.mutate({ text, images: [] })
+      }}
+    />
+  )
+
+  /*
+   * WP456-T8（WP456 §3.7）：和岗位页一个样——对话框是 WP437 那一个完整对话框，贴在中栏底部居中（`ComposerDock`），
+   * 对话在它后面往上滚；首屏只有品牌标 + 「有什么要我做的？」，快捷问题贴在框上面（和岗位页的快捷按钮同一种）。
+   * 顶部那几颗（搜以前聊过的 · 换个话题 · 记忆 · 替我答同事）进顶栏右边那排图标（没有外壳时就地画）。
+   */
   return (
-    <div className="-m-4 flex h-[calc(100vh-57px)] md:-m-7" data-testid="free-chat-page">
-      <section className="flex min-w-0 flex-1 flex-col">
-        {/* WP352：左边没有会话列表了。顶部：搜以前聊过的 · 换个话题 · 记忆 · 替我答同事 */}
-        <header className="flex items-center gap-2 px-4 py-2">
-          {rows.length === 0 ? null : <HistorySearch onJump={jump} />}
-          <span className="ml-auto flex items-center gap-1.5">
-            {currentHasTalk ? (
-              <NewTopicButton
-                disabled={busy || topic.isPending}
-                onClick={() => {
-                  topic.mutate()
-                }}
-              />
-            ) : null}
-            <MemoryButton highlight={memoryLit} />
-            {known && !solo ? <PeersButton defaultOpen={params.get('peers') === '1'} /> : null}
-          </span>
-        </header>
+    <div className="-m-4 flex h-[calc(100vh-2.75rem)] md:-m-7" data-testid="free-chat-page">
+      <TopBarAction>
+        {rows.length === 0 ? null : <HistorySearch onJump={jump} />}
+        {currentHasTalk ? (
+          <NewTopicButton
+            disabled={busy || topic.isPending}
+            onClick={() => {
+              topic.mutate()
+            }}
+          />
+        ) : null}
+        <MemoryButton highlight={memoryLit} />
+        {known && !solo ? <PeersButton defaultOpen={params.get('peers') === '1'} /> : null}
+      </TopBarAction>
+      <section ref={scroller} className="flex min-w-0 flex-1 flex-col overflow-y-auto px-4 md:px-7">
         {empty ? (
           <div
-            className="flex flex-1 flex-col items-center justify-center gap-5 px-4"
+            className="flex flex-1 flex-col items-center justify-center gap-4 pb-8"
             data-testid="free-chat-empty"
           >
             <BrandMark size={40} motion="idle" />
-            <div className="flex flex-col items-center gap-1.5 text-center">
-              <h2 className="ws-display text-xl">{t('assistant.empty.title')}</h2>
-              <p
-                className="max-w-xl text-[13px] text-muted-foreground"
-                data-testid="assistant-intro"
-              >
-                {t('assistant.empty.sub')}
-              </p>
-            </div>
-            <div className="w-full max-w-2xl">{composer}</div>
-            <Suggestions
-              items={assistant.data?.suggestions ?? []}
-              onPick={(text) => {
-                send.mutate({ text, images: [] })
-              }}
-            />
+            <h1 className="text-ws-page font-semibold text-ws-ink">{t('assistant.empty.title')}</h1>
           </div>
         ) : (
-          <>
-            <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4">
-              {/* WP341（决策 847）：回话里的按钮 / 表单点了、交了，就是在这里说了一句（结构化回话也是一句） */}
-              <GenuiHostProvider
-                value={{
-                  say: (text) => {
-                    send.mutate({ text, images: [] })
-                  },
-                  busy,
-                }}
-              >
-                <div
-                  className="mx-auto flex max-w-3xl flex-col gap-5 py-4"
-                  data-testid="free-chat-messages"
-                >
-                  {segmentsOf(rows).map((seg) => {
-                    const first = seg.rows[0]
-                    const prev = first === undefined ? undefined : rows[rows.indexOf(first) - 1]
-                    const head = first === undefined ? null : dividers(first, prev)
-                    const items = seg.rows.map((m, i) => (
-                      <Fragment key={m.id}>
-                        {i === 0 ? null : dividers(m, seg.rows[i - 1])}
-                        {bubble(m)}
-                      </Fragment>
-                    ))
-                    // WP350：同一批派出去的事回来报的几句聚在一起
-                    return (
-                      <Fragment key={`seg:${first?.id}`}>
-                        {head}
-                        {seg.batch === undefined ? (
-                          items
-                        ) : (
-                          <div
-                            className="flex flex-col gap-1.5 border-l-2 border-ws-line pl-2"
-                            data-testid="assistant-report-batch"
-                            data-batch={seg.batch.id}
-                          >
-                            {seg.batch.title === '' ? null : (
-                              <p className="text-xs text-muted-foreground">
-                                {t('fanout.batch', { title: seg.batch.title })}
-                              </p>
-                            )}
-                            {items}
-                          </div>
+          // WP341（决策 847）：回话里的按钮 / 表单点了、交了，就是在这里说了一句（结构化回话也是一句）
+          <GenuiHostProvider
+            value={{
+              say: (text) => {
+                send.mutate({ text, images: [] })
+              },
+              busy,
+            }}
+          >
+            <div
+              className="mx-auto flex w-full max-w-[760px] flex-col gap-5 pt-6 pb-2"
+              data-testid="free-chat-messages"
+            >
+              {segmentsOf(rows).map((seg) => {
+                const first = seg.rows[0]
+                const prev = first === undefined ? undefined : rows[rows.indexOf(first) - 1]
+                const head = first === undefined ? null : dividers(first, prev)
+                const items = seg.rows.map((m, i) => (
+                  <Fragment key={m.id}>
+                    {i === 0 ? null : dividers(m, seg.rows[i - 1])}
+                    {bubble(m)}
+                  </Fragment>
+                ))
+                // WP350：同一批派出去的事回来报的几句聚在一起
+                return (
+                  <Fragment key={`seg:${first?.id}`}>
+                    {head}
+                    {seg.batch === undefined ? (
+                      items
+                    ) : (
+                      <div
+                        className="flex flex-col gap-1.5 border-l-2 border-ws-line pl-2"
+                        data-testid="assistant-report-batch"
+                        data-batch={seg.batch.id}
+                      >
+                        {seg.batch.title === '' ? null : (
+                          <p className="text-xs text-muted-foreground">
+                            {t('fanout.batch', { title: seg.batch.title })}
+                          </p>
                         )}
-                      </Fragment>
-                    )
-                  })}
-                  {trailingTopic ? (
-                    <TopicDivider
-                      previous={
-                        lastRow === undefined ? undefined : segById.get(segOf(lastRow) ?? '')
-                      }
-                    />
-                  ) : null}
-                  {live === undefined ? null : (
-                    <AssistantMessage
-                      message={live.reply}
-                      live
-                      {...(live.status === undefined ? {} : { status: live.status })}
-                      last={false}
-                      onRegenerate={() => undefined}
-                    />
-                  )}
-                  {error === undefined ? null : <p className="text-sm text-destructive">{error}</p>}
-                </div>
-              </GenuiHostProvider>
+                        {items}
+                      </div>
+                    )}
+                  </Fragment>
+                )
+              })}
+              {trailingTopic ? (
+                <TopicDivider
+                  previous={lastRow === undefined ? undefined : segById.get(segOf(lastRow) ?? '')}
+                />
+              ) : null}
+              {live === undefined ? null : (
+                <AssistantMessage
+                  message={live.reply}
+                  live
+                  {...(live.status === undefined ? {} : { status: live.status })}
+                  last={false}
+                  onRegenerate={() => undefined}
+                />
+              )}
+              {error === undefined ? null : <p className="text-sm text-destructive">{error}</p>}
             </div>
-            <div className="mx-auto w-full max-w-3xl px-4 pb-4">{composer}</div>
-          </>
+          </GenuiHostProvider>
         )}
+        <ComposerDock
+          testId="composer-dock"
+          data={{ 'data-page': 'assistant' }}
+          above={empty ? suggestions : undefined}
+        >
+          {composer}
+        </ComposerDock>
       </section>
     </div>
   )

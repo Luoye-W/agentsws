@@ -132,6 +132,11 @@ export function TodoRow({
         ) : (
           <>
             {position === undefined ? null : <CategoryTag>{position}</CategoryTag>}
+            {todo.carried_over === true ? (
+              <span className="text-ws-warn" data-testid="todo-carried">
+                {t('caltodo.carried')}
+              </span>
+            ) : null}
             {todo.origin?.inbox_item === undefined ? null : (
               <Link to="/inbox" className="ws-link-muted" data-testid="todo-from-inbox">
                 {t('caltodo.from_inbox')}

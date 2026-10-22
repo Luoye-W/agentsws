@@ -71,7 +71,7 @@ export function NewPositionInline({
 
   return (
     <form
-      className="mx-1 mb-1 flex flex-col gap-2 rounded-[10px] border border-ws-line bg-ws-card p-2"
+      className="mx-1 mb-1 flex flex-col gap-2 rounded-lg border border-ws-line bg-ws-card p-2"
       data-testid="rail-new-position"
       onSubmit={(e) => {
         e.preventDefault()

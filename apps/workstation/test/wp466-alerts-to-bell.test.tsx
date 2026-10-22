@@ -37,6 +37,7 @@ const state: { items: InboxNotification[]; read: string[][]; prefs: Notification
     outbound: { inbox: true, system: true },
     messages: { inbox: true, system: false },
     alert: { inbox: true, system: true },
+    feedback: { inbox: true, system: false },
   },
 }
 

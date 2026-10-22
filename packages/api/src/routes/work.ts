@@ -38,6 +38,7 @@ import type {
   TodoHorizon,
   TodoSlotResult,
   TodoStatus,
+  WorkHours,
   WorkspaceId,
 } from '@agentsws/contracts'
 import {
@@ -283,6 +284,23 @@ const SlotsBody = z.object({
     .optional(),
 })
 
+/** WP474（决策 1530）：「我的作息」——只影响「帮我排进空档」的候选。上下班按半小时对齐。 */
+const HalfHour = z
+  .number()
+  .int()
+  .min(0)
+  .max(24 * 60)
+  .refine((v) => v % 30 === 0, '按半小时对齐')
+const WorkHoursBody = z
+  .object({
+    start_min: HalfHour,
+    end_min: HalfHour,
+    weekends: z.boolean(),
+    live_buffer_min: z.number().int().min(0).max(120),
+    avoid_lunch: z.boolean(),
+  })
+  .refine((v) => v.end_min > v.start_min, '下班要晚于上班')
+
 const DelegateBody = z.object({
   assignment_id: z.string().min(1).optional(),
   brief: z.string().max(2000).optional(),
@@ -483,6 +501,11 @@ export interface WorkPort {
    * WP469（决策 1522）：「帮我排进空档」的候选（不写任何东西）。不给 = 这个部署没有这件事（路由回 `not_implemented`）。
    */
   proposeSlots?(actor: WorkActor, input: z.infer<typeof SlotsBody>): MaybePromise<TodoSlotResult>
+  /**
+   * WP474（决策 1530）：「我的作息」（每人一份；没设过回默认）。不给 = 这个部署没有这一格（设置里那一行不出）。
+   */
+  workHours?(actor: WorkActor): MaybePromise<WorkHours>
+  setWorkHours?(actor: WorkActor, input: WorkHours): MaybePromise<WorkHours>
 
   todayPlan(actor: WorkActor, refresh: boolean): MaybePromise<DailyPlan>
   decidePlan(
@@ -1195,6 +1218,47 @@ export function workRoutes(): Route[] {
         const actor = actorOf(c)
         const { scheduled } = await body(c, ScheduleBody)
         return ok(c, { todo: await workOf(deps).scheduleTodo(actor, param(c, 'id'), scheduled) })
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/settings/work-hours',
+        operationId: 'getWorkHours',
+        summary:
+          '我的作息：工作时段、排不排周末、直播前后留空、避不避午饭（只影响「帮我排进空档」，WP474）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'WorkHours',
+      },
+      async (c, deps) => {
+        const port = workOf(deps)
+        if (port.workHours === undefined)
+          throw new ApiError('not_implemented', '这个部署没有「我的作息」')
+        return ok(c, await port.workHours(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/settings/work-hours',
+        operationId: 'putWorkHours',
+        summary: '改我的作息（WP474，决策 1530）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: WorkHoursBody,
+        returns: 'WorkHours',
+      },
+      async (c, deps) => {
+        const input = await body(c, WorkHoursBody)
+        const port = workOf(deps)
+        if (port.setWorkHours === undefined)
+          throw new ApiError('not_implemented', '这个部署没有「我的作息」')
+        return ok(c, await port.setWorkHours(actorOf(c), input))
       },
     ),
     route(

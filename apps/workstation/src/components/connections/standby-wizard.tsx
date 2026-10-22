@@ -222,7 +222,7 @@ export function StandbyWizard({
               </p>
               <div className="mt-1 flex items-center gap-2">
                 <code
-                  className="flex-1 overflow-x-auto rounded border bg-background px-2 py-1 font-mono text-xs"
+                  className="flex-1 overflow-x-auto rounded-sm border bg-background px-2 py-1 font-mono text-xs"
                   data-testid="standby-embed"
                 >
                   {view.embed_snippet}

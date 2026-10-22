@@ -100,7 +100,7 @@ export function AddDutyInline({
 
   return (
     <div
-      className="my-1 ml-5 flex flex-col gap-2 rounded-[10px] border border-ws-line bg-ws-card p-2"
+      className="my-1 ml-5 flex flex-col gap-2 rounded-lg border border-ws-line bg-ws-card p-2"
       data-testid="rail-add-duty"
       ref={box}
     >

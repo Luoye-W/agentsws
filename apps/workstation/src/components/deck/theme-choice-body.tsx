@@ -58,7 +58,7 @@ export function ThemeChoiceBody({
       <Label
         data-testid="theme-choice-premium"
         data-status={premium.status}
-        className={`flex items-center gap-3 rounded-[10px] border p-2.5 font-normal ${
+        className={`flex items-center gap-3 rounded-lg border p-2.5 font-normal ${
           canPremium ? 'border-ws-brand bg-ws-card' : 'border-ws-line bg-ws-surface opacity-70'
         }`}
       >
@@ -116,7 +116,7 @@ export function ThemeChoiceBody({
       {usable.map((x) => (
         <Label
           key={x.id}
-          className="flex items-center gap-2 rounded-[10px] bg-ws-surface p-2.5 font-normal"
+          className="flex items-center gap-2 rounded-lg bg-ws-surface p-2.5 font-normal"
           data-testid="theme-choice-store"
         >
           <RadioGroupItem value={`store:${x.id}`} />
@@ -135,7 +135,7 @@ export function ThemeChoiceBody({
       {tooOld.map((x) => (
         <div
           key={x.id}
-          className="flex items-center gap-2 rounded-[10px] p-2.5 pl-8 text-sm text-ws-muted-fg"
+          className="flex items-center gap-2 rounded-lg p-2.5 pl-8 text-sm text-ws-muted-fg"
           data-testid="theme-choice-too-old"
         >
           <span className="line-through">{x.name}</span>

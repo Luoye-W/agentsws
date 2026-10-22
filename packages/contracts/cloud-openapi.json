@@ -55,6 +55,9 @@
     },
     {
       "name": "team"
+    },
+    {
+      "name": "feedback"
     }
   ],
   "paths": {
@@ -11146,6 +11149,134 @@
           }
         }
       }
+    },
+    "/v1/feedback": {
+      "post": {
+        "operationId": "postV1Feedback",
+        "summary": "收一条反馈（截图 base64 带在正文里，解码后至多 4 MiB）。同一台设备同一个 `client_id`",
+        "description": "再发一次（离线补发、重试）回同一个结果，不另起一条。新反馈给运营发一封通知信。",
+        "tags": ["feedback"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackSubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FeedbackSubmitted"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "正文太大（截图超了）",
+            "x-error-codes": ["payload_too_large"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/feedback/status": {
+      "post": {
+        "operationId": "postV1FeedbackStatus",
+        "summary": "拿提交时给的 ticket 换回状态与运营的回复（查不到的不回）",
+        "tags": ["feedback"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FeedbackStatusList"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13248,6 +13379,194 @@
           "at"
         ],
         "description": "争议：某条公开资料不对。**只记不裁**——owner 后台看，系统不自动改数据。"
+      },
+      "FeedbackDiagnostics": {
+        "type": "object",
+        "properties": {
+          "app_version": {
+            "type": "string",
+            "description": "工坊版本（桌面壳版本；浏览器里是服务版本）。"
+          },
+          "os": {
+            "type": "string",
+            "description": "系统：平台 + 架构 + 系统版本（如 `darwin arm64 25.6.0`）。"
+          },
+          "locale": {
+            "type": "string",
+            "description": "界面语言（如 `zh-CN`）。"
+          },
+          "route": {
+            "type": "string",
+            "description": "当时在哪一页（只有路径，没有查询串）。"
+          },
+          "shell": {
+            "type": "string",
+            "enum": ["desktop", "browser"],
+            "description": "桌面版还是浏览器里打开的。"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "最近的错误日志（至多 {@link FEEDBACK_ERRORS_MAX} 条，每条已脱敏、截长）。"
+          }
+        },
+        "required": ["app_version", "os", "locale", "route", "errors"],
+        "description": "附上的诊断信息（白名单，一项一项列；不在这里的一律不发）。"
+      },
+      "FeedbackKind": {
+        "type": "string",
+        "enum": ["bug", "idea", "other"],
+        "description": "反馈类型：问题 / 建议 / 其他（默认问题）。"
+      },
+      "FeedbackReply": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["at", "text"],
+        "description": "运营给的一条回复。"
+      },
+      "FeedbackScreenshot": {
+        "type": "object",
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "enum": ["image/png", "image/jpeg", "image/webp"]
+          },
+          "data_base64": {
+            "type": "string"
+          }
+        },
+        "required": ["content_type", "data_base64"],
+        "description": "附上的截图（JSON 里带 base64，解码后至多 {@link FEEDBACK_SCREENSHOT_MAX_BYTES}）。"
+      },
+      "FeedbackStatus": {
+        "type": "string",
+        "enum": ["new", "in_progress", "fixed", "wont_fix"],
+        "description": "处理状态：新 / 处理中 / 已修 / 不修。"
+      },
+      "FeedbackStatusList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeedbackTicketView"
+            }
+          }
+        },
+        "required": ["items"]
+      },
+      "FeedbackStatusRequest": {
+        "type": "object",
+        "properties": {
+          "tickets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "至多 {@link FEEDBACK_STATUS_MAX_TICKETS} 个；查不到的不回（不说是哪一个错了）。"
+          }
+        },
+        "required": ["tickets"],
+        "description": "本机 → 云：查这几条的进度。"
+      },
+      "FeedbackSubmitRequest": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "本机生成的一次性 id：离线补发时同一条只收一次（同设备同 id 回同一个结果）。"
+          },
+          "device_id": {
+            "type": "string",
+            "description": "本机设备号（随机生成，存在本机；匿名用户靠它区分是哪台电脑）。"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FeedbackKind"
+          },
+          "message": {
+            "type": "string",
+            "description": "一句话（必填）。"
+          },
+          "contact": {
+            "type": "string",
+            "description": "联系方式（默认当前登录账号邮箱，用户可改、可空）。"
+          },
+          "diagnostics": {
+            "$ref": "#/components/schemas/FeedbackDiagnostics"
+          },
+          "screenshot": {
+            "$ref": "#/components/schemas/FeedbackScreenshot"
+          },
+          "written_at": {
+            "type": "string",
+            "description": "本机写下这条的时间（离线补发时早于云收到的时间）。"
+          }
+        },
+        "required": ["client_id", "device_id", "kind", "message"],
+        "description": "本机服务 → 云：一条反馈。"
+      },
+      "FeedbackSubmitted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "反馈编号（`fb_…`，后台与用户都看得到）。"
+          },
+          "ticket": {
+            "type": "string",
+            "description": "查进度用的凭据（`fbt_…`）：只回给提交的那台电脑，云只存哈希。"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FeedbackStatus"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "ticket", "status", "created_at"],
+        "description": "云 → 本机：收到了。"
+      },
+      "FeedbackTicketView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FeedbackKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FeedbackStatus"
+          },
+          "message": {
+            "type": "string",
+            "description": "用户当时写的那一句（原样带回，本机丢了也能显示）。"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "replies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeedbackReply"
+            },
+            "description": "运营的回复（按时间先后）。"
+          }
+        },
+        "required": ["id", "kind", "status", "message", "created_at", "updated_at", "replies"],
+        "description": "「我的反馈」里的一条（按 ticket 查回来的）。"
       },
       "FollowersBand": {
         "type": "string",

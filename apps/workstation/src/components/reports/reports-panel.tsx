@@ -41,7 +41,7 @@ function ReportView({ item }: { item: ReportItem }): ReactNode {
   return (
     <article className="flex flex-col gap-2" data-testid="report-view" data-id={item.id}>
       <header className="flex items-baseline gap-2">
-        <h3 className="min-w-0 flex-1 text-[15px] font-medium">{item.title}</h3>
+        <h3 className="min-w-0 flex-1 text-[14px] font-medium">{item.title}</h3>
         <span className="ws-num shrink-0 text-xs text-ws-muted-fg">{shortDate(item.at)}</span>
       </header>
       {isReport(payload) ? (

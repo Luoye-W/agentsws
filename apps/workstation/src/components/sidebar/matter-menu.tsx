@@ -55,7 +55,7 @@ export function MatterMenu({
         aria-expanded={open}
         data-testid="rail-matter-menu"
         className={cn(
-          'flex size-5 shrink-0 items-center justify-center rounded text-ws-muted-fg hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100',
+          'flex size-5 shrink-0 items-center justify-center rounded-sm text-ws-muted-fg hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100',
           !open && 'opacity-0 group-hover/thread:opacity-100',
         )}
         onClick={(e) => {
@@ -69,14 +69,14 @@ export function MatterMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute top-6 right-0 z-30 flex min-w-32 items-center gap-1 rounded-[10px] border border-ws-line bg-ws-card p-1 shadow-ws"
+          className="absolute top-6 right-0 z-30 flex min-w-32 items-center gap-1 rounded-lg border border-ws-line bg-ws-card p-1 shadow-ws"
         >
           <button
             type="button"
             role="menuitem"
             data-testid="rail-matter-archive"
             disabled={blocked !== undefined}
-            className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[12.5px] hover:bg-muted disabled:text-ws-muted-fg disabled:hover:bg-transparent"
+            className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[13px] hover:bg-muted disabled:text-ws-muted-fg disabled:hover:bg-transparent"
             onClick={() => {
               setOpen(false)
               onArchive()

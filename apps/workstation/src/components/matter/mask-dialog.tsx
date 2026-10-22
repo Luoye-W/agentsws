@@ -114,10 +114,10 @@ export function MaskDialog({
         <DialogHeader>
           <DialogTitle>{t('mask.title')}</DialogTitle>
         </DialogHeader>
-        <p className="text-[12.5px] text-ws-muted-fg">{t('mask.hint')}</p>
-        <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-[10px] ring-1 ring-ws-line">
+        <p className="text-[13px] text-ws-muted-fg">{t('mask.hint')}</p>
+        <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-lg ring-1 ring-ws-line">
           {url === undefined ? (
-            <div className="grid h-48 w-72 place-items-center text-[12.5px] text-ws-muted-fg">
+            <div className="grid h-48 w-72 place-items-center text-[13px] text-ws-muted-fg">
               {t('images.loading')}
             </div>
           ) : (

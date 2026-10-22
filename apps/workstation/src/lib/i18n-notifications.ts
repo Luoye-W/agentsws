@@ -35,6 +35,8 @@ export const NOTIFY_ZH: Record<string, string> = {
   'notify.cat.alert': '告警',
   'notify.cat.alert.hint':
     '店铺日报异常、广告改动没做成、改版回归、目标市场改了、模型自动换了；系统通知只弹紧急的',
+  'notify.cat.feedback': '反馈',
+  'notify.cat.feedback.hint': '你提的反馈有了回复，或者修好了',
   'notify.urgent': '紧急',
   'notify.col.inbox': '站内',
   'notify.col.system': '系统',
@@ -81,6 +83,8 @@ export const NOTIFY_EN: Record<string, string> = {
   'notify.cat.alert': 'Alerts',
   'notify.cat.alert.hint':
     'Store report anomalies, ad changes that failed, site regressions, target markets or models changed for you; only urgent ones pop a system notification',
+  'notify.cat.feedback': 'Feedback',
+  'notify.cat.feedback.hint': 'Feedback you sent got a reply, or got fixed',
   'notify.urgent': 'Urgent',
   'notify.col.inbox': 'In app',
   'notify.col.system': 'System',

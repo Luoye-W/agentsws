@@ -21,6 +21,7 @@ import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watc
 import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
+import { FEEDBACK_EN, FEEDBACK_ZH } from './i18n-feedback'
 import { FOLLOW_UP_EN, FOLLOW_UP_ZH } from './i18n-follow-up'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
 import {
@@ -62,6 +63,7 @@ import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
 import { TABLE_FILTER_EN, TABLE_FILTER_ZH } from './i18n-table-filter'
+import { TELEMETRY_EN, TELEMETRY_ZH } from './i18n-telemetry'
 import { THEMES_EN, THEMES_ZH } from './i18n-themes'
 import { TOPBAR_EN, TOPBAR_ZH } from './i18n-topbar'
 
@@ -9087,6 +9089,8 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_ZH,
     // WP356：设置弹窗（五组、每节、每项一句白话）
     ...SETTINGS_ZH,
+    // WP476：「帮助改进工坊（匿名使用数据）」开关与第一次提示
+    ...TELEMETRY_ZH,
     // WP426：设置 → 模型 整页重做（三块、状态标签、积分快用完）
     ...MODELS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
@@ -9103,6 +9107,8 @@ const TABLES: Record<Lang, Table> = {
     ...CONTENT_DIGEST_ZH,
     // WP429：站内通知（铃铛、面板、设置 → 通知开关）
     ...NOTIFY_ZH,
+    // WP475：左下角「反馈」
+    ...FEEDBACK_ZH,
     // WP431：顶栏标题下拉、左上角、搜索弹窗
     ...TOPBAR_ZH,
     // WP437：看板临时一眼、首页简易对话框
@@ -9155,6 +9161,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
+    ...TELEMETRY_EN,
     ...MODELS_EN,
     ...PANEL_EN,
     ...AMAZON_OPS_EN,
@@ -9164,6 +9171,7 @@ const TABLES: Record<Lang, Table> = {
     ...TABLE_FILTER_EN,
     ...CONTENT_DIGEST_EN,
     ...NOTIFY_EN,
+    ...FEEDBACK_EN,
     ...TOPBAR_EN,
     ...LAYOUT_EN,
     ...REPORTS_EN,

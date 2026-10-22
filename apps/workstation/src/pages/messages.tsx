@@ -615,7 +615,7 @@ export function MessagesPage(): ReactNode {
           type="button"
           aria-label={t('messages.notice.close')}
           data-testid="messages-notice-close"
-          className="shrink-0 rounded p-0.5 text-ws-muted-fg hover:bg-ws-surface"
+          className="shrink-0 rounded-sm p-0.5 text-ws-muted-fg hover:bg-ws-surface"
           onClick={() => {
             setNotice(undefined)
           }}
@@ -716,7 +716,7 @@ export function MessagesPage(): ReactNode {
                   data-folder={kind}
                   data-active={active ? 'true' : undefined}
                   className={cn(
-                    'flex items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left text-[13px]',
+                    'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px]',
                     active
                       ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
                       : 'text-ws-body hover:bg-sidebar-accent/60',
@@ -873,7 +873,7 @@ export function MessagesPage(): ReactNode {
                   aria-label={t('messages.sync')}
                   data-testid="messages-sync"
                   disabled={sync.isPending}
-                  className="rounded-[10px] p-2 text-ws-muted-fg hover:bg-ws-surface disabled:opacity-60"
+                  className="rounded-lg p-2 text-ws-muted-fg hover:bg-ws-surface disabled:opacity-60"
                   onClick={() => {
                     sync.mutate()
                   }}
@@ -998,7 +998,7 @@ export function MessagesPage(): ReactNode {
                     />
                   )}
 
-                  <h1 className="text-[15px] font-semibold">{thread.data?.subject}</h1>
+                  <h1 className="text-[14px] font-semibold">{thread.data?.subject}</h1>
 
                   {(thread.data?.messages ?? []).map((m) => (
                     <MessageCard
@@ -1340,7 +1340,7 @@ function MessageCard({
   const { t, lang } = useApp()
   return (
     <article
-      className="flex flex-col gap-2 rounded-[14px] border border-ws-line bg-ws-card p-3"
+      className="flex flex-col gap-2 rounded-xl border border-ws-line bg-ws-card p-3"
       data-testid="messages-message"
       data-message={message.id}
     >
@@ -1362,7 +1362,7 @@ function MessageCard({
           data-testid="messages-star"
           data-starred={message.flags.starred ? 'true' : undefined}
           disabled={starring}
-          className="shrink-0 rounded p-1 text-ws-muted-fg hover:bg-ws-surface disabled:opacity-60"
+          className="shrink-0 rounded-sm p-1 text-ws-muted-fg hover:bg-ws-surface disabled:opacity-60"
           onClick={onStar}
         >
           <Star
@@ -1375,7 +1375,7 @@ function MessageCard({
       {/* 远程图片默认不加载：在按下这一行之前，浏览器一个请求都没发出去 */}
       {message.has_remote_images ? (
         <div
-          className="flex items-center gap-2 rounded-[10px] bg-ws-surface px-2.5 py-1.5 text-[12px]"
+          className="flex items-center gap-2 rounded-lg bg-ws-surface px-2.5 py-1.5 text-[12px]"
           data-testid="messages-remote-images"
         >
           <ImageIcon aria-hidden className="size-3.5 text-ws-muted-fg" />
@@ -1556,7 +1556,7 @@ function AccountPicker({
         type="button"
         data-active={value === undefined ? 'true' : undefined}
         className={cn(
-          'rounded-[10px] px-2.5 py-1 text-left text-[12px]',
+          'rounded-lg px-2.5 py-1 text-left text-[12px]',
           value === undefined ? 'bg-sidebar-accent font-medium' : 'text-ws-muted-fg',
         )}
         onClick={() => {
@@ -1572,7 +1572,7 @@ function AccountPicker({
           data-account={a.address}
           data-active={value === a.address ? 'true' : undefined}
           className={cn(
-            'truncate rounded-[10px] px-2.5 py-1 text-left text-[12px]',
+            'truncate rounded-lg px-2.5 py-1 text-left text-[12px]',
             value === a.address ? 'bg-sidebar-accent font-medium' : 'text-ws-muted-fg',
           )}
           onClick={() => {
@@ -1636,7 +1636,7 @@ function NoMailbox({ onSiteChat }: { onSiteChat?: () => void }): ReactNode {
         onClick={() => {
           openConnect('imap_smtp')
         }}
-        className="w-fit rounded-[10px] bg-primary px-3 py-1.5 text-[13px] text-primary-foreground"
+        className="w-fit rounded-lg bg-primary px-3 py-1.5 text-[13px] text-primary-foreground"
         data-testid="messages-connect"
         data-connect="imap_smtp"
       >

@@ -56,7 +56,7 @@ export function DeckBattleReport({
         {ROWS.map((key) => (
           <div key={key} className="rounded-lg border bg-background px-3 py-2">
             <dt className="text-xs text-muted-foreground">{t(`deck.recap.${key}`)}</dt>
-            <dd className="text-lg font-semibold" data-testid={`recap-${key}`}>
+            <dd className="text-base font-semibold" data-testid={`recap-${key}`}>
               {report?.[key] ?? 0}
             </dd>
           </div>

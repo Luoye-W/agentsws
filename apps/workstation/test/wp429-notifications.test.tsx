@@ -46,6 +46,7 @@ const state: {
     messages: { inbox: true, system: false },
     // WP466：告警（原首页告警区）
     alert: { inbox: true, system: true },
+    feedback: { inbox: true, system: false },
   },
   read: [],
   readAll: 0,

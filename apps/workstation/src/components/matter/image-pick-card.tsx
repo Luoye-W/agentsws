@@ -134,7 +134,7 @@ export function ImageCard({
           {variants.map((v) => (
             <figure key={v.id} className="flex flex-col gap-1.5" data-testid="image-pick-variant">
               <div
-                className="relative overflow-hidden rounded-[10px] bg-ws-tint ring-1 ring-ws-line"
+                className="relative overflow-hidden rounded-lg bg-ws-tint ring-1 ring-ws-line"
                 style={{
                   aspectRatio:
                     v.width !== undefined && v.height !== undefined

@@ -546,7 +546,7 @@ export function OnboardingPage(): React.ReactNode {
               data-testid="onboarding-done"
             >
               <DoneMark />
-              <p className="ws-display text-[17px]">{t('onboarding.done.title')}</p>
+              <p className="ws-display text-base">{t('onboarding.done.title')}</p>
               <p className="max-w-sm text-sm text-ws-muted-fg" data-testid="onboarding-done-line">
                 {applied !== undefined && applied.created === 0 && applied.skipped > 0
                   ? t('onboarding.done.all_held', { n: applied.skipped })

@@ -40,7 +40,7 @@ function Sources({ sources }: { sources: readonly SetupSource[] }): ReactNode {
         return url === undefined ? (
           <span
             key={key}
-            className="rounded bg-ws-surface px-1 text-xs text-ws-muted-fg"
+            className="rounded-sm bg-ws-surface px-1 text-xs text-ws-muted-fg"
             data-testid="setup-plan-source"
             data-kind={s.kind}
           >
@@ -52,7 +52,7 @@ function Sources({ sources }: { sources: readonly SetupSource[] }): ReactNode {
             href={url}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex max-w-[180px] items-center gap-0.5 truncate rounded bg-ws-surface px-1 text-xs text-ws-brand hover:underline"
+            className="inline-flex max-w-[180px] items-center gap-0.5 truncate rounded-sm bg-ws-surface px-1 text-xs text-ws-brand hover:underline"
             data-testid="setup-plan-source"
             data-kind={s.kind}
           >

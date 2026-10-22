@@ -147,7 +147,9 @@ export class MemoryWorkStore implements WorkStore {
 
   // ── 待办
   putTodo(todo: Todo): void {
-    this.todos.set(todo.id, clone(todo))
+    // WP474：`carried_over` 是读的时候算的，不存
+    const { carried_over: _read, ...stored } = todo
+    this.todos.set(todo.id, clone(stored))
   }
   getTodo(id: TodoId): Todo | undefined {
     const t = this.todos.get(id)

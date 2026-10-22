@@ -183,7 +183,7 @@ export function InfoTip({
             data-hint={text}
             {...(testId === undefined ? {} : { 'data-testid': testId })}
             className={cn(
-              'rounded outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
               className,
             )}
           >

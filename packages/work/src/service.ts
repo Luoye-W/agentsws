@@ -94,7 +94,7 @@ import {
   newHandoff,
   settleHandoff,
 } from './handoff.js'
-import { isOpen, resolveHorizon } from './horizon.js'
+import { isOpen, resolveHorizon, viewTodo } from './horizon.js'
 import { type DailyPlanInput, draftDailyPlanWithFilter, type FilteredSuggestion } from './plan.js'
 import { MemoryWorkStore } from './store.js'
 import { DAY_MS, localDay, makeIdFactory, ms, startOfDay, uniq } from './util.js'
@@ -965,6 +965,7 @@ export class Work {
       title: input.title,
       owner: input.owner,
       horizon: resolveHorizon(input, at, this.tz_offset_minutes),
+      horizon_at: at,
       source: input.source ?? 'manual',
       status: 'open',
       cards: [],
@@ -1005,11 +1006,17 @@ export class Work {
         ...(todo.due === undefined ? {} : { due: todo.due }),
       },
     )
-    return todo
+    return this.view(todo)
+  }
+
+  /** WP474（决策 1531）：读出去的那一份按现在重算分档（本周 = 周一到周日），跨周没做完的标「上周没做完」。 */
+  private view(todo: Todo): Todo {
+    return viewTodo(todo, this.now(), this.tz_offset_minutes)
   }
 
   getTodo(id: TodoId): Todo | undefined {
-    return this.store.getTodo(id)
+    const t = this.store.getTodo(id)
+    return t === undefined ? undefined : this.view(t)
   }
 
   requireTodo(id: TodoId): Todo {
@@ -1019,7 +1026,17 @@ export class Work {
   }
 
   listTodos(filter: Omit<TodoFilter, 'workspace_id'> = {}): Todo[] {
-    return this.store.listTodos({ workspace_id: this.workspace_id, ...filter })
+    // 分档按读的这一刻算（存的那一档可能是上周定的），所以按分档筛要在重算之后
+    const { horizon, limit, ...rest } = filter
+    const all = this.store
+      .listTodos({
+        workspace_id: this.workspace_id,
+        ...rest,
+        ...(horizon === undefined && limit !== undefined ? { limit } : {}),
+      })
+      .map((t) => this.view(t))
+    const picked = horizon === undefined ? all : all.filter((t) => horizon.includes(t.horizon))
+    return horizon !== undefined && limit !== undefined ? picked.slice(0, limit) : picked
   }
 
   /** 待办箱三段：backlog / 本周 / 今天（只算未完的）。 */
@@ -1072,6 +1089,8 @@ export class Work {
           ),
       updated_at: at,
     }
+    // WP474：换了档（或这一次明说了放哪一档）就记下是这一刻定的——「本周」从这一周算起
+    if (next.horizon !== todo.horizon || patch.horizon !== undefined) next.horizon_at = at
     // exactOptionalPropertyTypes：可空字段要么有值要么整个键不在
     if (patch.note !== undefined) next.note = patch.note
     if (due === undefined) delete next.due
@@ -1115,7 +1134,7 @@ export class Work {
         ...(next.matter_id === undefined ? {} : { matter_id: next.matter_id }),
       },
     )
-    return next
+    return this.view(next)
   }
 
   /** 打勾 = 完成（37 §2.2b：打勾 / 关闭 / 删除都不进现场）。 */

@@ -116,7 +116,7 @@ function TitleEditor({
           onDone()
         }
       }}
-      className="h-7 w-[min(32em,50vw)] rounded-md border border-ws-brand/60 bg-transparent px-1.5 text-[13.5px] font-medium text-foreground outline-none"
+      className="h-7 w-[min(32em,50vw)] rounded-md border border-ws-brand/60 bg-transparent px-1.5 text-[13px] font-medium text-foreground outline-none"
     />
   )
 }
@@ -265,7 +265,7 @@ export function MatterHeader({
           <p className="mb-1 text-xs text-ws-muted-fg">{t('matter.pinned')}</p>
           <ul className="flex flex-col gap-1">
             {pinned.map((p) => (
-              <li key={p.key} className="flex items-center gap-1.5 text-[12.5px] text-ws-body">
+              <li key={p.key} className="flex items-center gap-1.5 text-[13px] text-ws-body">
                 <Pin aria-hidden className="size-3 text-ws-muted-fg" />
                 {p.label}
               </li>

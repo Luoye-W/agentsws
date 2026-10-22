@@ -46,7 +46,7 @@ export function RailPlus({
               onClick()
             }}
             className={cn(
-              'flex size-5 shrink-0 items-center justify-center rounded text-ws-muted-fg transition-opacity hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring',
+              'flex size-5 shrink-0 items-center justify-center rounded-sm text-ws-muted-fg transition-opacity hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring',
               hover && expanded !== true && 'opacity-0 group-hover/row:opacity-100',
             )}
           >

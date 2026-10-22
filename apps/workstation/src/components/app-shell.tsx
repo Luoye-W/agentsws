@@ -53,6 +53,8 @@ import {
 } from '@/components/conversations/actions'
 import { CountBadge } from '@/components/design'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { FeedbackButton } from '@/components/feedback/feedback-button'
+import { FeedbackHost } from '@/components/feedback/feedback-host'
 import { useInbox } from '@/components/inbox/inbox-model'
 import { useSiteChatUnread } from '@/components/messages/site-chat'
 import { QuotaChip } from '@/components/models/quota-notice'
@@ -821,7 +823,7 @@ export function AppShell({
                 {iconRail || (undo === undefined && undoError === undefined) ? null : (
                   <div
                     role="status"
-                    className="mt-2 flex items-center gap-2 rounded-[10px] bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
+                    className="mt-2 flex items-center gap-2 rounded-lg bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
                     data-testid="rail-undo"
                   >
                     <span className="min-w-0 flex-1 truncate">
@@ -852,7 +854,16 @@ export function AppShell({
                   {iconRail ? null : <BrandSwitcher />}
                   {/* WP218：账号区正上方——有新版本时才出现（桌面壳里），点一下就更新 */}
                   {iconRail ? null : <UpdateButton />}
-                  <AccountBlock {...(me === undefined ? {} : { me })} compact={iconRail} />
+                  {/* WP475：用户名旁一颗「反馈」；收成图标列时叠在头像上面 */}
+                  <div
+                    className={cn('flex items-center gap-1', iconRail && 'flex-col-reverse')}
+                    data-testid="rail-account-row"
+                  >
+                    <div className={cn('min-w-0', !iconRail && 'flex-1')}>
+                      <AccountBlock {...(me === undefined ? {} : { me })} compact={iconRail} />
+                    </div>
+                    <FeedbackButton />
+                  </div>
                 </div>
               </aside>
 
@@ -906,7 +917,7 @@ export function AppShell({
                     />
                     {topBar.claimed || pageName === undefined ? null : (
                       <span
-                        className="truncate px-1.5 text-[13.5px] font-medium"
+                        className="truncate px-1.5 text-[13px] font-medium"
                         data-testid="top-bar-page-name"
                       >
                         {t(pageName)}
@@ -982,6 +993,9 @@ export function AppShell({
                   instances={byPosition}
                 />
               )}
+
+              {/* WP475：反馈框（左下角按钮、⌘K「反馈」、铃铛 ?feedback=mine 都打开它） */}
+              <FeedbackHost />
 
               <CommandPalette
                 open={paletteOpen}

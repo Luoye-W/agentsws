@@ -58,15 +58,15 @@ export function StatTile({
       )}
       {fallback === undefined ? (
         <div>
-          <div className="ws-display text-[30px] leading-none" data-testid="ws-stat-tile-value">
+          <div className="ws-display text-[28px] leading-none" data-testid="ws-stat-tile-value">
             {value}
           </div>
-          <div className="mt-1.5 text-[13.5px] text-ws-body">{label}</div>
+          <div className="mt-1.5 text-[13px] text-ws-body">{label}</div>
           {note === undefined ? null : <div className="mt-1 text-xs text-ws-muted-fg">{note}</div>}
         </div>
       ) : (
         <div>
-          <div className="text-[13.5px] text-ws-body">{label}</div>
+          <div className="text-[13px] text-ws-body">{label}</div>
           <div className="mt-1.5">{fallback}</div>
         </div>
       )}

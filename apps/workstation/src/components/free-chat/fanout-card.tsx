@@ -94,7 +94,7 @@ function Row({
         ) : null}
         <span
           className={cn(
-            'mt-0.5 shrink-0 rounded px-1.5 py-px text-xs',
+            'mt-0.5 shrink-0 rounded-sm px-1.5 py-px text-xs',
             item.kind === 'task'
               ? 'bg-ws-tint text-ws-brand-ink'
               : 'bg-ws-surface text-ws-muted-fg',
@@ -104,7 +104,7 @@ function Row({
         </span>
         {editing && !locked && item.secret !== true ? (
           <input
-            className="min-w-0 flex-1 rounded border border-ws-line bg-transparent px-1.5 py-0.5 text-sm"
+            className="min-w-0 flex-1 rounded-sm border border-ws-line bg-transparent px-1.5 py-0.5 text-sm"
             value={now.text}
             data-testid="fanout-item-text"
             onChange={(e) => onEdit({ ...edit, id: item.id, text: e.target.value })}
@@ -126,7 +126,7 @@ function Row({
         )}
         {canMove ? (
           <select
-            className="max-w-[140px] shrink-0 rounded border border-ws-line bg-transparent px-1 py-0.5 text-xs"
+            className="max-w-[140px] shrink-0 rounded-sm border border-ws-line bg-transparent px-1 py-0.5 text-xs"
             value={now.owner === 'unsure' ? '' : now.owner}
             aria-label={t('fanout.unsure.pick')}
             data-testid="fanout-item-owner"

@@ -2,6 +2,8 @@
  * WP459（决策 1505 丁）：**一张一张**——中间一张大卡，顶上「第 N 张 / M」+ 接下来几张；
  * 回信卡原信与草稿并排、改价这类就是岗位里那张卡；底下通过 / 改 / 不要 / 跳过 + 快捷键（A / E / D / →）。
  * 和列表是同一份数据、同一张卡。跳过的放到这一轮最后；顶上「刚才：…」跳过的能撤回。
+ * WP474（决策 1514）：「不要」的也能撤回（放回待定）；「通过」的在批准后取消窗口里、真发出去之前能撤
+ * （按钮带剩几秒，过了就收起；撤不回时底下说一句）。
  *
  * 快捷键找的是这张卡上真有的那颗按钮（草稿卡的 `data-focus-act`，岗位卡的 `data-action`，
  * 信的三个建议），没有就不做事；打字时不响应。
@@ -12,14 +14,57 @@ import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useStat
 import { Link } from 'react-router-dom'
 import { isTypingTarget } from '@/components/deck/deck-gestures'
 import { CategoryTag, StatusPill } from '@/components/design'
+import { type ApprovalUndoData, getApprovalUndo, undoApproval } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { apiErrorText } from '@/lib/error-text'
 import { cn } from '@/lib/utils'
 import type { InboxNotice } from './inbox-actions'
-import { itemTitle, positionLabel } from './inbox-model'
+import { itemTitle, positionLabel, useInboxRefresh } from './inbox-model'
 import { DraftPane, InboxPaneItem, isDraftCard } from './inbox-pane'
 import { ItemGlyph, rowPill, rowTag } from './inbox-row'
 
-type Done = { kind: 'skip' | 'done'; item: InboxItem }
+type Done = {
+  kind: 'skip' | 'done'
+  item: InboxItem
+  /** WP474：卡刚才是通过了还是不要了（问过服务端才知道；信、别的去向是 `other`） */
+  did?: 'approve' | 'reject' | 'other'
+  /** WP474：还撤不撤得回 */
+  undo?: ApprovalUndoData
+  /** WP474：「通过」的撤回截止到本机哪一刻（收到时 + 服务端说的剩余秒数；不拿本机钟比服务端的钟） */
+  deadline?: number
+}
+
+/** WP474：一张卡不在了之后问一句它现在什么状态、还撤不撤得回。 */
+async function settle(item: InboxItem): Promise<Pick<Done, 'did' | 'undo' | 'deadline'>> {
+  const card = item.card
+  if (card === undefined) return { did: 'other' }
+  try {
+    const out = await getApprovalUndo(card.id, card.position_id)
+    const did =
+      out.state === 'approved' || out.state === 'approved_edited'
+        ? 'approve'
+        : out.state === 'rejected' || out.state === 'deferred'
+          ? 'reject'
+          : 'other'
+    const left = out.undo?.seconds_left
+    return {
+      did,
+      ...(out.undo === undefined ? {} : { undo: out.undo }),
+      ...(left === undefined ? {} : { deadline: Date.now() + left * 1000 }),
+    }
+  } catch {
+    return { did: 'other' }
+  }
+}
+
+/** 「通过」的撤回还剩几秒（「不要」的没有期限 → `undefined`；过了 → 0）。 */
+function secondsLeft(d: Done | undefined, now: number): number | undefined {
+  if (d?.undo?.kind !== 'unapprove') return undefined
+  // 老服务进程只给 until：按 until 算（同一台机器上钟是一样的）
+  const deadline = d.deadline ?? (d.undo.until === undefined ? undefined : Date.parse(d.undo.until))
+  if (deadline === undefined) return undefined
+  return Math.max(0, Math.ceil((deadline - now) / 1000))
+}
 
 /** 按键 → 这张卡上的哪颗按钮（第一个找得到的）。 */
 const KEY_TARGETS: Record<string, readonly string[]> = {
@@ -49,11 +94,16 @@ export function InboxFocus({
   onTodo?: (item: InboxItem) => void
 }): ReactNode {
   const { t, lang } = useApp()
+  const refresh = useInboxRefresh()
   const box = useRef<HTMLElement | null>(null)
   const [skipped, setSkipped] = useState<string[]>([])
   const [cursor, setCursor] = useState<string | undefined>(items[0]?.id)
   const [fallback, setFallback] = useState(0)
   const [recent, setRecent] = useState<Done[]>([])
+  const [undoing, setUndoing] = useState(false)
+  /** WP474：撤回了的那张——等它回到这一轮里再翻过去（重取之前它还不在） */
+  const [returning, setReturning] = useState<string | undefined>()
+  const [tick, setTick] = useState(() => Date.now())
   // 这一轮的顺序：跳过的挪到最后
   const order = useMemo(() => {
     const skip = new Set(skipped)
@@ -70,13 +120,24 @@ export function InboxFocus({
   useEffect(() => {
     const prev = last.current
     if (prev !== undefined && !items.some((i) => i.id === prev.id)) {
-      setRecent((r) => [{ kind: 'done' as const, item: prev }, ...r].slice(0, 5))
+      const entry: Done = { kind: 'done', item: prev }
+      setRecent((r) => [entry, ...r].slice(0, 5))
+      // WP474：问一句刚才是通过还是不要、还撤不撤得回
+      void settle(prev).then((more) => {
+        setRecent((r) => r.map((x) => (x === entry ? { ...x, ...more } : x)))
+        setTick(Date.now())
+      })
     }
     last.current = item
   }, [items, item])
   useEffect(() => {
     if (found < 0 && item !== undefined) setCursor(item.id)
   }, [found, item])
+  useEffect(() => {
+    if (returning === undefined || !items.some((i) => i.id === returning)) return
+    setCursor(returning)
+    setReturning(undefined)
+  }, [items, returning])
   useEffect(() => {
     box.current?.focus({ preventScroll: true })
   }, [])
@@ -93,6 +154,32 @@ export function InboxFocus({
     setSkipped((s) => s.filter((x) => x !== d.item.id))
     setRecent((r) => r.filter((x) => x !== d))
     setCursor(d.item.id)
+  }
+  /** WP474：撤回「不要 / 通过」——放回待定，翻回这一张。撤不回（已经发了 / 过了窗口）就说一句。 */
+  const undoDecision = (d: Done): void => {
+    const card = d.item.card
+    if (card === undefined || undoing) return
+    setUndoing(true)
+    undoApproval(card.id, card.position_id)
+      .then(() => {
+        setRecent((r) => r.filter((x) => x !== d))
+        setReturning(d.item.id)
+        onNotice({ tone: 'ok', text: t('inbox.focus.undone', { title: itemTitle(d.item) }) })
+      })
+      .catch((e: unknown) => {
+        setRecent((r) =>
+          r.map((x) => {
+            if (x !== d) return x
+            const { undo: _closed, ...rest } = x
+            return rest
+          }),
+        )
+        onNotice({ tone: 'warn', text: apiErrorText(e, t) })
+      })
+      .finally(() => {
+        setUndoing(false)
+        refresh()
+      })
   }
   const onKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
     if (isTypingTarget(e.target as HTMLElement | null)) return
@@ -123,6 +210,20 @@ export function InboxFocus({
 
   const upcoming = order.slice(index + 1, index + 4)
   const latest = recent[0]
+  // WP474：「通过」的撤回按钮带剩几秒，每秒走一下，到点收起
+  const left = secondsLeft(latest, tick)
+  useEffect(() => {
+    if (left === undefined || left <= 0) return
+    const timer = setTimeout(() => {
+      setTick(Date.now())
+    }, 1000)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [left])
+  const canUndo =
+    latest !== undefined &&
+    (latest.kind === 'skip' || (latest.undo !== undefined && (left === undefined || left > 0)))
   const pill = item === undefined ? undefined : rowPill(item, t)
   const posName =
     item === undefined ? undefined : positionLabel(view.positions, item.position, lang)
@@ -274,20 +375,32 @@ export function InboxFocus({
           data-testid="inbox-focus-recent"
         >
           {t('inbox.focus.recent', {
-            what: t(latest.kind === 'skip' ? 'inbox.focus.did.skip' : 'inbox.focus.did.other', {
-              title: itemTitle(latest.item),
-            }),
+            what: t(
+              latest.kind === 'skip'
+                ? 'inbox.focus.did.skip'
+                : latest.did === 'approve'
+                  ? 'inbox.focus.did.approve'
+                  : latest.did === 'reject'
+                    ? 'inbox.focus.did.reject'
+                    : 'inbox.focus.did.other',
+              { title: itemTitle(latest.item) },
+            ),
           })}
-          {latest.kind === 'skip' ? (
+          {canUndo ? (
             <button
               type="button"
               className="ws-link"
               data-testid="inbox-focus-undo"
+              data-undo={latest.kind === 'skip' ? 'skip' : latest.undo?.kind}
+              disabled={undoing}
               onClick={() => {
-                undoSkip(latest)
+                if (latest.kind === 'skip') undoSkip(latest)
+                else undoDecision(latest)
               }}
             >
-              {t('inbox.focus.undo')}
+              {left === undefined || latest.kind === 'skip'
+                ? t('inbox.focus.undo')
+                : t('inbox.focus.undo_left', { s: left })}
             </button>
           ) : null}
         </p>

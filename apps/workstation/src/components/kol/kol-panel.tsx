@@ -673,7 +673,7 @@ function CreatorDetail({
             </div>
           </div>
           {draft === undefined ? null : (
-            <div className="mt-2 rounded border p-2" data-testid="kol-outreach-draft">
+            <div className="mt-2 rounded-sm border p-2" data-testid="kol-outreach-draft">
               {draft.staged ? (
                 <>
                   <div className="text-xs font-medium">{draft.subject}</div>
@@ -898,7 +898,7 @@ function Collaborations({
                   >
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 flex-col gap-1 rounded px-1 py-0.5 text-left hover:bg-muted"
+                      className="flex min-w-0 flex-1 flex-col gap-1 rounded-sm px-1 py-0.5 text-left hover:bg-muted"
                       data-testid="kol-collab-open"
                       data-collab={c.id}
                       onClick={() => {
@@ -917,7 +917,7 @@ function Collaborations({
                         </span>
                         {c.sandbox === true ? (
                           <span
-                            className="rounded bg-[var(--ws-warn-bg)] px-1 text-xs text-[var(--ws-ink)]"
+                            className="rounded-sm bg-[var(--ws-warn-bg)] px-1 text-xs text-[var(--ws-ink)]"
                             data-testid="kol-collab-sandbox"
                           >
                             演练
@@ -926,7 +926,7 @@ function Collaborations({
                         {/* WP416：建合作那张卡还没人点头——点「不要」这一行就没了 */}
                         {c.awaiting_approval === true ? (
                           <span
-                            className="rounded bg-ws-surface px-1 text-xs text-ws-muted-fg"
+                            className="rounded-sm bg-ws-surface px-1 text-xs text-ws-muted-fg"
                             data-testid="kol-collab-awaiting"
                           >
                             {t('kol.collab.awaiting')}

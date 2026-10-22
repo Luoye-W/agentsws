@@ -64,6 +64,7 @@ export * from './dsh-scenes.js'
 export * from './economics.js'
 export * from './events.js'
 export * from './execution.js'
+export * from './feedback.js'
 // WP336（决策 810–812）：当场回答的 ```dsh-ui 写法（dsh-genui 渲染层）——白名单过滤与给模型的规矩
 export * from './genui.js'
 // WP341（决策 847）：genui 完全融合——动作写法、口令格、媒体来源、表单交上来的结构化回话
@@ -160,4 +161,6 @@ export * from './subscription.js'
 export * from './task-text.js'
 // WP427：团队通道（发起人电脑 ↔ 工坊云的长连接、邀请码登记与查找、申请人换登录）
 export * from './team-link.js'
+// WP476（决策 1590）：产品使用数据的事件清单与属性白名单（工作台与服务进程共用）
+export * from './telemetry.js'
 export * from './work.js'

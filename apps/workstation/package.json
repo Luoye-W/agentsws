@@ -37,6 +37,7 @@
     "exceljs": "4.4.0",
     "jszip": "3.10.2",
     "lucide-react": "^0.469.0",
+    "posthog-js": "1.438.8",
     "preact": "10.29.8",
     "radix-ui": "^1.6.7",
     "react": "^19.0.0",

@@ -1,12 +1,15 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { generateSecrets, secretLiterals } from '../src/secrets.js'
 import {
+  DEFAULT_TELEMETRY_HOST,
   INHERITED_ENV,
   inheritEnv,
   resolveServerEntry,
   resolveServerRuntime,
   type ServerSpawnInput,
   serverSpawnRequest,
+  telemetryHostFor,
 } from '../src/server-process.js'
 import { seqRandomBytes } from './fakes.js'
 
@@ -77,6 +80,40 @@ describe('serverSpawnRequest', () => {
     const dir = '/Users/a/Library/Application Support/@agentsws/desktop/chrome-extension'
     expect(serverSpawnRequest(input({ extensionDir: dir })).env.AGENTSWS_EXTENSION_DIR).toBe(dir)
     expect(serverSpawnRequest(input()).env.AGENTSWS_EXTENSION_DIR).toBeUndefined()
+  })
+
+  it('WP476：匿名使用数据的上报地址——只有打包后的安装包给；开发期不给；off 关掉；外面给了照给', () => {
+    expect(telemetryHostFor({ env: {}, packaged: true })).toBe('https://t.agentsws.com')
+    expect(telemetryHostFor({ env: {}, packaged: false })).toBeUndefined()
+    expect(
+      telemetryHostFor({ env: { AGENTSWS_TELEMETRY_HOST: 'off' }, packaged: true }),
+    ).toBeUndefined()
+    expect(
+      telemetryHostFor({
+        env: { AGENTSWS_TELEMETRY_HOST: 'https://t.example.test' },
+        packaged: false,
+      }),
+    ).toBe('https://t.example.test')
+    const host = telemetryHostFor({ env: {}, packaged: true })
+    expect(
+      serverSpawnRequest(input(host === undefined ? {} : { telemetryHost: host })).env
+        .AGENTSWS_TELEMETRY_HOST,
+    ).toBe('https://t.agentsws.com')
+    expect(serverSpawnRequest(input()).env.AGENTSWS_TELEMETRY_HOST).toBeUndefined()
+    // 宿主环境里的那条不会被白名单顺手带下去（只经 telemetryHost 这一条路）
+    expect(
+      serverSpawnRequest(input({ baseEnv: { AGENTSWS_TELEMETRY_HOST: 'https://x.example' } })).env
+        .AGENTSWS_TELEMETRY_HOST,
+    ).toBeUndefined()
+  })
+
+  it('WP476：壳里抄的默认地址与契约里那条一致', () => {
+    // 壳不依赖契约包：直接读源码那一行
+    const src = readFileSync(
+      new URL('../../../packages/contracts/src/telemetry.ts', import.meta.url),
+      'utf8',
+    )
+    expect(src).toContain(`export const DEFAULT_TELEMETRY_HOST = '${DEFAULT_TELEMETRY_HOST}'`)
   })
 
   it('WP353：应用内搜索浏览器的本机通道经两个环境变量给；不给就没有', () => {

@@ -455,6 +455,14 @@ export {
   isPanelCard,
   panelCardOf,
 } from './routes/extension-panel.js'
+export {
+  FEEDBACK_LOCAL_MAX_BODY,
+  type FeedbackActor,
+  type FeedbackPageContext,
+  type FeedbackPort,
+  feedbackRoutes,
+  routeOnly as feedbackRouteOnly,
+} from './routes/feedback.js'
 // WP188：随便聊
 export type {
   // WP343：「我的助理」
@@ -898,6 +906,8 @@ export {
   type StorageView,
   storageRoutes,
 } from './routes/storage.js'
+// WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」
+export { type TelemetrySettingsPort, telemetryRoutes } from './routes/telemetry.js'
 // WP337：重启并更新前看一眼 / 暂停全部 / 放开
 export {
   type UpdateBusyCounts,
