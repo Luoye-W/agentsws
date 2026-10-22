@@ -110,6 +110,7 @@ import { workRoutes } from './routes/work.js'
 import { workArchiveRoutes } from './routes/work-archive.js'
 import { workshopServicesRoutes } from './routes/workshop-services.js'
 import { workstationRoutes } from './routes/workstation.js'
+import { inboxRoutes } from './routes/inbox.js'
 import { wsRoutes } from './routes/ws.js'
 import type { GatewayDeps } from './types.js'
 
@@ -229,6 +230,8 @@ export function collectRoutes(): Route[] {
     ...wsRoutes(),
     // 36 工作台面：首页 / 岗位 / 积木；`/v1/positions/:id/...` 里的 id 就是 assignment_id
     ...workstationRoutes(),
+    // WP459（决策 1497）：收件箱——所有岗位的决策卡 + 要你判断的信一条队列
+    ...inboxRoutes(),
     // WP438：报表（看板那几行、一整份、快照、跟 AI 说想看什么 → 固定）
     ...reportRoutes(),
     // WP52（47 J1）数据地图：`/v1/positions/:id/ontology`。排在 workstationRoutes 之后——

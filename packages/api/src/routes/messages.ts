@@ -34,6 +34,7 @@ import type {
   MessageFollowUpRow,
   MessageFollowUpSettings,
   MessageFollowUpSettingsPatch,
+  MessageGuessRow,
   MessageImagesReport,
   MessageKind,
   MessageKindInput,
@@ -43,6 +44,8 @@ import type {
   MessageNoticeAckInput,
   MessageOverview,
   MessageRecord,
+  MessageRehandInput,
+  MessageRehandResult,
   MessageRule,
   MessageRuleDraft,
   MessageRuleList,
@@ -376,6 +379,18 @@ export interface MessagesPort {
     action: MessageFollowUpAction,
   ): MaybePromise<{ follow_up: MessageFollowUp }>
 
+  /**
+   * WP459（决策 1498 / 1504）：改判「AI 猜的」——交给别的岗位 / 我自己处理 / 只是通知；原岗位没批的卡撤掉。
+   * 不实现 = 这台机器改判不了（501）。
+   */
+  rehand?(
+    actor: MessageActor,
+    id: string,
+    input: MessageRehandInput,
+  ): MaybePromise<MessageRehandResult>
+  /** WP459：今天 AI 猜着交给岗位的那几封（简报「猜着交给岗位 N 封」）。不实现 = 501。 */
+  guessed?(actor: MessageActor): MaybePromise<{ rows: MessageGuessRow[] }>
+
   /** 立刻收一次。 */
   sync(actor: MessageActor): MaybePromise<MessageSyncReport>
   /** 「再往前取」。 */
@@ -511,6 +526,17 @@ const DigestAckBody = z.object({ message_ids: z.array(z.string().min(1)).max(100
 const KindBody = z.object({ kind: z.enum(KINDS), remember_sender: z.boolean().optional() })
 
 const ClaimBody = z.object({ as: z.enum(['notice', 'me', 'none']) })
+
+/** WP459：改判「AI 猜的」。 */
+const RehandBody = z
+  .object({
+    to: z.enum(['position', 'me', 'notice']),
+    position_id: z.string().min(1).max(80).optional(),
+    remember_sender: z.boolean().optional(),
+  })
+  .refine((b) => b.to !== 'position' || b.position_id !== undefined, {
+    message: '交给岗位要给 position_id',
+  })
 
 const NoticeAckBody = z.object({
   kind: z.enum(KINDS).optional(),
@@ -1016,6 +1042,25 @@ export function messageRoutes(): Route[] {
     route(
       {
         method: 'get',
+        path: '/v1/messages/guessed',
+        operationId: 'listGuessedMessages',
+        summary: '今天 AI 猜着交给岗位的那几封（决策 1498；简报「猜着交给岗位 N 封」点开；WP459）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: '{ rows: MessageGuessRow[] }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.guessed === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的消息面还没有「AI 猜的」')
+        return ok(c, await port.guessed(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'get',
         path: '/v1/messages/follow-ups',
         operationId: 'listMessageFollowUps',
         summary: '「等对方回」：我们发出去、对方还没回的会话（到期早的在前；WP442 回信跟进）',
@@ -1332,6 +1377,38 @@ export function messageRoutes(): Route[] {
             param(c, 'id'),
             (await body(c, KindBody)) as MessageKindInput,
           ),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/:id/rehand',
+        operationId: 'rehandMessage',
+        summary:
+          '改判「AI 猜的」：交给别的岗位 / 我自己处理 / 只是通知；原岗位还没批的卡一起撤掉（决策 1498 / 1504；WP459）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: RehandBody,
+        returns:
+          '{ message: MessageRecord; withdrawn: number; handed_off: boolean; position_id?; refused?; rule?; learned? }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.rehand === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的消息面还不能改判')
+        const input = await body(c, RehandBody)
+        return ok(
+          c,
+          await port.rehand(actorOf(c), param(c, 'id'), {
+            to: input.to,
+            ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+            ...(input.remember_sender === undefined
+              ? {}
+              : { remember_sender: input.remember_sender }),
+          }),
         )
       },
     ),

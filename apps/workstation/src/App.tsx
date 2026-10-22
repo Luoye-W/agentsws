@@ -48,7 +48,7 @@ import { MatterPage } from '@/pages/matter'
 import { MeetingPage } from '@/pages/meeting'
 import { MeetingsPage } from '@/pages/meetings'
 // WP113（63）：消息——统一收件处（左栏那个入口从「目标」换过来的）
-import { MessagesPage } from '@/pages/messages'
+import { MessagesRoute } from '@/pages/messages'
 import { OnboardingPage, onboardingSkipped } from '@/pages/onboarding'
 import { PeoplePage, PersonPage } from '@/pages/people'
 import { PositionPage } from '@/pages/position'
@@ -249,7 +249,9 @@ function Workspace(): ReactNode {
         */}
         <Route path="/goals" element={<GoalsPage />} />
         {/* WP113（63）：消息——整只邮箱 */}
-        <Route path="/messages" element={<MessagesPage />} />
+        {/* WP459（决策 1499）：「消息」改名「收件箱」——`/messages` 留着，`/inbox` 同一页 */}
+        <Route path="/messages" element={<MessagesRoute />} />
+        <Route path="/inbox" element={<MessagesRoute />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />

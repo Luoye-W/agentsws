@@ -32,6 +32,7 @@ import {
   Globe,
   GraduationCap,
   Handshake,
+  Inbox,
   ListChecks,
   MessageSquareQuote,
   MessagesSquare,
@@ -135,6 +136,11 @@ const MessageRulesBody = lazy(async () => {
 const MessageDigestBody = lazy(async () => {
   const m = await import('@/components/rail/panels/message-digest-panel')
   return { default: m.MessageDigestPanel }
+})
+/** WP459：收件箱点开的那一件（只从收件箱开）。 */
+const InboxItemBody = lazy(async () => {
+  const m = await import('@/components/inbox/inbox-pane')
+  return { default: m.InboxPaneBody }
 })
 /** WP372（决策 1019）：报表——全部 + 看板，与看一份。 */
 const ReportsBody = lazy(async () => {
@@ -356,6 +362,17 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('report-compose', ReportComposeBody)
+  // WP459（决策 1497）：收件箱点开一件——回信卡（原信 + 草稿 + 通过 / 改 / 不要）、岗位那张卡、要你判断的信、
+  // AI 猜着交给岗位的（改判）。只从收件箱开（`openRightPane({ kind: 'panel', id: 'inbox-item' })`）。
+  registerPanelType({
+    id: 'inbox-item',
+    label: 'rail.panel.inbox_item',
+    icon: Inbox,
+    priority: 'builtin',
+    group: 'layer',
+    hidden: true,
+  })
+  registerPanelBody('inbox-item', InboxItemBody)
   registerPanelType({
     id: 'outputs',
     label: 'rail.panel.outputs',

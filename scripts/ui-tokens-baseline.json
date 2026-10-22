@@ -168,10 +168,6 @@
       "font-size": 1,
       "radius": 2
     },
-    "apps/workstation/src/components/messages/unclaimed-view.tsx": {
-      "font-size": 4,
-      "radius": 1
-    },
     "apps/workstation/src/components/models/ai-source-order.tsx": {
       "radius": 1
     },
@@ -423,7 +419,7 @@
       "radius": 1
     },
     "apps/workstation/src/pages/home.tsx": {
-      "font-size": 12,
+      "font-size": 10,
       "radius": 4
     },
     "apps/workstation/src/pages/im-channels.tsx": {
