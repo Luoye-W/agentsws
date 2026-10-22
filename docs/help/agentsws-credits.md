@@ -1,6 +1,7 @@
 ---
 group: start
 order: 10
+description: 关联一次 Agents 工坊账号就能用官方模型和数据接口，不用填 key、按积分扣：1 积分 = ¥1，1 美元买 7 积分，新账号送 5 积分；填自己的 key 直连则一分不扣。
 positions: []
 roles: []
 ---

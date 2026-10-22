@@ -1,6 +1,7 @@
 ---
 group: models
 order: 40
+description: 百炼一把 key 同时调通义千问和 DeepSeek；先按你买的方案选 Token Plan、按量计费或 Coding Plan，三者的地址和 key 互不通用，选错会 401。
 positions: []
 roles: []
 ---

@@ -1,6 +1,7 @@
 ---
 group: tools
 order: 310
+description: 「SEO 与 GEO」职责默认每周一 16:30 把买家会问的问题拿去问 ChatGPT、Gemini、Claude 和 Google AI 概览，看提没提到你、排第几、引没引你的网站，并和竞品比。
 positions: [web-ops, dtc-ops]
 roles: [dtc.seo]
 ---

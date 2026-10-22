@@ -1,6 +1,7 @@
 ---
 group: tools
 order: 100
+description: 在「设置 → 数据接口」的「搜索数据」一行三选一：官方按次扣积分（查不到、出错不扣）、自带服务商的 key 不扣积分、或不接；没选过时会按顺序自动挑。
 positions: [web-ops, dtc-ops]
 roles: [dtc.seo]
 ---

@@ -1,6 +1,7 @@
 ---
 group: tools
 order: 240
+description: 在钉钉开发者后台建企业内部应用、加机器人并选 Stream 模式，把 Client ID 和 Client Secret 填进「设置 → 消息渠道」；不用公网地址，每个同事私聊发绑定码绑一次。
 positions: []
 roles: []
 ---

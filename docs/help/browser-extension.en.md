@@ -1,6 +1,9 @@
+---
+description: The Creator helper Chrome extension ships with Agents Workshop. Load it once in Developer mode to check up on and save creators on YouTube, Instagram and TikTok.
+---
 # The “Creator helper” browser extension
 
-This covers the Chrome extension “Agents Workshop · Creator helper”: it gives a creator an instant check-up right on their YouTube / Instagram / TikTok page, and one click saves them into the current brand’s creator list.
+The Chrome extension “Agents Workshop · Creator helper” isn’t in the Chrome Web Store — it ships with the app and updates with it. It gives a creator an instant check-up right on their YouTube / Instagram / TikTok page, and one click saves them into the current brand’s creator list.
 
 ## What it can and cannot do
 

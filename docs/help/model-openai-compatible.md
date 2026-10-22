@@ -1,6 +1,7 @@
 ---
 group: models
 order: 30
+description: 任何 OpenAI 格式的服务（Kimi、通义千问、智谱、本机 Ollama）都能在「OpenAI 兼容（自定义）」卡填地址和 key 接入，模型须能看图；Claude 中转站用「Anthropic 兼容（自定义）」卡。
 positions: []
 roles: []
 ---

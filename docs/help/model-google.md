@@ -1,6 +1,7 @@
 ---
 group: models
 order: 70
+description: 在 Google AI Studio 建一把 API key 填进「Google Gemini」卡，文字用 Gemini，生图自动用同一把 key 的 Nano Banana 2.1；费用走你的 Google 账单，不扣 Agents 工坊积分。
 positions: []
 roles: []
 ---

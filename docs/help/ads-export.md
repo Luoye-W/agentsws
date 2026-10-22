@@ -1,6 +1,7 @@
 ---
 group: tools
 order: 350
+description: Microsoft、Pinterest、Reddit、LinkedIn、Snapchat、Apple 广告不用连接口：在各家后台点「导出」，把文件拖进投放岗位的对话，工坊就读出花费、转化和 ROAS 并做账户体检。
 positions: [ads]
 roles: [ads.microsoft, ads.pinterest, ads.reddit, ads.linkedin, ads.snapchat, ads.apple]
 ---

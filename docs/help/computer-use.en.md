@@ -1,3 +1,6 @@
+---
+description: Off by default. Turn it on in Settings → Web & computer → Computer use, tick the allowed duties, and approve a card before each run. It stops at logins and payments.
+---
 # Let AI operate this computer
 
 Some work only happens inside an app on this computer (desktop-only software, system dialogs). "Settings → Web & computer → Computer use" decides whether **AI may touch this computer** — see the screen, click, type. Off by default.

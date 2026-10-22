@@ -1,6 +1,9 @@
+---
+description: Gmail, GA4, Search Console and Google Ads authorize through your own Google Cloud project; YouTube needs just an API key; Google Alerts is free, delivered via RSS.
+---
 # The Google connections
 
-What each of the six Google connections does and how to set it up. The first ones use your own Google Cloud project; Google Alerts at the end needs no approval at all.
+Google has six connections: Gmail, GA4, Search Console and Google Ads authorize through your own Google Cloud project, YouTube needs only an API key, and Google Alerts at the end is free with nothing to apply for.
 
 | Connection | In one line | Review / cost |
 |---|---|---|

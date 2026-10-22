@@ -1,3 +1,6 @@
+---
+description: Sign in with the Claude Pro / Max subscription you already pay for (personal setup only), or create an API key at console.anthropic.com and pay per use.
+---
 # Connect Anthropic / a Claude subscription
 
 Two ways: sign in with the Claude subscription you already pay for, or create an API key at console.anthropic.com and pay per use. If you already pay for Claude you don't need to buy API credit.

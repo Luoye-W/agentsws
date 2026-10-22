@@ -1,3 +1,6 @@
+---
+description: Sign in with the ChatGPT Plus / Pro subscription you already pay for via a device code (personal setup only), or use an API key from platform.openai.com.
+---
 # Connect OpenAI / a ChatGPT subscription
 
 Two ways: sign in with the ChatGPT subscription you already pay for, or create an API key at platform.openai.com and pay per use. The two are billed separately — if you already pay for ChatGPT you don't need to buy API credit.

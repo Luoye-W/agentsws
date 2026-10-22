@@ -1,3 +1,6 @@
+---
+description: On the Shopify CLI card, click Install, then Sign in to Shopify in your browser. No terminal or Node.js setup needed; only Shopify brands need it.
+---
 # Install and sign in to Shopify CLI
 
 Shopify CLI is Shopify's official command-line tool. The Theme duty on the Site Building team uses it for three things: pull your theme to this computer, push your edits as an **unpublished copy** for you to preview, and run Shopify's official Liquid check. Publishing a theme always waits for your approval on a card.

@@ -1,3 +1,6 @@
+---
+description: Each week the SEO & GEO duty asks ChatGPT, Gemini, Claude and Google AI Overviews your buyers' questions and tracks mentions, rank and citations against competitors.
+---
 # AI answer tracking
 
 More and more shoppers skip the search results and ask ChatGPT, Gemini or Claude directly, or read the AI overview at the top of Google. Every week the "SEO & GEO" duty asks these AIs the questions your buyers ask and checks **whether they mention you, where you rank, and whether they cite your site**, then compares you with competitors.

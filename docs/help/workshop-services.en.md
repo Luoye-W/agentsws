@@ -1,3 +1,6 @@
+---
+description: Spend credits to have the Workshop team get things done, like site builds or press pieces. Credits sit in escrow until you accept; ask for changes or a refund if needed.
+---
 # Workshop services: have people get it done
 
 Some things AI can't finish alone — building a store, writing a press piece, opening an account. **Workshop services** let you spend credits and have the Workshop team (or a Workshop partner team) get it done: order → track → receive → accept.

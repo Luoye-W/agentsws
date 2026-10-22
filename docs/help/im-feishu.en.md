@@ -1,3 +1,6 @@
+---
+description: Create a Feishu custom app with a bot, enter its App ID and Secret in Settings → Chat channels, then turn on long connection and release it. No public URL needed.
+---
 # Feishu bot: create the app, turn on long connection, get credentials
 
 The Feishu bot is **for your team**: a colleague DMs the bot or @-mentions it in a group, and it asks **that person's own assistant**, as that person — so everyone only sees what they are allowed to see.

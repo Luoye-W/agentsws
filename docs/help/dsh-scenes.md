@@ -1,6 +1,7 @@
 ---
 group: tools
 order: 270
+description: 点左下角你的名字 →「场景 ›」，选一个场景点「打开」就切过去了；安装包里已带完整的 DeepSeek Harness，编程、写作等其他场景不用另装。
 positions: []
 roles: []
 ---

@@ -1,12 +1,13 @@
 ---
 group: connect
 order: 160
+description: TikTok 的 Research API（红人查数据）、Content Posting API（发视频）、Business API（投放）都是申请制且要分别申请，审核要几天到几周；投放那条目前还没接。
 positions: [ads, social-media, kol-marketing]
 roles: [ads.tiktok, social.tiktok, kol.tiktok]
 ---
 # TikTok 的三个连接
 
-这篇讲 TikTok 的三个连接：红人用的 Research API、社媒发视频用的 Content Posting API、投放用的 Business API。三个都是**申请制**，而且**要分别申请**。
+TikTok 有三个连接：红人用的 Research API、社媒发视频用的 Content Posting API、投放用的 Business API。三个都是**申请制**，而且**要分别申请**，批了一个不等于另外两个也能用。
 
 | 连接 | 一句话 | 要不要审核 / 花不花钱 |
 |---|---|---|

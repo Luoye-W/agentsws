@@ -1,3 +1,6 @@
+---
+description: In Settings → Data sources → Search data, choose official (credits per call, failures free), your own provider key (no credits), or off.
+---
 # Search data APIs
 
 When the "SEO & GEO" duty checks search result pages (where you rank on Google / Bing, whether the AI overview mentions you) or asks AI platforms (do ChatGPT, Gemini, Claude or Google AI Overviews mention you), it needs third-party search data. The "Connections → Search data" row decides where it comes from — three options:
