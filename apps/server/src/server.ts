@@ -5600,9 +5600,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const models = effectiveModels()
         const ref = models.configured() ? models.defaultRef() : undefined
         if (ref === undefined || ref.provider === 'stub') return undefined
-        return modelReplyDrafter(async (prompt) => {
+        return modelReplyDrafter(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的规矩在系统提示，这一条的渠道 / 作者 / 原话在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: actor.assignment_id as never,
@@ -5639,9 +5643,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 .listByRole(spec.role_id)
                 .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
         if (holder === undefined) return undefined
-        return modelTagReviewer(async (prompt) => {
+        return modelTagReviewer(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的六类说明在系统提示，这条帖子在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: holder.id as never,

@@ -16,6 +16,7 @@ import {
   cleanDraft,
   MAX_DRAFT_OUTPUT,
   modelReplyDrafter,
+  REPLY_DRAFT_SYSTEM,
   type ReplyDrafter,
   replyBlockedReason,
   replyDraftPrompt,
@@ -193,5 +194,21 @@ describe('WP255 起草（提示词与整理）', () => {
       })(input),
     ).toBeUndefined()
     expect(await modelReplyDrafter(async () => '"Nice one!"')(input)).toBe('Nice one!')
+  })
+
+  it('WP471（决策 1549）：两条——系统提示逐字相同（规矩）；渠道 / 作者 / 原话在用户消息、原话最后', async () => {
+    const seen: { user: string; system?: string }[] = []
+    const draft = modelReplyDrafter(async (user, system) => {
+      seen.push({ user, ...(system === undefined ? {} : { system }) })
+      return 'ok'
+    })
+    const base = { channel_label: 'Reddit', account_name: 'r/x', surface: 'comment' as const }
+    await draft({ ...base, author: 'u/a', text: 'first' })
+    await draft({ ...base, author: 'u/b', text: 'second' })
+    const [a, b] = seen
+    expect(a?.system).toBe(REPLY_DRAFT_SYSTEM)
+    expect(b?.system).toBe(a?.system)
+    expect(a?.user).not.toContain('规矩：')
+    expect(b?.user.trimEnd().endsWith('</external_data>')).toBe(true)
   })
 })
