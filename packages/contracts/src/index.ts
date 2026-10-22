@@ -64,6 +64,7 @@ export * from './dsh-scenes.js'
 export * from './economics.js'
 export * from './events.js'
 export * from './execution.js'
+export * from './feedback.js'
 // WP336（决策 810–812）：当场回答的 ```dsh-ui 写法（dsh-genui 渲染层）——白名单过滤与给模型的规矩
 export * from './genui.js'
 // WP341（决策 847）：genui 完全融合——动作写法、口令格、媒体来源、表单交上来的结构化回话

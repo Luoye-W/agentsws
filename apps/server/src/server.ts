@@ -22,6 +22,7 @@ import type {
   AdsActor,
   AskPort,
   ChatPort,
+  ClientErrorPort,
   ConnectionDirectoryPort,
   FreeChatPort,
   PositionEntryPort,
@@ -525,6 +526,12 @@ import {
   isFaqBatchCard,
   isFaqImportCard,
 } from './faq-import.js'
+import {
+  clientErrorRingLine,
+  createFeedbackService,
+  type ErrorRing,
+  processErrorRing,
+} from './feedback.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
 import { createGenuiImageHosts } from './genui-image-hosts.js'
@@ -1286,6 +1293,8 @@ export interface ServerOptions {
    * quiet 时不写（`/v1/client-errors` 照收照答 logged=false）。
    */
   clientErrorLog?: (line: string) => void
+  /** WP475：最近的错误日志放哪（测试注入；不给用进程那一份 `processErrorRing`）。 */
+  feedbackErrors?: ErrorRing
   /**
    * WP398（docs/106 §13 A8）：词库读 Amazon 搜索框联想词用的那一块。不给 = 有桌面壳的内置浏览器时用它读
    * （`Agent/AgentsWorkshop` 标识、固定间隔、算进每小时额度、被拦就停），没有就照实说「读不了」。demo / 测试注入替身。
@@ -2079,6 +2088,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const notifications =
     options.notifications ??
     createNotifications({ clock, random, dbPath: file('notifications.db') })
+  // WP475：最近的错误日志（反馈的诊断信息用）；测试注入自己的一份
+  const feedbackErrors = options.feedbackErrors ?? processErrorRing
 
   // 21 §1：所有模块的事件都进同一条日志；请求内的 trace_id 覆盖模块自造的那个。
   const appendEvent = (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void => {
@@ -13340,6 +13351,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     appendEvent,
   }
+  /*
+   * WP475（决策 1591、1592）：左下角「反馈」——先存本机、再发工坊云（不要求登录：匿名 + 设备号）；
+   * 云不通就留在队列里联网后补发；发出去之后定时问进度，有回复 / 修好了进铃铛一条。
+   * 联系方式默认用关联的工坊账号邮箱。
+   */
+  const feedbackService = createFeedbackService({
+    clock,
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+    cloudBase: () => cloudBaseUrl(env),
+    ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+    serverVersion: env.AGENTSWS_VERSION ?? '0.1.0',
+    contactOf: async (actor) => {
+      const view = await cloudAccount.port.status(actor.workspace_id)
+      return view.linked ? view.email : undefined
+    },
+    notify: (input) => {
+      notifications.notify(input)
+    },
+    errors: feedbackErrors,
+  })
+  if (options.quiet !== true) feedbackService.start()
   let ownerEmailQueue: Promise<unknown> = Promise.resolve()
   cloudLinkedSink = () => {
     ownerEmailQueue = ownerEmailQueue
@@ -16270,6 +16302,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     // WP429：站内通知（铃铛）与「设置 → 通知」开关
     notifications: notifications.port,
+    // WP475：左下角「反馈」
+    feedback: feedbackService.port,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
@@ -16482,11 +16516,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }
     })(),
     // WP298：前端报错（错误边界 / onerror / 没人接的拒绝）写进服务日志
-    ...(options.clientErrorLog !== undefined
-      ? { clientErrors: stderrClientErrors(options.clientErrorLog) }
-      : options.quiet === true
-        ? {}
-        : { clientErrors: stderrClientErrors() }),
+    // WP475：同时记一份进「最近的错误日志」（反馈里附诊断信息时用）
+    ...((): { clientErrors?: ClientErrorPort } => {
+      const log =
+        options.clientErrorLog !== undefined
+          ? stderrClientErrors(options.clientErrorLog)
+          : options.quiet === true
+            ? undefined
+            : stderrClientErrors()
+      if (log === undefined) return {}
+      return {
+        clientErrors: {
+          record: (entry) => {
+            feedbackErrors.push(clientErrorRingLine(entry))
+            return log.record(entry)
+          },
+        },
+      }
+    })(),
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',
@@ -16962,6 +17009,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await subscription.close()
       await deepseekAccount.close()
       outboundLog.close()
+      feedbackService.stop()
       // WP429：注入的那一份由测试自己关
       if (options.notifications === undefined) notifications.close()
       outboundStore.close()

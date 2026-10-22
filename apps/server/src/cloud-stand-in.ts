@@ -178,6 +178,14 @@ export interface CloudStandIn {
    * `scopeMissing(true)` 演老令牌缺 `services`。
    */
   services: ServiceOrdersStandIn & { scopeMissing(on: boolean): void }
+  /**
+   * WP475：反馈那两条——测试 / 演示截图里扮「运营」那一侧（改状态、回一句）。替身自己从不回复。
+   * `list()` 看收到了哪些（编号 + 一句话）。
+   */
+  feedback: {
+    list(): { id: string; message: string }[]
+    reply(id: string, text: string, status?: 'new' | 'in_progress' | 'fixed' | 'wont_fix'): boolean
+  }
 }
 
 /** 只点本机回环口：替身绝不替用户去访问别的网址。 */
@@ -266,6 +274,17 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   const upgradedTokens = new Set<string>()
   const mint = (prefix: string): string => `${prefix}_${randomBytes(12).toString('hex')}`
   const shopify = shopifyCloudStandIn({ now, ...options.shopify })
+  /** WP475：收下的反馈（设备号:client_id → 回执）。 */
+  const feedback = new Map<
+    string,
+    {
+      submitted: { id: string; ticket: string; status: string; created_at: string }
+      kind: string
+      message: string
+      replies: { at: string; text: string }[]
+      updated_at: string
+    }
+  >()
   /** WP231：已注册的邮箱 → 密码（替身只在内存里，demo 一关就没了）。 */
   const registered = new Map<string, string>([
     [CLOUD_STAND_IN_REGISTERED_EMAIL, CLOUD_STAND_IN_PASSWORD],
@@ -1037,6 +1056,46 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (out?.bytes !== undefined) return respondBytes(out.status, out.bytes, out.headers ?? {})
       if (out !== undefined) return respond(out.status, out.body)
     }
+    // ── WP475：反馈（不要令牌；收下、给编号与 ticket。替身自己不回复——测试 / 演示经 `feedback.reply` 扮运营）
+    if (method === 'POST' && path === '/v1/feedback') {
+      const client = typeof body.client_id === 'string' ? body.client_id : ''
+      const device = typeof body.device_id === 'string' ? body.device_id : ''
+      const message = typeof body.message === 'string' ? body.message.trim() : ''
+      if (client === '' || device === '' || message === '')
+        return fail(400, 'invalid_input', '反馈缺东西')
+      const key = `${device}:${client}`
+      const prev = feedback.get(key)
+      if (prev !== undefined) return ok(prev.submitted)
+      const submitted = {
+        id: `fb_${randomBytes(6).toString('hex')}`,
+        ticket: `fbt_${randomBytes(16).toString('hex')}`,
+        status: 'new',
+        created_at: now(),
+      }
+      feedback.set(key, {
+        submitted,
+        kind: typeof body.kind === 'string' ? body.kind : 'bug',
+        message,
+        replies: [],
+        updated_at: submitted.created_at,
+      })
+      return ok(submitted)
+    }
+    if (method === 'POST' && path === '/v1/feedback/status') {
+      const tickets = new Set(Array.isArray(body.tickets) ? body.tickets : [])
+      const items = [...feedback.values()]
+        .filter((f) => tickets.has(f.submitted.ticket))
+        .map((f) => ({
+          id: f.submitted.id,
+          kind: f.kind,
+          status: f.submitted.status,
+          message: f.message,
+          created_at: f.submitted.created_at,
+          updated_at: f.updated_at,
+          replies: f.replies,
+        }))
+      return ok({ items })
+    }
     // ── WP265：Shopify 一键授权（只认替身签过的工作区令牌；授权页是 .invalid 假地址）
     if (path.startsWith('/v1/shopify/')) {
       if (token === undefined || !workspaceTokens.has(token))
@@ -1105,5 +1164,17 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
         servicesScopeMissing = on
       },
     }),
+    feedback: {
+      list: () => [...feedback.values()].map((f) => ({ id: f.submitted.id, message: f.message })),
+      reply(id, text, status) {
+        const f = [...feedback.values()].find((x) => x.submitted.id === id)
+        if (f === undefined) return false
+        const at = now()
+        if (text.trim() !== '') f.replies.push({ at, text: text.trim() })
+        if (status !== undefined) f.submitted.status = status
+        f.updated_at = at
+        return true
+      },
+    },
   }
 }

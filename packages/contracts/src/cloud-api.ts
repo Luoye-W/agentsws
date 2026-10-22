@@ -81,6 +81,12 @@ import type {
   DataTaskSubmit,
   DataTaskView,
 } from './data-service.js'
+import type {
+  FeedbackStatusList,
+  FeedbackStatusRequest,
+  FeedbackSubmitRequest,
+  FeedbackSubmitted,
+} from './feedback.js'
 import type { HostedInstanceStatus, HostedSnapshotStored } from './hosted.js'
 import type { KolChannel } from './kol.js'
 import type {
@@ -1226,6 +1232,39 @@ export interface CloudDataServiceApi {
     params: DataTaskParams
     ok: { status: 200; body: CloudDataEnvelope<DataTaskView> }
     errors: EntryAuthErrors & { 404: 'not_found' }
+    errorBody: CloudEntryErrorBody
+  }
+}
+
+/**
+ * WP475（决策 1591、1592）：左下角「反馈」。**不要求登录**（匿名 + 设备号也能发）；按来源与设备限流。
+ * 契约的说明在 `feedback.ts` 文件头。
+ */
+export interface CloudFeedbackApi {
+  /**
+   * 收一条反馈（截图 base64 带在正文里，解码后至多 4 MiB）。同一台设备同一个 `client_id`
+   * 再发一次（离线补发、重试）回同一个结果，不另起一条。新反馈给运营发一封通知信。
+   */
+  'POST /v1/feedback': {
+    auth: 'public'
+    tag: 'feedback'
+    body: FeedbackSubmitRequest
+    ok: { status: 200; body: CloudDataEnvelope<FeedbackSubmitted> }
+    errors: {
+      400: 'invalid_input'
+      /** 正文太大（截图超了） */
+      413: 'payload_too_large'
+      429: 'rate_limited'
+    }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 拿提交时给的 ticket 换回状态与运营的回复（查不到的不回） */
+  'POST /v1/feedback/status': {
+    auth: 'public'
+    tag: 'feedback'
+    body: FeedbackStatusRequest
+    ok: { status: 200; body: CloudDataEnvelope<FeedbackStatusList> }
+    errors: { 400: 'invalid_input'; 429: 'rate_limited' }
     errorBody: CloudEntryErrorBody
   }
 }
@@ -2570,7 +2609,8 @@ export interface CloudApi
     CloudPremiumThemeApi,
     CloudServiceOrderApi,
     CloudContentApi,
-    CloudTeamApi {}
+    CloudTeamApi,
+    CloudFeedbackApi {}
 
 /** 编译期检查：表里每一条都长成 {@link CloudApiOperation} 的样子（写错一个键名就红）。 */
 type AssertOperations<T extends Record<keyof T, CloudApiOperation>> = T

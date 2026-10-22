@@ -32,6 +32,7 @@ import {
   CornerDownLeft,
   Home,
   MessageCircle,
+  MessageSquareText,
   MessagesSquare,
   Search,
   Settings,
@@ -73,6 +74,7 @@ import {
   switchBrand,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { openFeedback } from '@/lib/feedback'
 import type { ReasoningEffort } from '@/lib/free-chat'
 import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
 import { HELP_SLUGS, helpAddress } from '@/lib/help'
@@ -530,6 +532,19 @@ export function CommandPalette({
             >
               <Home aria-hidden className={ROW_ICON} />
               {t('nav.home')}
+            </CommandItem>
+            {/* WP475：⌘K 里也能找到「反馈」 */}
+            <CommandItem
+              value={`${t('command.feedback')} feedback bug 反馈 问题 建议`}
+              data-testid="command-feedback"
+              className={ROW}
+              onSelect={() => {
+                onOpenChange(false)
+                openFeedback('new')
+              }}
+            >
+              <MessageSquareText aria-hidden className={ROW_ICON} />
+              {t('command.feedback')}
             </CommandItem>
             {/* WP70：岗位排在职责前面 */}
             {byPosition.map((p) => {

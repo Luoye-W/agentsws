@@ -38,6 +38,7 @@ import {
   type SceneOpenOutcome,
 } from './bridge-types.js'
 import { browserEntryUrl } from './browser-entry.js'
+import { encodeCapture } from './capture.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
 import {
   createLocalConnectLauncher,
@@ -967,6 +968,18 @@ async function bootstrap(): Promise<void> {
     if (target === null || target !== window) return false
     target.setTitleBarOverlay(titleBarOverlay(theme))
     return true
+  })
+  // WP475：反馈框「附上截图」——只截发起调用的那个工坊窗口（不截屏幕、不截别的应用）
+  ipcMain.handle(BRIDGE_CHANNELS.captureWindow, async (event) => {
+    if (!fromLocalWindow(event)) return null
+    const target = BrowserWindow.fromWebContents(event.sender)
+    if (target === null || target.isDestroyed()) return null
+    try {
+      return encodeCapture(await target.webContents.capturePage())
+    } catch (err) {
+      logger.warn('截图没成', { error: String(err) })
+      return null
+    }
   })
   ipcMain.handle(BRIDGE_CHANNELS.notify, (event, raw: unknown) => {
     if (!fromLocalWindow(event)) return false

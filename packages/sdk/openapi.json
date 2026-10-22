@@ -60282,12 +60282,474 @@
                         "type": "boolean"
                       }
                     }
+                  },
+                  "feedback": {
+                    "type": "object",
+                    "properties": {
+                      "inbox": {
+                        "type": "boolean"
+                      },
+                      "system": {
+                        "type": "boolean"
+                      }
+                    }
                   }
                 }
               }
             }
           }
         }
+      }
+    },
+    "/v1/feedback/draft": {
+      "get": {
+        "operationId": "feedbackDraft",
+        "summary": "WP475 打开反馈框：联系方式默认值 + 将要附上的诊断信息（已脱敏）",
+        "tags": ["feedback"],
+        "parameters": [
+          {
+            "name": "route",
+            "in": "query",
+            "required": false,
+            "description": "当前页面路径（查询串会被去掉）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "required": false,
+            "description": "界面语言",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app_version",
+            "in": "query",
+            "required": false,
+            "description": "桌面壳版本（有桥才有）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "shell",
+            "in": "query",
+            "required": false,
+            "description": "desktop | browser",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "FeedbackDraftView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "FeedbackDraftView"
+      }
+    },
+    "/v1/feedback": {
+      "post": {
+        "operationId": "submitFeedback",
+        "summary": "WP475 交一条反馈（先存本机，发不出去就联网后自动补发）",
+        "tags": ["feedback"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LocalFeedbackSubmitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "LocalFeedbackSubmitted",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["bug", "idea", "other"]
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "contact": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "include_diagnostics": {
+                    "type": "boolean"
+                  },
+                  "route": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "locale": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "app_version": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "shell": {
+                    "type": "string",
+                    "enum": ["desktop", "browser"]
+                  },
+                  "screenshot": {
+                    "type": "object",
+                    "properties": {
+                      "content_type": {
+                        "type": "string",
+                        "enum": ["image/png", "image/jpeg", "image/webp"]
+                      },
+                      "data_base64": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 5592410,
+                        "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+                      }
+                    },
+                    "required": ["content_type", "data_base64"]
+                  }
+                },
+                "required": ["kind", "message", "include_diagnostics", "route", "locale"]
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listMyFeedback",
+        "summary": "WP475 我的反馈：本机记的每一条 + 云上的状态与回复",
+        "tags": ["feedback"],
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "description": "1 = 先去云上查一遍进度（有节流）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LocalFeedbackList",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "LocalFeedbackList"
+      }
+    },
+    "/v1/feedback/seen": {
+      "post": {
+        "operationId": "markFeedbackSeen",
+        "summary": "WP475 我的反馈看过了（回复的未读数清零）",
+        "tags": ["feedback"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ unread }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-returns": "{ unread }"
       }
     },
     "/v1/ask": {
