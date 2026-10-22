@@ -185,6 +185,8 @@ describe('过渡页（等满 8 秒还是过渡页）', () => {
     expect(file().trace[0]?.steps.map((s) => [s.via, s.result])).toEqual([
       ['google_warmup', 'skipped'],
       ['google', 'timeout'],
+      // WP455：没选「用你正在用的浏览器」，这一步跳过
+      ['own_chrome', 'skipped'],
       ['bing', 'ok'],
     ])
   })
@@ -281,6 +283,7 @@ describe('首次热身', () => {
     expect(file().trace[0]?.steps.map((s) => `${s.via}:${s.result}`)).toEqual([
       'google_warmup:ok',
       'google:skipped',
+      'own_chrome:skipped',
       'bing:skipped',
       'cloud_google:skipped',
       'public:ok',
@@ -302,6 +305,7 @@ describe('首次热身', () => {
     expect(file().trace[0]?.steps.map((s) => `${s.via}:${s.result}`)).toEqual([
       'google_warmup:blocked',
       'google:blocked',
+      'own_chrome:skipped',
       'bing:ok',
     ])
 
@@ -374,6 +378,7 @@ describe('每步留痕（web-search.json）', () => {
     expect(first?.steps.map((s) => `${s.via}:${s.result}`)).toEqual([
       'google_warmup:skipped',
       'google:empty',
+      'own_chrome:skipped',
       'bing:empty',
       'cloud_google:skipped',
       'public:ok',
@@ -403,6 +408,7 @@ describe('每步留痕（web-search.json）', () => {
     }
     expect(s.trace[0]?.steps.map((x) => `${x.via}:${x.result}`)).toEqual([
       'google:skipped',
+      'own_chrome:skipped',
       'bing:skipped',
       'cloud_google:skipped',
       'public:skipped',

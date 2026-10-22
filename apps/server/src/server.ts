@@ -950,6 +950,7 @@ import {
   bskJsonOf,
   createBrowserWebSearch,
   createOwnBrowserReader,
+  createOwnChromeGate,
   createSearchThrottle,
   type KeylessSearch,
   type NativeSearchPort,
@@ -4725,6 +4726,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     minGapMs: 0,
     maxGapMs: 0,
   })
+  /*
+   * WP455（决策 1434）：「用你的 Chrome 搜 Google」那一环的整台机那一份——每小时最多 20 次、
+   * 被 Google 拦了停到北京时间第二天零点（用户的 Chrome 只有一个，几个品牌共用）。读页本身是各品牌那一份
+   * BrowserSkill 读页（WP402，下面装配品牌时晚绑定）。
+   */
+  const ownChromeGate = createOwnChromeGate({
+    now: () => Date.now(),
+    ...(dbDir === undefined ? {} : { file: join(dbDir, 'web-search-own-chrome.json') }),
+  })
   if (webSearchSetup !== undefined)
     process.stdout.write(
       `web search: ${webSearchChannel === undefined ? '没有内置浏览器（没有桌面壳）' : '工坊内置浏览器'}\n`,
@@ -5245,6 +5255,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP353（决策 912）：这个品牌的联网搜索后端（缓存与暂停记在品牌目录 `web-search/` 下）。
      * 云端 Google 那一路就是上面这个搜索数据接口（接了才走；官方按积分、自带 key 不扣）。
      */
+    // WP455：这个品牌的「你自己的浏览器」读页在下面（WP402 那一份）才建——晚绑定
+    const ownChromeLate: { reader?: () => OwnBrowserReader | undefined } = {}
     const webBrowser: BrowserWebSearch | undefined =
       webSearchSetup === undefined
         ? undefined
@@ -5261,6 +5273,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             keyless: webSearchKeyless,
             native: webSearchNative,
             nativeThrottle: webSearchNativeThrottle,
+            ownChrome: { reader: () => ownChromeLate.reader?.(), gate: ownChromeGate },
             now: () => Date.now(),
             log: (line) => process.stdout.write(`${line}\n`),
           })
@@ -9241,6 +9254,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ownBrowserMemo = { path, reader: createOwnBrowserReader({ bsk: bskJsonOf(path) }) }
       return ownBrowserMemo.reader
     }
+    ownChromeLate.reader = ownBrowserReader
     const amazonOwnHolder = ():
       | { person_id: string; assignment_id: string; role_id: string }
       | undefined => {

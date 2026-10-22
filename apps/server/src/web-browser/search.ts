@@ -8,6 +8,8 @@
  * 2. **内置浏览器开 Google**（桌面壳那个隐藏视图；带品牌主市场的 `gl` / `hl`）——打不开（超时 / 断网）换 Bing；
  *    进了 `/sorry/` 或人机验证页：**记一次暂停**；同一天**第二次**被拦，就把那一页亮给人（第三栏「浏览器」），
  *    在结果里说一句「需要你在那页点一下验证」——**人自己点，AI 不碰验证码**；人点过之后暂停自动解除；
+ * 2½. WP455：**你的 Chrome 搜 Google**（通过插件，后台窗口、读完自动关；只在上一步没拿到结果时走，
+ *    每小时最多 20 次、被 Google 拦了停到北京时间第二天零点，见 `own-chrome.ts`）；
  * 3. **内置浏览器开 Bing**（同一个浏览器）；
  * 4. **云端 Google**（`/v1/search-data/serp`，官方按积分或用户自带 key）——只有接了才走；
  * 5. **公开搜索服务**（社区插件 `@240xu/dsh-websearch` 的两家免 key 匿名口，见 dsh-adapter `keyless-search.ts`）。
@@ -38,6 +40,8 @@ import {
   nativeSearchSourceOf,
   type SearchWho,
 } from './native.js'
+import type { OwnChromeSearch } from './own-chrome.js'
+import { openResultOfHtml } from './serp-html.js'
 
 export interface SearchSource {
   url: string
@@ -45,8 +49,11 @@ export interface SearchSource {
   snippet?: string
 }
 
-/** 结果来自哪一路（审计 / 界面照实标）。WP355：`native` = 名单里那家模型自带的搜索。 */
-export type SearchVia = 'google' | 'bing' | 'cloud_google' | 'public' | 'native'
+/**
+ * 结果来自哪一路（审计 / 界面照实标）。WP355：`native` = 名单里那家模型自带的搜索。
+ * WP455：`own_chrome` = 通过插件在你自己的 Chrome 里搜的 Google。
+ */
+export type SearchVia = 'google' | 'own_chrome' | 'bing' | 'cloud_google' | 'public' | 'native'
 
 export interface BrowserSearchResult {
   sources: SearchSource[]
@@ -89,6 +96,15 @@ const CACHE_MAX = 300
 /** 第一次被拦停多久；第二次（亮给人之后）停多久（人点过就提前解除）。 */
 export const FIRST_BLOCK_PAUSE_MS = 30 * 60_000
 export const HANDOVER_PAUSE_MS = 6 * 3_600_000
+/**
+ * WP455（docs/110 §3.1 第 6 条）：「用你的 Chrome 搜 Google」每小时最多几次（整台机一份，`own-chrome.ts`）；
+ * 同时照样计入上面那道每小时 60 页的总上限。
+ */
+export const OWN_CHROME_MAX_PER_HOUR = 20
+/** WP455：每个品牌第一次走这一路时，在那条搜索结果说明里加的那一句（之后不再说）。 */
+export const OWN_CHROME_TELL_LINE = '这次用了你的 Chrome 搜 Google（后台窗口，读完自动关）'
+/** WP455：在你的 Chrome 里被 Google 拦过之后，这一步记 `skipped` 的原因（停到北京时间第二天零点）。 */
+export const OWN_CHROME_PAUSED_WHY = '今天在你的 Chrome 里被 Google 拦过'
 const DAY = 86_400_000
 const HOUR = 3_600_000
 
@@ -152,6 +168,8 @@ interface StepOutcome {
   handover?: boolean
   result?: SearchStepResult
   why?: string
+  /** WP455：这一步第一次用了你的 Chrome（结果说明里加那一句）。 */
+  tell?: boolean
 }
 
 export const HANDOVER_MESSAGE =
@@ -241,6 +259,8 @@ interface StateFile {
   trace?: SearchTraceEntry[]
   /** WP454：最近一次 Google 那一步没用上：什么时候、结果、为什么（一眼看出来用）。 */
   google_last_miss?: { at: number; result: SearchStepResult; why?: string }
+  /** WP455：这个品牌第一次用你的 Chrome 搜 Google 是什么时候（说过那一句就不再说）。 */
+  own_chrome_told_at?: number
 }
 
 function loadState(file: string | undefined): StateFile {
@@ -254,6 +274,9 @@ function loadState(file: string | undefined): StateFile {
       cache: raw.cache ?? {},
       ...(Array.isArray(raw.trace) ? { trace: raw.trace.slice(-SEARCH_TRACE_MAX) } : {}),
       ...(raw.google_last_miss === undefined ? {} : { google_last_miss: raw.google_last_miss }),
+      ...(typeof raw.own_chrome_told_at === 'number'
+        ? { own_chrome_told_at: raw.own_chrome_told_at }
+        : {}),
     }
   } catch {
     return empty
@@ -282,6 +305,11 @@ export interface BrowserWebSearchOptions {
   native?: NativeSearchPort | undefined
   /** WP355：自带搜索的节流（全进程一份；同一时刻只搜一次、每小时上限）。不给 = 不另节流。 */
   nativeThrottle?: SearchThrottle | undefined
+  /**
+   * WP455（决策 1434）：内置浏览器 Google 没拿到结果时，通过插件在你自己的 Chrome 里搜一次 Google。
+   * 不给 / `reader()` 回 `undefined`（没选「用你正在用的浏览器」、插件没装好、托管实例）= 这一步记 `skipped`。
+   */
+  ownChrome?: OwnChromeSearch | undefined
   now(): number
   log?(line: string): void
 }
@@ -561,6 +589,81 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
     }
   }
 
+  /**
+   * WP455（docs/110 §3.1 第 5–8 条）：通过插件在你自己的 Chrome 里搜一次 Google（只在内置浏览器 Google 没拿到结果时走）。
+   * 只读：后台窗口打开结果页、读回 HTML、读完闲 30 秒自动关；不点、不填、不跑页面脚本。
+   * 遇到人机验证 / `/sorry` / cookie 同意页：不亮给人、不点，这一路停到北京时间第二天零点。
+   */
+  async function viaOwnChrome(query: string, locale: SearchLocale): Promise<StepOutcome> {
+    const oc = o.ownChrome
+    const reader = oc?.reader()
+    const serp = reader?.serp?.bind(reader)
+    if (oc === undefined || serp === undefined)
+      return { result: 'skipped', why: '没选「用你正在用的浏览器」，或插件还没装好' }
+    if (oc.gate.pausedUntil() !== undefined)
+      return { result: 'skipped', why: OWN_CHROME_PAUSED_WHY }
+    const cap = oc.gate.throttle.maxPerHour
+    if (oc.gate.throttle.usedThisHour() >= cap)
+      return { result: 'skipped', why: `这一小时已经用你的 Chrome 搜了 ${cap} 次（上限）` }
+    const url = googleSearchUrl(query, locale)
+    let opened = false
+    const got = await o.throttle.run(() =>
+      oc.gate.throttle.run(() => {
+        opened = true
+        return serp(url, {
+          // 110A 的判法：还是过渡页就再等（最多 8 秒，在读页那一侧）
+          pending: (html, finalUrl) =>
+            blockOf(openResultOfHtml(html, finalUrl))?.kind === 'interstitial',
+        })
+      }),
+    )
+    // 每个品牌第一次真的用了你的 Chrome：结果说明里说一句，之后不再说
+    const tell = opened && state.own_chrome_told_at === undefined
+    if (tell) {
+      state.own_chrome_told_at = o.now()
+      flush()
+    }
+    const told: Pick<StepOutcome, 'tell'> = tell ? { tell: true } : {}
+    if (got === undefined)
+      return {
+        ...told,
+        result: 'skipped',
+        why: opened
+          ? `这一小时已经用你的 Chrome 搜了 ${cap} 次（上限）`
+          : `这一小时已经开了 ${o.throttle.maxPerHour} 页（上限）`,
+      }
+    if (!got.ok)
+      return { ...told, note: `你的 Chrome 这次没搜成（${got.message}）`, result: got.reason }
+    const page = openResultOfHtml(got.html, got.final_url)
+    const block = blockOf(page)
+    if (block?.kind === 'interstitial')
+      return {
+        ...told,
+        note: '你的 Chrome 里 Google 没出结果（过渡页，等了 8 秒还没跳到结果页）',
+        result: 'interstitial',
+        why: block.message,
+      }
+    if (block !== undefined && block.kind !== 'login') {
+      const until = oc.gate.pauseForToday()
+      o.log?.(`web-search: 你的 Chrome 里 Google ${block.message}，这一路停到 ${clock(until)}`)
+      return {
+        ...told,
+        note: `你的 Chrome 里 Google ${block.message}，这一路今天先不用了（不亮给你、不点）`,
+        result: block.kind === 'consent' ? 'consent' : 'blocked',
+        why: block.message,
+      }
+    }
+    const items = page.serp.items
+    const seen = page.serp.candidates ?? 0
+    return {
+      ...told,
+      sources: items,
+      ...(items.length === 0 && seen > 0
+        ? { why: `0 条结果（页面上有 ${seen} 个结果标题，一条都没读出来）` }
+        : {}),
+    }
+  }
+
   async function viaCloud(
     query: string,
     locale: SearchLocale,
@@ -663,6 +766,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
 
   const VIA_LINE: Record<Exclude<SearchVia, 'native'>, string> = {
     google: '这次的结果来自 Google（工坊内置浏览器）',
+    own_chrome: '这次的结果来自 Google（你的 Chrome）',
     bing: '这次的结果来自 Bing（工坊内置浏览器）',
     cloud_google: '这次的结果来自云端 Google 搜索',
     public: '这次的结果来自公开搜索服务',
@@ -678,11 +782,17 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
         ? '公开搜索服务'
         : via === 'cloud_google'
           ? '云端 Google'
-          : ENGINE_NAME[via]
+          : via === 'own_chrome'
+            ? 'Google（你的 Chrome）'
+            : ENGINE_NAME[via]
 
   return {
     fetchHosts: o.channel === undefined ? [] : BROWSER_FETCH_HOSTS,
-    available: () => o.channel !== undefined || o.cloud !== undefined || o.keyless !== undefined,
+    available: () =>
+      o.channel !== undefined ||
+      o.cloud !== undefined ||
+      o.keyless !== undefined ||
+      o.ownChrome?.reader() !== undefined,
 
     async search(query, maxResults = 10, who = {}) {
       const locale = searchLocaleOf(o.profile(), query)
@@ -725,6 +835,9 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
       const site = siteOf(query)
       const notes: string[] = []
       let handover = false
+      // WP455：这一次第一次用了你的 Chrome（结果说明末尾加一句）
+      let tellOwnChrome = false
+      const told = (): string => (tellOwnChrome ? `${OWN_CHROME_TELL_LINE}。` : '')
       let anyLoaded = false
       let nativeUsage: BrowserSearchResult['native_usage']
       // WP355（决策 937）：名单里的模型来源先走它自带的搜索，不行再走 WP353 的链
@@ -743,6 +856,8 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
               ] as [SearchVia, () => Promise<StepOutcome>],
             ]),
         ['google', () => viaBrowser('google', query, locale, trace)],
+        // WP455：上一步没拿到结果（被拦、过渡页、超时、0 条、停着）才走到这里
+        ['own_chrome', () => viaOwnChrome(query, locale)],
         ['bing', () => viaBrowser('bing', query, locale, trace)],
         ['cloud_google', () => viaCloud(query, locale)],
         ['public', () => viaPublic(query, maxResults)],
@@ -754,6 +869,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
           trace.push({ via, result, ms: o.now() - t0, ...(why === undefined ? {} : { why }) })
         }
         if (got.handover === true) handover = true
+        if (got.tell === true) tellOwnChrome = true
         if (got.note !== undefined) notes.push(got.note)
         if (got.sources === undefined) {
           // 没给结果的那几路：有一句话 = 试了没成；一句都没有 = 没接这一路
@@ -798,7 +914,7 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
         const before = notes.length === 0 ? '' : `前面没用上的：${notes.join('；')}。`
         return {
           sources,
-          content: `${viaLine(via, native)}。${before}`,
+          content: `${viaLine(via, native)}。${before}${told()}`,
           truncated: false,
           via,
           ...(handover ? { handover: true } : {}),
@@ -813,10 +929,11 @@ export function createBrowserWebSearch(o: BrowserWebSearchOptions): BrowserWebSe
           'WEB_PROVIDER_UNAVAILABLE',
           '这里没有内置浏览器，也没接云端搜索，联网搜索用不了。',
         )
-      if (!anyLoaded) throw webError('WEB_PROVIDER_ERROR', `这次没搜成：${notes.join('；')}。`)
+      if (!anyLoaded)
+        throw webError('WEB_PROVIDER_ERROR', `这次没搜成：${notes.join('；')}。${told()}`)
       return {
         sources: [],
-        content: `没搜到相关结果：${notes.join('；')}。`,
+        content: `没搜到相关结果：${notes.join('；')}。${told()}`,
         truncated: false,
         ...(handover ? { handover: true } : {}),
         ...(nativeUsage === undefined ? {} : { native_usage: nativeUsage }),

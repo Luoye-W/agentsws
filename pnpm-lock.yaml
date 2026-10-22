@@ -252,6 +252,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@agentsws/browser-action':
+        specifier: workspace:*
+        version: link:../../packages/browser-action
       '@agentsws/connect-adapter':
         specifier: workspace:*
         version: link:../../packages/connect-adapter
@@ -470,6 +473,9 @@ importers:
       hono:
         specifier: ^4.13.7
         version: 4.13.7
+      linkedom:
+        specifier: 0.18.13
+        version: 0.18.13
       playwright-core:
         specifier: 1.63.0-alpha-2026-08-31
         version: 1.63.0-alpha-2026-08-31
