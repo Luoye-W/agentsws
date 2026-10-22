@@ -42,6 +42,11 @@ import type {
   MessageDraft,
   MessageFolder,
   MessageFolderKind,
+  MessageFollowUp,
+  MessageFollowUpAction,
+  MessageFollowUpRow,
+  MessageFollowUpSettings,
+  MessageFollowUpSettingsPatch,
   MessageImagesReport,
   MessageKind,
   MessageLabel,
@@ -6702,6 +6707,30 @@ export const restoreMessageSenderRule = (
   id: string,
 ): Promise<{ restored: boolean; rule?: SenderRule }> =>
   api(`/v1/messages/rules/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+
+/** WP442：「等对方回」——我们发出去、对方还没回的会话（到期早的在前）。 */
+export const listMessageFollowUps = (): Promise<{ rows: MessageFollowUpRow[] }> =>
+  api('/v1/messages/follow-ups')
+
+/** WP442：系统规则「发出 N 个工作日没回 → 提醒我」。 */
+export const getMessageFollowUpSettings = (): Promise<MessageFollowUpSettings> =>
+  api('/v1/messages/follow-ups/settings')
+
+/** WP442：改系统规则（给 `account` 只改那只邮箱；`reset` = 回到跟着总设置）。 */
+export const setMessageFollowUpSettings = (
+  patch: MessageFollowUpSettingsPatch,
+): Promise<MessageFollowUpSettings> =>
+  api('/v1/messages/follow-ups/settings', { method: 'PATCH', body: patch })
+
+/** WP442：「等对方回」那一行上直接点（不用跟了 / 再等等 / 接着跟 / 现在就催）。 */
+export const actOnMessageFollowUp = (
+  thread_id: string,
+  action: MessageFollowUpAction,
+): Promise<{ follow_up: MessageFollowUp }> =>
+  api(`/v1/messages/threads/${encodeURIComponent(thread_id)}/follow-up`, {
+    method: 'POST',
+    body: { action },
+  })
 
 /** WP212：改判类型（✎）；`remember_sender` = 以后这个发件人都这样。 */
 export const setMessageKind = (

@@ -17,6 +17,7 @@
  *   「需要补素材」并进「修改」（点开同一个框：说一句怎么改，或贴素材）；
  * - **`···`**：只留真正少用的（主次都排不上的动作）；没有就不出。
  */
+import { FOLLOW_UP_CARD_FORM } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsws/deck'
 import { MoreHorizontal } from 'lucide-react'
@@ -57,10 +58,13 @@ export function quickActions(card: DeckCard): DeckAction[] {
     (card.detail.payload as { kind?: unknown } | undefined)?.kind === 'google_alert_change' ||
     (typeof form === 'string' && form.startsWith('service_')) ||
     // WP406：岗位更新的「全部应用 / 这次跳过」在卡身里（带选项）
-    form === 'content_update_digest'
+    form === 'content_update_digest' ||
+    // WP442：催促卡的「发出」「修改」都在卡身里（就地改字、带着改过的那一版批）
+    form === FOLLOW_UP_CARD_FORM
   return card.available_actions
     .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
     .filter((a) => !(bodyPrimary && a === 'approve'))
+    .filter((a) => !(form === FOLLOW_UP_CARD_FORM && a === 'instruct'))
     .sort((a, b) => rank(a) - rank(b))
     .slice(0, MAX_QUICK_ACTIONS)
 }
@@ -79,6 +83,11 @@ export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) 
   if ((card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff') {
     if (a === 'approve') return t('handoff.accept')
     if (a === 'reject') return t('handoff.decline')
+  }
+  // WP442：催促卡底下那排是「再等等」（顺延 3 个工作日）/「不用跟了」
+  if ((card.detail.payload as { form?: unknown } | undefined)?.form === FOLLOW_UP_CARD_FORM) {
+    if (a === 'snooze') return t('follow_up.verb.wait')
+    if (a === 'reject') return t('follow_up.verb.stop')
   }
   if (themePublish(card)) {
     if (a === 'approve') return t('verb.publish_theme.approve')

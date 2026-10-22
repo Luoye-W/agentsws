@@ -16,6 +16,7 @@ import { SENDER_RULE_UNDO_DAYS } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Undo2 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
+import { FollowUpSystemRule } from '@/components/messages/follow-up-rule'
 import { positionName, useMessageOverview } from '@/components/messages/hand-actions'
 import { PanelError } from '@/components/rail/panel-error'
 import { Hint } from '@/components/ui/hint'
@@ -162,6 +163,9 @@ export function MessageRulesPanel(): ReactNode {
           </ul>
         </section>
       ))}
+
+      {/* WP442：系统规则「发出 N 个工作日没回 → 提醒我」（108C 合了以后并进同一张清单） */}
+      <FollowUpSystemRule />
 
       {deleted.length === 0 ? null : (
         <section
