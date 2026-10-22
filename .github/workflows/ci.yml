@@ -75,6 +75,11 @@ jobs:
           CONTENT_FIX_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'content-fix') }}
         run: node scripts/check-content-freeze.mjs --base HEAD^1 ${{ github.event_name == 'pull_request' && '--strict' || '' }}
 
+      # WP461（决策 1446）：工作台视觉档位守卫——新出现的不在档位里的字号 / 圆角 / Tailwind 原色会红。
+      # 现有的记在 scripts/ui-tokens-baseline.json（只减不增，T2–T8 逐步清）。
+      - name: check-ui-tokens（字号 / 圆角 / 原色只用档位）
+        run: node scripts/check-ui-tokens.mjs
+
       # WP197：官网 apps/site 只构建、不部署（部署由 Fable 找 Luoye 确认后手动做）。
       # CI 里不打网取价目（AGENTSWS_SITE_OFFLINE=1 → 用仓库样例），构建结果不随云上改价而变；
       # 取价目那段逻辑由 apps/site/test 覆盖。wrangler dry-run 只校验部署配置，不上传。
