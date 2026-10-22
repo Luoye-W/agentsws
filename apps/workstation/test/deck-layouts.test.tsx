@@ -172,7 +172,7 @@ describe('⑤ 选择卡', () => {
     const box = screen.getByTestId('deck-card-options')
     expect(within(box).getAllByRole('radio')).toHaveLength(2)
     await userEvent.click(screen.getByText('内容与博客'))
-    expect(within(box).getAllByRole('radio')[1]?.getAttribute('aria-checked')).toBe('true')
+    expect((within(box).getAllByRole('radio')[1] as HTMLInputElement).checked).toBe(true)
   })
 })
 
@@ -247,7 +247,7 @@ describe('⑩ 接管卡', () => {
 })
 
 describe('⑪ 策略卡', () => {
-  it('配置 diff + 只有 owner 能批那一句', () => {
+  it('配置 diff；「点通过以后都这样做」不再写（WP456-T3），「只有 owner 能批」只在公司模式写（见 wp275）', () => {
     renderCard(
       layoutCard(
         'policy',
@@ -256,7 +256,7 @@ describe('⑪ 策略卡', () => {
       ),
     )
     expect(screen.getByTestId('deck-before-after').textContent).toContain('≤ 25%')
-    expect(screen.getByTestId('deck-layout-policy').textContent).toContain('owner')
+    expect(screen.getByTestId('deck-layout-policy').textContent).not.toContain('点通过以后都这样做')
   })
 
   it('它同时是问句：diff 与单选列表都在（裸 approve 服务端会拒）', () => {
@@ -299,7 +299,7 @@ describe('全类共用的头与脚', () => {
     expect(screen.getByTestId('ws-go')).toBeTruthy()
   })
 
-  it('头一行末尾是提案人头像，且不印任何 id', () => {
+  it('WP456-T3：头一行右边只留「证据 N」，不再有提案人头像；不印任何 id', () => {
     const { container } = renderWithProviders(
       <DeckCardView
         card={layoutCard('outbound')}
@@ -309,8 +309,7 @@ describe('全类共用的头与脚', () => {
       />,
     )
     const row = screen.getByTestId('deck-tag-row')
-    const avatar = within(row).getByTestId('ws-avatar')
-    expect(avatar.textContent).toBe('AI')
+    expect(within(row).queryByTestId('ws-avatar')).toBeNull()
     expect(container.textContent ?? '').not.toContain('售后客服 Agent')
   })
 
@@ -406,8 +405,11 @@ describe('WP141：卡面上的字段名与值说人话', () => {
       ),
     )
     const ba = screen.getByTestId('deck-before-after').textContent ?? ''
-    expect(ba).toContain('过了退货期还能宽限: 0 天')
-    expect(ba).toContain('过了退货期还能宽限: 7 天')
+    // WP456-T3：对比块里「名字 值」中间一个空格（不再是冒号），左「现在」右「改成」
+    expect(ba).toContain('过了退货期还能宽限 0 天')
+    expect(ba).toContain('过了退货期还能宽限 7 天')
+    expect(ba).toContain('现在')
+    expect(ba).toContain('改成')
     expect(ba).not.toContain('late_return_grace_days')
   })
 

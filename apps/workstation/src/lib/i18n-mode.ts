@@ -94,7 +94,6 @@ export const MODE_ZH: Record<string, string> = {
   'memory.promote.ok@solo': '提上去了',
   'card.instruct.scope.global_rule@solo': '以后都这样',
   'deck.receipt.instruct.global_rule@solo': '记下了：出了一张卡，点「记进规矩」以后都这样。',
-  'deck.policy.owner_only@solo': '点通过以后都这样做。',
   'deck.keyboard@solo': '→ 通过 · ← 不要 · ↑ 稍后 · ↓ 修改',
   'b2b.sales.approver.role_holder@solo': '等你确认',
   'b2b.sales.approver.scope_manager@solo': '等你确认',
@@ -114,7 +113,6 @@ export const MODE_ZH: Record<string, string> = {
   'memory.promote.ok@peers': '提上去了',
   'card.instruct.scope.global_rule@peers': '以后都这样',
   'deck.receipt.instruct.global_rule@peers': '记下了：出了一张卡，点「记进规矩」以后都这样。',
-  'deck.policy.owner_only@peers': '点通过以后都这样做。',
   'deck.keyboard@peers': '→ 通过 · ← 不要 · ↑ 稍后 · ↓ 修改',
   'b2b.sales.approver.role_holder@peers': '等你确认',
   'b2b.sales.approver.scope_manager@peers': '等你确认',
@@ -234,7 +232,6 @@ export const MODE_EN: Record<string, string> = {
   'card.instruct.scope.global_rule@solo': 'Always do this',
   'deck.receipt.instruct.global_rule@solo':
     'Noted: a card is out — accept it and this becomes a rule.',
-  'deck.policy.owner_only@solo': 'Approve it and this becomes how it is done from now on.',
   'deck.keyboard@solo': '→ approve · ← drop · ↑ later · ↓ revise',
   'b2b.sales.approver.role_holder@solo': 'waiting for you',
   'b2b.sales.approver.scope_manager@solo': 'waiting for you',
@@ -256,7 +253,6 @@ export const MODE_EN: Record<string, string> = {
   'card.instruct.scope.global_rule@peers': 'Always do this',
   'deck.receipt.instruct.global_rule@peers':
     'Noted: a card is out — accept it and this becomes a rule.',
-  'deck.policy.owner_only@peers': 'Approve it and this becomes how it is done from now on.',
   'deck.keyboard@peers': '→ approve · ← drop · ↑ later · ↓ revise',
   'b2b.sales.approver.role_holder@peers': 'waiting for you',
   'b2b.sales.approver.scope_manager@peers': 'waiting for you',

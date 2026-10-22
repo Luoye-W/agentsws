@@ -1,6 +1,6 @@
 /**
- * 一副牌（37 §1 第 1 行）：**一次一张**、780px 居中、背后两张歪斜的景深假卡、
- * 「第 N / M 张」、键盘 → 批准 / ← 拒绝 / ↑ 稍后 / ↓ 指导。
+ * 一副牌（37 §1 第 1 行）：**一次一张**、780px 居中、「第 N / M 张」、键盘 → 批准 / ← 拒绝 / ↑ 稍后 / ↓ 指导。
+ * （WP456-T3：背后两张景深假卡去掉，快捷键提示进卡底最右边。）
  *
  * 首页与岗位页各自只写一行 `<DeckSection …/>`：筛选、语言、翻页、决定、飞出、空态
  * 全在这里，两个页面不再各抄一份卡片列表。
@@ -499,40 +499,24 @@ export function DeckSection({
               }}
             />
           ) : null}
-          <div className="relative mb-4">
-            {/* 景深：背后两张歪斜的假卡，让「还有几张」有体感 */}
-            {index + 1 < total ? (
-              <div
-                data-testid="deck-ghost"
-                className="absolute inset-x-3 top-2 h-full rotate-1 rounded-2xl border bg-card/70 shadow-sm"
-              />
-            ) : null}
-            {index + 2 < total ? (
-              <div
-                data-testid="deck-ghost"
-                className="absolute inset-x-6 top-4 h-full -rotate-1 rounded-2xl border bg-card/40"
-              />
-            ) : null}
-            {/* WP414：卡身里自带主按钮的卡（Reddit「发送」）决定完，同类卡也报到顶上那一行 */}
-            <DeckAfterContext.Provider value={setAfter}>
-              <DeckCardView
-                key={card.id}
-                card={card}
-                mode={mode}
-                busy={mutation.isPending}
-                exiting={exiting}
-                {...(error === '' ? {} : { error })}
-                onDecide={dispatch}
-                onOpen={onOpen}
-              />
-            </DeckAfterContext.Provider>
-          </div>
-          {/* WP141：提示行按这张卡真有的动作生成（没有「稍后」就不写 ↑ 稍后） */}
-          {hints.length === 0 ? null : (
-            <p className="text-xs text-muted-foreground" data-testid="deck-keyboard">
-              {hints.join(' · ')}
-            </p>
-          )}
+          {/*
+            WP456-T3（§3.1）：后面叠着的两层假卡边去掉（「1 / N」已经说了有几张）；
+            卡下面那行「↑ 稍后 · ↓ 修改」挪进卡底最右边的灰字和按钮的悬停提示。
+          */}
+          {/* WP414：卡身里自带主按钮的卡（Reddit「发送」）决定完，同类卡也报到顶上那一行 */}
+          <DeckAfterContext.Provider value={setAfter}>
+            <DeckCardView
+              key={card.id}
+              card={card}
+              mode={mode}
+              busy={mutation.isPending}
+              exiting={exiting}
+              keys={hints}
+              {...(error === '' ? {} : { error })}
+              onDecide={dispatch}
+              onOpen={onOpen}
+            />
+          </DeckAfterContext.Provider>
         </>
       )}
     </section>
