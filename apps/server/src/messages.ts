@@ -2655,12 +2655,17 @@ function suggestModel(options: MessagesOptions, workspace_id: WorkspaceId): Sugg
           { role: 'system', content: SUGGEST_SYSTEM },
           {
             role: 'user',
+            /*
+             * WP471（docs/116 §2 第 9 条，决策 1549）：品牌话术 `voice` 同一品牌每封信都一样，
+             * 排在 JSON 最前面（紧跟固定的系统提示），开头逐字相同、能命中缓存；
+             * 这封信的主题、发件人、正文、材料在后面。字段不变、只换顺序。
+             */
             content: JSON.stringify({
+              voice: req.voice ?? '',
               subject: req.subject,
               from: req.from,
               body: req.body,
               context: req.context,
-              voice: req.voice ?? '',
               knowledge: req.knowledge.map((k) => ({ title: k.title, text: k.text })),
               kinds: req.kinds,
               lang: req.lang,

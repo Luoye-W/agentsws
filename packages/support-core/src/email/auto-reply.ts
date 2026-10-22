@@ -250,7 +250,20 @@ export const EMAIL_ANSWER_CITE_INSTRUCTION = [
 /** 来信那一段的标记（stub 剧本靠它找问句）。 */
 export const EMAIL_QUESTION_MARK = '来信（这一封新写的部分）：'
 
-/** 拼给模型的那一段（材料 + 格式要求 + 打码围栏过的问句）。 */
+/**
+ * 系统提示：固定说明 + 格式要求（出处标注）。
+ *
+ * WP471（docs/116 §2 第 9 条，决策 1549）：出处要求是固定内容（约 250 token），放进系统提示，
+ * 同一品牌每封信的开头逐字一样、能命中缓存；信件和材料留在用户消息（`emailAnswerPrompt`）。
+ */
+export function emailAnswerSystem(base: string): string {
+  return `${base}\n\n${EMAIL_ANSWER_CITE_INSTRUCTION}`
+}
+
+/**
+ * 拼给模型的用户消息（材料 + 打码围栏过的问句）。
+ * WP471 起格式要求不在这里了，在 `emailAnswerSystem` 里（固定在前、变化在后）。
+ */
 export function emailAnswerPrompt(input: {
   sources: readonly AutoAnswerSource[]
   question: string
@@ -258,7 +271,6 @@ export function emailAnswerPrompt(input: {
 }): string {
   return [
     ...(input.sources.length === 0 ? [] : [`材料：\n${formatChatSources(input.sources)}`]),
-    EMAIL_ANSWER_CITE_INSTRUCTION,
     ...(input.subject === undefined || input.subject.trim() === ''
       ? []
       : [`主题：${fenceForPrompt(input.subject, 200).text}`]),

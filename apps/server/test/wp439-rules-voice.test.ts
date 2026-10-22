@@ -64,15 +64,24 @@ const writer: MailboxWriter = {
 }
 
 /** 模型桩：分拣回一份固定结论；建议那一次把送进去的请求记下来。 */
-function models(): { gateway: ModelGateway; calls: string[]; suggests: Record<string, unknown>[] } {
+function models(): {
+  gateway: ModelGateway
+  calls: string[]
+  suggests: Record<string, unknown>[]
+  raw: { system: string; user: string }[]
+} {
   const calls: string[] = []
   const suggests: Record<string, unknown>[] = []
+  const raw: { system: string; user: string }[] = []
   const gateway = {
     async complete(req: { messages: { role: string; content: string }[] }) {
       const system = req.messages[0]?.content ?? ''
       const triage = system.includes('邮件分拣')
       calls.push(triage ? 'triage' : 'suggest')
-      if (!triage) suggests.push(JSON.parse(req.messages[1]?.content ?? '{}'))
+      if (!triage) {
+        suggests.push(JSON.parse(req.messages[1]?.content ?? '{}'))
+        raw.push({ system, user: req.messages[1]?.content ?? '' })
+      }
       const text = triage
         ? JSON.stringify({
             route: 'inbox',
@@ -96,7 +105,7 @@ function models(): { gateway: ModelGateway; calls: string[]; suggests: Record<st
       }
     },
   } as unknown as ModelGateway
-  return { gateway, calls, suggests }
+  return { gateway, calls, suggests, raw }
 }
 
 function harness(rows: RawEmailMessage[], extra: Partial<MessagesOptions> = {}) {
@@ -267,6 +276,12 @@ describe('WP439 回复建议：品牌口吻、按来信语言', () => {
     await h.messages.port.assistant(ACTOR, zh.id)
     expect(h.suggests.map((s) => s.lang)).toEqual(['en', 'zh'])
     expect(h.suggests.every((s) => String(s.voice).includes('Nordvolt Team'))).toBe(true)
+    // WP471（决策 1549）：两封信系统提示逐字相同；品牌话术排在 JSON 最前面（固定在前、这封信在后）
+    const [a, b] = h.raw
+    expect(b?.system).toBe(a?.system)
+    const voicePrefix = JSON.stringify({ voice: h.suggests[0]?.voice }).slice(0, -1)
+    expect(a?.user.startsWith(voicePrefix)).toBe(true)
+    expect(b?.user.startsWith(voicePrefix)).toBe(true)
     // 这封信「交给 X」的主按钮是哪个岗位，就按那个岗位取口吻
     expect(asked).toEqual(['customer-care', 'customer-care'])
   })
