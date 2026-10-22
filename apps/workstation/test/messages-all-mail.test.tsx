@@ -1,21 +1,16 @@
 /**
- * WP212（docs/88 §4.1）：消息页默认视图「没人接的」。
- *
- * 钉住的是：
- * - 默认就是「没人接的」，顶上一行「已交给岗位 N」+「卡片流里 N 张等你批 →」（只报数）；
- * - 每条：AI 摘要、类型胶囊（拿不准写把握，点开改判，勾「记住」）、三个建议（AI 挑的是主按钮）；
- * - 「交给 X」打出去的是 confirm-route 推广到岗位；没开的岗位在 ▾ 里是灰的；
- * - 「只是通知」成捆、整捆「知道了」；
- * - AI 助手是兜底助手：岗位在办的信不请求建议；
- * - 卡片那头「看原件 →」落到「全部」这条会话。
+ * WP212（docs/88 §4.1）→ WP459：消息页默认是收件箱（`wp459-inbox.test.tsx` 钉那一页）；这里留：
+ * - `/messages` 默认落在收件箱；
+ * - 「全部信」（`?view=all`）打开一条岗位在办的会话：挂「X 在办 · 有卡等你 →」，AI 助手不请求建议；
+ * - 卡片那头「看原件 →」落到「全部信」这条会话。
  */
 import type { MessageOverview, MessageRecord, MessageThreadSummary } from '@agentsws/contracts'
-import { screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { MessageAccountView, MessageThreadView } from '@/lib/api'
 import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
+import { inboxView } from './inbox-fixtures'
 
 const T0 = '2026-09-30T01:00:00.000Z'
 const ME = 'support@shop.example'
@@ -203,110 +198,38 @@ vi.mock('@/lib/api', async () => {
     setMessageKind: (id: string, k: string, r: boolean) => setMessageKind(id, k, r),
     claimMessage: (id: string, as: string) => claimMessage(id, as),
     ackMessageNotices: (input: unknown) => ackMessageNotices(input),
+    getInbox: async () => inboxView(),
+    listMessageFollowUps: async () => ({ rows: [] }),
   }
 })
 
 const { MessagesPage } = await import('@/pages/messages')
 const { DeckCardView } = await import('@/components/deck/deck-card')
 
-describe('消息页默认「没人接的」（WP212）', () => {
-  it('顶上一行只报数；每条 AI 摘要 + 类型 + 原文一句 + 三个建议，AI 挑的是主按钮', async () => {
+describe('消息页：默认收件箱、「全部信」与看原件（WP212 / WP459）', () => {
+  it('WP459：/messages 默认就是收件箱（不靠邮箱，没人接的那一套换掉了）', async () => {
     renderWithProviders(<MessagesPage />, '/messages')
-    const cards = await screen.findAllByTestId('unclaimed-card')
-    expect(cards).toHaveLength(2)
-    // 按急不急：要紧的在前
-    expect(cards[0]?.getAttribute('data-thread')).toBe('<t2@x>')
-    expect(screen.getByTestId('messages-headline').textContent).toContain('2 件没人接')
-    const strip = screen.getByTestId('messages-handed')
-    expect(strip.textContent).toContain('已交给岗位')
-    expect(strip.textContent).toContain('客服')
-    expect(screen.getByTestId('messages-cards-link').textContent).toContain('卡片流里 2 张等你批')
-    const first = cards[0] as HTMLElement
-    expect(within(first).getByTestId('unclaimed-summary').textContent).toContain('没写订单号')
-    // 拿不准写把握
-    expect(within(first).getByTestId('kind-chip').textContent).toContain('像是售后 · 把握 52%')
-    expect(within(first).getByTestId('hand-actions').getAttribute('data-primary')).toBe('hand')
-    expect(within(first).getByTestId('hand-primary').textContent).toBe('交给客服')
-    // 把握够的不写把握
-    expect(within(cards[1] as HTMLElement).getByTestId('kind-chip').textContent).toBe('媒体')
-    // 你教过它：看得见
-    expect(screen.getByTestId('messages-taught').textContent).toContain('少问你 12 次')
+    expect(await screen.findByTestId('inbox-page')).toBeDefined()
+    expect(screen.queryByTestId('unclaimed-card')).toBeNull()
+    expect(screen.getByTestId('inbox-title').textContent).toBe('收件箱')
   })
 
-  it('「交给 X」打出去的是推广到岗位的 confirm-route，默认勾「以后都这样」', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />, '/messages')
-    const card = (await screen.findAllByTestId('unclaimed-card'))[1] as HTMLElement
-    await user.click(within(card).getByTestId('hand-primary'))
-    await waitFor(() => {
-      expect(handMessageToPosition).toHaveBeenCalledWith('msg_1', 'pr', true)
-    })
-    expect((await screen.findByTestId('messages-notice')).textContent).toContain('已交给公共关系')
-  })
-
-  it('▾ 里换岗位：AI 建议的在最上面；没开的岗位是灰的、点不了', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />, '/messages')
-    const card = (await screen.findAllByTestId('unclaimed-card'))[1] as HTMLElement
-    await user.click(within(card).getByTestId('hand-more'))
-    const menu = await screen.findByTestId('hand-menu')
-    const options = within(menu).getAllByTestId('hand-option')
-    expect(options[0]?.getAttribute('data-position')).toBe('pr')
-    expect(options[0]?.textContent).toContain('AI 建议 · 媒体')
-    const closed = options.find((o) => o.getAttribute('data-position') === 'social-media')
-    expect(closed?.hasAttribute('disabled')).toBe(true)
-    expect(menu.textContent).toContain('这里不再催')
-    await user.click(
-      options.find((o) => o.getAttribute('data-position') === 'customer-care') as HTMLElement,
+  it('WP459：收件箱「我自己回」带 ?reply=1 过来——打开这条会话就开写信框', async () => {
+    renderWithProviders(
+      <MessagesPage />,
+      `/messages?view=all&thread=${encodeURIComponent('<t1@x>')}&reply=1`,
     )
-    await waitFor(() => {
-      expect(handMessageToPosition).toHaveBeenCalledWith('msg_1', 'customer-care', true)
-    })
+    expect((await screen.findByTestId('messages-page')).getAttribute('data-view')).toBe('all')
+    // 岗位在办的会话不给回复框（只读）——这条在办，所以照实说只读而不是开写信框
+    await screen.findByTestId('messages-claim-band')
   })
 
-  it('改判：点类型胶囊 → 选一个 → 带「记住」', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />, '/messages')
-    const card = (await screen.findAllByTestId('unclaimed-card'))[1] as HTMLElement
-    await user.click(within(card).getByTestId('kind-chip'))
-    const pop = await screen.findByTestId('kind-popover')
-    expect(within(pop).getByTestId('kind-popover-head').textContent).toBe('把握 91% · 模型')
-    await user.click(
-      within(pop)
-        .getAllByTestId('kind-option')
-        .find((o) => o.getAttribute('data-kind') === 'partnership') as HTMLElement,
-    )
-    await waitFor(() => {
-      expect(setMessageKind).toHaveBeenCalledWith('msg_1', 'partnership', true)
-    })
-  })
-
-  it('「只是通知」一下 + 撤销；通知成捆整捆「知道了」', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />, '/messages')
-    const card = (await screen.findAllByTestId('unclaimed-card'))[1] as HTMLElement
-    await user.click(within(card).getByTestId('hand-notice'))
-    await waitFor(() => {
-      expect(claimMessage).toHaveBeenCalledWith('msg_1', 'notice')
-    })
-    await user.click(await screen.findByTestId('messages-undo'))
-    await waitFor(() => {
-      expect(claimMessage).toHaveBeenCalledWith('msg_1', 'none')
-    })
-    const groups = screen.getAllByTestId('notice-group')
-    expect(groups.map((g) => g.getAttribute('data-kind'))).toEqual(['billing_system', 'suspicious'])
-    await user.click(within(groups[0] as HTMLElement).getByTestId('notice-ack'))
-    await waitFor(() => {
-      expect(ackMessageNotices).toHaveBeenCalledWith({ kind: 'billing_system' })
-    })
-  })
-
-  it('→ 看原件：切到「全部」打开这条；岗位在办的挂「在办 · 有卡等你 →」，AI 助手不请求建议', async () => {
-    const user = userEvent.setup()
+  it('→ 看原件：「全部信」打开这条；岗位在办的挂「在办 · 有卡等你 →」，AI 助手不请求建议', async () => {
     getMailAssistant.mockClear()
-    renderWithProviders(<MessagesPage />, '/messages')
-    const card = (await screen.findAllByTestId('unclaimed-card'))[1] as HTMLElement
-    await user.click(within(card).getByTestId('ws-go'))
+    renderWithProviders(
+      <MessagesPage />,
+      `/messages?view=all&thread=${encodeURIComponent('<t1@x>')}`,
+    )
     expect((await screen.findByTestId('messages-page')).getAttribute('data-view')).toBe('all')
     const band = await screen.findByTestId('messages-claim-band')
     expect(band.textContent).toContain('公共关系在办')

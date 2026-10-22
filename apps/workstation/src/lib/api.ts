@@ -53,6 +53,8 @@ import type {
   MessageLabel,
   MessageOverview,
   MessageRecord,
+  MessageRehandInput,
+  MessageRehandResult,
   MessageRule,
   MessageRuleDraft,
   MessageRuleList,
@@ -77,6 +79,7 @@ import type {
   BlockData,
   DeckCard,
   DeckFilters,
+  InboxView,
   PositionTiles,
   RangeName,
   RecordRow,
@@ -6874,6 +6877,19 @@ export const ackMessageNotices = (input: {
 
 /** WP212：「没人接的」顶上那一行、只是通知几捆、你教过它。 */
 export const getMessageOverview = (): Promise<MessageOverview> => api('/v1/messages/overview')
+
+/**
+ * WP459（决策 1497）：收件箱——所有岗位等你批的卡 + 要你判断的信一条队列（要紧 / 今天 / 不急）、
+ * 筛选件数、今天 AI 猜着交给岗位的、简报的数。
+ */
+export const getInbox = (): Promise<InboxView> => api('/v1/inbox')
+
+/** WP459（决策 1498 / 1504）：改判「AI 猜的」——原岗位没批的卡一起撤掉。 */
+export const rehandMessage = (
+  id: string,
+  input: MessageRehandInput,
+): Promise<MessageRehandResult> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/rehand`, { method: 'POST', body: input })
 
 export const setMessageLabels = (
   id: string,

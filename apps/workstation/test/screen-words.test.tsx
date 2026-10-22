@@ -19,6 +19,7 @@ import { BlockBody } from '@/components/blocks/block-view'
 import { ReportBlocks } from '@/components/deck/panel-blocks'
 import { draftCard, homeData, questionCard } from './fixtures'
 import { renderWithProviders } from './helpers'
+import { inboxView } from './inbox-fixtures'
 
 /** 屏上可能合法出现的「像内部值」的词（不是内部值本身）。 */
 const SNAKE_ALLOW = new Set<string>([])
@@ -164,6 +165,7 @@ vi.mock('@/lib/api', async () => {
       ],
     }),
     getHome: async () => home,
+    getInbox: async () => inboxView(),
     getPositions: async () => ({ positions: [], instances: [], tile_library: [], max_tiles: 4 }),
     listMembers: async () => [],
     listInProgress: async () => ({ items: [], scope: 'position' }),
@@ -172,6 +174,7 @@ vi.mock('@/lib/api', async () => {
 })
 
 const { HomePage } = await import('@/pages/home')
+const { InboxPage } = await import('@/pages/inbox')
 const { MatterPage } = await import('@/pages/matter')
 
 describe('WP141 守卫：屏幕上没有内部值', () => {
@@ -207,10 +210,15 @@ describe('WP141 守卫：屏幕上没有内部值', () => {
     expect(screenText(container)).not.toContain('common.owner')
   })
 
-  it('首页（WP438 四块）：页头、要你定、关键数字、岗位卡', async () => {
+  it('首页（WP438 四块）：页头、收件箱那一行、关键数字、岗位卡', async () => {
     const { container } = renderWithProviders(<HomePage />)
-    await screen.findByTestId('home-decide')
-    await screen.findAllByTestId('home-decide-row')
+    await screen.findByTestId('home-inbox-line')
+    expect(rawTokens(screenText(container))).toEqual([])
+  })
+
+  it('WP459 收件箱：每一行、筛选、简报都说人话', async () => {
+    const { container } = renderWithProviders(<InboxPage />, '/inbox')
+    await screen.findAllByTestId('inbox-row')
     expect(rawTokens(screenText(container))).toEqual([])
   })
 
