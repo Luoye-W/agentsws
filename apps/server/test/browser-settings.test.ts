@@ -208,3 +208,79 @@ describe('我正在用的浏览器（browserskill）', () => {
     expect(s.forRun()).toBeUndefined()
   })
 })
+
+describe('WP463：ego（用户自己装的 ego 浏览器）', () => {
+  const found = { ok: true, path: '/Users/a/.local/bin/ego-browser', version: '2.1.0' }
+  const missing = { ok: false, detail: '这台电脑上没找到 ego' }
+  const withEgo = (
+    over: Partial<Parameters<typeof createBrowserSettings>[0]> = {},
+    result: { ok: boolean; path?: string; version?: string; detail?: string } = found,
+  ) => {
+    const asked: (string | undefined)[] = []
+    const s = createBrowserSettings({
+      runtimeMode: () => 'local',
+      probe: probeOf([]),
+      detectEgo: (saved) => {
+        asked.push(saved)
+        return result
+      },
+      ...over,
+    })
+    return { s, asked }
+  }
+
+  it('个人档：选得了，`forRun()` 给的是探到的 ego-browser 路径', () => {
+    const { s } = withEgo()
+    expect(s.get().ego_allowed).toBe(true)
+    expect(s.set({ mode: 'ego' })).toMatchObject({ mode: 'ego' })
+    expect(s.forRun()).toEqual({ mode: 'ego', ego_path: '/Users/a/.local/bin/ego-browser' })
+  })
+
+  it('**没装 / 跑不起来就当这次运行没有浏览器**', () => {
+    const { s } = withEgo({}, missing)
+    s.set({ mode: 'ego' })
+    expect(s.get().mode).toBe('ego')
+    expect(s.forRun()).toBeUndefined()
+    expect(s.egoStatus()).toMatchObject({ allowed: true, installed: false })
+  })
+
+  it('状态：探到了给版本与路径；手动指过的路径交给探测排第一', () => {
+    const { s, asked } = withEgo()
+    s.set({ mode: 'ego', ego_path: '/opt/ego-browser' })
+    expect(s.egoStatus()).toEqual({
+      allowed: true,
+      installed: true,
+      ego_path: '/Users/a/.local/bin/ego-browser',
+      version: '2.1.0',
+    })
+    expect(asked.at(-1)).toBe('/opt/ego-browser')
+  })
+
+  it('探测结果短暂缓存（forRun 每次运行都问，不能每次起子进程）；状态按钮总是现探', () => {
+    let now = 0
+    const { s, asked } = withEgo({ nowMs: () => now, egoCacheMs: 30_000 })
+    s.set({ mode: 'ego' })
+    s.forRun()
+    s.forRun()
+    expect(asked).toHaveLength(1)
+    now = 31_000
+    s.forRun()
+    expect(asked).toHaveLength(2)
+    s.egoStatus()
+    expect(asked).toHaveLength(3)
+  })
+
+  it('公司档（Docker / 托管）：不允许，`PUT` 也拒，`forRun()` 不给', () => {
+    let mode: 'local' | 'docker' | 'hosted' = 'docker'
+    const { s } = withEgo({ runtimeMode: () => mode })
+    expect(s.get().ego_allowed).toBe(false)
+    expect(s.get().ego_blocked_reason).toContain('不在你自己的电脑上')
+    expect(() => s.set({ mode: 'ego' })).toThrow(BrowserSettingsError)
+    expect(s.egoStatus()).toMatchObject({ allowed: false, installed: false })
+    mode = 'local'
+    s.set({ mode: 'ego' })
+    expect(s.forRun()).toBeDefined()
+    mode = 'hosted'
+    expect(s.forRun()).toBeUndefined()
+  })
+})

@@ -1018,6 +1018,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/settings/browser/ego': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** WP463：这台机器上 ego 装没装、能不能跑——按 PATH 与常见安装位置找 `ego-browser`，跑一次 `ego-browser skill` 取版本 */
+    get: operations['getEgoBrowserStatus']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/settings/browser/browserskill/install': {
     parameters: {
       query?: never
@@ -18197,11 +18214,12 @@ export interface operations {
       content: {
         'application/json': {
           /** @enum {string} */
-          mode: 'off' | 'attach' | 'launch' | 'browserskill'
+          mode: 'off' | 'attach' | 'launch' | 'browserskill' | 'ego'
           endpoint?: string
           executable_path?: string
           headless?: boolean
           bsk_path?: string
+          ego_path?: string
         }
       }
     }
@@ -18364,6 +18382,83 @@ export interface operations {
     requestBody?: never
     responses: {
       /** @description BrowserSkillStatus */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  getEgoBrowserStatus: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description EgoBrowserStatus */
       200: {
         headers: {
           [name: string]: unknown

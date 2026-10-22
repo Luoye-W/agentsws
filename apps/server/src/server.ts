@@ -7346,7 +7346,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP181：官方「自动化任务」的四个工具（装了那个官方插件才挂；执行器是进程那一份）
             automation,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
-            browser: () => browserSettings.forRun(),
+            // WP463：ego 只在 ① 个人用法里接（docs/111 §0 第 4 条）——② 同事互联、③ 公司集体不给
+            browser: () => {
+              const b = browserSettings.forRun()
+              if (b?.mode === 'ego' && (modeOfWorkspaceSync?.(ws) ?? 'company') !== 'solo')
+                return undefined
+              return b
+            },
             // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
             computerUse,
             /*
@@ -15400,6 +15406,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           throw err
         }
       },
+      // WP463：ego 装没装、能不能跑（现探一次 `ego-browser skill`）
+      egoStatus: () => browserSettings.egoStatus(),
       /*
        * WP95（36 §11）：第三栏「运行中的浏览器」读的那一份。
        * 纯投影——把这次运行的事件折成"哪种执行器、当前域、最近一次导航 / 拒绝、
