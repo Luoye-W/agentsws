@@ -29,7 +29,7 @@ function block(selector: ':root' | '.dark'): string {
   return CSS.slice(start, CSS.indexOf('\n}', start))
 }
 
-const valueOf = (css: string, name: string): string | undefined =>
+const tokenValue = (css: string, name: string): string | undefined =>
   new RegExp(`${name}:\\s*([^;]+);`, 'u').exec(css)?.[1]?.trim()
 
 describe('index.css：WP456 §2.4 新补的 token，浅 / 深两套', () => {
@@ -44,24 +44,24 @@ describe('index.css：WP456 §2.4 新补的 token，浅 / 深两套', () => {
     ['--ws-chart-3', '#eb6834', '#d95926'],
     ['--ws-chart-4', '#6250d6', '#9085e9'],
   ])('%s', (name, l, d) => {
-    expect(valueOf(light, name)).toBe(l)
-    expect(valueOf(dark, name)).toBe(d)
+    expect(tokenValue(light, name)).toBe(l)
+    expect(tokenValue(dark, name)).toBe(d)
   })
   it('悬停底色 = ink 5%（浅）/ 6%（深）', () => {
-    expect(valueOf(light, '--ws-hover')).toMatch(/var\(--ws-ink\) 5%/u)
-    expect(valueOf(dark, '--ws-hover')).toMatch(/var\(--ws-ink\) 6%/u)
+    expect(tokenValue(light, '--ws-hover')).toMatch(/var\(--ws-ink\) 5%/u)
+    expect(tokenValue(dark, '--ws-hover')).toMatch(/var\(--ws-ink\) 6%/u)
   })
   it('弹层 / 弹窗阴影两套都有；弹层底色接到 shadcn 的 --popover', () => {
     for (const css of [light, dark]) {
-      expect(valueOf(css, '--ws-shadow-pop')).toBeDefined()
-      expect(valueOf(css, '--ws-shadow-dialog')).toBeDefined()
-      expect(valueOf(css, '--popover')).toBe('var(--ws-pop)')
-      expect(valueOf(css, '--input')).toBe('var(--ws-line-strong)')
+      expect(tokenValue(css, '--ws-shadow-pop')).toBeDefined()
+      expect(tokenValue(css, '--ws-shadow-dialog')).toBeDefined()
+      expect(tokenValue(css, '--popover')).toBe('var(--ws-pop)')
+      expect(tokenValue(css, '--input')).toBe('var(--ws-line-strong)')
     }
   })
   it('深色卡一圈 3.5% 白细边，浅色没有', () => {
-    expect(valueOf(light, '--ws-card-edge')).toBe('0 0 #0000')
-    expect(valueOf(dark, '--ws-card-edge')).toBe('inset 0 0 0 1px rgba(255, 255, 255, 0.035)')
+    expect(tokenValue(light, '--ws-card-edge')).toBe('0 0 #0000')
+    expect(tokenValue(dark, '--ws-card-edge')).toBe('inset 0 0 0 1px rgba(255, 255, 255, 0.035)')
     expect(CSS).toMatch(/\.ws-card \{[^}]*box-shadow: var\(--ws-card-edge\), var\(--ws-shadow\);/u)
     expect(CSS).toContain('--shadow-ws: var(--ws-card-edge), var(--ws-shadow);')
   })
@@ -79,19 +79,19 @@ describe('index.css：档位进了 Tailwind', () => {
       ['ws-big', '28px', '34px'],
     ]
     for (const [name, size, lh] of tiers) {
-      expect(valueOf(CSS, `--text-${name}`)).toBe(size)
-      expect(valueOf(CSS, `--text-${name}--line-height`)).toBe(lh)
+      expect(tokenValue(CSS, `--text-${name}`)).toBe(size)
+      expect(tokenValue(CSS, `--text-${name}--line-height`)).toBe(lh)
     }
   })
   it('圆角五档：sm 6 / md 8 / lg 12 / xl 16，另有语义名；对话框 20', () => {
-    expect(valueOf(CSS, '--radius-sm')).toBe('6px')
-    expect(valueOf(CSS, '--radius-md')).toBe('8px')
-    expect(valueOf(CSS, '--radius-lg')).toBe('12px')
-    expect(valueOf(CSS, '--radius-xl')).toBe('16px')
-    expect(valueOf(CSS, '--radius-ws-tag')).toBe('6px')
-    expect(valueOf(CSS, '--radius-ws-ctl')).toBe('8px')
-    expect(valueOf(CSS, '--radius-ws-block')).toBe('12px')
-    expect(valueOf(CSS, '--radius-ws-dialog')).toBe('20px')
+    expect(tokenValue(CSS, '--radius-sm')).toBe('6px')
+    expect(tokenValue(CSS, '--radius-md')).toBe('8px')
+    expect(tokenValue(CSS, '--radius-lg')).toBe('12px')
+    expect(tokenValue(CSS, '--radius-xl')).toBe('16px')
+    expect(tokenValue(CSS, '--radius-ws-tag')).toBe('6px')
+    expect(tokenValue(CSS, '--radius-ws-ctl')).toBe('8px')
+    expect(tokenValue(CSS, '--radius-ws-block')).toBe('12px')
+    expect(tokenValue(CSS, '--radius-ws-dialog')).toBe('20px')
   })
   it('按钮四级的基础类都在，不能点的是 40% 透明度', () => {
     for (const c of [
