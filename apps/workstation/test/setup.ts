@@ -25,6 +25,16 @@ if (globalThis.window !== undefined) {
   Element.prototype.hasPointerCapture ??= () => false
   Element.prototype.setPointerCapture ??= () => {}
   Element.prototype.releasePointerCapture ??= () => {}
+  /*
+   * jsdom 没有顶层（top layer）：`:modal` / `:popover-open` / `:fullscreen` 永远不成立。
+   * nwsapi 2.2.27 匹配这几个伪类时会绕回 `matches` 自己、递归到栈溢出再吞掉异常，
+   * floating-ui 每次算弹层位置都要对每一层祖先问一遍（`isTopLayer`）——一个下拉就能卡十几秒。
+   */
+  const nativeMatches = Element.prototype.matches
+  const TOP_LAYER = new Set([':modal', ':popover-open', ':fullscreen'])
+  Element.prototype.matches = function matches(this: Element, selector: string): boolean {
+    return TOP_LAYER.has(selector) ? false : nativeMatches.call(this, selector)
+  }
 }
 
 afterEach(() => {
