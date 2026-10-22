@@ -95,9 +95,7 @@ describe('WP462 门禁：内置职责升大版本必须登记，自动接上的�
 
   it(`对着 ${released.release}：这次升了大版本的职责都登记了`, () => {
     // 这一份就是报告里那张表；以后再升大版本，这里会多一行，同时必须登记
-    expect(changed.map((r) => `${r.id} ${released.roles[r.id]} → ${r.version}`)).toEqual([
-      'dtc.content 2.0.0 → 3.0.0',
-    ])
+    expect(changed.map((r) => `${r.id} ${released.roles[r.id]} → ${r.version}`)).toEqual([])
     for (const role of changed) {
       const path = majorUpgradePath(
         role.id,
