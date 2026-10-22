@@ -46,6 +46,8 @@ const BLOCKED_TEXT = [
   'you are doing that too much',
   "you're doing that too much",
   'whoa there, pardner',
+  // WP467：Reddit 的网络拦截页
+  'blocked by network security',
   '异常活动',
   '暂时被阻止',
 ]
@@ -60,8 +62,17 @@ export function detectPageWall(
   site = '广告后台',
 ): { kind: WallKind; message: string } | undefined {
   const text = `${look.title}\n${look.text}`.toLowerCase()
+  /*
+   * WP467（10-22 真站核过）：新版 Reddit 一展开评论框就加载 Google 的**隐形** reCAPTCHA 脚本（发评论时它自己在后台打分），
+   * 页面上并没有要人做的验证——Reddit 这条路不把 reCAPTCHA / hCaptcha 的脚本当成「被拦了」，只认整页的拦截
+   * （Cloudflare / Arkose）和页面上写着的验证、拦截字样。真弹出验证时人点发送那一下自己会看到、自己处理；插件只填字。
+   */
+  const sources =
+    site === 'Reddit'
+      ? CAPTCHA_SOURCES.filter((c) => c !== 'recaptcha' && c !== 'hcaptcha')
+      : CAPTCHA_SOURCES
   if (
-    look.frameSources.some((s) => CAPTCHA_SOURCES.some((c) => s.toLowerCase().includes(c))) ||
+    look.frameSources.some((s) => sources.some((c) => s.toLowerCase().includes(c))) ||
     CAPTCHA_TEXT.some((t) => text.includes(t))
   )
     return {

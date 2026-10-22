@@ -65,6 +65,8 @@ export const HELP_SLUGS = [
   'workshop-services',
   // WP447：六个新平台的广告报表怎么导出（拖进对话就能看数和体检）
   'ads-export',
+  // WP449：发布前质检（引用核查、给别的市场的版本、「好不好被 AI 引用」、对比页）
+  'content-quality',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -180,6 +182,7 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
     roles: ['dtc.store', 'site.shopify-build', 'site.shopify-theme', 'dtc.seo'],
   },
   'workshop-services': { positions: [], roles: [] },
+  'content-quality': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content', 'dtc.seo'] },
   'ads-export': {
     positions: ['ads'],
     roles: [

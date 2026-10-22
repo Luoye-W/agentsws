@@ -11,15 +11,19 @@ import {
   type ActionPage,
   domClick,
   domCount,
-  domFill,
+  domFillAsync,
   domFindPosted,
   domLook,
   domText,
+  redditPostIdOf,
+  resolveAll,
   resolveOne,
 } from '../src/index.js'
 
 export interface FakeShredditState {
   brokenReply: boolean
+  /** 按钮行滚到眼前才长出来（真站如此；`false` = 一打开就有）。 */
+  lazyRows?: boolean
   sent: { fullname: string; text: string; parent: string }[]
   next: number
 }
@@ -31,22 +35,32 @@ export const fakeShredditState = (patch: Partial<FakeShredditState> = {}): FakeS
   ...patch,
 })
 
-const comment = (
-  id: string,
-  author: string,
-  text: string,
-  parent: string,
-  depth: number,
-  broken = false,
-): string =>
-  `<shreddit-comment thingid="t1_${id}" author="${author}" parentid="${parent}" depth="${depth}" permalink="/r/ivraxr/comments/abc/comment/${id}/">
-     <div slot="comment"><p>${text}</p></div>
-     <shreddit-comment-action-row slot="actionRow">${
-       broken
-         ? '<button class="new-reply">Reply</button>'
-         : '<button slot="comment-reply">Reply</button>'
-}</shreddit-comment-action-row>
+/**
+ * 一条评论，照真站 10-22 的样子：正文与按钮行包在 `details` 里（不是直接孩子）；按钮行一开始是个空 div，
+ * **滚到眼前才长出来**（{@link FakeShreddit.hydrate}）。
+ */
+const comment = (id: string, author: string, text: string, parent: string, depth: number): string =>
+  `<shreddit-comment thingid="t1_${id}" author="${author}" parentid="${parent}" depth="${depth}" postid="t3_abc" permalink="/r/ivraxr/comments/abc/comment/${id}/">
+     <details open><summary></summary><div>
+       <div slot="commentMeta">${author}</div>
+       <div slot="comment" id="t1_${id}-comment-rtjson-content"><p>${text}</p></div>
+       <div slot="actionRow" data-for="t1_${id}"></div>
+     </div></details>
    </shreddit-comment>`
+
+/** 按钮行长出来之后的样子（Reply 在 `faceplate-tracker[slot=comment-reply]` 里）。 */
+const actionRow = (t1: string, broken: boolean): string =>
+  `<shreddit-comment-action-row slot="actionRow" comment-id="${t1}">${
+    broken
+      ? '<button class="new-reply">Reply</button>'
+      : '<faceplate-tracker slot="comment-reply" noun="reply_comment"><button>Reply</button></faceplate-tracker>'
+  }<template slot="comment-composer-template"></template></shreddit-comment-action-row>`
+
+/** 一个编辑框（照真站：Lexical 编辑器 + Cancel / Comment；`parent` 给了就是回评论那一种）。 */
+const composer = (parent?: string): string =>
+  `<shreddit-async-loader slot="comment-composer"><comment-composer-host${
+    parent === undefined ? '' : ` parent-id="${parent}" reply-mode`
+  }><faceplate-form><shreddit-composer name="content"><div slot="rte" contenteditable="true" role="textbox"></div><button slot="cancel-button" type="reset">Cancel</button><button slot="submit-button" type="submit">Comment</button></shreddit-composer></faceplate-form></comment-composer-host></shreddit-async-loader>`
 
 export class FakeShreddit implements ActionPage {
   doc: Document = new JSDOM('').window.document
@@ -87,8 +101,8 @@ export class FakeShreddit implements ActionPage {
     return shell(
       'Does the Air3 work with glasses? : r/ivraxr',
       `<shreddit-post id="t3_abc" author="carol" permalink="/r/ivraxr/comments/abc/slug/"><h1 slot="title">Does the Air3 work with glasses?</h1></shreddit-post>
-       <comment-composer-host><faceplate-textarea-input data-testid="trigger-button" placeholder="Join the conversation"></faceplate-textarea-input></comment-composer-host>
-       <shreddit-comment-tree>${top}${comment('c1', 'alice', 'Mine fogs up a bit', 't3_abc', 0, s.brokenReply)}${kids}</shreddit-comment-tree>`,
+       <comment-body-header><shreddit-async-loader><comment-composer-host post-id="t3_abc"><faceplate-textarea-input data-testid="trigger-button" placeholder="Join the conversation"></faceplate-textarea-input></comment-composer-host></shreddit-async-loader></comment-body-header>
+       <shreddit-comment-tree>${top}${comment('c1', 'alice', 'Mine fogs up a bit', 't3_abc', 0)}${kids}</shreddit-comment-tree>`,
     )
   }
 
@@ -98,28 +112,33 @@ export class FakeShreddit implements ActionPage {
     // 标题框长在组件的 shadow root 里
     const title = this.doc.querySelector('faceplate-textarea-input[name="title"]')
     title?.attachShadow({ mode: 'open' }).append(this.doc.createElement('textarea'))
-    // 点 Reply：那条评论里冒出一个富文本框
-    this.doc
-      .querySelector('shreddit-comment[thingid="t1_c1"] button[slot="comment-reply"]')
-      ?.addEventListener('click', () => {
-        this.doc
-          .querySelector('shreddit-comment[thingid="t1_c1"]')
-          ?.insertAdjacentHTML(
-            'beforeend',
-            '<shreddit-composer><div contenteditable="true" role="textbox"></div><button slot="submit-button">Comment</button></shreddit-composer>',
-          )
-      })
-    // 点「Join the conversation」：展开顶层评论框
-    this.doc
-      .querySelector('comment-composer-host faceplate-textarea-input')
-      ?.addEventListener('click', () => {
-        this.doc
-          .querySelector('comment-composer-host')
-          ?.insertAdjacentHTML(
-            'beforeend',
-            '<shreddit-composer><div contenteditable="true" role="textbox"></div><button slot="submit-button">Comment</button></shreddit-composer>',
-          )
-      })
+    // 「Join the conversation」：组件的 shadow root 里一个 textarea，**聚焦它**才展开顶层评论框（真站就是这样）
+    const trigger = this.doc.querySelector(
+      'comment-composer-host:not([parent-id]) faceplate-textarea-input[data-testid="trigger-button"]',
+    )
+    const inner = this.doc.createElement('textarea')
+    trigger?.attachShadow({ mode: 'open' }).append(inner)
+    inner.addEventListener('focus', () => {
+      const host = this.doc.querySelector('comment-composer-host:not([parent-id])')
+      if (host !== null && host.querySelector('shreddit-composer') === null)
+        host.insertAdjacentHTML(
+          'beforeend',
+          composer().replace(/^<shreddit-async-loader[^>]*>|<\/shreddit-async-loader>$/gu, ''),
+        )
+    })
+    if (this.state.lazyRows === false) for (const id of ['t1_c1']) this.hydrate(id)
+  }
+
+  /** 那条评论滚到眼前了：按钮行长出来（点 Reply 在按钮行里冒出回复框）。 */
+  hydrate(t1: string): void {
+    const slot = this.doc.querySelector(`div[slot="actionRow"][data-for="${t1}"]`)
+    if (slot === null || slot.querySelector('shreddit-comment-action-row') !== null) return
+    slot.insertAdjacentHTML('beforeend', actionRow(t1, this.state.brokenReply))
+    const row = slot.querySelector('shreddit-comment-action-row')
+    row?.querySelector('[slot="comment-reply"] button')?.addEventListener('click', () => {
+      if (row.querySelector('shreddit-composer') === null)
+        row.insertAdjacentHTML('beforeend', composer(t1))
+    })
   }
 
   /** 正在编辑的那个框（回复框优先）。 */
@@ -143,12 +162,10 @@ export class FakeShreddit implements ActionPage {
   /** 认不出 Reply 时，「人」自己点开那个框。 */
   private ensureReplyBox(): void {
     if (this.box() !== null) return
+    this.hydrate('t1_c1')
     this.doc
-      .querySelector('shreddit-comment[thingid="t1_c1"]')
-      ?.insertAdjacentHTML(
-        'beforeend',
-        '<shreddit-composer><div contenteditable="true" role="textbox"></div></shreddit-composer>',
-      )
+      .querySelector('shreddit-comment-action-row[comment-id="t1_c1"]')
+      ?.insertAdjacentHTML('beforeend', composer('t1_c1'))
   }
 
   /** 测试里的「人」：点发送。回发没发出去。 */
@@ -167,7 +184,7 @@ export class FakeShreddit implements ActionPage {
     const box = this.box()
     const text = box?.textContent?.trim() ?? ''
     if (box === null || text === '') return false
-    const inReply = box.closest('shreddit-comment') !== null
+    const inReply = box.closest('comment-composer-host[parent-id]') !== null
     s.next += 1
     s.sent.push({ fullname: `t1_${id}`, text, parent: inReply ? 't1_c1' : 't3_abc' })
     this.load(this.current)
@@ -185,8 +202,25 @@ export class FakeShreddit implements ActionPage {
   async look() {
     return domLook(this.doc, this.current)
   }
-  async waitFor(selector: string): Promise<boolean> {
+  readonly revealed: string[] = []
+  /** 停在原页上（不跳转）几次。 */
+  stays = 0
+  async waitFor(selector: string, _ms?: number, options?: { reveal?: string }): Promise<boolean> {
+    if (options?.reveal !== undefined) {
+      const el = resolveAll(this.doc, options.reveal)[0]
+      const t1 = el?.getAttribute('thingid')
+      if (t1 !== null && t1 !== undefined) {
+        this.revealed.push(t1)
+        this.hydrate(t1)
+      }
+    }
     return domCount(this.doc, selector) > 0
+  }
+  async stay(post: string, need?: string): Promise<boolean> {
+    if (redditPostIdOf(this.current) !== post) return false
+    if (need !== undefined && domCount(this.doc, need) === 0) return false
+    this.stays += 1
+    return true
   }
   async click(selector: string) {
     this.clicks.push(selector)
@@ -194,7 +228,7 @@ export class FakeShreddit implements ActionPage {
   }
   async fill(selector: string, value: string, options?: { highlight?: boolean }) {
     this.fills.push(selector)
-    return domFill(this.doc, selector, value, options)
+    return domFillAsync(this.doc, selector, value, options)
   }
   async setFile() {
     return { ok: false as const, why: 'Reddit 没有上传' }

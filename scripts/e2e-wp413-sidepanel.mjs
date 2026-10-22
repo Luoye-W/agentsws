@@ -153,10 +153,14 @@ const shell = (title, body, script = '') =>
   <body>${body}<div class="side"><span class="user">u/ivra_official（本地替身页面）</span></div>
   <script>const report=(trusted,text)=>fetch('/__fake/sent',{method:'POST',body:JSON.stringify({trusted,text})});${script}</script></body></html>`
 // WP432：新版 Reddit（shreddit 组件的样子）——一条评论 + 它的 Reply、收起的「Join the conversation」
+// WP467：照真站 10-22 的样子——正文与按钮行包在 details 里；Reply 在 faceplate-tracker[slot=comment-reply] 里，
+// 点了回复框长在按钮行里（包在带 parent-id 的 comment-composer-host 里）；「Join the conversation」聚焦里面的 textarea 才展开
 const scomment = (id, author, text, parent, depth, post) =>
   `<shreddit-comment thingid="t1_${id}" author="${author}" parentid="${parent}" depth="${depth}" permalink="/r/ivraxr/comments/${post}/comment/${id}/">
-     <div slot="comment"><p>${text}</p></div>
-     <shreddit-comment-action-row slot="actionRow"><button slot="comment-reply">Reply</button></shreddit-comment-action-row>
+     <details open><summary></summary><div>
+       <div slot="comment"><p>${text}</p></div>
+       <div slot="actionRow"><shreddit-comment-action-row slot="actionRow" comment-id="t1_${id}"><faceplate-tracker slot="comment-reply"><button>Reply</button></faceplate-tracker></shreddit-comment-action-row></div>
+     </div></details>
    </shreddit-comment>`
 const COMPOSER =
   '<shreddit-composer><div contenteditable="true" role="textbox" style="min-height:60px;border:1px solid #ccc;padding:6px"></div><button class="human-send" type="button">Comment</button></shreddit-composer>'
@@ -164,7 +168,7 @@ const threadPage = (post, title) =>
   shell(
     `${title}（替身）`,
     `<shreddit-post id="t3_${post}" author="carol" permalink="/r/ivraxr/comments/${post}/x/"><h1 slot="title">${title}</h1></shreddit-post>
-     <comment-composer-host><faceplate-textarea-input data-testid="trigger-button">Join the conversation</faceplate-textarea-input></comment-composer-host>
+     <comment-body-header><comment-composer-host post-id="t3_${post}"><faceplate-textarea-input data-testid="trigger-button">Join the conversation</faceplate-textarea-input></comment-composer-host></comment-body-header>
      <shreddit-comment-tree>${post === 'abc' ? scomment('c1', 'alice', 'Mine fogs up a bit when I wear glasses. Does the Air3 work with prescription frames?', 't3_abc', 0, 'abc') : ''}</shreddit-comment-tree>`,
     `const COMPOSER=${JSON.stringify(COMPOSER)};let n=0
      const wire=(host,parent,depth)=>{const b=host.querySelector('button.human-send');b.addEventListener('click',async e=>{
@@ -172,10 +176,13 @@ const threadPage = (post, title) =>
        host.remove();n+=1
        document.querySelector('shreddit-comment-tree').insertAdjacentHTML('beforeend',${JSON.stringify(scomment('__ID__', 'ivra_official', '__TEXT__', '__PARENT__', '__DEPTH__', post))}
          .replace(/__ID__/g,'new'+n).replace('__TEXT__',text.replace(/</g,'&lt;')).replace('__PARENT__',parent).replace('__DEPTH__',String(depth)))})}
-     document.querySelector('shreddit-comment[thingid="t1_c1"] button[slot="comment-reply"]')?.addEventListener('click',()=>{
-       const c=document.querySelector('shreddit-comment[thingid="t1_c1"]');c.insertAdjacentHTML('beforeend',COMPOSER);wire(c.querySelector('shreddit-composer'),'t1_c1',1)})
-     document.querySelector('comment-composer-host faceplate-textarea-input').addEventListener('click',()=>{
-       const h=document.querySelector('comment-composer-host');h.insertAdjacentHTML('beforeend',COMPOSER);wire(h.querySelector('shreddit-composer'),'t3_${post}',0)})`,
+     document.querySelector('shreddit-comment-action-row[comment-id="t1_c1"] [slot="comment-reply"] button')?.addEventListener('click',()=>{
+       const row=document.querySelector('shreddit-comment-action-row[comment-id="t1_c1"]');if(row.querySelector('shreddit-composer'))return
+       row.insertAdjacentHTML('beforeend','<comment-composer-host parent-id="t1_c1">'+COMPOSER+'</comment-composer-host>');wire(row.querySelector('comment-composer-host'),'t1_c1',1)})
+     const trig=document.querySelector('comment-composer-host:not([parent-id]) faceplate-textarea-input');const ta=document.createElement('textarea')
+     trig.attachShadow({mode:'open'}).append(ta)
+     ta.addEventListener('focus',()=>{const h=document.querySelector('comment-composer-host:not([parent-id])');if(h.querySelector('shreddit-composer'))return
+       h.insertAdjacentHTML('beforeend',COMPOSER);wire(h,'t3_${post}',0)})`,
   )
 
 // ── 真本机服务（临时目录；没有模型 → 草稿是模板那一句，正好拿来演「改草稿」）─────────────
@@ -471,7 +478,14 @@ try {
   )
   await shot(panel, '2b-card-checks-light')
   await alice.locator('[data-testid="ws-desk-draft"]').fill(EDITED)
-  // WP445：「打开这一条」= 批 + 打开——人这一下点的：在这个窗口新开新版 Reddit 的标签页、填好、描一圈
+  // WP467：用户自己已经开着这个帖子（网址带标题段和分享参数）——「填入」就在这一页里填，不另开、不跳 old.reddit
+  const userPg = await context.newPage()
+  await userPg
+    .goto('https://www.reddit.com/r/ivraxr/comments/abc/does_the_air3_work/?utm_source=share')
+    .catch(() => undefined)
+  const redditTabsBefore = context.pages().filter((x) => x.url().includes('reddit.com')).length
+  await panel.bringToFront()
+  // WP445：「填入」= 批 + 填——人这一下点的
   await alice.locator('[data-testid="ws-desk-open"]').click()
   let pg
   let reloaded = false
@@ -507,8 +521,19 @@ try {
     )
   })
   check(
-    '点「打开这一条」→ 马上在新版 Reddit 新开标签页，改过的草稿填进回复框并描一圈；横条是中性的「草稿已填好，请检查后自己点发送」',
+    '点「填入」→ 改过的草稿填进回复框并描一圈；横条是中性的「草稿已填好，请检查后自己点发送」',
     filled,
+  )
+  check(
+    'WP467：用户已经开着这个帖子 → 就在那一页里填（没另开标签页、没跳转、没去 old.reddit）',
+    pg === userPg &&
+      context.pages().filter((x) => x.url().includes('reddit.com')).length === redditTabsBefore &&
+      (pg?.url() ?? '').includes('utm_source=share') &&
+      !context.pages().some((x) => x.url().includes('old.reddit.com')),
+    `${pg?.url()} / ${context
+      .pages()
+      .map((x) => x.url())
+      .join(' , ')}`,
   )
   check('插件没点发送', sends.length === 0)
   const item = server.txn.runtime.store
@@ -633,7 +658,8 @@ try {
 
   // 人点「打开这一条」→ 新版 Reddit 帖子页、点开「Join the conversation」、草稿填好；人改了一句才点 Comment
   await desk.locator('[data-testid="ws-desk-open"]').click()
-  const topBox = 'comment-composer-host shreddit-composer div[contenteditable="true"]'
+  const topBox =
+    'comment-composer-host:not([parent-id]) shreddit-composer div[contenteditable="true"]'
   let pg2
   let reloaded2 = false
   const filled2 = await until(async () => {
@@ -653,12 +679,12 @@ try {
       .catch(() => '')
     return (v ?? '').startsWith('Thanks Bob')
   })
-  check('点「打开这一条」→ 新开新版 Reddit 帖子页，草稿填进评论框', filled2)
+  check('点「填入」→ 没开着这个帖子：新开新版 Reddit 帖子页（www），草稿填进评论框', filled2)
   if (pg2 !== undefined) await shot(pg2, '8b-reddit-filled-new')
   const HUMAN = 'Thanks Bob! Which mode were you in? We are collecting 2.1 battery reports.'
   if (pg2 !== undefined && filled2) {
     await pg2.locator(topBox).fill(HUMAN)
-    await pg2.locator('comment-composer-host button.human-send').click()
+    await pg2.locator('comment-composer-host:not([parent-id]) button.human-send').click()
   }
   const sent2 = await until(async () => {
     const rows = await http('/v1/outbound/records')

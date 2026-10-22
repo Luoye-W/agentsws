@@ -21,7 +21,12 @@ import type {
   RedditWriteTarget,
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
-import { contradictionHints, personaViolations, ungroundedSentences } from '@agentsws/social-core'
+import {
+  contradictionHints,
+  personaViolations,
+  redditPlainText,
+  ungroundedSentences,
+} from '@agentsws/social-core'
 
 /** 一段上下文最多收多少字进提示词。 */
 export const MAX_REDDIT_CONTEXT = 2_000
@@ -59,6 +64,13 @@ export interface RedditDraft {
 }
 
 export type RedditDrafter = (input: RedditDraftPromptInput) => Promise<RedditDraft | undefined>
+
+/**
+ * WP468（决策 1510）：给 Reddit 起草时那一条——不写 Markdown 记号。新版 Reddit 的评论框是富文本，
+ * `**粗体**`、`[字](链接)`、`# 标题` 会照符号原样发出去；出卡前还有一道 `redditPlainText` 兜底。
+ */
+export const REDDIT_PLAIN_RULE =
+  '5. 写纯文字，不写任何 Markdown 记号（Reddit 的评论框是富文本，`**`、`__`、`[字](链接)`、`#` 标题都会照符号原样发出去）：要强调就靠措辞；需要链接就直接写完整网址（https://…），前后留空格；分段用空行。'
 
 const fence = (s: string, max = MAX_REDDIT_CONTEXT): string =>
   `${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(s, max)}\n${EXTERNAL_FENCE.close}`
@@ -150,9 +162,11 @@ export function redditDraftPrompt(input: RedditDraftPromptInput): string {
     '2. 不许承诺任何事：不说退款、赔偿、补发、折扣、保证、时间点；要查订单的请对方私信或联系客服。',
     '3. 不编造产品参数、价格、链接；知识卡里没有的就不说。具体的技术说法（规格、故障原因、修法、兼容 / 连接方式、型号定位、计划与进度、召回 / 保修）只能来自上面的知识卡或品牌号已经说过的话；没有依据就写一句 "Let me check on that and get back to you"（中文帖写「这个我去确认一下再回你」），宁可不说也不猜。',
     t.kind === 'submit'
-      ? '4. 发新帖：第一行写「标题：……」（一行，不超过 120 个字符），空一行，再写正文；正文可以用简单的 Markdown。'
-      : '4. 评论一到四句；可以用简单的 Markdown，但不要标题、不要署名、不要引号包起来、不要前言。',
-    '5. 只输出要发出去的内容本身。',
+      ? '4. 发新帖：第一行写「标题：……」（一行，不超过 120 个字符），空一行，再写正文。'
+      : '4. 评论一到四句；不要标题、不要署名、不要引号包起来、不要前言。',
+    // WP468（决策 1510）：新版 Reddit 的评论框是富文本，Markdown 记号会照原样发出去
+    REDDIT_PLAIN_RULE,
+    '6. 只输出要发出去的内容本身。',
   )
   if ((input.fix ?? []).length > 0)
     lines.push('', '上一稿有这几处不行，这一稿改掉：', ...(input.fix ?? []).map((f) => `- ${f}`))
@@ -237,10 +251,13 @@ export function cleanRedditDraft(
   kind: RedditWriteTarget['kind'],
 ): RedditDraft | undefined {
   if (raw === undefined) return undefined
-  let s = raw
-    .trim()
-    .replace(/^```[a-z]*\n?|```$/giu, '')
-    .trim()
+  // WP468：先把 Markdown 记号去掉（「**Title:** …」也认得出标题）
+  let s = redditPlainText(
+    raw
+      .trim()
+      .replace(/^```[a-z]*\n?|```$/giu, '')
+      .trim(),
+  )
   let title: string | undefined
   if (kind === 'submit') {
     const m = s.match(/^(?:标题|title)\s*[:：]\s*(.+)$/imu)

@@ -31,7 +31,13 @@ const MATTER = {
   people: [],
 } as unknown as MatterViewWithPeople
 
-const getMatter = vi.fn(async () => MATTER)
+const getMatter = vi.fn<() => Promise<MatterViewWithPeople>>(async () => MATTER)
+/** WP468：本人名下的分配（第三栏用「跑这次运行的那条分配」去读，是我名下的才用）。 */
+const ensureSession = vi.fn(async () => ({
+  person: { id: 'p_1', email: 'a@example.com', name: 'A' },
+  workspace: { id: 'ws_1', name: 'W' },
+  assignments: [{ id: 'asg_kol', role_id: 'kol.youtube' }],
+}))
 const getRunBrowser = vi.fn<() => Promise<RunBrowserView>>()
 const listChanges = vi.fn<() => Promise<StagedChange[]>>()
 const getChangeFiles = vi.fn<() => Promise<ChangeFilesView>>()
@@ -41,6 +47,7 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     getMatter: (...a: unknown[]) => getMatter(...(a as [])),
+    ensureSession: (...a: unknown[]) => ensureSession(...(a as [])),
     getRunBrowser: (...a: unknown[]) => getRunBrowser(...(a as [])),
     listChanges: (...a: unknown[]) => listChanges(...(a as [])),
     getChangeFiles: (...a: unknown[]) => getChangeFiles(...(a as [])),
@@ -145,7 +152,52 @@ describe('运行中的浏览器（#12 / #15）', () => {
     )
   })
 
+  it('WP468：这次运行是我名下那条分配跑的 → 用那条分配去读（红人职责没有读运行记录也能看）', async () => {
+    getRunBrowser.mockReset()
+    getRunBrowser.mockResolvedValue({ ...BASE, executor: 'ego', running: false })
+    const agentLine = (id: string) => ({
+      id: 'me_3',
+      matter_id: 'mat_1',
+      at: '2026-09-18T02:05:00.000Z',
+      kind: 'agent_message',
+      text: '标题是 Example Domain',
+      actor: { kind: 'agent', id },
+      run_id: 'run_1',
+    })
+    getMatter.mockResolvedValueOnce({
+      ...MATTER,
+      timeline: [...MATTER.timeline, agentLine('asg_kol')],
+    } as unknown as MatterViewWithPeople)
+    renderBrowser()
+    await screen.findByTestId('rail-browser-executor')
+    expect(getRunBrowser).toHaveBeenLastCalledWith('run_1', 'asg_kol')
+  })
+
+  it('WP468：不是我名下的分配跑的（别人交过来的事）→ 照旧用当前岗位那一条', async () => {
+    getRunBrowser.mockReset()
+    getRunBrowser.mockResolvedValue({ ...BASE, executor: 'none', running: false })
+    getMatter.mockResolvedValueOnce({
+      ...MATTER,
+      timeline: [
+        ...MATTER.timeline,
+        {
+          id: 'me_3',
+          matter_id: 'mat_1',
+          at: '2026-09-18T02:05:00.000Z',
+          kind: 'agent_message',
+          text: '做完了',
+          actor: { kind: 'agent', id: 'asg_someone_else' },
+          run_id: 'run_1',
+        },
+      ],
+    } as unknown as MatterViewWithPeople)
+    renderBrowser()
+    await screen.findByTestId('rail-browser-executor')
+    expect(getRunBrowser).toHaveBeenLastCalledWith('run_1', undefined)
+  })
+
   it('不在事项页 / 这件事还没跑过：照实说，不去打一条注定 404 的接口', async () => {
+    getRunBrowser.mockReset()
     renderBrowser('/')
     expect(await screen.findByTestId('rail-browser-no-matter')).toBeDefined()
     expect(getRunBrowser).not.toHaveBeenCalled()

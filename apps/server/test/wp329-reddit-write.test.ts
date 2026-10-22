@@ -191,9 +191,11 @@ describe('WP329 交出去', () => {
     const opened = await m.svc.open(job_id)
     expect(opened.ok && opened.job.plan.platform).toBe('reddit')
     // 默认新版 www.reddit.com
-    expect(opened.ok && opened.job.plan.steps[0]).toEqual({
+    expect(opened.ok && opened.job.plan.steps[0]).toMatchObject({
       op: 'goto',
       url: 'https://www.reddit.com/r/ivraxr/comments/abc/s/c1/',
+      // WP467：带上帖子 id（已经开着这个帖子就地填）
+      post: 'abc',
     })
   })
 })

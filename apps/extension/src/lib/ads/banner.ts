@@ -6,6 +6,7 @@
  * 要人再确认时多两个按钮：「确认提交」「不提交」。
  */
 
+import { SOFT_MISS_LABEL } from '@agentsws/browser-action'
 import type { BannerState } from './dom-messages'
 
 export const BANNER_HOST_ID = 'agentsws-ads-banner'
@@ -43,7 +44,7 @@ export function bannerText(state: BannerState): string {
   if (state.assist === true) {
     if (state.label === SEND_STEP_LABEL) return ASSIST_READY
     // 对不上页面那一句（等你粘贴）原样说；还在填的时候说在填草稿
-    if (state.label.startsWith('对不上页面')) return state.label
+    if (state.label === SOFT_MISS_LABEL) return state.label
     return `正在填草稿${step} · ${state.label}`
   }
   return `AI 正在操作${step} · ${state.label}`

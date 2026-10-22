@@ -38,6 +38,8 @@ export * from './competitor/store-plan.js'
 export * from './moderation.js'
 export * from './own-sub-queue.js'
 export * from './platform.js'
+// WP468：Reddit 草稿去 Markdown 记号（新版评论框是富文本，出卡前兜一道）
+export * from './reddit-plain.js'
 // WP411：Reddit 巡查与起草的质量闸（整词匹配、去重、外部帖闸、草稿依据 / 矛盾 / 人设）
 export * from './reddit-quality.js'
 export * from './research/index.js'

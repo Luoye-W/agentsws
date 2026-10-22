@@ -183,3 +183,25 @@ export async function readRunBrowser(
     events.push(e)
   return summarizeRunBrowser(run_id, events)
 }
+
+/**
+ * WP468（决策 1478）：**这次运行是哪条分配发起的**——`run.started` 那一条的 `actor.id`
+ * （运行时记事件时 `actor = { kind: 'agent', id: <分配 id>, run_id }`）。
+ *
+ * 给 `GET /v1/runs/:id/browser` 的窄放行用：分配上没有 `event_log.read` 的，只能看自己发起的那次运行。
+ * 认不出（没有这次运行、不是这个工作区、没记 `run.started`）一律 `undefined` = 不放行。
+ * `run.started` 是一次运行的第一条事件，读到就停。
+ */
+export async function readRunAssignment(
+  reader: RunEventReader,
+  workspace_id: string,
+  run_id: string,
+): Promise<string | undefined> {
+  for await (const e of reader.read({ workspace_id, run_id, limit: RUN_BROWSER_EVENT_LIMIT })) {
+    if (e.type !== 'run.started') continue
+    if (e.workspace_id !== workspace_id || e.actor.kind !== 'agent') return undefined
+    const of = e.correlation.run_id ?? e.actor.run_id
+    return of === run_id ? e.actor.id : undefined
+  }
+  return undefined
+}
