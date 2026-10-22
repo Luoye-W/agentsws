@@ -7991,6 +7991,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return page.ok ? { html: page.html } : undefined
       },
       /*
+       * WP449：发布前引用核查打开引用页——同一口抓取（只 GET、不带凭据、认得出是我们的 UA）；robots 不让抓的
+       * 不抓。打不开把原因带回来（404 / 被挡 / 超时），卡上照实写。
+       */
+      citationFetch: async (url) => {
+        const doFetch = (options.brandIntakeFetch ?? globalThis.fetch) as BrandIntakeFetch
+        let target: URL
+        try {
+          target = new URL(url)
+        } catch {
+          return { ok: false, reason: '网址写得不对' }
+        }
+        const disallow = await fetchRobots(doFetch, target.origin).catch(() => [] as string[])
+        if (isDisallowed(target.pathname, disallow))
+          return { ok: false, reason: '对方的 robots.txt 不让机器读这一页，请人点开核一下' }
+        const page = await fetchPage(doFetch, url)
+        return page.ok
+          ? { ok: true, html: page.html }
+          : { ok: false, reason: page.reason ?? `没取到（${page.status}）` }
+      },
+      // WP449：引用核查上限与「好不好被 AI 引用」的建议线读「内容与博客」那条职责
+      contentThresholds: () => roles.roles.get('dtc.content')?.thresholds ?? {},
+      /*
        * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
        * 抓取，只抓自家域名）。
        */

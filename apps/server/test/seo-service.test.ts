@@ -217,6 +217,11 @@ describe('每日：今天值得动的 5 件事落成什么', () => {
     expect(write?.role_id).toBe('dtc.content')
     expect(write?.participants).toEqual(['p_zhao'])
     expect(write?.position_id).toBe('asg_writer')
+    // WP449：对比类选题（gan vs silicon）把对比页的规矩带过去
+    expect((write as { summary?: string } | undefined)?.summary).toContain('不贬低')
+    expect((write as { summary?: string } | undefined)?.summary).toContain(
+      '结构化数据只标我们自己的商品',
+    )
   })
 
   it('WP446：没人担内容与博客时，写这一页派回 SEO 与 GEO 自己的担当人', () => {
@@ -779,5 +784,167 @@ describe('WP166：模型初稿读页面正文', () => {
     const drafted = picks.filter((p) => p.outcome?.body === 'none')
     expect(drafted).toHaveLength(2)
     expect(drafted[0]?.outcome?.note).toBe('没读到正文')
+  })
+})
+
+describe('WP449：发布前质检整套（引用核查 / 市场版本 / 竞品 / 被 AI 引用打分）', () => {
+  const post = (
+    body: string,
+    title = 'Magnetic power banks',
+    extra: Record<string, unknown> = {},
+  ) => ({
+    workspace_id: 'ws_1',
+    role_id: 'dtc.content',
+    assignment_id: 'asg_content',
+    run_id: 'run_449',
+    change_set_id: 'cs_449',
+    kind: 'publish_post' as const,
+    target: { type: 'article', id: 'art_449' },
+    before: { title, published: false },
+    after: { title, published: true, body, ...extra },
+    created_by: { kind: 'agent' as const, id: 'agent_dtc.content' },
+    mandate: { caps: { max_posts_per_day: 2 } },
+    level: 'L2' as const,
+    approval: {
+      title: `发布文章：${title}`,
+      summary: '这篇会出现在店里的博客上。',
+      recipients: [{ person: 'p_li', via: 'scope_manager' as const }],
+      proposer: { kind: 'agent' as const, id: 'agent_dtc.content', assignment_id: 'asg_content' },
+    },
+  })
+  const knowledge = async () => ({
+    facts: [
+      {
+        id: 'f1',
+        statement: 'The NordVolt Mag 10K has a capacity of 10,000 mAh.',
+        terms: ['capacity'],
+      },
+      { id: 'f2', statement: 'The NordVolt Mag 10K weighs 6.3 oz.' },
+      { id: 'f3', statement: 'The NordVolt Mag 10K costs EUR 39.95 in the EU store.' },
+    ],
+    rules: [],
+  })
+  /** 录好的引用页（没录的一律 404）。 */
+  const pages: Record<string, string> = {
+    'https://research.example.org/survey':
+      '<html><body><main><p>42% of respondents carry a power bank.</p></main></body></html>',
+  }
+  const calls: string[] = []
+  const citationFetch = async (url: string) => {
+    calls.push(url)
+    const html = pages[url]
+    return html === undefined
+      ? { ok: false as const, reason: '这个页面不存在（404）' }
+      : { ok: true as const, html }
+  }
+  const brand = () => ({
+    name: 'NordVolt',
+    language: 'en' as const,
+    domains: ['nordvolt.example.com'],
+    shop_host: 'nordvolt.example.com',
+    currency: 'USD',
+    country: 'us',
+    markets: ['US', 'DE'],
+    competitors: [{ name: 'VoltMax', reason: 'same category' }],
+  })
+  const gate = async (input: ReturnType<typeof post>, over: Partial<SeoServiceOptions> = {}) => {
+    const { service, events } = setup({ knowledge, brand, citationFetch, ...over })
+    const out = await service.gatePublish(input)
+    const after = out.after as {
+      published: boolean
+      quality_gate: {
+        passed: boolean
+        issues: { rule: string; sentence: string; url?: string }[]
+        citations?: { checked: number; skipped: number }
+        ai_citability?: { score: number }
+        locale?: { language: string; markets: string[] }
+      }
+    }
+    return { out, after, gate: after.quality_gate, events }
+  }
+
+  it('引用页里没有那个数：挡在草稿、卡上指到那一句与那个网址', async () => {
+    const {
+      out,
+      after,
+      gate: g,
+    } = await gate(
+      post(
+        'The NordVolt Mag 10K holds 10,000 mAh. A [2026 survey](https://research.example.org/survey) found 57% of people carry a power bank.',
+      ),
+    )
+    expect(after.published).toBe(false)
+    expect(out.level).toBe('L1')
+    const issue = g.issues.find((i) => i.rule === 'citation_not_found')
+    expect(issue?.sentence).toBe('A 2026 survey found 57% of people carry a power bank.')
+    expect(issue?.url).toBe('https://research.example.org/survey')
+    expect(out.approval.summary).toContain(
+      '「A 2026 survey found 57% of people carry a power bank.」',
+    )
+    expect(out.approval.summary).toContain('57%')
+  })
+
+  it('数在引用页上：过；外链里的数不再报「知识库里找不到出处」', async () => {
+    const {
+      after,
+      gate: g,
+      events,
+    } = await gate(
+      post(
+        'The NordVolt Mag 10K holds 10,000 mAh. A [2026 survey](https://research.example.org/survey) found 42% of people carry a power bank.',
+      ),
+    )
+    expect(g.issues).toEqual([])
+    expect(after.published).toBe(true)
+    expect(g.citations).toMatchObject({ checked: 1, skipped: 0 })
+    const ev = events.find((e) => e.type === 'content.quality_checked')
+    expect(ev?.payload).toMatchObject({ passed: true, citations_checked: 1 })
+  })
+
+  it('每篇上限读「内容与博客」的阈值：超了只查前几个，卡上注明', async () => {
+    calls.length = 0
+    const body = Array.from(
+      { length: 4 },
+      (_, i) => `See [source ${i}](https://research.example.org/survey${i === 0 ? '' : `-${i}`}).`,
+    ).join('\n\n')
+    const { out, gate: g } = await gate(post(body), {
+      contentThresholds: () => ({ citation_check_max_links: 1 }),
+    })
+    expect(calls).toEqual(['https://research.example.org/survey'])
+    expect(g.citations).toMatchObject({ checked: 1, skipped: 3 })
+    expect(out.notes?.join('\n')).toContain('后面 3 个没查')
+  })
+
+  it('德语版：认出是给德国的；美元价与英制单位挡下；写对的照发', async () => {
+    const bad = await gate(
+      post(
+        'Die NordVolt Mag 10K hat 10.000 mAh und wiegt 6.3 oz. Sie kostet $39.99 und du bekommst sie schnell.',
+        'Die richtige Powerbank für dein iPhone',
+      ),
+    )
+    expect(bad.gate.locale).toEqual({ language: 'de', markets: ['DE'] })
+    expect(bad.after.published).toBe(false)
+    const say = bad.gate.issues.filter((i) => i.rule === 'locale_mismatch').map((i) => i.sentence)
+    expect(say).toContain('Die NordVolt Mag 10K hat 10.000 mAh und wiegt 6.3 oz.')
+    const good = await gate(
+      post(
+        'Die NordVolt Mag 10K hat 10.000 mAh und wiegt 179 g. Im EU-Shop kostet sie 39,95 € und du bekommst sie schnell.',
+        'Die richtige Powerbank für dein iPhone',
+      ),
+    )
+    expect(good.gate.issues).toEqual([])
+    expect(good.after.published).toBe(true)
+  })
+
+  it('竞品对比：贬低挡下；「好不好被 AI 引用」分数记在结论上、低了只给建议不挡', async () => {
+    const rude = await gate(post('VoltMax is junk next to the NordVolt Mag 10K.'))
+    expect(rude.gate.issues.map((i) => i.rule)).toContain('comparison_disparaging')
+    const weak = await gate(
+      post('Have you ever wondered about power? It is complicated.', 'Thoughts'),
+    )
+    expect(weak.after.published).toBe(true)
+    expect(weak.gate.ai_citability?.score).toBeLessThan(70)
+    expect(weak.out.notes?.join('\n')).toContain('好不好被 AI 引用')
+    expect(weak.out.notes?.join('\n')).toContain('不挡发布')
   })
 })

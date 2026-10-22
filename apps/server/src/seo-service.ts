@@ -80,18 +80,23 @@ import { GEO_PROMPT_TOPICS, marketLanguage } from '@agentsws/contracts'
 import { reportWeek } from '@agentsws/schedule'
 import { firstDomainMention, mentions } from '@agentsws/search-providers'
 import {
+  AI_CITABILITY_RULES,
   aiTrafficBrief,
   type BrandProfileLike,
   buildDaily,
+  type CitationFetchResult,
   CLAIM_MARKET_GROUPS,
   type ClaimRuleCardLike,
-  checkContentQuality,
+  COMPARISON_BRIEF,
   competitorId,
+  DEFAULT_CITABILITY_ADVICE_BELOW,
+  DEFAULT_CITATION_MAX_LINKS,
   DEFAULT_MODEL_DRAFTS_PER_DAY,
   estimateLine,
   evidenceText,
   type FactLike,
   geoGaps,
+  isComparisonQuery,
   type LandingConversion,
   type LandingOrder,
   marketName,
@@ -100,6 +105,7 @@ import {
   parseSeoDraft,
   qualitySummary,
   resolveClaimRules,
+  reviewContent,
   type SearchConsolePort,
   type SeoDraftKind,
   SITE_FACADE_NOTE,
@@ -294,6 +300,16 @@ export interface SeoServiceOptions {
    * 不给 = 一致性检查只能说「这台电脑取不了网页」。
    */
   pageFetch?(url: string): Promise<{ html: string } | undefined>
+  /**
+   * WP449：发布前引用核查打开引用页（只 GET、不带凭据、遵 robots；打不开回原因——卡上要说是 404 还是被挡）。
+   * 不给就退到 `pageFetch`（取不到只能说「打不开」）；两个都没有 = 引用没法查，卡上注明。
+   */
+  citationFetch?(url: string): Promise<CitationFetchResult>
+  /**
+   * WP449：「内容与博客」那条职责的阈值（`citation_check_max_links`、`ai_citability_advice_below`）。
+   * `thresholds` 读的是 SEO 与 GEO 那条；不给按缺省（10 个链接、70 分）。
+   */
+  contentThresholds?(): Record<string, number>
   /**
    * WP380：WP381 的体检与 AI 来源流量放进周报的位置（没有就不显示）；`site` 是网站体检给的两个
    * 硬信号（AI 爬虫被挡 / 原始网页里没正文），缺位主因先看它们。
@@ -1672,7 +1688,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           : gap.page === undefined
             ? `写一页回答「${it.question}」`
             : `改这页，让 AI 回答「${it.question}」时用上它`
-        const body = `${where}${why}\n${gap.suggestion}\n${quality.recheckLine(recheck)}`
+        // WP449：改页面的那类，改动稿照「好不好被 AI 引用」五条写
+        const rules = offsite ? '' : `\n改动稿这样写：${AI_CITABILITY_RULES.zh.join('；')}。`
+        const body = `${where}${why}\n${gap.suggestion}${rules}\n${quality.recheckLine(recheck)}`
         const id = offsite
           ? toPr(`geo_pr|${it.question}|${it.market}`, title, body)
           : toContent(`geo_fix|${it.question}|${it.market}`, title, body, gap.page)
@@ -2310,20 +2328,71 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         role_id: input.role_id,
       }
       const kb = await knowledgeFor(actor)
-      const result = checkContentQuality({
+      // WP449：整套——原来三道 + 引用核查 + 市场版本 + 竞品对比 + 「好不好被 AI 引用」（只给建议）
+      const brand = await options.brand()
+      const t = options.contentThresholds?.() ?? {}
+      const num = (k: string, d: number): number =>
+        typeof t[k] === 'number' && Number.isFinite(t[k]) ? (t[k] as number) : d
+      const pageFetch = options.pageFetch
+      const fetch =
+        options.citationFetch ??
+        (pageFetch === undefined
+          ? undefined
+          : async (url: string): Promise<CitationFetchResult> => {
+              const page = await pageFetch(url)
+              return page === undefined
+                ? { ok: false, reason: '没取到' }
+                : { ok: true, html: page.html }
+            })
+      const language = typeof after.language === 'string' ? after.language : undefined
+      const result = await reviewContent({
         body,
         ...(title === undefined ? {} : { title }),
         facts: kb.facts,
         ...(kb.rules.length === 0 ? {} : { rules: kb.rules }),
         now: clock.now(),
+        brand: {
+          name: brand.name,
+          language: brand.language,
+          domains: [
+            ...brand.domains,
+            ...(brand.shop_host.endsWith('.invalid') ? [] : [brand.shop_host]),
+          ],
+          ...(brand.markets === undefined ? {} : { markets: brand.markets }),
+          ...(brand.market_languages === undefined
+            ? {}
+            : { market_languages: brand.market_languages }),
+          competitors: (brand.competitors ?? []).map((c) => c.name),
+        },
+        primaryLanguage: (code) => marketLanguage(code),
+        ...(language === undefined ? {} : { language }),
+        ...(fetch === undefined ? {} : { fetch }),
+        maxLinks: num('citation_check_max_links', DEFAULT_CITATION_MAX_LINKS),
+        adviceBelow: num('ai_citability_advice_below', DEFAULT_CITABILITY_ADVICE_BELOW),
       })
       emit('content.quality_checked', input.assignment_id, {
         target: input.target.id,
         passed: result.passed,
         issues: result.issues.length,
         rules_from: result.rules_from,
+        ...(result.citations === undefined
+          ? {}
+          : {
+              citations_checked: result.citations.checked,
+              citations_skipped: result.citations.skipped,
+            }),
+        ...(result.ai_citability === undefined
+          ? {}
+          : { ai_citability: result.ai_citability.score }),
+        ...(result.locale === undefined ? {} : { language: result.locale.language }),
       })
-      if (result.passed) return { ...input, after: { ...after, quality_gate: result } }
+      const advice = result.advice ?? []
+      if (result.passed)
+        return {
+          ...input,
+          after: { ...after, quality_gate: result },
+          ...(advice.length === 0 ? {} : { notes: [...(input.notes ?? []), ...advice] }),
+        }
       return {
         ...input,
         after: { ...after, published: false, quality_gate: result },
@@ -2332,6 +2401,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         notes: [
           ...(input.notes ?? []),
           ...result.issues.map((i) => `「${i.sentence}」——${i.detail}`),
+          ...advice,
         ],
         approval: {
           ...input.approval,
@@ -2412,7 +2482,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       openMatter(`topic|${p.query}`, {
         kind: 'project',
         title: `写一页新的：${p.query}`,
-        summary: `${p.why}\n${p.serp.reason}\n写好后发布照每天 2 篇的额度分批发；发布前自动质检。${p.ranking_page === undefined ? '' : `\n发出去之后从 ${p.ranking_page} 链过来。`}`,
+        summary: `${p.why}\n${p.serp.reason}\n写好后发布照每天 2 篇的额度分批发；发布前自动质检。${p.ranking_page === undefined ? '' : `\n发出去之后从 ${p.ranking_page} 链过来。`}${
+          // WP449：对比类选题（X vs Y、X 的替代品）把对比页的规矩带过去
+          isComparisonQuery(p.query) ? `\n${COMPARISON_BRIEF.join('\n')}` : ''
+        }`,
         entry: 'role',
         role_id: writer.role_id,
         ...(actor === undefined
