@@ -6277,9 +6277,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const models = effectiveModels()
         const ref = models.configured() ? models.defaultRef() : undefined
         if (ref === undefined || ref.provider === 'stub') return undefined
-        return modelRedditDrafter(async (prompt) => {
+        return modelRedditDrafter(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的话术 / 人设 / 规矩在系统提示，这一帖的在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: actor.assignment_id as never,
