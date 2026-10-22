@@ -3248,6 +3248,10 @@ const zh: Table = {
   'settings.browser.hint':
     '有些活只能在网页上干（YouTube 的频道页、Amazon 卖家后台）。这一节告诉工作台用哪个浏览器去干。不配 = 谁都开不了浏览器。',
   'settings.browser.summary': '每条岗位只能打开它职责里写的那几个网站。',
+  // WP468（决策 1479）：选 ego 时上面那句不成立（ego 不过网站名单，10-22 定）
+  'settings.browser.summary.ego': 'ego 不按网站名单拦，只留记录。',
+  'settings.browser.summary.ego.hint':
+    'AI 在 ego 里开哪个站都不拦；每段脚本和结果都记在运行记录里，事项页第三栏「浏览器」看得到。',
   'settings.browser.summary.hint':
     '别的站一律打不开：红人各自的平台、Amazon 客服只开卖家后台，其余岗位一个站都开不了。',
   'settings.browser.safety': '密码只在你自己的浏览器里输；截图只发给你选的模型，不留记录。',
@@ -7686,6 +7690,9 @@ const en: Table = {
   'settings.browser.hint':
     'Some work only exists on a web page (a YouTube channel page, Amazon Seller Central). This section says which browser the workstation uses. Leave it off and no role can open a page at all.',
   'settings.browser.summary': 'Each role can only open the sites its duties list.',
+  'settings.browser.summary.ego': 'ego is not limited to a site list; everything is logged.',
+  'settings.browser.summary.ego.hint':
+    'Nothing the AI opens in ego is blocked; every script and its result is kept in the run record, visible in the Browser panel on the right of a task.',
   'settings.browser.summary.hint':
     'Everything else is refused: each creator channel its own platform, Amazon support only Seller Central, and every other role none at all.',
   'settings.browser.safety':
