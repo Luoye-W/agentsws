@@ -126,7 +126,7 @@ export function MailAssistantPanel(): ReactNode {
                   type="button"
                   data-testid="rail-mail-suggestion"
                   data-kind={s.kind}
-                  className="w-full rounded-[10px] border border-ws-line bg-ws-card p-2.5 text-left hover:shadow-ws"
+                  className="w-full rounded-lg border border-ws-line bg-ws-card p-2.5 text-left hover:shadow-ws"
                   onClick={() => {
                     // 点了进编辑框成草稿——**人改完自己点发送**
                     window.dispatchEvent(new CustomEvent(USE_SUGGESTION_EVENT, { detail: s.text }))

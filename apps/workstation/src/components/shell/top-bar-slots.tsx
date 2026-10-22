@@ -148,7 +148,7 @@ export function TitleMenu({
         }}
       >
         <span
-          className="min-w-0 truncate text-[13.5px] font-medium text-foreground"
+          className="min-w-0 truncate text-[13px] font-medium text-foreground"
           data-testid={testId}
           {...(typeof title === 'string' ? { title } : {})}
         >

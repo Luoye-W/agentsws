@@ -91,7 +91,7 @@ export function MeetInbox({ meets }: { meets: MeetProposalView[] }): React.React
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>{t('secretary.meets.alternatives')}</span>
                 {m.alternatives.map((slot) => (
-                  <span key={slot.start} className="rounded border px-1.5 py-0.5">
+                  <span key={slot.start} className="rounded-sm border px-1.5 py-0.5">
                     {when(slot.start)}
                   </span>
                 ))}

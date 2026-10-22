@@ -108,7 +108,7 @@ export function NoticeToast({
         type="button"
         aria-label={dismissLabel}
         data-testid={`${testId}-dismiss`}
-        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="rounded-sm p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         onClick={onDismiss}
       >
         <X aria-hidden className="size-3.5" />

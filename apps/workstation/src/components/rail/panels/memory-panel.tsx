@@ -322,7 +322,7 @@ function TierCard({ tier }: { tier: RailScope['tier'] }): React.ReactNode {
           <li
             key={value}
             className={cn(
-              'flex items-center gap-1 rounded px-1 py-0.5',
+              'flex items-center gap-1 rounded-sm px-1 py-0.5',
               value === tier
                 ? 'bg-secondary font-medium text-secondary-foreground'
                 : 'text-muted-foreground',

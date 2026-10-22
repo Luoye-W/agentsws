@@ -121,12 +121,12 @@ export function RoleDetail({
                 {a.caps.length === 0 && a.window === undefined ? null : (
                   <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
                     {a.caps.map((cap) => (
-                      <span key={cap.key} className="rounded bg-muted px-1.5 py-0.5">
+                      <span key={cap.key} className="rounded-sm bg-muted px-1.5 py-0.5">
                         {cap.key}：{cap.value}
                       </span>
                     ))}
                     {a.window === undefined ? null : (
-                      <span className="rounded bg-muted px-1.5 py-0.5">
+                      <span className="rounded-sm bg-muted px-1.5 py-0.5">
                         {t('org.roles.window', {
                           n: a.window.max_count,
                           per: t(`org.per.${a.window.per}`),

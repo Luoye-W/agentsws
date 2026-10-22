@@ -82,10 +82,10 @@ export function GeoGrid({
         <Hint text={t('geo.grid.hint')} />
       </h4>
       <div className="-mx-1 overflow-x-auto">
-        <table className="w-full text-[13.5px]">
+        <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-ws-surface text-left text-xs font-medium text-ws-muted-fg">
-              <th scope="col" className="rounded-l-[10px] px-3 py-2.5">
+              <th scope="col" className="rounded-l-lg px-3 py-2.5">
                 {t('geo.grid.prompt')}
               </th>
               {grid.platforms.map((p) => (
@@ -93,7 +93,7 @@ export function GeoGrid({
                   {head(p)}
                 </th>
               ))}
-              <th scope="col" className="w-8 rounded-r-[10px] px-2 py-2.5">
+              <th scope="col" className="w-8 rounded-r-lg px-2 py-2.5">
                 <span className="sr-only">{t('geo.change.up')}</span>
               </th>
             </tr>

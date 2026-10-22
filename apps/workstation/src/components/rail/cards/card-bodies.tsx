@@ -423,7 +423,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
       {live ? (
         <div
           ref={here}
-          className="rounded-[10px] ring-2 ring-ws-brand/40"
+          className="rounded-lg ring-2 ring-ws-brand/40"
           data-testid="connections-live"
         >
           <Suspense fallback={null}>

@@ -123,7 +123,7 @@ function OwnRow({ source, index }: { source: OwnSource; index: number }): ReactN
         {...attributes}
         {...listeners}
         aria-label={t('models.ai_source.drag', { name: source.label })}
-        className="shrink-0 cursor-grab rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+        className="shrink-0 cursor-grab rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
         data-testid={`model-ai-source-handle-${source.provider_id}`}
       >
         <GripVertical className="size-3.5" aria-hidden />

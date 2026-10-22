@@ -4,16 +4,18 @@
  * - {@link DispatchLine}：回复下面一行「已交给 Reddit 运营 · 官方版块 →」（点了进那件事）；
  * - {@link ReportNote}：交出去的事回来报的那一句（做完 / 要你拍板 / 没做成）+ 一个「去看 / 去拍板」；
  * - {@link Suggestions}：输入框下面最多 4 个快捷问题（服务端按状态生成；开始对话后收起）；
- * - {@link MentionMenu}：输入框里打 `@` 弹出的岗位 / 职责清单（选了就直接交给它）；
+ * - {@link MentionMenu}：输入框里打 `@` 弹出的岗位 / 职责清单（选了就直接交给它；选好的那一个是框里一颗小标，见 `composer.tsx`）；
  * - {@link MemoryButton}：右上角「记忆」（助理这一层记的几条，能删）；
  * - {@link PeersButton}：右上角「替我答同事」（谁问过我 / 约时间 / 我的公开资料；个人模式不出）。
+ *   WP456-T8（§3.7）：这两颗是顶栏右边那排图标钮（悬停出字），不再是文字按钮。
  *
  * 出现规则写在各自头上（docs/96 §4：组件有出现 / 不出现规则）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, AtSign, Brain, CheckCircle2, CircleAlert, Gavel, Users, X } from 'lucide-react'
+import { ArrowRight, Brain, CheckCircle2, CircleAlert, Gavel, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { TOPBAR_ICON, TOPBAR_ICON_ACTIVE, TOPBAR_ICON_IDLE } from '@/components/shell/top-bar-slots'
 import { Button } from '@/components/ui/button'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -107,14 +109,15 @@ export function Suggestions({
   const navigate = useNavigate()
   if (items.length === 0) return null
   return (
-    <div className="flex flex-wrap justify-center gap-2" data-testid="assistant-suggestions">
+    <div className="flex flex-wrap items-center gap-1.5" data-testid="assistant-suggestions">
       {items.slice(0, 4).map((s) => (
         <button
           key={s.text}
           type="button"
           data-kind={s.kind}
           data-testid="assistant-suggestion"
-          className="rounded-full border bg-ws-card px-3 py-1.5 text-[13px] text-muted-foreground shadow-ws transition-colors hover:text-foreground"
+          // WP456-T8：和岗位页框上面那排快捷按钮同一种（`LandingActions`）
+          className="inline-flex h-[26px] items-center rounded-full border border-ws-line-strong bg-ws-card px-2.5 text-xs text-ws-body hover:bg-ws-hover hover:text-ws-ink"
           onClick={() => {
             if (s.href === undefined) onPick(s.text)
             else navigate(s.href)
@@ -210,34 +213,6 @@ export function MentionMenu({
   )
 }
 
-/** 选好的 `@` 那一个（输入框上面一个小胶囊，× 去掉）。 */
-export function MentionChip({
-  target,
-  onClear,
-}: {
-  target: AssistantTarget
-  onClear: () => void
-}): React.ReactNode {
-  const { t } = useApp()
-  return (
-    <span
-      className="inline-flex w-fit items-center gap-1 rounded-full bg-ws-tint px-2 py-0.5 text-xs text-ws-brand-ink"
-      data-testid="assistant-mention-chip"
-    >
-      <AtSign aria-hidden className="size-3" />
-      {target.label}
-      <button
-        type="button"
-        aria-label={t('assistant.mention.remove')}
-        className="rounded-full p-0.5 hover:bg-background"
-        onClick={onClear}
-      >
-        <X aria-hidden className="size-3" />
-      </button>
-    </span>
-  )
-}
-
 /**
  * 右上角「记忆」。出现：总在（点开是助理这一层记的几条，能删）。
  * `highlight` 是从「记住了」小提醒点过来时要亮的那几条（`?memory=`）——那时自动打开。
@@ -269,15 +244,16 @@ export function MemoryButton({ highlight }: { highlight?: readonly string[] }): 
     })
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <Button
-        size="xs"
-        variant="ghost"
+      <button
+        type="button"
         data-testid="assistant-memory"
+        title={t('assistant.memory')}
+        aria-label={t('assistant.memory')}
+        className={cn(TOPBAR_ICON, open ? TOPBAR_ICON_ACTIVE : TOPBAR_ICON_IDLE)}
         onClick={() => setOpen(true)}
       >
-        <Brain aria-hidden />
-        {t('assistant.memory')}
-      </Button>
+        <Brain aria-hidden className="size-4" />
+      </button>
       <SheetContent side="right" data-testid="assistant-memory-sheet">
         <SheetHeader>
           <SheetTitle>{t('assistant.memory')}</SheetTitle>
@@ -332,15 +308,16 @@ export function PeersButton({ defaultOpen = false }: { defaultOpen?: boolean }):
   const [open, setOpen] = useState(defaultOpen)
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <Button
-        size="xs"
-        variant="outline"
+      <button
+        type="button"
         data-testid="assistant-peers"
+        title={t('assistant.peers')}
+        aria-label={t('assistant.peers')}
+        className={cn(TOPBAR_ICON, open ? TOPBAR_ICON_ACTIVE : TOPBAR_ICON_IDLE)}
         onClick={() => setOpen(true)}
       >
-        <Users aria-hidden />
-        {t('assistant.peers')}
-      </Button>
+        <Users aria-hidden className="size-4" />
+      </button>
       <SheetContent
         side="right"
         className="data-[side=right]:w-full data-[side=right]:sm:max-w-xl"

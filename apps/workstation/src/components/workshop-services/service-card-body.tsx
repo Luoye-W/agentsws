@@ -206,7 +206,7 @@ function MenuBody({
         })}
       </ul>
       <p
-        className="flex flex-wrap items-center gap-1 text-[12.5px] text-ws-body"
+        className="flex flex-wrap items-center gap-1 text-[13px] text-ws-body"
         data-testid="service-menu-total"
       >
         <span className="font-semibold text-ws-ink">
@@ -266,7 +266,7 @@ function RequirementsBody({
       {editing && decidable ? (
         <div className="flex flex-col gap-1.5">
           {s.questions.map((q) => (
-            <div key={q.id} className="flex flex-col gap-0.5 text-[12.5px]">
+            <div key={q.id} className="flex flex-col gap-0.5 text-[13px]">
               <span className="text-ws-muted-fg">
                 {label(q)}
                 {q.required === true ? ` · ${t('svc.req.required')}` : ''}
@@ -348,11 +348,11 @@ function PayBody({ card, payload }: { card: DeckCard; payload: ServicePayCardPay
   if (payload.stage === 'extra')
     return (
       <div className="mt-2.5 flex flex-col gap-2" data-testid="service-pay" data-stage="extra">
-        <p className="text-2xl font-semibold text-ws-ink tabular-nums">
+        <p className="text-[22px] font-semibold text-ws-ink tabular-nums">
           {t('svc.extra.price', { credits: creditsText(payload.credits, lang) })}
         </p>
         {payload.extra_reason === undefined ? null : (
-          <p className="text-[12.5px] text-ws-body">「{payload.extra_reason}」</p>
+          <p className="text-[13px] text-ws-body">「{payload.extra_reason}」</p>
         )}
         <p className="flex items-center gap-1 text-[12px] text-ws-muted-fg">
           {payload.deliver_hours === undefined
@@ -377,10 +377,10 @@ function PayBody({ card, payload }: { card: DeckCard; payload: ServicePayCardPay
     )
   return (
     <div className="mt-2.5 flex flex-col gap-2" data-testid="service-pay">
-      <p className="text-2xl font-semibold text-ws-ink tabular-nums">
+      <p className="text-[22px] font-semibold text-ws-ink tabular-nums">
         {t('svc.offer.price', { credits: creditsText(payload.credits, lang) })}
       </p>
-      <p className="text-[12.5px] text-ws-body">
+      <p className="text-[13px] text-ws-body">
         {terms(s, payload.deliver_hours ?? s.promise.deliver_hours)}
       </p>
       {ms.length > 1 ? (
@@ -392,7 +392,7 @@ function PayBody({ card, payload }: { card: DeckCard; payload: ServicePayCardPay
         </p>
       ) : null}
       {payload.quote_note === undefined ? null : (
-        <p className="text-[12.5px] text-ws-body">「{payload.quote_note}」</p>
+        <p className="text-[13px] text-ws-body">「{payload.quote_note}」</p>
       )}
       <p className="flex items-center gap-1 text-[12px] text-ws-muted-fg">
         {t('svc.pay.shares')}
@@ -441,7 +441,7 @@ function AcceptanceBody({
   return (
     <div className="mt-2.5 flex flex-col gap-2" data-testid="service-acceptance">
       {payload.lines !== undefined && payload.lines.length > 0 ? (
-        <ul className="flex flex-col gap-0.5 text-[12.5px] text-ws-body">
+        <ul className="flex flex-col gap-0.5 text-[13px] text-ws-body">
           {payload.lines.map((l) => (
             <li key={l.item_id}>
               {t('svc.acc.done_of', {
@@ -455,7 +455,7 @@ function AcceptanceBody({
       ) : null}
       {[...(proof?.links ?? []), ...(proof?.screenshots ?? [])].length > 0 ||
       payload.deliverables.some((d) => d.url !== undefined || d.text !== undefined) ? (
-        <ul className="flex flex-col gap-0.5 text-[12.5px]" data-testid="service-acceptance-proof">
+        <ul className="flex flex-col gap-0.5 text-[13px]" data-testid="service-acceptance-proof">
           {payload.deliverables.map((d) => (
             <li key={`${d.label}-${d.delivered_at}`} className="flex min-w-0 items-center gap-1">
               {d.url === undefined ? (

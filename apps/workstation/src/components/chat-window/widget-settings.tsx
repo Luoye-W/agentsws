@@ -157,7 +157,7 @@ export function ChatWidgetSettings(): React.ReactNode {
               type="color"
               value={accent}
               aria-label={t('chat.window.accent')}
-              className="h-8 w-14 cursor-pointer rounded border bg-transparent"
+              className="h-8 w-14 cursor-pointer rounded-sm border bg-transparent"
               onChange={(e) =>
                 saveSettings.mutate({
                   allowed_origins: cfg?.allowed_origins ?? [],

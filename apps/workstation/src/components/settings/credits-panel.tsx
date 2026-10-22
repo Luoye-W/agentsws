@@ -669,7 +669,7 @@ export function TierCards({
                     </span>
                   ) : null}
                 </span>
-                <span className="text-lg font-semibold tabular-nums">US${num(tier.usd)}</span>
+                <span className="text-base font-semibold tabular-nums">US${num(tier.usd)}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {t('credits.tiers.credits', { n: num(tier.credits) })}
                 </span>
@@ -850,7 +850,7 @@ function Figure({
   return (
     <div className="rounded-lg border p-2">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={strong ? 'text-lg font-semibold tabular-nums' : 'text-base tabular-nums'}>
+      <p className={strong ? 'text-base font-semibold tabular-nums' : 'text-base tabular-nums'}>
         {value}
       </p>
     </div>

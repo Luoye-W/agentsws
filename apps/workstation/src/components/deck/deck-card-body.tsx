@@ -101,7 +101,7 @@ function Note({
   return (
     <p
       {...(testId === undefined ? {} : { 'data-testid': testId })}
-      className="rounded-[10px] bg-ws-surface p-3 text-sm leading-6 whitespace-pre-wrap text-ws-body"
+      className="rounded-lg bg-ws-surface p-3 text-sm leading-6 whitespace-pre-wrap text-ws-body"
     >
       {children}
     </p>
@@ -229,7 +229,7 @@ function CampaignGroups({ groups }: { groups: unknown[] }): React.ReactNode {
         return (
           <div
             key={`${channel}:${str(g.role_id) ?? ''}`}
-            className="rounded-[10px] bg-ws-surface p-2.5 text-[13px] leading-5"
+            className="rounded-lg bg-ws-surface p-2.5 text-[13px] leading-5"
             data-testid="deck-campaign-group"
           >
             <b>{t('deck.campaign.group', { channel, n: picks.length })}</b>
@@ -349,7 +349,7 @@ function OutboundBody({ card, mode }: { card: DeckCard; mode: DeckContentMode })
       <p
         data-testid="deck-content"
         data-mode={content.mode}
-        className="mt-2.5 rounded-[10px] bg-ws-surface p-3 text-sm leading-6 whitespace-pre-wrap"
+        className="mt-2.5 rounded-lg bg-ws-surface p-3 text-sm leading-6 whitespace-pre-wrap"
       >
         {content.text}
       </p>
@@ -463,7 +463,7 @@ export function DeckCardBody({
         if (payload.form === 'theme_purchase')
           return (
             <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-layout-theme-purchase">
-              <p className="text-2xl font-semibold text-ws-ink">
+              <p className="text-[22px] font-semibold text-ws-ink">
                 {t('themes.purchase.credits', { credits: Number(payload.price_credits ?? 0) })}
               </p>
               <Note testId="deck-reason">{reasonText}</Note>
@@ -600,7 +600,7 @@ export function DeckCardBody({
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-money">
             <div className="flex items-end gap-3.5">
-              <span className="ws-display text-[30px] leading-none" data-testid="deck-money-amount">
+              <span className="ws-display text-[28px] leading-none" data-testid="deck-money-amount">
                 {amount}
               </span>
               <div className="flex-1">
@@ -633,7 +633,7 @@ export function DeckCardBody({
                     onClick={() => {
                       onOption(id)
                     }}
-                    className={`aspect-[4/3] overflow-hidden rounded-[10px] bg-ws-tint ${
+                    className={`aspect-[4/3] overflow-hidden rounded-lg bg-ws-tint ${
                       selected ? 'ring-2 ring-ws-brand' : ''
                     }`}
                   >
@@ -663,7 +663,7 @@ export function DeckCardBody({
         const rows = pairs(payload.facts, lang).concat(pairs(payload.after, lang))
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-aftermath">
-            <div className="rounded-[10px] bg-ws-surface p-3">
+            <div className="rounded-lg bg-ws-surface p-3">
               {rows.length === 0 ? (
                 <p className="text-[13px] text-ws-body">{content.text}</p>
               ) : (
@@ -728,7 +728,7 @@ export function DeckCardBody({
               {note === undefined ? null : (
                 <blockquote
                   data-testid="deck-quote"
-                  className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
+                  className="rounded-lg bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
                 >
                   {note}
                 </blockquote>
@@ -748,7 +748,7 @@ export function DeckCardBody({
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-handoff">
             <blockquote
               data-testid="deck-quote"
-              className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
+              className="rounded-lg bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
             >
               {quote}
             </blockquote>
@@ -776,7 +776,7 @@ export function DeckCardBody({
               type="button"
               data-testid="deck-takeover-open"
               onClick={onOpen}
-              className="inline-flex h-8 w-fit items-center rounded-[10px] bg-ws-brand px-3 text-xs font-medium text-ws-brand-fg"
+              className="inline-flex h-8 w-fit items-center rounded-md bg-ws-brand px-3 text-xs font-medium text-ws-brand-fg"
             >
               {t('deck.takeover.open')}
             </button>

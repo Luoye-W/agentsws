@@ -90,7 +90,7 @@ function ScoreHero({ score, label }: { score: number | undefined; label: string 
     <span className="w-11 shrink-0 text-center" data-testid="kol-card-score">
       <span
         className={cn(
-          'ws-num block text-2xl font-extrabold leading-none tracking-tight',
+          'ws-num block text-[22px] font-extrabold leading-none tracking-tight',
           score === undefined
             ? 'text-muted-foreground'
             : score >= 80
@@ -131,7 +131,7 @@ function Stat({
   const body = (
     <span
       className={cn(
-        'block min-w-0 rounded px-2 py-1.5 text-left',
+        'block min-w-0 rounded-sm px-2 py-1.5 text-left',
         level === undefined ? '' : JUDGEMENT_CELL[level],
       )}
       data-testid="kol-card-stat"
@@ -149,7 +149,7 @@ function Stat({
           <span
             className={cn(
               // 色块只有一两个字（好 / 一般 / 弱），不截——截成「…」就白画了
-              'shrink-0 rounded px-1 text-xs font-bold leading-[1.35]',
+              'shrink-0 rounded-sm px-1 text-xs font-bold leading-[1.35]',
               JUDGEMENT_BADGE[level],
             )}
           >
@@ -204,7 +204,7 @@ export function CreatorCard({
     >
       <button
         type="button"
-        className="flex min-w-0 flex-col gap-2 rounded text-left hover:bg-muted/50"
+        className="flex min-w-0 flex-col gap-2 rounded-sm text-left hover:bg-muted/50"
         data-testid="kol-library-row"
         data-creator={row.creator_id}
         onClick={onOpen}

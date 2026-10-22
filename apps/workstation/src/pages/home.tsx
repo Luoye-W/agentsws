@@ -13,9 +13,14 @@
  * 首页自己不产生数据：数字取自各岗位的固定报表（`/v1/reports/overview`），「要你定」取自卡片队列。
  *
  * 三种模式（决策 222）：同事互联 / 公司集体时，「正在进行」「待认领」照旧接在最下面（个人模式收起）。
+ *
+ * WP456-T8（WP456 §3.13，只改样子、不改数据口径）：节标题、分段切换、一行提醒、空状态、列表组都换成 T2 的共用件；
+ * 岗位卡图标底色一律中性，「还没开工」那几张也是整卡可点（不再各放一颗「开工」主按钮、不再画描边）；
+ * 字号都落在档位上。首页不出现任何决定卡（决策 1497）。
  */
 import { useQuery } from '@tanstack/react-query'
 import {
+  BarChart3,
   CalendarDays,
   ChevronRight,
   HandHeart,
@@ -26,10 +31,21 @@ import {
   Users,
 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useOpenTodos } from '@/components/cal-todo/use-todos'
 import { connectServiceFor } from '@/components/connections/links'
-import { BrandMark, StatusPill, WsCard } from '@/components/design'
+import {
+  BrandMark,
+  EmptyState,
+  ListGroup,
+  ListRow,
+  NoticeLine,
+  SectionHeader,
+  Segmented,
+  SkeletonBar,
+  StatusPill,
+  WsCard,
+} from '@/components/design'
 import { SimpleComposer } from '@/components/free-chat/simple-composer'
 import { useInbox } from '@/components/inbox/inbox-model'
 import { deltaOf, fmtValue } from '@/components/reports/kit/format'
@@ -38,7 +54,6 @@ import { openRightPane } from '@/components/reports/right-pane'
 import { PositionIcon } from '@/components/role-icons/role-icon'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { ComposerDock, DOCK_PAGE } from '@/components/shell/composer-dock'
-import { Skeleton } from '@/components/ui/skeleton'
 import { ClaimPool } from '@/components/work/claim-pool'
 import { InProgressList } from '@/components/work/in-progress-list'
 import {
@@ -75,6 +90,7 @@ function dateLine(now: Date, lang: 'zh' | 'en'): string {
   return `${now.getMonth() + 1} 月 ${now.getDate()} 日 周${wd}`
 }
 
+/** 一节的标题（WP456-T8：T2 的共用节标题，和上一节隔 24）。 */
 function SectionHead({
   title,
   count,
@@ -84,17 +100,7 @@ function SectionHead({
   count?: number
   right?: ReactNode
 }): ReactNode {
-  return (
-    <div className="mt-[30px] mb-3 flex items-center gap-2.5">
-      <h2 className="text-[15px] font-semibold text-ws-ink">{title}</h2>
-      {count === undefined ? null : (
-        <span className="ws-display text-[13px] text-ws-muted-fg">{count}</span>
-      )}
-      {right === undefined ? null : (
-        <div className="ml-auto flex items-center gap-1.5">{right}</div>
-      )}
-    </div>
-  )
+  return <SectionHeader className="mt-6 mb-3" title={title} count={count} actions={right} />
 }
 
 // ── ② 收件箱那一行（WP459，决策 1497）────────────────────────────────
@@ -110,12 +116,8 @@ function InboxLine(): ReactNode {
   if (view === undefined) return null
   const n = view.counts.all
   return (
-    <Link
-      to="/inbox"
-      className="flex items-center gap-3 px-[18px] py-3.5 transition-colors hover:bg-ws-hover"
-      data-testid="home-inbox-line"
-    >
-      <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-ws-tint text-ws-brand-ink">
+    <ListRow to="/inbox" className="py-3" data-testid="home-inbox-line">
+      <span className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-ws-tint text-ws-brand-ink">
         <Inbox aria-hidden className="size-4" />
       </span>
       <b className="shrink-0 text-[14px] font-semibold text-ws-ink" data-testid="home-inbox-count">
@@ -133,8 +135,7 @@ function InboxLine(): ReactNode {
           {t('inbox.home.top', { title: view.brief.top })}
         </span>
       )}
-      <ChevronRight aria-hidden className="size-4 shrink-0 text-ws-faint" />
-    </Link>
+    </ListRow>
   )
 }
 
@@ -156,24 +157,33 @@ function TodoLine(): ReactNode {
     ...(line.unscheduled === 0 ? [] : [t('caltodo.home.undated', { n: line.unscheduled })]),
   ].join(' · ')
   return (
-    <Link
-      to="/planner"
-      className="flex items-center gap-3 border-t border-ws-line px-[18px] py-3.5 transition-colors hover:bg-ws-hover"
-      data-testid="home-todo-line"
-    >
-      <span className="grid size-[30px] shrink-0 place-items-center rounded-[8px] bg-ws-tint text-ws-brand-ink">
+    <ListRow to="/planner" className="py-3" data-testid="home-todo-line">
+      <span className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-ws-tint text-ws-brand-ink">
         <CalendarDays aria-hidden className="size-4" />
       </span>
       <b className="shrink-0 text-[14px] font-semibold text-ws-ink" data-testid="home-todo-count">
         {line.today === 0 ? t('caltodo.home.empty') : t('caltodo.home.line', { n: line.today })}
       </b>
       <span className="min-w-0 flex-1 truncate text-[13px] text-ws-muted-fg">{rest}</span>
-      <ChevronRight aria-hidden className="size-4 shrink-0 text-ws-faint" />
-    </Link>
+    </ListRow>
   )
 }
 
 // ── ③ 关键数字 ───────────────────────────────────────────────────────
+
+/**
+ * 关键数字对应的那个岗位。同一个岗位开了几份（「社媒运营 · 1 / · 2」）时报表那边只给模板 id，
+ * 这时取第一份；都对不上就不写名字（WP456-T8：以前会把 `social-media` 这种内部 id 直接写出来）。
+ */
+function instanceOf(
+  instances: readonly PositionInstanceData[],
+  position: string,
+): PositionInstanceData | undefined {
+  return (
+    instances.find((i) => i.position_id === position) ??
+    instances.find((i) => i.position_id.startsWith(position))
+  )
+}
 
 function KeyNumbers({
   data,
@@ -189,7 +199,7 @@ function KeyNumbers({
   const { t, lang } = useApp()
   const openConnect = useOpenConnect()
   const nameOf = (position: string): string | undefined => {
-    const inst = instances.find((i) => i.position_id === position)
+    const inst = instanceOf(instances, position)
     return inst === undefined ? undefined : lang === 'en' ? inst.name.en : inst.name.zh
   }
   const sentence = data?.sentence
@@ -198,27 +208,17 @@ function KeyNumbers({
       <SectionHead
         title={t('home2.key')}
         right={
-          <div className="inline-flex rounded-[9px] bg-ws-secondary p-0.5">
-            {KEY_RANGES.map((r) => (
-              <button
-                key={r}
-                type="button"
-                aria-pressed={range === r}
-                data-range={r}
-                className={cn(
-                  'rounded-[7px] px-2.5 py-[3px] text-[12px]',
-                  range === r
-                    ? 'bg-ws-card font-semibold text-ws-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
-                    : 'text-ws-muted-fg hover:text-ws-ink',
-                )}
-                onClick={() => {
-                  onRange(r)
-                }}
-              >
-                {t(`home2.key.range.${r}`)}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            size="sm"
+            label={t('home2.key')}
+            value={range}
+            options={KEY_RANGES.map((r) => ({
+              value: r,
+              label: t(`home2.key.range.${r}`),
+              data: { 'data-range': r },
+            }))}
+            onChange={onRange}
+          />
         }
       />
       {sentence === undefined ? null : (
@@ -242,7 +242,7 @@ function KeyNumbers({
           </span>
           <button
             type="button"
-            className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-[12.5px] font-semibold whitespace-nowrap"
+            className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-[13px] font-semibold whitespace-nowrap"
             data-testid="home-key-go"
             onClick={() => {
               openRightPane({ kind: 'report', id: sentence.report_id })
@@ -254,13 +254,13 @@ function KeyNumbers({
         </div>
       )}
       {data !== undefined && data.key.length === 0 ? (
-        <p className="text-[13px] text-ws-muted-fg">{t('home2.key.empty')}</p>
+        <EmptyState icon={BarChart3} text={t('home2.key.empty')} data-testid="home-key-empty" />
       ) : (
         <div className="grid grid-cols-1 gap-3 @md:grid-cols-2 @3xl:grid-cols-4">
           {(data?.key ?? []).map((k) => {
             const m = k.metric
             const d = deltaOf(m)
-            const inst = instances.find((i) => i.position_id === k.position)
+            const inst = instanceOf(instances, k.position)
             return (
               <button
                 key={k.position}
@@ -272,11 +272,11 @@ function KeyNumbers({
                   openRightPane({ kind: 'report', id: k.report_id, position: k.position })
                 }}
               >
-                <span className="truncate text-[12.5px] text-ws-muted-fg">{m.label}</span>
+                <span className="truncate text-[12px] text-ws-muted-fg">{m.label}</span>
                 <span className="mt-1.5 flex items-end justify-between gap-2">
                   <span className="min-w-0">
                     <span
-                      className="ws-display block text-[26px] leading-[1.15] text-ws-ink"
+                      className="ws-display block text-[28px] leading-[1.15] text-ws-ink"
                       data-slot="data"
                     >
                       {fmtValue(m.value, m.format, m.currency ?? 'USD', { full: true })}
@@ -306,7 +306,7 @@ function KeyNumbers({
                       size={13}
                     />
                   )}
-                  {nameOf(k.position) ?? k.position}
+                  {nameOf(k.position) ?? ''}
                   {range === '1d' && m.delta !== undefined ? ` · ${t('home2.key.compare.1d')}` : ''}
                 </span>
               </button>
@@ -315,22 +315,19 @@ function KeyNumbers({
         </div>
       )}
       {data?.missing === undefined ? null : (
-        <p
-          className="mt-2.5 flex items-center gap-2 px-1 text-[12.5px] text-ws-muted-fg"
+        <NoticeLine
+          className="mt-3"
+          icon={Plug}
           data-testid="home-key-missing"
-        >
-          <Plug aria-hidden className="size-3.5" />
-          {t('home2.missing', { label: spaced(data.missing.label), unlocks: data.missing.unlocks })}
-          <button
-            type="button"
-            className="ml-1 font-semibold text-ws-brand-ink hover:underline"
-            onClick={() => {
+          action={{
+            label: t('home2.missing.go'),
+            onClick: () => {
               openConnect(connectServiceFor(data.missing?.source))
-            }}
-          >
-            {t('home2.missing.go')}
-          </button>
-        </p>
+            },
+          }}
+        >
+          {t('home2.missing', { label: spaced(data.missing.label), unlocks: data.missing.unlocks })}
+        </NoticeLine>
       )}
     </section>
   )
@@ -357,7 +354,8 @@ function PositionTile({
   const name = lang === 'en' ? inst.name.en : inst.name.zh
   const d = m === undefined ? undefined : deltaOf(m)
   const icon = (
-    <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-ws-tint text-ws-brand-ink">
+    // WP456-T8（§3.13）：岗位靠图标区分，底色一律中性
+    <span className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-ws-secondary text-ws-body">
       <PositionIcon
         position_id={inst.position_id}
         icon={inst.icon}
@@ -366,32 +364,39 @@ function PositionTile({
       />
     </span>
   )
+  // 整卡可点（键盘回车也行）；卡上不再放按钮（§3.13：8 张卡 8 颗一样的按钮去掉）
+  const clickable =
+    to === undefined
+      ? {}
+      : {
+          role: 'link',
+          tabIndex: 0,
+          onClick: go,
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter') go()
+          },
+        }
   if (idle)
     return (
-      <div
-        className="flex min-h-[168px] flex-col gap-2.5 rounded-[16px] px-[18px] pt-4 pb-3.5 shadow-[inset_0_0_0_1px_var(--ws-line)]"
+      <WsCard
+        className={cn(
+          'flex min-h-[168px] flex-col gap-2.5 px-[18px] pt-4 pb-3.5',
+          to !== undefined && 'cursor-pointer hover:shadow-[var(--ws-shadow-hover)]',
+        )}
         data-testid="position-card"
         data-position={inst.position_id}
         data-state="idle"
+        {...clickable}
       >
         <div className="flex items-center gap-2.5">
           {icon}
-          <b className="text-[14px] font-semibold">{name}</b>
+          <b className="truncate text-[14px] font-semibold">{name}</b>
           <StatusPill tone="neutral" className="ml-auto">
             {t('home2.pos.idle')}
           </StatusPill>
         </div>
-        <p className="text-[12.5px] text-ws-muted-fg">{t('home2.pos.idle.line')}</p>
-        {to === undefined ? null : (
-          <button
-            type="button"
-            className="mt-auto h-[30px] self-start rounded-[8px] bg-ws-brand px-3 text-[13px] font-medium text-ws-brand-fg hover:brightness-95"
-            onClick={go}
-          >
-            {t('home2.pos.start')}
-          </button>
-        )}
-      </div>
+        <p className="text-[13px] text-ws-muted-fg">{t('home2.pos.idle.line')}</p>
+      </WsCard>
     )
   return (
     <WsCard
@@ -399,7 +404,7 @@ function PositionTile({
       data-testid="position-card"
       data-position={inst.position_id}
       data-state={inst.pending_cards > 0 && inst.open_matters === 0 ? 'waiting' : 'running'}
-      onClick={go}
+      {...clickable}
     >
       <div className="flex items-center gap-2.5">
         {icon}
@@ -428,7 +433,7 @@ function PositionTile({
           <div className="min-w-0">
             <p className="truncate text-xs text-ws-muted-fg">{headline.headline_label}</p>
             <p className="flex items-baseline gap-1.5">
-              <span className="ws-display text-[21px] leading-tight text-ws-ink" data-slot="data">
+              <span className="ws-display text-[22px] leading-tight text-ws-ink" data-slot="data">
                 {fmtValue(m.value, m.format, m.currency ?? 'USD')}
               </span>
               {d === undefined ? null : <Delta {...d} />}
@@ -441,7 +446,7 @@ function PositionTile({
           )}
         </div>
       ) : (
-        <p className="text-[12.5px] text-ws-muted-fg">{headline?.headline.note ?? ''}</p>
+        <p className="text-[13px] text-ws-muted-fg">{headline?.headline.note ?? ''}</p>
       )}
       <p
         className="mt-auto border-t border-ws-line pt-2.5 text-[12px] text-ws-muted-fg"
@@ -469,21 +474,25 @@ function TeamSections({ solo }: { solo: boolean }): ReactNode {
   const busy = (board.data?.items.length ?? 0) > 0
   if (solo && !showClaimPool) return null
   return (
-    <div className="mt-[30px] grid gap-3 lg:grid-cols-2">
+    <div className="mt-6 grid gap-3 lg:grid-cols-2">
       {solo ? null : (
         <WsCard className="p-4" data-testid="home-inprogress">
-          <h3
-            className="mb-2 flex items-center gap-1.5 text-sm font-medium"
+          <SectionHeader
+            as="h3"
+            className="mb-2"
             data-testid="home-inprogress-title"
-          >
-            <Users className="size-4" aria-hidden />
-            {t('home.inprogress')}
-            {busy ? <BrandMark size={14} motion="breathe" label={t('brand.busy')} /> : null}
-          </h3>
+            title={
+              <>
+                <Users className="size-4 text-ws-muted-fg" aria-hidden />
+                {t('home.inprogress')}
+                {busy ? <BrandMark size={14} motion="breathe" label={t('brand.busy')} /> : null}
+              </>
+            }
+          />
           {board.isPending ? (
-            <Skeleton className="h-12 w-full" />
+            <SkeletonBar className="h-12 w-full" />
           ) : board.error !== null ? (
-            <p className="text-sm text-muted-foreground">{t('inprogress.empty')}</p>
+            <EmptyState text={t('inprogress.empty')} />
           ) : (
             <InProgressList items={board.data.items} />
           )}
@@ -491,10 +500,16 @@ function TeamSections({ solo }: { solo: boolean }): ReactNode {
       )}
       {showClaimPool ? (
         <WsCard className="p-4" data-testid="home-claim-pool">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-            <HandHeart className="size-4" aria-hidden />
-            {t('home.claim_pool')}
-          </h3>
+          <SectionHeader
+            as="h3"
+            className="mb-2"
+            title={
+              <>
+                <HandHeart className="size-4 text-ws-muted-fg" aria-hidden />
+                {t('home.claim_pool')}
+              </>
+            }
+          />
           <ClaimPool />
         </WsCard>
       ) : null}
@@ -529,7 +544,21 @@ export function HomePage(): ReactNode {
   const only = instances?.length === 1 ? instances[0] : undefined
   const onlyTo = only?.roles.map((r) => r.my_assignment_id).find((x) => x !== undefined)
 
-  if (home.isPending) return <Skeleton className="h-64 w-full" />
+  // 加载中：和真内容一样排（问候一行 + 两行列表），不铺一整块灰
+  if (home.isPending)
+    return (
+      <div
+        className="mx-auto flex w-full max-w-[1040px] flex-col gap-3 pt-2"
+        data-testid="home-loading"
+      >
+        <SkeletonBar className="h-7 w-56" />
+        <SkeletonBar className="h-4 w-80" />
+        <div className="mt-6 flex flex-col gap-3">
+          <SkeletonBar className="h-[104px] w-full rounded-2xl" />
+          <SkeletonBar className="h-32 w-full rounded-2xl" />
+        </div>
+      </div>
+    )
   if (onlyTo !== undefined) return <Navigate to={`/positions/${onlyTo}`} replace />
   if (home.error !== null) {
     return (
@@ -550,10 +579,10 @@ export function HomePage(): ReactNode {
     <div className={cn(DOCK_PAGE, '@container mx-auto w-full max-w-[1040px]')} data-testid="home">
       {/* ① 问候 + 一行概况（输入框换成 WP437 的简易对话框，悬浮在页面底部居中） */}
       <header className="pt-2" data-testid="home-header">
-        <h1 className="ws-display text-[28px] text-ws-ink">
+        <h1 className="ws-display text-ws-big text-ws-ink">
           {name === '' ? t('home.headline') : t(helloKey(now), { name })}
         </h1>
-        <p className="mt-1 text-[13.5px] text-ws-muted-fg" data-testid="home-line">
+        <p className="mt-1 text-[13px] text-ws-muted-fg" data-testid="home-line">
           {t('home2.line', {
             date: dateLine(now, lang),
             done,
@@ -576,10 +605,10 @@ export function HomePage(): ReactNode {
       </header>
 
       {/* ② 收件箱那一行（WP459：首页不再列决策卡）+ 今天的待办那一行（WP469） */}
-      <div className="ws-card mt-[30px] overflow-hidden" data-testid="home-lines">
+      <ListGroup className="mt-6" data-testid="home-lines">
         <InboxLine />
         <TodoLine />
-      </div>
+      </ListGroup>
 
       {/* ③ 关键数字：一句话 + 4 个数（点了在第三栏打开那份报表） */}
       <KeyNumbers data={overview.data} range={range} onRange={setRange} instances={insts} />
@@ -592,7 +621,7 @@ export function HomePage(): ReactNode {
             right={
               <button
                 type="button"
-                className="inline-flex items-center gap-1 text-[12.5px] text-ws-muted-fg hover:text-ws-ink"
+                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] text-ws-muted-fg hover:bg-ws-hover hover:text-ws-ink"
                 onClick={() => {
                   document
                     .querySelector<HTMLButtonElement>('[data-testid="rail-new-position-plus"]')

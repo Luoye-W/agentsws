@@ -246,7 +246,7 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
       )}
       {d.expiring === true ? (
         <p
-          className="flex items-center gap-1.5 text-[12.5px] text-ws-warn"
+          className="flex items-center gap-1.5 text-[13px] text-ws-warn"
           data-testid="service-order-expiring"
         >
           <AlertTriangle aria-hidden className="size-3.5" />
@@ -259,12 +259,12 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
         </p>
       )}
       {o.dispute?.note === undefined ? null : (
-        <p className="text-[12.5px] text-ws-body">
+        <p className="text-[13px] text-ws-body">
           {t('svc.order.dispute_note', { note: o.dispute.note })}
         </p>
       )}
       {open && o.contact?.status === 'accepted' && o.contact.provider_contact !== undefined ? (
-        <p className="text-[12.5px] text-ws-body">
+        <p className="text-[13px] text-ws-body">
           {t('svc.order.contact', {
             kind: t(`svc.contact.${o.contact.provider_contact.kind}`),
             value: o.contact.provider_contact.value,
@@ -282,7 +282,7 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
           </div>
           <ul className="flex flex-col gap-0.5">
             {files.map((f) => (
-              <li key={f.id} className="flex items-center gap-1.5 text-[12.5px]">
+              <li key={f.id} className="flex items-center gap-1.5 text-[13px]">
                 <span className="min-w-0 flex-1 truncate text-ws-ink" title={f.name}>
                   {f.name}
                 </span>

@@ -63,7 +63,7 @@ export function RecallCards({
               data-testid="recall-card"
               data-matter={c.matter_id}
               disabled={restore.isPending || restored}
-              className="flex w-full flex-col gap-1 rounded-[10px] border border-ws-line bg-ws-card p-2.5 text-left shadow-ws transition-shadow hover:shadow-ws-hover disabled:opacity-70"
+              className="flex w-full flex-col gap-1 rounded-lg border border-ws-line bg-ws-card p-2.5 text-left shadow-ws transition-shadow hover:shadow-ws-hover disabled:opacity-70"
               onClick={() => {
                 restore.mutate(c.matter_id)
               }}

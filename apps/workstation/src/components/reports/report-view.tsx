@@ -50,7 +50,7 @@ function RangePills({
   const { t } = useApp()
   return (
     <div
-      className="inline-flex rounded-[9px] bg-ws-secondary p-0.5"
+      className="inline-flex rounded-md bg-ws-secondary p-0.5"
       title={t('report.range')}
       data-testid="report-ranges"
     >
@@ -61,7 +61,7 @@ function RangePills({
           aria-pressed={value === r}
           data-range={r}
           className={cn(
-            'rounded-[7px] px-2.5 py-[3px] text-[12px]',
+            'rounded-md px-2.5 py-[3px] text-[12px]',
             value === r
               ? 'bg-ws-card font-semibold text-ws-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
               : 'text-ws-muted-fg hover:text-ws-ink',
@@ -114,7 +114,7 @@ function MoreMenu({
         title={t('report.menu')}
         aria-expanded={open}
         data-testid="report-more"
-        className="grid size-7 place-items-center rounded-[7px] text-ws-muted-fg hover:bg-ws-secondary hover:text-ws-ink"
+        className="grid size-7 place-items-center rounded-md text-ws-muted-fg hover:bg-ws-secondary hover:text-ws-ink"
         onClick={() => {
           setOpen(!open)
         }}
@@ -224,7 +224,7 @@ function AskBox({
           placeholder={t(data.origin === 'ai' ? 'report.ask.revise' : 'report.ask.new')}
           aria-label={t('report.ask')}
           data-testid="report-ask-input"
-          className="min-w-0 flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-ws-faint"
+          className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ws-faint"
           onChange={(e) => {
             setText(e.target.value)
           }}
@@ -243,7 +243,7 @@ function AskBox({
         </button>
       </div>
       {answer === undefined ? null : (
-        <p className="mt-2 text-[12.5px] text-ws-muted-fg" role="status">
+        <p className="mt-2 text-[13px] text-ws-muted-fg" role="status">
           {answer}
         </p>
       )}
@@ -316,10 +316,10 @@ export function ReportView({
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-ws-line px-3">
         {/* int/1024：收起用第三栏宿主头上那颗 ×（WP437），这里不再另放一颗 */}
         {info.name === undefined ? null : (
-          <span className="shrink-0 px-1 text-[12.5px] text-ws-muted-fg">{info.name}</span>
+          <span className="shrink-0 px-1 text-[13px] text-ws-muted-fg">{info.name}</span>
         )}
         <div
-          className="flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-[9px] bg-ws-secondary/60 p-0.5"
+          className="flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-md bg-ws-secondary/60 p-0.5"
           role="tablist"
           data-testid="report-tabs"
         >
@@ -332,7 +332,7 @@ export function ReportView({
               data-testid="report-tab"
               data-id={r.id}
               className={cn(
-                'flex shrink-0 items-center gap-1 rounded-[7px] px-2.5 py-1 text-[12.5px] whitespace-nowrap',
+                'flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-[13px] whitespace-nowrap',
                 r.id === id
                   ? 'bg-ws-card font-semibold text-ws-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
                   : 'text-ws-muted-fg hover:text-ws-ink',
@@ -356,7 +356,7 @@ export function ReportView({
             type="button"
             data-testid="report-ask-open"
             aria-pressed={asking}
-            className="inline-flex h-7 items-center gap-1 rounded-[7px] px-2 text-[12.5px] text-ws-body hover:bg-ws-secondary"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-ws-body hover:bg-ws-secondary"
             onClick={() => {
               setAsking(!asking)
             }}
@@ -371,7 +371,7 @@ export function ReportView({
               title={t('report.unpin')}
               data-testid="report-unpin"
               disabled={unpin.isPending}
-              className="grid size-7 place-items-center rounded-[7px] text-ws-brand hover:bg-ws-secondary"
+              className="grid size-7 place-items-center rounded-md text-ws-brand hover:bg-ws-secondary"
               onClick={() => {
                 unpin.mutate()
               }}
@@ -403,10 +403,10 @@ export function ReportView({
             <>
               <header className="flex flex-wrap items-end gap-4 pb-1">
                 <div className="min-w-0">
-                  <h1 className="ws-display text-[24px] text-ws-ink" data-testid="report-title">
+                  <h1 className="ws-display text-[22px] text-ws-ink" data-testid="report-title">
                     {data.title}
                   </h1>
-                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] text-ws-muted-fg">
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ws-muted-fg">
                     {data.origin === 'ai' && data.created !== undefined ? (
                       <>
                         <AiTag />

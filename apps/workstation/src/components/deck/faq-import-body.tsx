@@ -38,7 +38,7 @@ function Preview({ rows }: { rows: { question: string; answer: string }[] }): Re
   if (rows.length === 0) return null
   return (
     <div
-      className="flex flex-col gap-1.5 rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5"
+      className="flex flex-col gap-1.5 rounded-lg bg-ws-surface p-3 text-[13px] leading-5"
       data-testid="faq-preview"
     >
       {rows.map((r) => (
@@ -100,7 +100,7 @@ export function FaqImportBody({ payload }: { payload: FaqImportPayload }): React
       <Preview rows={payload.preview} />
       {change === undefined ? null : (
         <div
-          className="flex flex-col gap-1 rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5"
+          className="flex flex-col gap-1 rounded-lg bg-ws-surface p-3 text-[13px] leading-5"
           data-testid="faq-change"
         >
           <p className="truncate font-medium text-ws-ink">{change.question}</p>

@@ -745,7 +745,7 @@ export function MatterPage(): ReactNode {
         {/* WP207：归档的事照样能看；一句话 + 一个「放回左栏」 */}
         {view.matter.archived_at === undefined ? null : (
           <div
-            className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] bg-ws-tint/60 px-3 py-2 text-[13px]"
+            className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-ws-tint/60 px-3 py-2 text-[13px]"
             data-testid="matter-archived"
           >
             <Archive aria-hidden className="size-3.5 text-ws-muted-fg" />
@@ -824,7 +824,7 @@ export function MatterPage(): ReactNode {
           {running ? <RunningEntry live={live} roleId={roleId} roleName={roleName} /> : null}
           {closed ? (
             <div
-              className="flex items-center justify-center gap-2 text-[12.5px] text-ws-muted-fg"
+              className="flex items-center justify-center gap-2 text-[13px] text-ws-muted-fg"
               data-testid="matter-closed-line"
             >
               <CircleCheck aria-hidden className="size-3.5 text-ws-good" />
@@ -838,7 +838,7 @@ export function MatterPage(): ReactNode {
           testId="matter-dock"
           above={
             say.error === null ? null : (
-              <p role="alert" className="text-center text-[12.5px] text-destructive">
+              <p role="alert" className="text-center text-[13px] text-destructive">
                 {say.error.message}
               </p>
             )

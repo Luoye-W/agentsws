@@ -229,7 +229,7 @@ export function DutyPage(): React.ReactNode {
                 <Link
                   to={`/positions/${encodeURIComponent(assignment)}`}
                   data-testid="duty-breadcrumb"
-                  className="shrink-0 truncate rounded-md px-1.5 py-1 text-[13.5px] text-ws-muted-fg hover:bg-foreground/[0.06] hover:text-foreground"
+                  className="shrink-0 truncate rounded-md px-1.5 py-1 text-[13px] text-ws-muted-fg hover:bg-foreground/[0.06] hover:text-foreground"
                 >
                   {positionName === '' ? t('nav.positions') : positionName}
                 </Link>

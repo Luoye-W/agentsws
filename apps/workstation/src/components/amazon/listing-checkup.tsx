@@ -72,7 +72,7 @@ function IssueRow({ issue }: { issue: ListingIssue }): ReactNode {
         )}
         {issue.rule_stale ? (
           <span
-            className="rounded bg-ws-warn-bg px-1.5 text-xs text-ws-warn"
+            className="rounded-sm bg-ws-warn-bg px-1.5 text-xs text-ws-warn"
             data-testid="alst-stale"
             title={t('alst.stale.hint', { at: issue.rule_checked_at })}
           >
@@ -80,7 +80,7 @@ function IssueRow({ issue }: { issue: ListingIssue }): ReactNode {
           </span>
         ) : null}
         {issue.needs_human === true ? (
-          <span className="rounded bg-muted px-1.5 text-xs text-muted-foreground">
+          <span className="rounded-sm bg-muted px-1.5 text-xs text-muted-foreground">
             {t('alst.human')}
           </span>
         ) : null}

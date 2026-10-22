@@ -102,7 +102,7 @@ export function LoginPage(): React.ReactNode {
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
       <div className="mb-5 flex items-center justify-center gap-2.5" data-testid="login-brand">
         <BrandMark size={32} motion="idle" />
-        <span className="ws-display text-[18px]">{t('app.title')}</span>
+        <span className="ws-display text-base">{t('app.title')}</span>
       </div>
       <Card>
         <CardHeader>

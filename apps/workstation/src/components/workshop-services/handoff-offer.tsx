@@ -42,7 +42,7 @@ export function WorkshopHandoff({
         : t('svc.offer.from', { credits: creditsText(offer.from_credits, lang) })
   return (
     <div
-      className="mt-2 flex items-center gap-1.5 text-[12.5px]"
+      className="mt-2 flex items-center gap-1.5 text-[13px]"
       data-testid="setup-workshop-handoff"
     >
       <button

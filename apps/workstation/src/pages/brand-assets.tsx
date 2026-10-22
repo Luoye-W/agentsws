@@ -75,7 +75,7 @@ export function BrandAssetsPage(): ReactNode {
       data-testid="brand-assets-page"
     >
       <header className="flex items-center gap-2">
-        <h1 className="flex items-center gap-1 text-lg font-semibold text-ws-ink">
+        <h1 className="flex items-center gap-1 text-base font-semibold text-ws-ink">
           {t('assets.title')}
           <Hint text={t('assets.hint')} testId="brand-assets-hint" />
         </h1>
@@ -114,7 +114,7 @@ export function BrandAssetsPage(): ReactNode {
               setFilter(f)
             }}
             className={cn(
-              'h-7 rounded-full px-3 text-[12.5px]',
+              'h-7 rounded-full px-3 text-[13px]',
               filter === f
                 ? 'bg-ws-ink text-ws-paper'
                 : 'bg-ws-surface text-ws-body ring-1 ring-ws-line hover:bg-muted',
@@ -125,7 +125,7 @@ export function BrandAssetsPage(): ReactNode {
         ))}
       </div>
       {problem === undefined ? null : (
-        <p role="alert" className="text-[12.5px] text-destructive">
+        <p role="alert" className="text-[13px] text-destructive">
           {problem}
         </p>
       )}
@@ -268,7 +268,7 @@ function AssetDetail({ row }: { row: BrandAssetRow }): ReactNode {
         alt={row.source_label}
         className="w-full rounded-xl object-contain"
       />
-      <dl className="grid grid-cols-[72px_minmax(0,1fr)] gap-x-2 gap-y-1.5 text-[12.5px]">
+      <dl className="grid grid-cols-[72px_minmax(0,1fr)] gap-x-2 gap-y-1.5 text-[13px]">
         {rows.map(([k, v]) => (
           <div key={k} className="contents">
             <dt className="text-ws-muted-fg">{k}</dt>
@@ -277,7 +277,7 @@ function AssetDetail({ row }: { row: BrandAssetRow }): ReactNode {
         ))}
       </dl>
       {p.prompt === undefined ? null : (
-        <details className="text-[12.5px]">
+        <details className="text-[13px]">
           <summary className="cursor-pointer text-ws-muted-fg">{t('assets.detail.prompt')}</summary>
           <p className="mt-1 whitespace-pre-wrap break-words text-ws-body">{p.prompt}</p>
         </details>

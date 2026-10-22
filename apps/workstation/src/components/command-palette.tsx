@@ -90,7 +90,7 @@ export { shortAgo } from '@/lib/short-ago'
 
 /** 搜索弹窗里一行的样子（照 Claude：左图标、标题、右边灰字）。 */
 // 最后那个是 cmdk 行自带的勾（这里用不着，不占位）
-const ROW = 'gap-2.5 rounded-lg! px-2.5 py-2 text-[13.5px] [&>svg:last-child]:hidden'
+const ROW = 'gap-2.5 rounded-lg! px-2.5 py-2 text-[13px] [&>svg:last-child]:hidden'
 const ROW_ICON = 'size-4 shrink-0 text-ws-muted-fg'
 const ROW_RIGHT = 'ml-auto shrink-0 pl-3 text-[12px] text-ws-muted-fg'
 
@@ -447,7 +447,7 @@ export function CommandPalette({
             placeholder={t('search.placeholder')}
             value={search}
             onValueChange={setSearch}
-            className="h-full w-full bg-transparent text-[15px] outline-hidden placeholder:text-ws-muted-fg"
+            className="h-full w-full bg-transparent text-[14px] outline-hidden placeholder:text-ws-muted-fg"
           />
         </div>
         <CommandList className="max-h-[min(60vh,440px)] p-1.5">
@@ -813,13 +813,13 @@ export function CommandPalette({
           data-testid="search-footer"
         >
           <span className="inline-flex items-center gap-1">
-            <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-ws-line px-1 font-sans">
+            <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-ws-line px-1 font-sans">
               <CornerDownLeft aria-hidden className="size-3" />
             </kbd>
             {t('search.open')}
           </span>
           <span className="inline-flex items-center gap-1">
-            <kbd className="inline-flex h-5 items-center justify-center rounded border border-ws-line px-1 font-sans text-ws-tiny">
+            <kbd className="inline-flex h-5 items-center justify-center rounded-sm border border-ws-line px-1 font-sans text-ws-tiny">
               Esc
             </kbd>
             {t('search.close')}

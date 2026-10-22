@@ -107,7 +107,7 @@ function PersonaBody({
         {/* WP421（自查 general）：「包里自带」不上屏；只有公司改写过的标一下 */}
         {view.overridden ? (
           <span
-            className="rounded border px-1 py-0.5 text-xs text-muted-foreground"
+            className="rounded-sm border px-1 py-0.5 text-xs text-muted-foreground"
             data-testid="role-source"
           >
             {t('rail.role.overridden')}
@@ -115,7 +115,7 @@ function PersonaBody({
         ) : null}
         {untranslated ? (
           <span
-            className="inline-flex items-center gap-1 rounded border px-1 py-0.5 text-xs text-muted-foreground"
+            className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-xs text-muted-foreground"
             data-testid="role-untranslated"
           >
             <Languages aria-hidden className="size-3" />

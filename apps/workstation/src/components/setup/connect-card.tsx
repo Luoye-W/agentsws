@@ -44,7 +44,7 @@ function NeedRow({
   const done = connected === true && need.state !== 'reauth'
   return (
     <li
-      className="flex flex-col gap-2 rounded-[10px] border border-ws-line bg-ws-card p-2.5"
+      className="flex flex-col gap-2 rounded-lg border border-ws-line bg-ws-card p-2.5"
       data-testid="setup-need"
       data-service={need.service ?? ''}
       data-connected={connected === undefined ? 'unknown' : String(connected)}

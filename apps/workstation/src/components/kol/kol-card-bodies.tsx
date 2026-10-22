@@ -44,7 +44,7 @@ export function KolOutreachBody({ payload }: { payload: unknown }): React.ReactN
           ))}
         </ul>
       )}
-      <div className="rounded-[10px] bg-ws-surface p-3 text-sm leading-6 text-ws-body">
+      <div className="rounded-lg bg-ws-surface p-3 text-sm leading-6 text-ws-body">
         {subject === undefined ? null : (
           <p className="font-medium" data-testid="kol-outreach-subject">
             {subject}

@@ -5,13 +5,14 @@
  * - {@link TopicDivider}：换了话题，一条淡线 + 上一个话题的一行小结（悬停看整段小结）；
  * - {@link HistorySearch}：顶部搜索（搜以前聊过的原话与小结，点一条跳到那里）；
  * - {@link NewTopicButton}：「换个话题」；
+ *   WP456-T8（§3.7）：搜索、换个话题都是顶栏右边那排图标钮（悬停出字）；
  * - {@link RecalledRefs}：助理翻了以前聊过的，回复下面一排出处（点了跳过去）；
  * - {@link ModelSwitchDivider}：WP373，换了模型那一句「上面是 X 答的，接下来用 Y」。
  */
 import { useQuery } from '@tanstack/react-query'
-import { MessageSquarePlus, Search, X } from 'lucide-react'
+import { History, MessageSquarePlus, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { TOPBAR_ICON, TOPBAR_ICON_IDLE } from '@/components/shell/top-bar-slots'
 import { useApp } from '@/lib/app-context'
 import {
   type AssistantHistoryHit,
@@ -19,6 +20,7 @@ import {
   type FreeChatMessage,
   searchAssistantHistory,
 } from '@/lib/free-chat'
+import { cn } from '@/lib/utils'
 
 /** 本地日历日（分天用）。 */
 export const dayOf = (at: string): string => {
@@ -81,16 +83,17 @@ export function NewTopicButton({
 }): React.ReactNode {
   const { t } = useApp()
   return (
-    <Button
-      size="xs"
-      variant="ghost"
+    <button
+      type="button"
       data-testid="assistant-new-topic"
+      title={t('assistant.topic.new')}
+      aria-label={t('assistant.topic.new')}
+      className={cn(TOPBAR_ICON, TOPBAR_ICON_IDLE, 'disabled:opacity-40')}
       onClick={onClick}
       disabled={disabled === true}
     >
-      <MessageSquarePlus aria-hidden />
-      {t('assistant.topic.new')}
-    </Button>
+      <MessageSquarePlus aria-hidden className="size-4" />
+    </button>
   )
 }
 
@@ -121,15 +124,17 @@ export function HistorySearch({
   })
   if (!open)
     return (
-      <Button
-        size="xs"
-        variant="ghost"
+      <button
+        type="button"
         aria-label={t('assistant.search')}
+        title={t('assistant.search')}
         data-testid="assistant-search"
+        className={cn(TOPBAR_ICON, TOPBAR_ICON_IDLE)}
         onClick={() => setOpen(true)}
       >
-        <Search aria-hidden />
-      </Button>
+        {/* 顶栏左边已经有一颗放大镜（全局搜索），这颗用「历史」区分开 */}
+        <History aria-hidden className="size-4" />
+      </button>
     )
   const close = (): void => {
     setOpen(false)
@@ -137,8 +142,8 @@ export function HistorySearch({
     setQ('')
   }
   return (
-    <div className="relative w-full max-w-sm" data-testid="assistant-search-box">
-      <div className="flex items-center gap-1.5 rounded-lg border bg-ws-card px-2 py-1">
+    <div className="relative w-64" data-testid="assistant-search-box">
+      <div className="flex h-7 items-center gap-1.5 rounded-md bg-ws-card px-2 shadow-[inset_0_0_0_1px_var(--ws-line-strong)]">
         <Search aria-hidden className="size-3.5 text-muted-foreground" />
         <input
           ref={input}
@@ -151,13 +156,18 @@ export function HistorySearch({
           className="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
           data-testid="assistant-search-input"
         />
-        <button type="button" aria-label={t('answer.close')} onClick={close}>
+        <button
+          type="button"
+          aria-label={t('answer.close')}
+          title={t('answer.close')}
+          onClick={close}
+        >
           <X aria-hidden className="size-3.5 text-muted-foreground" />
         </button>
       </div>
       {q.length < 2 ? null : (
         <div
-          className="absolute top-full right-0 left-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border bg-ws-card p-1 shadow-ws"
+          className="absolute top-full right-0 z-50 mt-1 max-h-80 w-80 overflow-y-auto rounded-xl bg-ws-pop p-1 shadow-ws-pop"
           data-testid="assistant-search-results"
         >
           {(hits.data ?? []).length === 0 ? (

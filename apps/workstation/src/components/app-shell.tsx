@@ -823,7 +823,7 @@ export function AppShell({
                 {iconRail || (undo === undefined && undoError === undefined) ? null : (
                   <div
                     role="status"
-                    className="mt-2 flex items-center gap-2 rounded-[10px] bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
+                    className="mt-2 flex items-center gap-2 rounded-lg bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
                     data-testid="rail-undo"
                   >
                     <span className="min-w-0 flex-1 truncate">
@@ -917,7 +917,7 @@ export function AppShell({
                     />
                     {topBar.claimed || pageName === undefined ? null : (
                       <span
-                        className="truncate px-1.5 text-[13.5px] font-medium"
+                        className="truncate px-1.5 text-[13px] font-medium"
                         data-testid="top-bar-page-name"
                       >
                         {t(pageName)}

@@ -151,7 +151,7 @@ export function MeBubble({
     >
       <div
         className={cn(
-          'rounded-[18px_18px_6px_18px] bg-secondary px-3.5 py-2.5 text-[14.5px] leading-[1.6] break-words whitespace-pre-wrap text-ws-ink',
+          'rounded-[18px_18px_6px_18px] bg-secondary px-3.5 py-2.5 text-[14px] leading-[1.6] break-words whitespace-pre-wrap text-ws-ink',
           long && !open && 'line-clamp-6',
           queued && 'opacity-70',
         )}
@@ -284,7 +284,7 @@ export function AiShell({
               type="button"
               aria-label={copied ? t('matter.copied') : t('matter.copy')}
               title={copied ? t('matter.copied') : t('matter.copy')}
-              className="grid size-[22px] place-items-center rounded-[7px] hover:bg-muted hover:text-ws-ink"
+              className="grid size-[22px] place-items-center rounded-md hover:bg-muted hover:text-ws-ink"
               onClick={() => {
                 void globalThis.navigator?.clipboard?.writeText(copyText).then(
                   () => {
@@ -388,7 +388,7 @@ export function PreviewCard({
           onClick={() => {
             setDiff((v) => !v)
           }}
-          className="ws-link-muted ml-auto inline-flex items-center gap-1 text-[12.5px]"
+          className="ws-link-muted ml-auto inline-flex items-center gap-1 text-[13px]"
         >
           <FileCode aria-hidden className="size-3" />
           {t('matter.preview.diff')}
@@ -450,7 +450,7 @@ export function AiEntry({
       {...(text === '' ? {} : { copyText: text })}
     >
       {item.event === undefined ? (
-        <p className="text-[14.5px] leading-[1.7] text-ws-ink">{t('matter.preview.lead')}</p>
+        <p className="text-[14px] leading-[1.7] text-ws-ink">{t('matter.preview.lead')}</p>
       ) : null}
       {card}
       {text === '' ? null : (
@@ -478,7 +478,7 @@ export function AiEntry({
               onClick={() => {
                 setOpen((v) => !v)
               }}
-              className="mt-1.5 inline-flex h-[26px] items-center gap-1 rounded-full bg-ws-card px-2.5 text-[12.5px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:text-ws-ink"
+              className="mt-1.5 inline-flex h-[26px] items-center gap-1 rounded-full bg-ws-card px-2.5 text-[13px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:text-ws-ink"
             >
               {open ? (
                 <ChevronUp aria-hidden className="size-3" />
@@ -514,7 +514,7 @@ function StepList({ steps, live = false }: { steps: MatterRunStep[]; live?: bool
   const { t } = useApp()
   return (
     <ul
-      className="w-full max-w-[560px] rounded-xl bg-ws-surface px-3 py-2 text-[12.5px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)]"
+      className="w-full max-w-[560px] rounded-xl bg-ws-surface px-3 py-2 text-[13px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)]"
       data-testid="matter-steps"
     >
       {steps.map((s, i) => (
@@ -641,7 +641,7 @@ export function SysLine({
       )
     const options = (e.route?.options ?? []).filter((o) => o.role_id !== currentRole)
     detail = (
-      <div className="flex max-w-[560px] flex-col items-center gap-2 text-center text-[12.5px] text-ws-body">
+      <div className="flex max-w-[560px] flex-col items-center gap-2 text-center text-[13px] text-ws-body">
         {name === undefined || e.route?.task === true ? null : <p>{e.text}</p>}
         {onRoute === undefined || options.length === 0 ? null : (
           <div className="flex flex-wrap justify-center gap-1.5" data-testid="matter-route-options">
@@ -700,7 +700,7 @@ export function SysLine({
           onClick={() => {
             setOpen((v) => !v)
           }}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[12.5px] text-ws-muted-fg enabled:hover:bg-muted enabled:hover:text-ws-body disabled:cursor-default"
+          className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[13px] text-ws-muted-fg enabled:hover:bg-muted enabled:hover:text-ws-body disabled:cursor-default"
         >
           <Icon aria-hidden className={cn('size-3.5 shrink-0', tone)} />
           <span className="truncate">{text}</span>
@@ -715,7 +715,7 @@ export function SysLine({
           <button
             type="button"
             data-testid="matter-route-switch"
-            className="text-[12.5px] text-ws-muted-fg underline-offset-2 hover:text-ws-ink hover:underline"
+            className="text-[13px] text-ws-muted-fg underline-offset-2 hover:text-ws-ink hover:underline"
             onClick={() => {
               setOpen(true)
             }}
@@ -831,7 +831,7 @@ export function RunningEntry({
         {/* WP287：AI 边做边说的话，流式出现在线程里（跑完以时间线上那条为准） */}
         {live?.text === undefined ? null : (
           <p
-            className="mt-1.5 max-w-[640px] text-[14.5px] leading-[1.7] whitespace-pre-wrap text-ws-ink"
+            className="mt-1.5 max-w-[640px] text-[14px] leading-[1.7] whitespace-pre-wrap text-ws-ink"
             data-testid="matter-running-text"
           >
             {live.text}
@@ -862,7 +862,7 @@ export function BlockedCard({
   const what = event.blocked?.connections.join('、') ?? ''
   return (
     <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
-      <p className="text-[14.5px] leading-[1.7] text-ws-ink">{event.text}</p>
+      <p className="text-[14px] leading-[1.7] text-ws-ink">{event.text}</p>
       <div className="mt-3 ws-dcard max-w-[520px]" data-testid="matter-blocked-card">
         <div className="ws-dcard-head">
           <Plug aria-hidden className="size-3.5" />

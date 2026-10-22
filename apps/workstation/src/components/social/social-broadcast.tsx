@@ -164,7 +164,7 @@ export function SocialBroadcast({
 
             {/* 纪律 4：WhatsApp 的两道闸摆在明处 */}
             {channel === 'whatsapp' ? (
-              <div className="flex flex-col gap-1 rounded border border-ws-warn/40 bg-ws-warn-bg p-2">
+              <div className="flex flex-col gap-1 rounded-sm border border-ws-warn/40 bg-ws-warn-bg p-2">
                 <p
                   className="flex items-start gap-1 text-xs text-muted-foreground"
                   data-slot="warning"
@@ -210,7 +210,7 @@ export function SocialBroadcast({
 
             {result === undefined ? null : (
               <div
-                className="flex flex-col gap-1 rounded border p-2"
+                className="flex flex-col gap-1 rounded-sm border p-2"
                 data-testid="social-broadcast-result"
               >
                 {/* 纪律 1：这一句原样来自服务端 */}
