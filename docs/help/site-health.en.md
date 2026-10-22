@@ -42,6 +42,28 @@ The SEO & GEO duty page gets one more block: sales and revenue from ChatGPT, Per
 - Each order counts once: the AI of the last visit before buying, otherwise the first visit;
 - **Visits** need the "Reports" permission in your store authorization; without it only sales are counted, and the footer says so.
 
+## Technical audit, redesign regressions, competing pages (SEO & GEO)
+
+The **technical audit** runs in the same pass. "SEO & GEO" and the site-building positions each get a "Technical audit" block that lists only problems:
+
+- **Indexing**: pages Search Console reports as not indexed, redirecting, or with a different Google-selected canonical (needs Search Console connected);
+- **Canonical**: missing, more than one, pointing to another page, or pointing to a broken URL;
+- **Redirects and dead links**: links on the home page that return 404, redirect chains, temporary redirects;
+- **Sitemap**: missing, unreadable, listing broken or noindex URLs, or missing live pages;
+- **hreflang** (when you sell in several markets): wrong language/region codes (GB, not UK), no self-reference, missing return tags, or not matching the canonical;
+- **Structured data**: Product / Offer / breadcrumb checked against Google's current rich-result requirements; articles only get recommendations;
+- **Page speed**: real-user data (Chrome UX Report) first; lab numbers otherwise, marked "lab".
+
+Fixes are **handed to site building as a task**: redirects, sitemap and dead links go to "Full site build"; template tags and speed go to "Theme". Redirect chains come as "old path → new path" lines ready for a redirect card. The same list is not handed over again within 7 days.
+
+**Redesign regressions**: after a theme is published or an app is installed/removed (plus a weekly fallback), we capture the home page, two products, one collection and one article and compare title, description, canonical, noindex, H1, structured data and status with last time:
+- **Critical** (e.g. noindex added, product structured data gone, page broken): an alert card on the home page naming the change, plus a task for site building;
+- **Warning / FYI**: one line in the daily "5 things worth doing" brief and the "Redesign regressions" block.
+
+**Competing pages**: once a week we look in Search Console for queries where two of our pages compete. Critical ones join the daily "5 things" (at most two a day), keeping the page with more clicks; the other page is either merged and redirected (handed to site building) or rewritten for a different angle with a link to the kept page (a change card). The rest are listed in the "Two pages competing for the same queries" block.
+
+**Decay triage**: a "declining" item now says which kind it is — refresh the content, the queries shifted (rewrite title and intro), merge, or retire (hand to site building for a redirect) — with the numbers behind it.
+
 ## Lists, feeds and marketplace pages
 
 The AI crawler and AI source lists are data and are updated with the app. By default we compare the product page, the structured data and your store's public product data; your product feed and marketplace listings are compared only once their addresses are added — until then they're skipped, never counted as "missing".
@@ -50,4 +72,4 @@ The AI crawler and AI source lists are data and are updated with the app. By def
 
 To ask "can AI get into our site?" or "how many orders did AI bring last week?", just ask in the chat — the assistant reads the latest check to answer.
 
-Ideas from Aleyda Solis' *AI Search Optimization Checklist*; the crawler list draws on the open-source ai.robots.txt project and each vendor's documentation.
+Ideas from Aleyda Solis' *AI Search Optimization Checklist*; the crawler list draws on the open-source ai.robots.txt project and each vendor's documentation; the technical audit, regression, competing-page and decay checks draw on the open-source claude-seo and claude-blog projects (MIT).

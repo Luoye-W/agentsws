@@ -1584,6 +1584,9 @@ importers:
 
   packages/site-core:
     dependencies:
+      '@adobe/structured-data-validator':
+        specifier: 1.7.0
+        version: 1.7.0
       '@agentsws/brand-intake':
         specifier: workspace:*
         version: link:../brand-intake
@@ -1714,6 +1717,10 @@ packages:
       '@deepseek-ai/dsh-settings': '*'
       '@deepseek-ai/dsh-web': '*'
       '@deepseek-ai/schemastery': '*'
+
+  '@adobe/structured-data-validator@1.7.0':
+    resolution: {integrity: sha512-7z4MDfbYUBeMW2XyDzcpEh5FtDYaXmuERBCdmeDOkcsrOuLe0NJb97tAKoqoe+qll17fX9C5V8zgU1z+7hIWMg==}
+    engines: {node: '>=18.0.0'}
 
   '@agentclientprotocol/sdk@1.4.0':
     resolution: {integrity: sha512-/eufudw+aFY1LKLolT6yFE6UMmYRl7fMJ/DEONSIyR6wI3slHWITBsANRGqXEY8FRzqUxwh7QEaGiZHcJPVThg==}
@@ -11921,6 +11928,8 @@ snapshots:
       '@deepseek-ai/dsh-settings': 0.2.1-rc.2(f19463d923a7a6aadc4d6ed675af1c31)
       '@deepseek-ai/dsh-web': 0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))
       '@deepseek-ai/schemastery': 3.18.5
+
+  '@adobe/structured-data-validator@1.7.0': {}
 
   '@agentclientprotocol/sdk@1.4.0(zod@4.5.4)':
     dependencies:

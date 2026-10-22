@@ -233,7 +233,7 @@ import {
   ruleFromFact,
   type SearchConsolePort,
 } from '@agentsws/seo-core'
-import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
+import { type RedirectProbe, siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
 import {
   CONTENT_REJECT_TEXT,
   createSkills,
@@ -864,6 +864,7 @@ import {
   SecretStoreError,
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
+import { driftAlertCards } from './seo-drift-alerts.js'
 import {
   claimRuleCard,
   createSeoService,
@@ -908,6 +909,12 @@ import {
   type SiteHealthService,
   trafficOrdersFromRows,
 } from './site-health.js'
+import {
+  manualRedirectProbe,
+  pageSpeedReader,
+  probeFromPageFetch,
+  type RawFetch,
+} from './site-health-net.js'
 import { createChromeRenderer } from './site-health-render.js'
 import { siteHealthSetupTarget } from './site-health-setup.js'
 import { createSiteHealthToolExecutor } from './site-health-tools.js'
@@ -1403,6 +1410,16 @@ export interface ServerOptions {
    * （托管实例没有）。
    */
   siteHealthRenderer?: PageRenderer | false
+  /**
+   * WP448：技术体检「不跟跳转抓一次」那一口（查跳转链与死链）。不给 = 给了 `siteHealthFetch` / `brandIntakeFetch`
+   * 替身时从替身推一口（不跳）；都没给就是真请求（`redirect: 'manual'`）。
+   */
+  siteHealthProbe?: RedirectProbe
+  /**
+   * WP448：页面速度（PageSpeed Insights 回包）。`false` = 不量；不给 = 给了抓取替身时不量（测试不联网），
+   * 否则调 Google 公开的 PageSpeed Insights（不要 key、不花钱）。
+   */
+  siteHealthPageSpeed?: ((url: string) => Promise<unknown>) | false
   /**
    * WP90（55 §9 Q8）：起订阅登录那棵 dsh 树的工厂（测试注入替身 → 全程不联网、
    * 也不真的装一棵 Cordis 树）。生产不传：第一次有人点"用订阅登录"时才
@@ -2081,6 +2098,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP334（决策 725 / 726）：IM 渠道连上 / 云账号关联上了 → 这个品牌还在等的连接卡复查一遍
     if (e.type === 'connection.changed' || e.type === 'cloud.account_linked')
       setupRecheckSink?.(e.workspace_id as WorkspaceId)
+    // WP448：主题发布生效 / 巡检读到的 App 变了 → 那个品牌跑一次改版回归（不等、不抛）
+    if (e.type === 'site_theme.published' || e.type === 'site.checklist_ran')
+      driftSink?.(
+        e.workspace_id as WorkspaceId,
+        e.type,
+        e.payload !== null && typeof e.payload === 'object'
+          ? (e.payload as Record<string, unknown>)
+          : {},
+      )
     // WP425：关联 / 解除工坊账号 → 各品牌重装一次网关（「自己的用不了时用工坊积分」那条备用跟着有 / 没有）
     if (e.type === 'cloud.account_linked' || e.type === 'cloud.account_unlinked')
       cloudLinkChangedSink?.()
@@ -2096,6 +2122,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let cloudLinkChangedSink: (() => void) | undefined
   /** WP334：晚绑定——连接卡那一套装好之后才挂上（`recheckSetupCards`）。 */
   let setupRecheckSink: ((ws: WorkspaceId) => void) | undefined
+  /** WP448：晚绑定——品牌那一套装好之后才挂上（主题发布 / App 变了跑一次改版回归）。 */
+  let driftSink:
+    | ((ws: WorkspaceId, type: string, payload: Record<string, unknown>) => void)
+    | undefined
   /** WP360：晚绑定——插件配对表在后面才建出来（这个品牌有没有一个没撤掉的插件配上了）。 */
   let extensionPairedRef: ((ws: WorkspaceId) => boolean) | undefined
   /** WP360：晚绑定——需要插件的岗位引导装插件（第一次在岗位上说话时带卡）。 */
@@ -5031,6 +5061,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...retiredModelAlerts(actor.person_id),
           // WP418（自查 B7）：店铺日报查出来的异常（销售骤降 / 断货），当天给店铺管理担着的人
           ...(storeDigestRef?.alerts(actor.person_id) ?? []),
+          // WP448：改版回归里严重的那几条（担 SEO 与 GEO 或整站搭建的人看；点「去处理」到交给建站的那件事）
+          ...driftAlertCards({
+            view: siteHealth.driftView(),
+            now: clock.now(),
+            ...(() => {
+              const a = roles.assignments
+                .listByPerson(actor.person_id, { workspace_id: ws })
+                .find(
+                  (x) =>
+                    x.revoked_at === undefined &&
+                    (x.role_id === 'dtc.seo' || x.role_id === 'site.shopify-build'),
+                )
+              return a === undefined
+                ? {}
+                : {
+                    position: {
+                      position_id: a.id,
+                      role_id: a.role_id,
+                      href: `/positions/${encodeURIComponent(a.id)}/duties/${encodeURIComponent(a.role_id)}`,
+                    },
+                  }
+            })(),
+          }),
           // WP316：广告改动——等你确认提交 / 退回 / 交给你 / 读回对不上（点「去处理」到职责页那一块）
           ...adsNoticeCards({
             rows: adsWiringNow.entries(),
@@ -7760,6 +7813,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP381（决策 1066）：网站 / 商品体检与 AI 来源流量（这个品牌一份，落在品牌目录的 `site-health.json`）。
      * 只读：公开页面只 GET、店铺走店铺授权的只读口；不一致交给担「店铺管理」的人开一件事。
      */
+    // WP158：连上了就是真读数（`google-reads.ts`）；注入的模拟世界里「连着」却没有真连接的，
+    // 照旧说"读数那一步还没接"。WP448：技术体检读网址检查也走这一口。
+    const searchConsoleOf = (): SearchConsolePort => {
+      const injectedPort = options.searchConsoleFor?.(ws)
+      if (injectedPort !== undefined) return injectedPort
+      const real = googleReads.searchConsole()
+      if (real.connected()) return real
+      return workData.sources().some((s) => s.id === 'gsc' && s.connected)
+        ? pendingSearchConsole()
+        : disconnectedSearchConsole()
+    }
+    /** WP448：技术问题交给建站的哪一条（没人担主题就交整站搭建；都没人担就不派，清单留在报表里）。 */
+    const siteHandoff = async (input: {
+      owner: 'site.shopify-build' | 'site.shopify-theme'
+      title: string
+      text: string
+    }): Promise<{ matter_id: string } | undefined> => {
+      const live = roles.assignments.listByWorkspace(ws).filter((a) => a.revoked_at === undefined)
+      const holder =
+        live.find((a) => a.role_id === input.owner) ??
+        live.find((a) => a.role_id === 'site.shopify-build')
+      if (holder === undefined) return undefined
+      const port = await positionPortFor(ws)
+      const out = await port.open(
+        { workspace_id: ws, person_id: holder.person_id, assignment_id: holder.id },
+        holder.id,
+        {
+          ...fitTaskTitle({ title: input.title, summary: input.text }),
+          role_id: holder.role_id,
+          mode: 'task',
+          detach: true,
+        },
+      )
+      return { matter_id: out.matter.id }
+    }
+    const healthFetch =
+      options.siteHealthFetch ?? options.brandIntakeFetch ?? (globalThis.fetch as never)
+    const stubbedFetch =
+      options.siteHealthFetch !== undefined || options.brandIntakeFetch !== undefined
     const siteHealth = createSiteHealthService({
       clock,
       newId: (prefix) =>
@@ -7774,7 +7866,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         if (domain === undefined || domain === '') return undefined
         return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`
       },
-      fetch: options.siteHealthFetch ?? options.brandIntakeFetch ?? (globalThis.fetch as never),
+      fetch: healthFetch,
+      // WP448：技术体检的跳转 / 死链、网址检查、目标市场、页面速度、交建站
+      probe:
+        options.siteHealthProbe ??
+        (stubbedFetch
+          ? probeFromPageFetch(healthFetch)
+          : manualRedirectProbe(globalThis.fetch as unknown as RawFetch)),
+      indexStatus: async () => {
+        const gsc = searchConsoleOf()
+        if (!gsc.connected()) return undefined
+        // 真读数那一口的页面清单是读行时一起拉回来的
+        await gsc.rows({ end: clock.now() }).catch(() => [])
+        return gsc.pages()
+      },
+      markets: () => onboardingRef?.brandProfile(ws).markets?.length ?? 1,
+      ...(options.siteHealthPageSpeed === false ||
+      (options.siteHealthPageSpeed === undefined && stubbedFetch)
+        ? {}
+        : {
+            pageSpeed: options.siteHealthPageSpeed ?? pageSpeedReader(globalThis.fetch as never),
+          }),
+      handoff: (input) => siteHandoff(input),
       renderer: () =>
         options.siteHealthRenderer === false || hostedInstance
           ? undefined
@@ -7820,6 +7933,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       // WP381：周报里和引用数并排的 AI 来源流量（实测）
       aiTraffic: () => siteHealth.aiTraffic(),
+      // WP448：改版回归的「注意 / 知道一下」进当天简报一行
+      drift: () => siteHealth.driftView().last,
       routeScopeManager,
       clock,
       random,
@@ -7843,15 +7958,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       // WP158：连上了就是真读数（`google-reads.ts`）；注入的模拟世界里「连着」却没有真连接的，
       // 照旧说"读数那一步还没接"
-      searchConsole: (): SearchConsolePort => {
-        const injectedPort = options.searchConsoleFor?.(ws)
-        if (injectedPort !== undefined) return injectedPort
-        const real = googleReads.searchConsole()
-        if (real.connected()) return real
-        return workData.sources().some((s) => s.id === 'gsc' && s.connected)
-          ? pendingSearchConsole()
-          : disconnectedSearchConsole()
-      },
+      searchConsole: searchConsoleOf,
       ga4: () => googleReads.ga4Conversions(),
       ga4Note: () => googleReads.ga4Note(),
       ga4Window: () => googleReads.ga4Window?.(),
@@ -10694,6 +10801,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   const brandModules: BrandModules = brands
   /*
+   * WP448（docs/109 §4.4）：主题发布生效 → 跑一次改版回归，指到是哪张发布卡；巡检读到的已装 App 和上次不一样 →
+   * 也跑一次。只对已经装起来的品牌（`peek`），没装起来的等每周那一次兜底。
+   */
+  driftSink = (ws, type, payload) => {
+    const health = brandModules.peek(ws)?.siteHealth
+    if (health === undefined) return
+    if (type === 'site_theme.published') {
+      const change_id = typeof payload.change_id === 'string' ? payload.change_id : undefined
+      void health
+        .drift({
+          kind: 'theme_publish',
+          ...(change_id === undefined ? {} : { change_id }),
+          label: '主题发布',
+        })
+        .catch(() => undefined)
+      return
+    }
+    const apps = payload.apps_installed
+    if (Array.isArray(apps))
+      void health
+        .appsSeen(apps.filter((a): a is string => typeof a === 'string'))
+        .catch(() => undefined)
+  }
+  /*
    * WP429：站内通知从事件里认人、认标题——按品牌现取（名字走身份层、卡走审批总线、
    * 交出去的那件事走那个品牌的工作模型；那个品牌还没装起来就只给标题兜底）。
    */
@@ -11238,8 +11369,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP418（自查 B7 / B13）：店铺日报 + 异常提醒；网站体检每周一自动跑
     registerStoreDigest(s, {
       digest: async () => (await of()).storeDigest?.run() ?? { skipped: 'not_installed' },
-      siteHealth: async () =>
-        (await (await of()).siteHealth?.run()) ?? { skipped: 'not_installed' },
+      // WP448：同一轮里另跑一次改版回归（每周兜底；主题发布 / App 装卸之后另有即时那一次）
+      siteHealth: async () => {
+        const health = (await of()).siteHealth
+        if (health === undefined) return { skipped: 'not_installed' }
+        const run = await health.run()
+        const drift = await health.drift({ kind: 'weekly' }).catch(() => undefined)
+        return { ...run, ...(drift === undefined ? {} : { drift_run: drift.id }) }
+      },
     })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
     registerPrMonitor(s, {
@@ -14895,10 +15032,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const siteHealthViewOf = (svc: SiteHealthService): SiteHealthView => {
     const run = svc.latest()
     const traffic = svc.lastTraffic()
+    const drift = svc.driftView()
     return {
       ...(run === undefined ? {} : { run }),
       ...(traffic === undefined ? {} : { ai_traffic: traffic }),
       settings: svc.settings(),
+      ...(drift.last === undefined ? {} : { drift }),
     }
   }
   const siteHealthPort: SiteHealthPort = {
@@ -14917,6 +15056,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     saveSettings: async (actor, input) => {
       const svc = await siteHealthOf(actor.workspace_id)
       svc.saveSettings(input)
+      return siteHealthViewOf(svc)
+    },
+    // WP448：面板「改版回归」块头的「现在比一次」
+    drift: async (actor) => {
+      const svc = await siteHealthOf(actor.workspace_id)
+      await svc.drift({ kind: 'manual' })
       return siteHealthViewOf(svc)
     },
   }

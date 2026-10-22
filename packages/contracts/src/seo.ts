@@ -66,6 +66,12 @@ export type SeoSignalId =
   | 'wrong_intent'
   | 'ai_mode'
 
+/**
+ * WP448：卡上一件事的来源——六个信号之一，或每周抢词检测（`cannibalization`，**不算**每日六个信号，
+ * `signal_counts` 里也没有它；只有 `merge` 车道那几件是它）。
+ */
+export type SeoPickSignal = SeoSignalId | 'cannibalization'
+
 export const SEO_SIGNALS: readonly SeoSignalId[] = [
   'almost_there',
   'no_clicks',
@@ -109,9 +115,11 @@ export interface SitePage {
  * - `fix_page`：改现有页面（元信息 / 开头 / 小节 / 内链）→ 本职责出改动卡；
  * - `new_page`：需要一页新的 → 先看一次 SERP 排前面的是不是对的人群，是才出「新页面选题」卡；
  * - `site_handoff`：跳转 / 规范网址 / 没被收录 → 交给「建站」岗位（开一件事项 + 说明）；
- * - `pr_handoff`：需要站外被提及 → 交给「公关」岗位（Reddit / 论坛 / 新闻稿）。
+ * - `pr_handoff`：需要站外被提及 → 交给「公关」岗位（Reddit / 论坛 / 新闻稿）；
+ * - `merge`（WP448）：两页抢同一组词 → 定保留哪页，另一页出改动卡（内链指向保留页）或交建站跳转。
+ *   只来自每周的抢词检测（严重的那几组），不来自每日六个信号。
  */
-export type SeoLane = 'fix_page' | 'new_page' | 'site_handoff' | 'pr_handoff'
+export type SeoLane = 'fix_page' | 'new_page' | 'site_handoff' | 'pr_handoff' | 'merge'
 
 /** 本职责自己动的那几种改法（每一种对应一条 `ChangeKind`）。 */
 export type SeoFixKind = 'page_seo_edit' | 'page_section_add' | 'internal_link_edit'
@@ -145,7 +153,8 @@ export interface SeoSerpCheck {
 export interface SeoPick {
   /** 1 起算，就是卡上的顺序（先修再写）。 */
   rank: number
-  signal: SeoSignalId
+  /** WP448：`merge` 车道那几件是 `cannibalization`（每周抢词检测），其余都是六个信号之一。 */
+  signal: SeoPickSignal
   query: string
   /** 现有页面（没有专门页面的 `untargeted` 也可能有一页"顺带排上"的）。 */
   page?: string
@@ -165,6 +174,10 @@ export interface SeoPick {
    * 只有一个市场时不写。
    */
   serp_markets?: SeoSerpCheck[]
+  /** WP448：`decaying` 那一件的分诊提示（刷新 / 查询变了 / 该合并 / 该下线），规则判、附证据。 */
+  triage?: SeoDecayTriageResult
+  /** WP448：`merge` 车道那一组抢词（保留哪页、另一页怎么处理）。 */
+  merge?: SeoCannibalizationGroup
   /** 这一件落成了什么：改动卡 / 选题卡 / 事项（服务端回填）。 */
   outcome?: {
     kind: 'change' | 'topic' | 'matter' | 'dropped' | 'none'
@@ -395,7 +408,75 @@ export interface GeoCostEstimate {
   market_codes?: string[]
 }
 
-export type SeoReportPayload = SeoDailyPayload | SeoWeeklyRevenuePayload | SeoWeeklyGeoPayload
+export type SeoReportPayload =
+  | SeoDailyPayload
+  | SeoWeeklyRevenuePayload
+  | SeoWeeklyGeoPayload
+  | SeoCannibalizationPayload
+
+/* ------------------------------------------------------------------ */
+/* WP448（docs/109 §5.1 #3–4）：抢词检测与掉量分诊                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 掉量分诊（`decaying` 那一件的提示）：规则判、附证据数字。
+ *
+ * - `refresh`：还有需求，内容旧了——刷新内容（加小节、更新日期、请 Google 重新收录）；
+ * - `query_shift`：这页丢的那个词掉了，别的词在涨——查询变了，按新的词改标题与开头；
+ * - `merge`：同一个词我们另一页在涨——两页在抢，该合并；
+ * - `retire`：这页整体已经没什么人搜了——该下线（跳到相关的页）。
+ */
+export type SeoDecayTriage = 'refresh' | 'query_shift' | 'merge' | 'retire'
+
+export interface SeoDecayTriageResult {
+  verdict: SeoDecayTriage
+  /** 一句人话（模板生成）。 */
+  reason: string
+  /** 证据数字（全由规则从 Search Console 行算出来）。 */
+  evidence: {
+    /** 这一页本周 / 上周的点击合计。 */
+    page_clicks: number
+    page_clicks_prev?: number
+    /** 这一页本周的曝光合计。 */
+    page_impressions: number
+    /** 这一页本周在涨的词带来的点击增量（`query_shift` 看它）。 */
+    gaining_clicks?: number
+    /** `merge`：同一个词在涨的那一页。 */
+    other_page?: string
+    other_page_clicks?: number
+  }
+}
+
+/**
+ * 抢词：同一组查询我们两页以上都有可观曝光、互相顶替。
+ *
+ * - `critical`：同一个词两页都在前 20、曝光都够——互相顶替最明显；
+ * - `high`：同一组词里一页明显压着另一页；
+ * - `medium`：只在少量曝光上重叠（只列在周报，不进 5 件事）。
+ */
+export interface SeoCannibalizationGroup {
+  /** 稳定键（查询归一后排序拼起来），去重与「已处理」用。 */
+  key: string
+  severity: 'critical' | 'high' | 'medium'
+  queries: string[]
+  /** 两页（或更多）各自在这组词上的数（按点击从多到少）。 */
+  pages: { url: string; clicks: number; impressions: number; position: number }[]
+  /** 建议保留哪一页（点击多的；并列看排名）。 */
+  keep: string
+  /** 另一页怎么处理：合并后跳过去 / 改写成别的角度并链到保留页。 */
+  action: 'redirect' | 'differentiate'
+  /** 一句人话（模板生成）。 */
+  suggestion: string
+}
+
+/** `seo_report` 卡 `variant: 'weekly_cannibalization'` 的 payload（每周一次，不进每日六个信号）。 */
+export interface SeoCannibalizationPayload {
+  variant: 'weekly_cannibalization'
+  week_of: string
+  gsc: 'connected' | 'not_connected'
+  groups: SeoCannibalizationGroup[]
+  notes: string[]
+}
 
 /** `seo_topic` 卡（新页面选题）的 payload。 */
 export interface SeoTopicPayload {

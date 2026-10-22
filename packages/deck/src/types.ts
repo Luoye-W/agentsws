@@ -18,6 +18,7 @@ import type {
   ObjectRef,
   RiskClass,
   RoleId,
+  SeoDriftView,
   SiteHealthRun,
 } from '@agentsws/contracts'
 import type { DeckLayout } from './layout.js'
@@ -1565,6 +1566,8 @@ export interface BlockDef {
 export interface SiteHealthDeckData {
   run?: SiteHealthRun
   ai_traffic?: AiTrafficSummary
+  /** WP448：改版回归（最近一次 + 最近一次有发现的那一次）。 */
+  drift?: SeoDriftView
 }
 
 export interface BlockData {

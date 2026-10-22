@@ -7,7 +7,9 @@
  * | 模块 | 干什么 |
  * |---|---|
  * | `signals` | 读 Search Console：只算六个信号（文章第 1 步），其余不看 |
- * | `picks` | 判断：每个查询一件、定车道（改页 / 新页 / 交建站 / 交公关）、先修再写地排 |
+ * | `picks` | 判断：每个查询一件、定车道（改页 / 合并 / 新页 / 交建站 / 交公关）、先修再写地排 |
+ * | `cannibalization` | WP448：每周抢词检测（查询 × 页面）、`decaying` 的分诊（刷新 / 查询变了 / 合并 / 下线） |
+ * | `drift` | WP448：改版回归——基线 vs 这一次，比对规则表（三级） |
  * | `serp` | 写新页之前看一眼 SERP：排前面的是不是对的人群（文章第 5 步） |
  * | `daily` | 早上那一轮：读 → 判断 → 5 件（没接搜索数据接口就跳过 SERP，照跑） |
  * | `attribution` | 点击之后看转化：按页面并排点击 / 订单 / 收入（Shopify `landing_site`） |
@@ -28,10 +30,14 @@ export * from './amazon-keywords.js'
 // WP396（docs/106 §13）：自家 Amazon Listing 体检的规则表与判法
 export * from './amazon-listing-check.js'
 export * from './attribution.js'
+// WP448（docs/109 §5.1 #3–4）：抢词检测（每周）与掉量分诊
+export * from './cannibalization.js'
 export * from './claim-rules.js'
 export * from './daily.js'
 export * from './demo.js'
 export * from './drafts.js'
+// WP448（docs/109 §5.1 #2）：改版回归——比对规则表（数据）与比法
+export * from './drift.js'
 export * from './geo.js'
 export * from './geo-consistency.js'
 export * from './geo-cost.js'

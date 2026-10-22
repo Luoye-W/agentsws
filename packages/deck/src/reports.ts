@@ -1480,6 +1480,22 @@ export const REPORT_DATASETS: readonly DatasetDef[] = [
     sources: ['approvals'],
     run: (ctx) => fromQueryTable('seo.geo_visibility', ctx),
   },
+  // WP448：技术体检、改版回归（我们自己跑出来的结论）、每周抢词（Search Console）
+  {
+    id: 'site.tech_audit',
+    sources: ['site'],
+    run: (ctx) => fromQueryTable('site.tech_audit', ctx),
+  },
+  {
+    id: 'site.drift',
+    sources: ['site'],
+    run: (ctx) => fromQueryTable('site.drift', ctx),
+  },
+  {
+    id: 'seo.cannibalization',
+    sources: ['gsc'],
+    run: (ctx) => fromQueryTable('seo.cannibalization', ctx),
+  },
   {
     id: 'email.campaigns',
     sources: ['email_marketing'],
