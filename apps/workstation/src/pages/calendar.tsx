@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { MiniMonth } from '@/components/calendar/mini-month'
 import { UnifiedCalendar } from '@/components/calendar/unified-calendar'
+import { Segmented } from '@/components/design/segmented'
 import { MeetDialog } from '@/components/secretary/meet-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -153,26 +154,13 @@ export function CalendarPage(): React.ReactNode {
           {title} · {t('calendar.count', { n: total })}
         </span>
         <span className="flex-1" />
-        <div
-          className="flex items-center gap-0.5 rounded-xl bg-ws-surface p-0.5"
-          data-testid="calendar-views"
-        >
-          {CALENDAR_VIEWS.map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={view === v}
-              onClick={() => {
-                setView(v)
-              }}
-              className={`rounded-[9px] px-2.5 py-1 text-xs ${
-                view === v ? 'bg-ws-card shadow-ws' : 'text-ws-muted-fg hover:text-ws-ink'
-              }`}
-            >
-              {t(`calendar.${v}`)}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label={t('calendar.title')}
+          testId="calendar-views"
+          value={view}
+          options={CALENDAR_VIEWS.map((v) => ({ value: v, label: t(`calendar.${v}`) }))}
+          onChange={setView}
+        />
       </div>
 
       {meeting ? (

@@ -14,6 +14,7 @@
 import type { DeckContentMode, DeckFilters, DeckKind, DeckSource } from '@agentsws/deck'
 import { CONTENT_MODES } from '@agentsws/deck'
 import { ListFilter, X } from 'lucide-react'
+import { CountBadge } from '@/components/design/kit'
 import { Pop } from '@/components/position/work-bits'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/app-context'
@@ -114,14 +115,7 @@ export function DeckFilterPop({
       icon={
         <span className="relative inline-flex">
           <ListFilter className="size-4" aria-hidden />
-          {n === 0 ? null : (
-            <span
-              aria-hidden
-              className="absolute -top-1 -right-1.5 inline-flex size-3.5 items-center justify-center rounded-full bg-ws-brand text-[9px] font-semibold text-background"
-            >
-              {n}
-            </span>
-          )}
+          {n === 0 ? null : <CountBadge aria-hidden n={n} tone="brand" corner />}
         </span>
       }
       testId="deck-filter"

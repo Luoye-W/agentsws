@@ -5,6 +5,7 @@
  * 一个技能挂在几个岗位下，就在几个组里各出现一次，卡上标「共用」。
  */
 import { type ReactNode, useState } from 'react'
+import { CountBadge } from '@/components/design/kit'
 import type { SkillSummary } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { groupSkills, type SkillGroup, skillLabel } from '@/lib/library'
@@ -109,12 +110,11 @@ export function SkillTagList({
         >
           {skillLabel(s, lang)}
           {s.pending_proposals > 0 ? (
-            <span
-              className="rounded-full bg-ws-warn-bg px-1 text-[10px] text-ws-warn"
+            <CountBadge
+              n={s.pending_proposals}
+              tone="brand"
               title={t('skills.badge.proposals', { count: s.pending_proposals })}
-            >
-              {s.pending_proposals}
-            </span>
+            />
           ) : null}
         </li>
       ))}

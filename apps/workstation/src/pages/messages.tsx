@@ -58,7 +58,7 @@ import {
 } from 'lucide-react'
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { StatusPill, WsAvatar, WsTag } from '@/components/design'
+import { Segmented, StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
 import {
@@ -1251,36 +1251,23 @@ function ViewToggle({
   onChange(view: 'unclaimed' | 'all'): void
 }): ReactNode {
   const { t } = useApp()
+  // WP456-T2：全站唯一那种分段切换
   return (
-    <div
-      className="ml-auto inline-flex rounded-[12px] bg-ws-surface p-0.5 text-[13px]"
-      role="tablist"
-      data-testid="messages-view-toggle"
-    >
-      {(['unclaimed', 'all'] as const).map((v) => (
-        <button
-          key={v}
-          type="button"
-          role="tab"
-          aria-selected={view === v}
-          data-testid={`messages-view-${v}`}
-          className={cn(
-            'rounded-[10px] px-3 py-1',
-            view === v
-              ? 'bg-ws-card font-medium shadow-ws'
-              : 'text-ws-muted-fg hover:text-foreground',
-          )}
-          onClick={() => {
-            onChange(v)
-          }}
-        >
-          {t(`messages.view.${v}`)}
-          {v === 'unclaimed' && unclaimed !== undefined ? (
-            <span className="ws-num ml-1">{unclaimed}</span>
-          ) : null}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      kind="tabs"
+      className="ml-auto"
+      label={t('nav.messages')}
+      testId="messages-view-toggle"
+      value={view}
+      reselect
+      options={(['unclaimed', 'all'] as const).map((v) => ({
+        value: v,
+        label: t(`messages.view.${v}`),
+        testId: `messages-view-${v}`,
+        ...(v === 'unclaimed' && unclaimed !== undefined ? { count: unclaimed } : {}),
+      }))}
+      onChange={onChange}
+    />
   )
 }
 

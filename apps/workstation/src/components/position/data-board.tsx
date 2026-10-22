@@ -15,7 +15,7 @@ import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
 import { connectServiceFor } from '@/components/connections/links'
-import { DeltaPill } from '@/components/design'
+import { DeltaPill, Segmented } from '@/components/design'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
@@ -457,19 +457,14 @@ export function DataBoard({
         <h3 className="ws-display text-[17px]">{t('pos2.data.title')}</h3>
         <Hint text={t('pos2.data.hint')} />
         <span className="ml-auto flex items-center gap-1">
-          {RANGES.map((r) => (
-            <Button
-              key={r}
-              size="xs"
-              variant={range === r ? 'secondary' : 'ghost'}
-              aria-pressed={range === r}
-              onClick={() => {
-                setRange(r)
-              }}
-            >
-              {t(`range.${r}`)}
-            </Button>
-          ))}
+          <Segmented
+            size="sm"
+            label={t('pos2.data.title')}
+            value={range}
+            reselect
+            options={RANGES.map((r) => ({ value: r, label: t(`range.${r}`) }))}
+            onChange={setRange}
+          />
           <Button
             size="xs"
             variant="ghost"

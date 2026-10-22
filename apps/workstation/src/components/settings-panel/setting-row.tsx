@@ -48,47 +48,8 @@ export function SettingRow({
   )
 }
 
-/** 几选一的小胶囊（主题、语言、动效、内容更新那类两三档）。 */
-export function Segmented<V extends string>({
-  value,
-  options,
-  onChange,
-  label,
-  testId,
-  disabled = false,
-}: {
-  value: V
-  options: readonly { value: V; label: string }[]
-  onChange: (v: V) => void
-  label: string
-  testId?: string
-  disabled?: boolean
-}): ReactNode {
-  return (
-    <fieldset
-      className="inline-flex rounded-full border p-0.5 text-xs"
-      aria-label={label}
-      disabled={disabled}
-      {...(testId === undefined ? {} : { 'data-testid': testId })}
-    >
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          aria-pressed={o.value === value}
-          data-value={o.value}
-          className={
-            o.value === value
-              ? 'rounded-full bg-primary px-2.5 py-0.5 text-primary-foreground'
-              : 'rounded-full px-2.5 py-0.5 text-muted-foreground hover:text-foreground'
-          }
-          onClick={() => {
-            if (o.value !== value) onChange(o.value)
-          }}
-        >
-          {o.label}
-        </button>
-      ))}
-    </fieldset>
-  )
-}
+/**
+ * 几选一的小胶囊（主题、语言、动效、内容更新那类两三档）。
+ * WP456-T2：换成全站唯一那种分段切换（灰底 + 白块），不再是品牌绿实底；老的引用路径照旧能用。
+ */
+export { Segmented } from '@/components/design/segmented'

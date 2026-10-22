@@ -41,6 +41,7 @@ import {
 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import { CountBadge } from '@/components/design/kit'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { type ColumnsLayout, columnsLayout, useShellSize } from '@/components/rail/board-fit'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
@@ -385,13 +386,13 @@ function PanelIcon({
     >
       <definition.icon aria-hidden className="size-4" />
       {count === undefined ? null : (
-        <span
+        <CountBadge
           aria-hidden
+          n={count}
+          tone="brand"
+          corner
           data-testid={`rail-badge-${definition.id}`}
-          className="ws-num absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-ws-brand px-1 text-[9px] leading-none font-medium text-white"
-        >
-          {count > 99 ? '99+' : count}
-        </span>
+        />
       )}
     </button>
   )

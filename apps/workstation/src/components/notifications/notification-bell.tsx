@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { CountBadge, Segmented } from '@/components/design'
 import {
   type InboxNotification,
   listNotifications,
@@ -152,14 +153,7 @@ export function NotificationBell(): ReactNode {
         }}
       >
         <Bell aria-hidden className="size-4" />
-        {count > 0 ? (
-          <span
-            data-testid="notify-badge"
-            className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-ws-bad px-1 text-[10px] leading-none font-semibold text-white ring-2 ring-ws-paper tabular-nums"
-          >
-            {badgeText(count)}
-          </span>
-        ) : null}
+        {count > 0 ? <CountBadge n={count} tone="alert" corner data-testid="notify-badge" /> : null}
       </button>
       {open ? (
         <div
@@ -170,35 +164,21 @@ export function NotificationBell(): ReactNode {
         >
           <div className="flex items-center gap-2 border-b border-ws-line px-3 py-2">
             <span className="text-sm font-semibold">{t('notify.title')}</span>
-            <div
-              role="tablist"
-              className="ml-1 flex items-center rounded-full bg-ws-tint p-0.5 text-xs"
-              data-testid="notify-views"
-            >
-              {(['unread', 'all'] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  role="tab"
-                  aria-selected={view === v}
-                  data-testid={`notify-view-${v}`}
-                  className={cn(
-                    'rounded-full px-2.5 py-0.5 transition-colors',
-                    view === v
-                      ? 'bg-ws-card font-medium text-foreground shadow-sm'
-                      : 'text-ws-muted-fg hover:text-foreground',
-                  )}
-                  onClick={() => {
-                    setView(v)
-                  }}
-                >
-                  {t(`notify.view.${v}`)}
-                  {v === 'unread' && count > 0 ? (
-                    <span className="ml-1 tabular-nums text-ws-muted-fg">{badgeText(count)}</span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              kind="tabs"
+              size="sm"
+              className="ml-1"
+              label={t('notify.title')}
+              testId="notify-views"
+              value={view}
+              options={(['unread', 'all'] as const).map((v) => ({
+                value: v,
+                label: t(`notify.view.${v}`),
+                testId: `notify-view-${v}`,
+                ...(v === 'unread' && count > 0 ? { count: badgeText(count) } : {}),
+              }))}
+              onChange={setView}
+            />
             <div className="ml-auto flex items-center">
               <button
                 type="button"
