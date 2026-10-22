@@ -10,7 +10,7 @@
  * 纪律照旧：这里只**排版**，不算数也不编。payload 里没有的字段就不出那一格，
  * 绝不用"—"以外的东西填空（14 §2 数字不经模型手）。
  */
-import { isAssistantNotesPayload } from '@agentsws/contracts'
+import { isAssistantNotesPayload, isFollowUpNudgePayload } from '@agentsws/contracts'
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
@@ -25,6 +25,7 @@ import {
   KolOutreachBody,
   KolReviewBody,
 } from '@/components/kol/kol-card-bodies'
+import { FollowUpCardBody } from '@/components/messages/follow-up-card-body'
 import { isMessageRuleCardPayload, MessageRuleCardBody } from '@/components/messages/rule-card-body'
 import {
   GoogleAlertChangeBody,
@@ -755,6 +756,9 @@ export function DeckCardBody({
       default:
         // WP329：Reddit「发出去」卡——卡上能改字，「发送」在卡身里（批了交给插件填进页面、你自己点发送）
         if (isRedditWritePayload(payload)) return <RedditWriteBody card={card} payload={payload} />
+        // WP442：催促卡——「X 还没回」：你哪天发的、催促草稿（就地修改）、「发出」在卡身里
+        if (isFollowUpNudgePayload(payload))
+          return <FollowUpCardBody card={card} payload={payload} />
         // WP416：红人开发信——卡面直接放正文（前 6 行可展开）与要先看一眼的几句
         if (isKolOutreachPayload(payload)) return <KolOutreachBody payload={payload} />
         return (

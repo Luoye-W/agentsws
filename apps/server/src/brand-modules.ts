@@ -62,6 +62,7 @@ import type { KolMailAssembly } from './kol-mail.js'
 import type { KolSandboxAssembly } from './kol-sandbox.js'
 import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
+import type { MessageFollowUpService } from './message-follow-up.js'
 import type { MessagesAssembly } from './messages.js'
 import type { ModelsAssembly } from './models.js'
 import type { PrStore } from './pr.js'
@@ -395,6 +396,8 @@ export interface BrandModuleSet {
    * （消息库、分拣、标签、草稿、回写）。两边共用同一批凭据与同一个受控原始材料区。
    */
   messages: MessagesAssembly
+  /** WP442（docs/108 §5.3）：回信跟进（发出去 N 个工作日没回 → 出卡附催促草稿）。 */
+  followUp?: MessageFollowUpService
   chat: ChatLane
   /**
    * WP125（72 §1.I / §P0-1）：这个品牌的**客服判断层**。

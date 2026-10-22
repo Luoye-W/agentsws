@@ -15,6 +15,7 @@
  * ③ 内容盒：一次一种语言 + 证据芯片 + 实体芯片
  * ④ 动作行：≤ 3 个快捷决定 + 安静区；折叠区就地替换它
  */
+import { FOLLOW_UP_CARD_FORM } from '@agentsws/contracts'
 import type { DeckAction, DeckCard, DeckContentMode, InstructionScope } from '@agentsws/deck'
 import { categoryKey } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
@@ -206,6 +207,9 @@ export function categoryOf(card: DeckCard, t: (key: string) => string): string {
   // WP249：自家版的版务卡是「做之前」的（排成改动卡），不是「处置后」
   if (card.change_kind === 'community_moderation' && card.layout === 'change')
     return t('category.own_sub_moderation')
+  // WP442：催促卡——「催一下」，不是「回信」
+  if ((card.detail.payload as { form?: unknown } | undefined)?.form === FOLLOW_UP_CARD_FORM)
+    return t('follow_up.category')
   const key = categoryKey(card.kind, card.change_kind)
   return t(key ?? `kind.${card.kind}`)
 }
@@ -295,6 +299,16 @@ export function DeckCardView({
   const routeChoice = (card.kind === 'claim' && isQuestion && !handoffOffer) || peerNotice
   const examples = useTaskExamples(card.role_id)
   const positionName = usePositionName(card.role_id)
+  /**
+   * WP442（决策 1452）：没归属的催促卡挂在品牌里第一个持岗位的人名下，但它不是那个岗位的事——
+   * 头一行写「消息 · 催一下」，不写那个岗位的名字。
+   */
+  const pillPosition =
+    (card.detail.payload as { form?: unknown; surface?: unknown } | undefined)?.form ===
+      FOLLOW_UP_CARD_FORM &&
+    (card.detail.payload as { surface?: unknown } | undefined)?.surface === 'messages'
+      ? t('follow_up.surface.messages')
+      : positionName
   const rail = useRailState()
   const evidence = evidenceLines(card, t, (iso) => formatDateTime(iso, lang))
   // WP100：头一行那个类别写人话（"网站运营 · 改价"）；表里没登记的退回枚举名那一版
@@ -400,7 +414,7 @@ export function DeckCardView({
         data-testid="deck-tag-row"
       >
         <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
-          {positionName === undefined ? category : `${positionName} · ${category}`}
+          {pillPosition === undefined ? category : `${pillPosition} · ${category}`}
         </StatusPill>
         {/*
           WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长。

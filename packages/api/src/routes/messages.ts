@@ -29,6 +29,11 @@ import type {
   MessageDraftInput,
   MessageFlagsInput,
   MessageFolder,
+  MessageFollowUp,
+  MessageFollowUpAction,
+  MessageFollowUpRow,
+  MessageFollowUpSettings,
+  MessageFollowUpSettingsPatch,
   MessageImagesReport,
   MessageKind,
   MessageKindInput,
@@ -139,6 +144,8 @@ export interface MessageThreadView {
   card_link?: string
   /** WP212：没人接时 AI 挑的主按钮。 */
   suggest?: MessageSuggest
+  /** WP442：回信跟进（最后一封是我们发的、在等对方回的会话才有）。 */
+  follow_up?: MessageFollowUp
   kind?: MessageKind
   /**
    * WP440（docs/108 M9）：这条会话上 AI **按把握直接回**的那几封——
@@ -352,6 +359,22 @@ export interface MessagesPort {
   digest?(actor: MessageActor): MaybePromise<MessageDigest>
   /** 「全部知道了」（或点名几封）。 */
   ackDigest?(actor: MessageActor, message_ids?: string[]): MaybePromise<{ acked: number }>
+  /**
+   * WP442（docs/108 §5.3）：回信跟进。「等对方回」那一堆（到期早的在前）；不实现 = 这台机器没有回信跟进（501）。
+   */
+  followUps?(actor: MessageActor): MaybePromise<{ rows: MessageFollowUpRow[] }>
+  /** WP442：系统规则「发出 N 个工作日没回 → 提醒我」（能改天数、能关、能按邮箱分开设）。 */
+  followUpSettings?(actor: MessageActor): MaybePromise<MessageFollowUpSettings>
+  setFollowUpSettings?(
+    actor: MessageActor,
+    patch: MessageFollowUpSettingsPatch,
+  ): MaybePromise<MessageFollowUpSettings>
+  /** WP442：「等对方回」那一行上直接点的（不用跟了 / 再等等 / 接着跟 / 现在就催）。 */
+  followUpAction?(
+    actor: MessageActor,
+    thread_id: string,
+    action: MessageFollowUpAction,
+  ): MaybePromise<{ follow_up: MessageFollowUp }>
 
   /** 立刻收一次。 */
   sync(actor: MessageActor): MaybePromise<MessageSyncReport>
@@ -534,6 +557,16 @@ const SendBody = z.object({
 })
 
 const ImagesBody = z.object({ always: z.boolean().optional() })
+
+/** WP442：系统规则「发出 N 个工作日没回 → 提醒我」；给 `account` 只改那只邮箱（`reset` = 回到跟着总设置）。 */
+const FollowUpSettingsBody = z.object({
+  enabled: z.boolean().optional(),
+  business_days: z.number().int().min(1).max(15).optional(),
+  account: z.string().min(3).max(320).optional(),
+  reset: z.boolean().optional(),
+})
+
+const FollowUpActionBody = z.object({ action: z.enum(['stop', 'wait', 'resume', 'nudge']) })
 
 const BackfillBody = z.object({
   account: z.string().max(320).optional(),
@@ -978,6 +1011,92 @@ export function messageRoutes(): Route[] {
           throw new ApiError('not_implemented', '这个服务进程还没有今天的简报')
         const input = await body(c, DigestAckBody)
         return ok(c, await port.ackDigest(actorOf(c), input.message_ids))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/messages/follow-ups',
+        operationId: 'listMessageFollowUps',
+        summary: '「等对方回」：我们发出去、对方还没回的会话（到期早的在前；WP442 回信跟进）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: '{ rows: MessageFollowUpRow[] }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.followUps === undefined)
+          throw new ApiError('not_implemented', '这台机器上没有回信跟进')
+        return ok(c, await port.followUps(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/messages/follow-ups/settings',
+        operationId: 'getMessageFollowUpSettings',
+        summary: '系统规则「发出 N 个工作日没回 → 提醒我」：天数、开关、按邮箱分开设的几只',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'MessageFollowUpSettings',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.followUpSettings === undefined)
+          throw new ApiError('not_implemented', '这台机器上没有回信跟进')
+        return ok(c, await port.followUpSettings(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'patch',
+        path: '/v1/messages/follow-ups/settings',
+        operationId: 'setMessageFollowUpSettings',
+        summary: '改系统规则「发出 N 个工作日没回 → 提醒我」（给 account 只改那只邮箱）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: FollowUpSettingsBody,
+        returns: 'MessageFollowUpSettings',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setFollowUpSettings === undefined)
+          throw new ApiError('not_implemented', '这台机器上没有回信跟进')
+        return ok(
+          c,
+          await port.setFollowUpSettings(
+            actorOf(c),
+            (await body(c, FollowUpSettingsBody)) as MessageFollowUpSettingsPatch,
+          ),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/threads/:id/follow-up',
+        operationId: 'actOnMessageFollowUp',
+        summary:
+          '「等对方回」那一行上直接点：stop 不用跟了 / wait 再等等（顺延 3 个工作日）/ resume 接着跟 / nudge 现在就出催促卡',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: FollowUpActionBody,
+        returns: '{ follow_up: MessageFollowUp }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.followUpAction === undefined)
+          throw new ApiError('not_implemented', '这台机器上没有回信跟进')
+        const input = (await body(c, FollowUpActionBody)) as { action: MessageFollowUpAction }
+        return ok(c, await port.followUpAction(actorOf(c), param(c, 'id'), input.action))
       },
     ),
     route(

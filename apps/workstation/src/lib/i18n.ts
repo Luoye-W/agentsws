@@ -20,6 +20,7 @@ import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watc
 import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
+import { FOLLOW_UP_EN, FOLLOW_UP_ZH } from './i18n-follow-up'
 import { GEO_EN, GEO_ZH } from './i18n-geo'
 import {
   GOOGLE_ALERTS_EN,
@@ -8998,6 +8999,7 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_ZH,
     // WP439：消息页右栏「规则」
     ...MESSAGE_RULES_ZH,
+    ...FOLLOW_UP_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
     ...COMPANY_ZH,
     // WP329：Reddit「发出去」卡（卡上改字、发送 = 交给插件填进页面、你自己点发送）
@@ -9071,6 +9073,7 @@ const TABLES: Record<Lang, Table> = {
     ...MODE_EN,
     ...PEERS_EN,
     ...MESSAGE_RULES_EN,
+    ...FOLLOW_UP_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
     ...GOOGLE_ALERTS_EN,

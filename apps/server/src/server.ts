@@ -596,6 +596,11 @@ import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meeti
 import { createMemoryBook, type MemoryReason } from './memory-book.js'
 import { attachMemoryPersistence } from './memory-persist.js'
 import {
+  createMessageFollowUp,
+  isFollowUpCard,
+  type MessageFollowUpService,
+} from './message-follow-up.js'
+import {
   isMessageRuleCard,
   messageRuleCardInput,
   messageRuleDraftCardInput,
@@ -2948,6 +2953,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       const sandboxed = kolSandboxIntercept(brand, item)
       if (sandboxed !== undefined) return sandboxed
+      // WP442：催促卡批了 → 从原邮箱在原会话里回一封（已连邮箱的 sendMail：急停、outbox 幂等）
+      const nudged = await brand?.followUp?.deliver(item, opts)
+      if (nudged !== undefined) return nudged
       // WP329：Reddit「发出去」卡批了 → 交给插件填进页面、人点发送（读回之后才记发出记录）
       const redditSent = await brand?.redditWrites?.deliver(item)
       if (redditSent !== undefined) return redditSent
@@ -6466,6 +6474,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 邮箱开关，那两样比渠道、运行时都晚建）。渠道问它「这一封能不能直接回」，运行时问它「那张卡为什么没直接回」。
      */
     let emailAutoReplyRef: EmailAutoReply | undefined
+    /** WP442（docs/108 §5.3）：回信跟进（要消息库，消息建好之后才建；消息那一侧晚绑定着取它）。 */
+    let followUpRef: MessageFollowUpService | undefined
     /** WP417（自查 A8 / C23）：客服查询类工具的数据（消息库与聊天车道比记录源晚建，建好再填）。 */
     let supportInboxRef: SupportInboxPort | undefined
     /** WP417（自查 C2 / D9）：运行起草的回复回哪个渠道（聊天车道比运行时晚建，建好再填）。 */
@@ -8837,6 +8847,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }
         })
       },
+      // WP441 / WP442：今天的简报到点、分拣时抽「对方说哪天答复」都按品牌时区算；列表 / 会话上挂回信跟进、来信撤卡
+      tzOffsetMinutes: () => workData.tz_offset_minutes,
+      followUp: () => followUpRef,
       // WP440：「全部」时间线里 AI 直接回的那几封，与「这封不该直接回」
       autoReplies: (matter_ids) => emailAutoReplyRef?.forMatters(matter_ids) ?? [],
       flagAutoReply: (approval_item_id, by) =>
@@ -9054,9 +9067,60 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           output_tokens: calls * 200,
         })
       },
-      tzOffsetMinutes: () => outboundTz.get(ws) ?? 0,
     })
     lateMessages.current = messages
+    /*
+     * WP442（docs/108 §5.3 / M4，Luoye 10-21）：**回信跟进**——发出去 N 个工作日没回 → 出卡附催促草稿。
+     * 卡走同一条审批总线：归岗位的会话给做那个岗位的人，没归属的给品牌里第一个持岗位的人（消息页「等对方回」
+     * 就地批，决策 1452）；批了经执行器 → 这里的 deliver → 已连邮箱 sendMail（急停、outbox 幂等）。
+     */
+    followUpRef = createMessageFollowUp({
+      workspace_id: ws,
+      clock,
+      appendEvent,
+      store: messages.store,
+      accounts: () => connections.mailAccounts().map((a) => a.address),
+      tz: () => workData.tz_offset_minutes,
+      otherFollowUp: (thread_id, refs) => messages.otherFollowUp(thread_id, refs),
+      recipientFor: (position_id) => {
+        if (position_id === undefined) return firstPositionOf(ws)
+        const template = org.positions().find((t) => t.id === position_id)
+        const duties = template?.roles.map((r) => r.role) ?? []
+        return duties.length === 0 ? firstPositionOf(ws) : positionFor(ws, duties)
+      },
+      approvals,
+      applyApproval: (id) => txn.executor.applyApproval(id),
+      cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
+      sendMail: (input) => channels.sendMail(input),
+      halt: brandHalt,
+      models: gatewayProxy,
+      modelReady: () => {
+        const models = effectiveModels()
+        return models.configured() && models.defaultRef().provider !== 'stub'
+      },
+      voice: async (position_id) => {
+        const template =
+          position_id === undefined ? undefined : org.positions().find((t) => t.id === position_id)
+        const duties = template?.roles.map((r) => r.role) ?? []
+        const holder = duties.length === 0 ? undefined : positionFor(ws, duties)
+        const held = holder !== undefined && duties.includes(holder.role_id) ? holder : undefined
+        const role_id = held?.role_id ?? 'common.member'
+        const resolved = await skills.registry
+          .resolve(BRAND_VOICE_SKILL, {
+            person_id: held?.person_id ?? firstPositionOf(ws)?.person_id ?? person.id,
+            workspace_id: ws,
+            role_id,
+          })
+          .catch(() => undefined)
+        return supportVoiceSection(role_id, brandVoiceCard(resolved))?.text
+      },
+      brandLanguage: () => {
+        const profile = onboardingRef?.brandProfile(ws)
+        const market = profile?.markets?.[0]
+        return market === undefined ? undefined : marketLanguage(market, profile?.market_languages)
+      },
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
     /*
      * WP440（docs/108 M9，Luoye 10-21）：**邮件客服也按把握直接回**——照在线客服 WP428 那一套。
      * 判断层的三道自主门放行（`auto_reply`）**且**置信度过线才直接发；走审批总线的自动批路径
@@ -10351,6 +10415,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(startRun === undefined ? {} : { startRun }),
       channels,
       messages,
+      followUp: followUpRef,
       chat,
       chatWidget,
       supportJudgment,
@@ -10362,6 +10427,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       async dispose() {
         await chat.close()
         messages.close()
+        followUpRef?.close()
         await channels.close()
         liveData?.close()
         connections.close()
@@ -10403,6 +10469,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP442：催促卡定了——批了过取消窗口施行；再等等 → 撤卡顺延 3 个工作日；不用跟了 → 停
+    if (isFollowUpCard(item)) {
+      await (await brands?.forWorkspace(item.workspace_id))?.followUp?.onDecided(item)
+      return
+    }
     // WP428：全自动——建议卡点了 → 开 / 记下先不开；同类卡定了 → 看够不够条件、出没出事
     await autopilot.afterDecided(item).catch(() => undefined)
     if (isAutopilotCard(item)) return
@@ -11231,7 +11302,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     // WP57：聊天求助超时；WP125：首响 SLA
     s.register(CHAT_ASSIST_TIMEOUT_HANDLER, async () => (await of()).chat.sweepAssistTimeouts())
-    s.register(SUPPORT_SLA_HANDLER, async () => (await of()).supportJudgment.sweepSla())
+    // WP442（docs/108 §5.3）：回信跟进挂在同一拍上（不另起定时），自己一小时最多跑一次
+    s.register(SUPPORT_SLA_HANDLER, async () => {
+      const b = await of()
+      const sla = await b.supportJudgment.sweepSla()
+      const followUp = await b.followUp?.sweepIfDue().catch(() => undefined)
+      return followUp === undefined ? sla : { ...sla, follow_up: followUp }
+    })
   }
 
   /**

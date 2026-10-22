@@ -105,6 +105,12 @@ export interface MessageTriage {
   rule_hits?: MessageRuleHit[]
   /** WP441：去向由哪条规则定的（多条命中时只认排最前、带去向动作的那一条）。 */
   rule_route?: string
+  /**
+   * WP442（docs/108 §5.3）：对方在这封信里说过「什么时候给答复」（「下周一给你答复」「I'll confirm by Friday」），
+   * 分拣时顺手抽出来的那一天（品牌时区那一天的 00:00，ISO）。回信跟进到那天**再过 1 个工作日**才提醒，
+   * 不再按默认的 N 个工作日算。抽不出来、日期已经过去的不写。
+   */
+  promised_reply_at?: Iso8601
 }
 
 /** WP441：一封信命中的一条消息规则。 */
@@ -450,6 +456,11 @@ export interface MessageThreadSummary {
   card_link?: string
   /** WP441：最新那封来信命中的消息规则（「为什么这样处理」那一格）。 */
   rule_hits?: MessageRuleHit[]
+  /**
+   * WP442（docs/108 §5.3）：**回信跟进**——最后一封是我们发的、对方是真人、不在别的跟进里的会话才有。
+   * 对方来信了就收掉（这一格没有了）。
+   */
+  follow_up?: MessageFollowUp
 }
 
 /* ── 标签 ─────────────────────────────────────────────────────────────── */
@@ -743,4 +754,160 @@ export type MessageWriteback = 'written' | 'local_only' | 'failed' | 'no_mailbox
 export interface MessageImagesReport {
   shown: number
   failed: number
+}
+
+/* ── WP442：回信跟进（docs/108 §5.3 / M4；只加）──────────────────────────── */
+
+/** 默认几个工作日没回就提醒（品牌时区，周六日不算）。系统规则里能改、能按邮箱分开设。 */
+export const FOLLOW_UP_DEFAULT_BUSINESS_DAYS = 3
+/** 能设的范围（1–15 个工作日）。 */
+export const FOLLOW_UP_MIN_BUSINESS_DAYS = 1
+export const FOLLOW_UP_MAX_BUSINESS_DAYS = 15
+/** 一个会话最多提醒几次（第二次间隔翻倍，之后不再出）。 */
+export const FOLLOW_UP_MAX_REMINDERS = 2
+/** 卡上「再等等」顺延几个工作日。 */
+export const FOLLOW_UP_WAIT_BUSINESS_DAYS = 3
+/**
+ * 只盯最近这么多天里发出去的（日历日）。第一次接邮箱回填的老信、早就没下文的往来不翻出来催。
+ */
+export const FOLLOW_UP_LOOKBACK_DAYS = 14
+/** 催促卡的卡面（`outbound_draft` 的 `payload.form`）。 */
+export const FOLLOW_UP_CARD_FORM = 'follow_up_nudge'
+/** 系统规则的名字（108C 合了以后 `MessageRule.system = 'follow_up'` 统一）。 */
+export const FOLLOW_UP_SYSTEM_RULE = 'follow_up'
+
+/**
+ * 一条会话的跟进状态：
+ * - `waiting`：在等对方回，`due_at` 到了还没回就出卡；
+ * - `carded`：卡已经出了（在卡片流 / 消息页等你「发出 / 修改 / 再等等 / 不用跟了」）；
+ * - `stopped`：不再跟（你点了「不用跟了」，或已经提醒满 {@link FOLLOW_UP_MAX_REMINDERS} 次）。
+ */
+export type MessageFollowUpState = 'waiting' | 'carded' | 'stopped'
+
+/** 这一天是怎么算出来的。 */
+export type MessageFollowUpBasis =
+  /** 默认：发出后 N 个工作日（催过一次之后翻倍）。 */
+  | 'default'
+  /** 对方说过什么时候答复：那天再过 1 个工作日。 */
+  | 'promised'
+  /** 卡上点了「再等等」：顺延 {@link FOLLOW_UP_WAIT_BUSINESS_DAYS} 个工作日。 */
+  | 'waited'
+
+export interface MessageFollowUp {
+  /** 到这个时刻还没回就提醒（`carded` 时是这张卡出的那一拍）。 */
+  due_at: Iso8601
+  /** 已经催过几次（经卡「发出」的那几封）。 */
+  nudges: number
+  state: MessageFollowUpState
+  basis?: MessageFollowUpBasis
+  /** 我们最后一封发出的时间（从这时开始等）。 */
+  since?: Iso8601
+  /** 等谁回（我们最后一封的第一个收件人）。 */
+  waiting_on?: MessageAddress
+  /** 这一轮按几个工作日算（默认 / 这只邮箱的设置；翻倍之前的数）。 */
+  business_days?: number
+  /** 对方说过的那一天（`basis = 'promised'` 时）。 */
+  promised_reply_at?: Iso8601
+  /** 出了卡就是那张卡的 id。 */
+  card_id?: string
+  /** 会话归哪个岗位（岗位模板 id）；没有 = 没归属（卡在消息页「等对方回」批，决策 1452）。 */
+  position_id?: string
+}
+
+/** 「等对方回」那一堆的一行（WP459 消息页用；按到期早的在前）。 */
+export interface MessageFollowUpRow {
+  thread_id: string
+  subject: string
+  account: string
+  /** 我们最后发出的那一封。 */
+  last_message_id: string
+  follow_up: MessageFollowUp
+}
+
+/** 系统规则「发出 N 个工作日没回 → 提醒我」按邮箱分开设的那一行。 */
+export interface MessageFollowUpAccountSetting {
+  account: string
+  /** 不给 = 跟着总开关。 */
+  enabled?: boolean
+  /** 不给 = 跟着总天数。 */
+  business_days?: number
+}
+
+/** 系统规则「发出 N 个工作日没回 → 提醒我」。 */
+export interface MessageFollowUpSettings {
+  enabled: boolean
+  business_days: number
+  /** 按邮箱分开设的（没设过的邮箱不在里面）。 */
+  accounts: MessageFollowUpAccountSetting[]
+  /** 现在连着的邮箱（界面「按邮箱分开设」列它们）。 */
+  mailboxes?: string[]
+  updated_at?: Iso8601
+  updated_by?: PersonId
+}
+
+/** 改系统规则：给 `account` 就只改那只邮箱的（`reset: true` = 那只邮箱回到跟着总设置）。 */
+export interface MessageFollowUpSettingsPatch {
+  enabled?: boolean | undefined
+  business_days?: number | undefined
+  account?: string | undefined
+  reset?: boolean | undefined
+}
+
+/**
+ * 在「等对方回」那一行上直接点的（不经卡）：
+ * - `stop`：不用跟了；`wait`：再等等（顺延 {@link FOLLOW_UP_WAIT_BUSINESS_DAYS} 个工作日）；
+ * - `resume`：停了的接着跟；`nudge`：现在就出催促卡（不等到点）。
+ */
+export type MessageFollowUpAction = 'stop' | 'wait' | 'resume' | 'nudge'
+
+/** 催促卡的载荷（`outbound_draft`，`form = 'follow_up_nudge'`）。批了经已连的邮箱在原会话里回一封。 */
+export interface FollowUpNudgePayload {
+  form: typeof FOLLOW_UP_CARD_FORM
+  channel: 'email'
+  thread_ref: string
+  /** 从哪只邮箱发（我们上一封是从这只发的）。 */
+  account: string
+  /**
+   * 收件人门禁看的那一个（`contact`，id = 对方邮箱；31 §3.3：必须是这条会话的原参与者）。
+   * `email` 给发出记录读（「发给了谁」）。
+   */
+  to: ObjectRef & { email: string }
+  /** 真正发给谁（我们上一封的收件人，不含自己）。 */
+  recipients: MessageAddress[]
+  cc?: MessageAddress[]
+  in_reply_to?: string
+  references?: string[]
+  body: { subject: string; text: string }
+  /** 草稿的语言（ISO 639-1）。 */
+  lang: string
+  /** 我们上一封的开头一段（卡上「你 10-15 发的：…」）。 */
+  quote?: string
+  follow_up: {
+    thread_id: string
+    waiting_on: MessageAddress
+    since: Iso8601
+    business_days: number
+    /** 卡上「还没回」后面那个数（工作日）。 */
+    waited_business_days: number
+    basis: MessageFollowUpBasis
+    promised_reply_at?: Iso8601
+    /** 第几次提醒（1 或 2）。 */
+    reminder: number
+    nudges: number
+    position_id?: string
+  }
+  /** 决策 1452：没归属的在消息页「等对方回」就地批；首页「要你定」不列（WP459 接）。 */
+  surface?: 'messages' | 'position'
+}
+
+export function isFollowUpNudgePayload(p: unknown): p is FollowUpNudgePayload {
+  if (typeof p !== 'object' || p === null || Array.isArray(p)) return false
+  const r = p as Record<string, unknown>
+  return (
+    r.form === FOLLOW_UP_CARD_FORM &&
+    typeof r.body === 'object' &&
+    r.body !== null &&
+    typeof r.follow_up === 'object' &&
+    r.follow_up !== null
+  )
 }

@@ -28,6 +28,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, GripVertical, Pencil, Sparkles, Trash2, Undo2 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FollowUpRuleRow, useFollowUpSettings } from '@/components/messages/follow-up-rule'
 import { positionName, useMessageOverview } from '@/components/messages/hand-actions'
 import { type PendingRuleText, takePendingRuleText } from '@/components/messages/rule-draft-text'
 import { RuleProposalView } from '@/components/messages/rule-proposal'
@@ -92,6 +93,8 @@ export function MessageRulesPanel(): ReactNode {
     queryFn: () => listMessageRules().catch((): MessageRuleList => ({ rules: [] })),
   })
   const overview = useMessageOverview()
+  // WP442：回信跟进那一行的设置（天数、按邮箱分开设）在它自己的接口；没装回信跟进 = undefined
+  const followUp = useFollowUpSettings()
   const [echo, setEcho] = useState<Echo | undefined>(undefined)
   /** WP441：清单里点「改」→ 原话带回顶上的输入框。 */
   const [seed, setSeed] = useState<(PendingRuleText & { n: number }) | undefined>()
@@ -247,7 +250,8 @@ export function MessageRulesPanel(): ReactNode {
       )}
       {groups.filter((g) => g.id !== 'sender').map(renderGroup)}
 
-      {systemRules.length === 0 ? null : (
+      {/* WP441 + WP442：系统规则一组——今天的简报、回信跟进（`MessageRule.system = 'follow_up'`） */}
+      {systemRules.length === 0 && followUp.data === undefined ? null : (
         <SystemRuleGroup
           rules={systemRules}
           onEcho={(text, tone) => {
@@ -933,7 +937,7 @@ function ruleLine(
   return `${cond} → ${acts}`
 }
 
-/* ── WP441：系统规则（今天的简报几点发） ───────────────────────────────── */
+/* ── WP441：系统规则（今天的简报几点发；WP442 回信跟进那一行见 FollowUpRuleRow） ─────────── */
 
 function SystemRuleGroup({
   rules,
@@ -954,9 +958,13 @@ function SystemRuleGroup({
         <Hint text={t('message_rules.group.system.hint')} />
       </h3>
       <ul className="flex flex-col divide-y divide-ws-line rounded-[12px] border border-ws-line bg-ws-card">
-        {rules.map((r) => (
-          <SystemRuleRow key={r.id} rule={r} onEcho={onEcho} />
-        ))}
+        {rules
+          .filter((r) => r.system !== 'follow_up')
+          .map((r) => (
+            <SystemRuleRow key={r.id} rule={r} onEcho={onEcho} />
+          ))}
+        {/* WP442：回信跟进那一行带天数、按邮箱分开设，自己画（没装回信跟进时不画） */}
+        <FollowUpRuleRow />
       </ul>
     </section>
   )

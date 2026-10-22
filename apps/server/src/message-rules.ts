@@ -42,6 +42,8 @@ import type {
   Iso8601,
   MessageDigest,
   MessageDigestEntry,
+  MessageFollowUpSettings,
+  MessageFollowUpSettingsPatch,
   MessageLabel,
   MessagePositionOption,
   MessageRecord,
@@ -59,6 +61,7 @@ import type {
   RoleId,
 } from '@agentsws/contracts'
 import {
+  FOLLOW_UP_SYSTEM_RULE,
   MESSAGE_DIGEST_DEFAULT_TIME,
   MESSAGE_RULE_NOTIFY_MERGE_MS,
   MESSAGE_RULE_TRIAL_AI_LIMIT,
@@ -70,6 +73,13 @@ import { isMessageRuleCard } from './message-rule-cards.js'
 
 /** 系统规则「今天的简报」的 id（一个品牌一条）。 */
 export const DIGEST_SYSTEM_RULE_ID = 'mrule_sys_digest'
+
+/**
+ * WP442 × WP441：系统规则「发出 N 个工作日没回 → 提醒我」的 id。设置本身仍在回信跟进那边
+ * （`message-follow-up.json`：天数、按邮箱分开设），清单里按 `MessageRule.system = 'follow_up'` 现拼一行，
+ * 开关走这里也行（转给回信跟进），删不掉。
+ */
+export const FOLLOW_UP_SYSTEM_RULE_ID = 'mrule_sys_follow_up'
 
 /** 「告诉我一声」「进简报」「起草」只对这么新的信生效（接邮箱时回填的老信不该一下子响一串）。 */
 export const RULE_FRESH_MS = 24 * 3_600_000
@@ -120,6 +130,15 @@ export interface MessageRuleServiceOptions {
   trialCredits?(calls: number, chars: number): number | undefined
   /** 本地时区（分钟；东八区 480）。简报按它到点。 */
   tzOffsetMinutes?(): number
+  /**
+   * WP442：回信跟进的系统规则（晚绑定；没装回信跟进 = undefined，清单里就没有那一行）。
+   */
+  followUp?():
+    | {
+        settings(): MessageFollowUpSettings
+        setSettings(patch: MessageFollowUpSettingsPatch, by: PersonId): MessageFollowUpSettings
+      }
+    | undefined
 }
 
 export interface MessageRuleService {
@@ -220,6 +239,30 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
     })
   }
 
+  /** WP442：系统规则「回信跟进」那一行（设置在回信跟进那边，这里现拼；不进分拣用的 cache）。 */
+  const followUpRule = (): MessageRule | undefined => {
+    const hook = options.followUp?.()
+    if (hook === undefined) return undefined
+    const s = hook.settings()
+    const at = s.updated_at ?? now()
+    return {
+      id: FOLLOW_UP_SYSTEM_RULE_ID,
+      name: '回信跟进',
+      scope: { kind: 'brand' },
+      when: { match: 'all', conditions: [] },
+      actions: [],
+      enabled: s.enabled,
+      order: 1_000_001,
+      revision: 1,
+      by: 'system' as PersonId,
+      updated_by: (s.updated_by ?? 'system') as PersonId,
+      created_at: at,
+      updated_at: at,
+      origin_text: '',
+      system: FOLLOW_UP_SYSTEM_RULE,
+    }
+  }
+
   const refresh = async (): Promise<void> => {
     await ensureSystem()
     await purge()
@@ -305,6 +348,8 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
     }
     const rules: MessageRuleView[] = []
     for (const r of cache) if (visible(r, actor)) rules.push(await viewOf(r, actor, shared, recent))
+    const fu = followUpRule()
+    if (fu !== undefined) rules.push(await viewOf(fu, actor, shared, recent))
     // 刚删的（能撤回）：新的在前
     const recently_deleted: MessageRuleView[] = []
     const deleted = (await withDeleted())
@@ -387,6 +432,15 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
     id: string,
     patch: MessageRulePatch,
   ): Promise<MessageRule> => {
+    if (id === FOLLOW_UP_SYSTEM_RULE_ID) {
+      // WP442：回信跟进那条只有开关（天数、按邮箱分开设走回信跟进自己的设置接口）；不查版本号
+      const hook = options.followUp?.()
+      if (hook === undefined) throw new ApiError('not_found', '这台机器上没有回信跟进。')
+      if (patch.enabled !== undefined) hook.setSettings({ enabled: patch.enabled }, actor.person_id)
+      const next = followUpRule()
+      if (next === undefined) throw new ApiError('not_found', '这台机器上没有回信跟进。')
+      return next
+    }
     const prior = await requireRule(id, actor)
     if (patch.revision !== prior.revision) return conflict(prior)
     let next: MessageRule = {
@@ -431,6 +485,8 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
 
   /** 删：当场不再生效；留 7 天能撤回（决策 243），过了才真删。 */
   const remove = async (actor: MessageActor, id: string): Promise<boolean> => {
+    if (id === FOLLOW_UP_SYSTEM_RULE_ID)
+      throw new ApiError('invalid_input', '系统规则删不掉，只能关。')
     const prior = await requireRule(id, actor)
     if (prior.system !== undefined) throw new ApiError('invalid_input', '系统规则删不掉，只能关。')
     if (store.putMessageRule === undefined) return false

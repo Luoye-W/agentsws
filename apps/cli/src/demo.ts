@@ -2323,7 +2323,28 @@ async function seedMessages(server: Server, world: World): Promise<void> {
     }),
   ]
 
+  /*
+   * WP442（docs/108 §5.3）：回信跟进——6 天前发给一位买家的样品报价，对方一直没回（过了 3 个工作日）。
+   * 种完立刻巡检一轮：首页 / 消息页有一张「Sophie Laurent 还没回」的催促卡可看。名字、公司都是假的。
+   */
+  rows.push({
+    ...base({
+      id: 'm118',
+      from: { email: DEMO_MAILBOX, name: 'Luminous Lab' },
+      subject: 'Sample order: 3 units of the 600W power station',
+      text: 'Hi Sophie,\n\nThanks for your interest. Attached is the quote for 3 sample units of the 600W power station (EXW Shenzhen, ships in 5 days). Let me know if you would like us to go ahead.\n\nBest,\nLuminous Lab',
+      minutes: 60 * 24 * 6,
+      folder: 'Sent',
+      folder_kind: 'sent',
+      read: true,
+    }),
+    to: [{ email: 'sophie@alpenhaus-retail.example', name: 'Sophie Laurent' }],
+  })
+
   for (const row of rows) await store.put(row)
+  await (await server.brands.forWorkspace(world.workspace_id)).followUp
+    ?.sweep()
+    .catch(() => undefined)
 
   /*
    * WP439：你教过的三个发件人（右栏「规则」那一页有东西可看）——命中账按天摊在最近几天。

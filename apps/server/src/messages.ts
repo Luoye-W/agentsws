@@ -66,6 +66,7 @@ import {
   matchSenderRule,
   POSITION_OF_ROUTE,
   positionForKind,
+  promisedReplyAt,
   ReplySuggester,
   recordSenderRuleHit,
   restoreRemoteImages,
@@ -97,6 +98,11 @@ import type {
   MessageDraftInput,
   MessageFlagsInput,
   MessageFolderKind,
+  MessageFollowUp,
+  MessageFollowUpAction,
+  MessageFollowUpRow,
+  MessageFollowUpSettings,
+  MessageFollowUpSettingsPatch,
   MessageImagesReport,
   MessageKind,
   MessageKindInput,
@@ -352,8 +358,30 @@ export interface MessagesOptions {
   }): Promise<string | undefined>
   /** 用工坊积分时一次试跑大概多少积分。 */
   trialCredits?: MessageRuleServiceOptions['trialCredits']
-  /** 本地时区（分钟）：今天的简报按它到点。 */
+  /**
+   * 本地 / 品牌时区（分钟偏移）。WP441：今天的简报按它到点；WP442：分拣时抽「对方说哪天答复」按它算当地哪一天。
+   * 不给 = 0（UTC）。
+   */
   tzOffsetMinutes?(): number
+  /**
+   * WP442（docs/108 §5.3）：回信跟进（`message-follow-up.ts`，晚绑定）。给了：列表 / 会话上挂 `follow_up`，
+   * 来信时撤卡收掉，「等对方回」与系统规则那几条接口有东西。不给 = 没有回信跟进。
+   */
+  followUp?(): MessageFollowUpHooks | undefined
+}
+
+/** WP442：消息那一层要回信跟进做的几件事（`MessageFollowUpService` 的子集，免得两个文件互相引用）。 */
+export interface MessageFollowUpHooks {
+  of(thread_id: string): MessageFollowUp | undefined
+  noteInbound(record: Pick<MessageRecord, 'thread_id' | 'date' | 'from' | 'account'>): Promise<void>
+  rows(): MessageFollowUpRow[]
+  settings(): MessageFollowUpSettings
+  setSettings(patch: MessageFollowUpSettingsPatch, by: PersonId): MessageFollowUpSettings
+  act(
+    thread_id: string,
+    action: MessageFollowUpAction,
+    by: PersonId,
+  ): Promise<MessageFollowUp | undefined>
 }
 
 /** WP212：不进「交给 X ▾」的岗位（负责人：自己处理用「我自己回」）。 */
@@ -447,6 +475,11 @@ export interface MessagesAssembly {
   ): Promise<
     { status: 'ok' | 'failed'; error?: { message: string; retryable?: boolean } } | undefined
   >
+  /**
+   * WP442：这条会话在别的跟进里吗（红人 / B2B 开发信序列——回信跟进不重复盯）。客服线程不在这里判：
+   * 归了客服的信路由就是 `support`，跟进那一侧按路由 / 文件夹自己认。
+   */
+  otherFollowUp(thread_id: string, refs: readonly string[]): boolean
   close(): void
 }
 
@@ -842,7 +875,14 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
             logQuiet('sender_rule_hit_failed', record.account, e)
           }
         }
-        return verdict
+        // WP442：对方回了 → 在跟的那条收掉、卡撤掉；对方说过「哪天答复」→ 顺手抽出来（到那天再过 1 个工作日才提醒）
+        try {
+          await options.followUp?.()?.noteInbound(record)
+        } catch (e) {
+          logQuiet('follow_up_inbound_failed', record.account, e)
+        }
+        const promised = promisedReplyAt(record.text, record.date, options.tzOffsetMinutes?.() ?? 0)
+        return promised === undefined ? verdict : { ...verdict, promised_reply_at: promised }
       }),
     /**
      * 交给客服 / 红人那一路；那一侧不接就回 `false`——于是信不挪、留在收件箱里可见。
@@ -926,6 +966,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     ...(options.stageRuleCard === undefined ? {} : { stageRuleCard: options.stageRuleCard }),
     ...(options.trialCredits === undefined ? {} : { trialCredits: options.trialCredits }),
     ...(options.tzOffsetMinutes === undefined ? {} : { tzOffsetMinutes: options.tzOffsetMinutes }),
+    // WP442：系统规则「回信跟进」并进同一张清单（`MessageRule.system = 'follow_up'`）
+    followUp: () => options.followUp?.(),
     ...(options.stageRuleDraft === undefined
       ? {}
       : {
@@ -1169,6 +1211,9 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         next = { ...next, open_card_count: c.open_card_count }
         if (c.card_link !== undefined) next = { ...next, card_link: c.card_link }
       }
+      // WP442：回信跟进（在等对方回 / 出了催促卡 / 不跟了）
+      const followUp = options.followUp?.()?.of(row.thread_id)
+      if (followUp !== undefined) next = { ...next, follow_up: followUp }
       out.push(next)
     }
     return out
@@ -1362,9 +1407,35 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     return marks.length === 0 ? {} : { auto_replies: marks }
   }
 
+  /** WP442：回信跟进没装配时那几条接口照实说。 */
+  const followUpOrThrow = (): MessageFollowUpHooks => {
+    const f = options.followUp?.()
+    if (f === undefined) throw new ApiError('not_implemented', '这台机器上没有装回信跟进。')
+    return f
+  }
+
   const port: MessagesPort = {
     flagAutoReply(actor, approval_item_id) {
       return options.flagAutoReply?.(approval_item_id, actor.person_id)
+    },
+    // WP442：「等对方回」那一堆、系统规则「发出 N 个工作日没回 → 提醒我」、行上直接点的
+    followUps() {
+      return { rows: followUpOrThrow().rows() }
+    },
+    followUpSettings() {
+      return followUpOrThrow().settings()
+    },
+    setFollowUpSettings(actor, patch) {
+      return followUpOrThrow().setSettings(patch, actor.person_id as PersonId)
+    },
+    async followUpAction(actor, thread_id, action) {
+      const out = await followUpOrThrow().act(thread_id, action, actor.person_id as PersonId)
+      if (out === undefined)
+        throw new ApiError(
+          'not_found',
+          '这条会话现在不在跟进里（对方回过了，或者最后一封不是我们发的）。',
+        )
+      return { follow_up: out }
     },
     async accounts(): Promise<{ accounts: MessageAccountView[] }> {
       const known = options.accounts().map((a) => a.address)
@@ -1423,6 +1494,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         ...(summary?.kind === undefined ? {} : { kind: summary.kind }),
         // WP440：AI 按把握直接回的那几封（按这条会话落成的事项找）
         ...autoRepliesOf(messages),
+        // WP442：回信跟进
+        ...(summary?.follow_up === undefined ? {} : { follow_up: summary.follow_up }),
         ...(agentRoute === undefined
           ? {}
           : {
@@ -2428,6 +2501,12 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         logQuiet('message_digest_failed', '', e)
       }
       return report
+    },
+    otherFollowUp(thread_id, refs) {
+      return (
+        (options.kol?.isOurThread(thread_id, refs) ?? false) ||
+        (options.b2b?.isOurThread(thread_id, refs) ?? false)
+      )
     },
     close(): void {
       store.close?.()

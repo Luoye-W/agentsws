@@ -124,10 +124,7 @@ export function KindChip({
       }
     >
       <div className="flex w-56 flex-col gap-1 p-1.5">
-        <div
-          className="px-2 pt-1 pb-1.5 text-xs text-ws-muted-fg"
-          data-testid="kind-popover-head"
-        >
+        <div className="px-2 pt-1 pb-1.5 text-xs text-ws-muted-fg" data-testid="kind-popover-head">
           {lead === undefined
             ? t('messages.kind.head', { pct, by: t(`messages.kind.by.${by ?? 'model'}`) })
             : t(hits.length > 1 ? 'messages.rule.head.more' : 'messages.rule.head', {
