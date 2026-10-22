@@ -122,7 +122,7 @@ export function OptionGroup({
   className?: string
 }): ReactNode {
   return (
-    <fieldset aria-label={label} className={cn('ws-opts m-0 border-0 p-0', className)}>
+    <fieldset aria-label={label} className={cn('ws-opts mx-0 mb-0 border-0 p-0', className)}>
       {options.map((o) => {
         const on = o.id === value
         return (

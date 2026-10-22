@@ -13,6 +13,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { PageHeader } from '@/components/design/kit'
 import { AskSecretary } from '@/components/secretary/ask-secretary'
 import { MeetDialog } from '@/components/secretary/meet-dialog'
 import { Button } from '@/components/ui/button'
@@ -20,7 +21,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DutyBadges } from '@/components/work/duty-badges'
 import { getPersonProfile, listPeople, type ProfileFieldName } from '@/lib/api'
-import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 
 export function PeoplePage(): React.ReactNode {

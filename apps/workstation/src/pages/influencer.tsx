@@ -18,11 +18,11 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
+import { PageHeader } from '@/components/design/kit'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getKolCreators, getPositions } from '@/lib/api'
-import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 
 export function InfluencerPage({ setup = false }: { setup?: boolean }): React.ReactNode {

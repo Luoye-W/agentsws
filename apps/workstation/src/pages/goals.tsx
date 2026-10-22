@@ -5,9 +5,9 @@
  */
 import type { Goal, GoalProgress } from '@agentsws/contracts'
 import { useQuery } from '@tanstack/react-query'
+import { PageHeader } from '@/components/design/kit'
 import { Skeleton } from '@/components/ui/skeleton'
 import { listGoals } from '@/lib/api'
-import { PageHeader } from '@/components/design/kit'
 import { useApp } from '@/lib/app-context'
 import { daysLeftLabel } from '@/lib/work'
 

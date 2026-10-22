@@ -835,6 +835,9 @@
     border-radius: 8px;
     background-color: var(--ws-secondary);
     min-inline-size: 0;
+    /* 放在竖排容器里也只占自己那么宽，不被拉满一整行 */
+    width: fit-content;
+    max-width: 100%;
   }
   .ws-seg-item {
     display: inline-flex;
