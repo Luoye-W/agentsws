@@ -122,6 +122,23 @@ export type RunBrowser =
        */
       bsk_path?: string
     }
+  | {
+      /**
+       * WP463（docs/111 §3，决策 1471–1477）：**用户自己装的 ego 浏览器**（lite.ego.app）。
+       *
+       * 和 Claude Code 调 ego 一样原样调用：AI 读 `ego-browser skill` 的说明，把一段 JS
+       * 交给 `ego-browser nodejs` 跑（`dsh-adapter` 的 `ego.ts` 三个工具）。我们只做
+       * 「方便调用」：不打包、不分发、不过网站白名单、不按读写拦，只留痕。
+       * **只有个人档允许**（ego 装在用户那台电脑上），判法同 `browserskill`。
+       */
+      mode: 'ego'
+      /**
+       * `ego-browser` 可执行文件的路径（服务端探到的那一个：设置里存过的 → PATH →
+       * 常见安装位置）。Windows 上是经 `active_version_dir` 联接的那条路径，
+       * 每次按联接取，不缓存版本目录。
+       */
+      ego_path: string
+    }
 
 /**
  * WP89（55 §8 Q7）：这次运行**在沙箱里跑命令**的那一层。
@@ -232,7 +249,7 @@ export const DEFAULT_WEB_LIMITS: Readonly<{ max_searches: number; max_fetches: n
  */
 export interface BrowserSettings {
   /** `off` = 谁都不许开浏览器（缺省）。 */
-  mode: 'off' | 'attach' | 'launch' | 'browserskill'
+  mode: 'off' | 'attach' | 'launch' | 'browserskill' | 'ego'
   /** `attach`：本机 Chrome 的 CDP 地址（`http://127.0.0.1:9222`）。 */
   endpoint?: string
   /** `launch`：本机 Chrome / Chromium 的可执行文件路径。 */
@@ -244,6 +261,30 @@ export interface BrowserSettings {
    * 缺省是我们自己装的那一份（`AGENTSWS_DATA_DIR/bin/bsk`），用户一般不用填。
    */
   bsk_path?: string
+  /**
+   * WP463：`ego`：用户手动指的 `ego-browser` 路径。一般不用填——服务端按
+   * PATH → 常见安装位置自己找（docs/111 §3「探测」）。
+   */
+  ego_path?: string
+}
+
+/**
+ * WP463（docs/111 §3）：**这台机器上 ego 装没装、能不能跑**（设置页那一项读它）。
+ *
+ * 「能跑」= `ego-browser skill` 退出码 0、首行是
+ * `[ego-browser:skill] ego-browser usage guide v<版本>`；版本号就从这一行取。
+ */
+export interface EgoBrowserStatus {
+  /** 这一档允不允许（只有个人档）。 */
+  allowed: boolean
+  /** 探到了、而且 `skill` 跑得通。 */
+  installed: boolean
+  /** 探到的 `ego-browser` 在哪。 */
+  ego_path?: string
+  /** 运行时自己报的版本（`skill` 首行里的那个）。 */
+  version?: string
+  /** 没装 / 跑不起来 / 这一档不允许时说给人听的那一句。 */
+  detail?: string
 }
 
 /**
@@ -304,6 +345,13 @@ export interface BrowserSettingsView extends BrowserSettings {
   browserskill_allowed: boolean
   /** 不允许时说给人听的那一句。 */
   browserskill_blocked_reason?: string
+  /**
+   * WP463：这一档允不允许用 ego（同 BrowserSkill：只有个人档）。老服务进程没有这一格，
+   * 读的一方缺省当不允许。
+   */
+  ego_allowed?: boolean
+  /** 不允许时说给人听的那一句。 */
+  ego_blocked_reason?: string
 }
 
 /** 探一次 CDP 地址（`GET /json/version`）的结果。 */
@@ -334,9 +382,10 @@ export interface RunBrowserView {
    * 哪种执行器（55 §3 / §10）：
    * `playwright-mcp` = 官方 provider 那一种（工具名带 `mcp__playwright-mcp__` 前缀）；
    * `browserskill` = WP92「我正在用的浏览器」（六个 `browser_*` 裸名工具）；
+   * `ego` = WP463 用户自己装的 ego（`ego_run` / `ego_guide` / `ego_status`）；
    * `none` = 这次运行一个浏览器工具都没调过。
    */
-  executor: 'playwright-mcp' | 'browserskill' | 'none'
+  executor: 'playwright-mcp' | 'browserskill' | 'ego' | 'none'
   /** 这次运行还在不在跑（日志里有没有 `run.completed` / `run.failed` / `run.cancelled`）。 */
   running: boolean
   /** 最近一次导航去的域（`example.myshopify.com`）。 */
@@ -353,6 +402,12 @@ export interface RunBrowserView {
   /** 导航次数与被拦次数（"运行中"那三个字段的同一条思路，#15）。 */
   navigations: number
   blocked: number
+  /**
+   * WP463：ego 这一种每跑一段脚本留的那一行（`progress{step:'ego_run'}` 的 note：
+   * 退出码、耗时、输出摘要），从旧到新，最多留最近 20 段。脚本原文在事件日志的
+   * `tool.call` 里，这里不重复。别的执行器没有这一格。
+   */
+  ego_runs?: { at: Iso8601; note: string }[]
 }
 
 export interface RunRequest {
