@@ -62,6 +62,7 @@ import {
   computerUseProviderConfig,
   cuaDriverUsable,
 } from './computer-use.js'
+import { egoToolDefinitions, readEgoSkill } from './ego.js'
 import { DshAdapterError } from './errors.js'
 import type { GateApi, GateInput } from './gate.js'
 import { installGate } from './gate.js'
@@ -305,6 +306,24 @@ async function inject(root: Context, services: string[]): Promise<Context> {
  * 跨进程那一档见 `headless/child.ts`（同一份组合，换宿主进程）。
  */
 export async function createHarness(input: HarnessInput): Promise<DshHarness> {
+  /*
+   * WP463（docs/111 §3）：ego 那一种**先读一次 `ego-browser skill`**，在搭任何东西之前。
+   * 读到的原文本次运行缓存（`ego_guide` 回它、persona 段整段放它）；读不到 = ego 没装好 /
+   * 跑不起来，这次运行明明白白地失败（同 WP92「装好了才挂」）。服务端那一侧更早一步：
+   * `forRun()` 探不到能跑的 ego 根本不给 `browser`。
+   */
+  const egoBrowser = input.request.browser?.mode === 'ego' ? input.request.browser : undefined
+  let egoGuide: { version: string; text: string } | undefined
+  if (egoBrowser !== undefined) {
+    const read = await readEgoSkill(egoBrowser.ego_path)
+    if (!read.ok) {
+      throw new DshAdapterError(
+        'invalid_input',
+        `ego 跑不起来：${read.detail}（${egoBrowser.ego_path}；设置页「浏览器」那一节看看 ego 装好没有）`,
+      )
+    }
+    egoGuide = { version: read.version, text: read.text }
+  }
   const root = new Context()
   /*
    * WP86（55 §4 第三层）：**只有这条职责真有连接才有 preset 这一层**。
@@ -365,7 +384,12 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * 所以这一档连 `browserUse` 这个服务都不挂（挂了也没人注册 provider，白占一个槽）。
    */
   const browserSkill = browser?.mode === 'browserskill'
-  if (browser !== undefined && !browserSkill) root.plugin(BrowserUseRegistry)
+  /*
+   * WP463：ego 那一种同样不走官方 seam——它是我们自己的三个工具（`ego.ts`），
+   * 浏览器在 ego 自己的进程里，这棵树里不挂 `browserUse`、不挂附件库、不挂工作目录。
+   */
+  const ego = egoBrowser !== undefined
+  if (browser !== undefined && !browserSkill && !ego) root.plugin(BrowserUseRegistry)
   /*
    * WP144（docs/80）：**只有人批过、而且还没过期，才有电脑操控这一层**。
    *
@@ -393,7 +417,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * 腾讯 BrowserSkill 插件同样认 `ctx.attachments` + 路由能力，这一条两条腿都受益。
    */
   const imageHome =
-    browser !== undefined || cuGranted
+    (browser !== undefined && !ego) || cuGranted
       ? mkdtempSync(join(tmpdir(), 'agentsws-run-images-'))
       : undefined
   const dropImages = (): void => {
@@ -476,7 +500,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    *   **多出来的一样**：它往模型的用户上下文里放一句 `Current working directory: "<目录>".`（官方的必选上下文段）。
    * 别的运行照旧不挂（不用的东西不挂），提示词与工具面字节不变。
    */
-  if (shell !== undefined || (browser !== undefined && !browserSkill)) {
+  if (shell !== undefined || (browser !== undefined && !browserSkill && !ego)) {
     const cwd = shell?.workspace_root ?? process.cwd()
     root.plugin(LocalFileSystem, { cwd } as never)
     root.plugin(WorkingDirectoryService, { defaultDirectory: cwd } as never)
@@ -507,7 +531,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     'llm',
     'agents',
     'sessions',
-    ...(browser === undefined || browserSkill ? [] : ['browserUse']),
+    ...(browser === undefined || browserSkill || ego ? [] : ['browserUse']),
     ...(cuGranted ? ['computerUse'] : []),
     ...(imageHome === undefined ? [] : ['attachments']),
     ...(preset === undefined ? [] : ['agentPresets']),
@@ -664,7 +688,12 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
         }
         // 工具与 hook 装在宿主 ctx 上（scope-filtered dispatch 按 `exec.agent` 路由），
         // `tools.restrict` 则必须在 Agent 的 scoped ctx 上调——全局 ctx 会抛。
-        gate = installGate(ctx, { ...input, agent, agentCtx })
+        gate = installGate(ctx, {
+          ...input,
+          agent,
+          agentCtx,
+          ...(egoGuide === undefined ? {} : { egoGuide }),
+        })
         if (browser !== undefined) await mountBrowser(agentCtx)
         /*
          * WP144：电脑操控提供方，排在浏览器**之后**（mount → installGate → 浏览器 →
@@ -685,6 +714,17 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
   /** WP82 / WP92：浏览器那一层（两种执行器一次只挂一种）。 */
   async function mountBrowser(agentCtx: Context): Promise<void> {
     if (browser === undefined) return
+    if (egoBrowser !== undefined && egoGuide !== undefined) {
+      /*
+       * WP463：三个自己的工具注册在 Agent 的 scoped ctx 上（与 BrowserSkill 插件同一个位置），
+       * 于是它们是 scoped registration：`tools.restrict` 遮不住、也**不能**列进白名单
+       * （AGENT-LAYER §9.4 那条坑）。在不在只取决于 `RunRequest.browser.mode === 'ego'`。
+       */
+      for (const def of egoToolDefinitions({ egoPath: egoBrowser.ego_path, guide: egoGuide })) {
+        agentCtx.tools.register(def)
+      }
+      return
+    }
     if (browserSkill) {
       /*
        * WP92：腾讯官方的 dsh 插件（`@wxg-prc-cpg/browser-skill-dsh-plugin`）。

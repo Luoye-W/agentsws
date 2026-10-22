@@ -51,6 +51,7 @@ import {
   cuaToolName,
   isComputerUseOwnTool,
 } from './computer-use.js'
+import { EGO_RUN_TOOL, egoBrief, egoRunNote, isEgoTool } from './ego.js'
 import { presetToolNames } from './preset.js'
 import { inferRefs, plainText } from './reading.js'
 import type { ShellCheck } from './shell.js'
@@ -121,6 +122,11 @@ export interface GateInput {
   onToolResult?: (tool: string, value: unknown) => void
   /** 预算耗尽：宿主发 `budget.exhausted` 并把 Agent 停下。 */
   onBudgetExhausted?: (which: keyof RunRequest['budget'], used: number, cap: number) => void
+  /**
+   * WP463：ego 那一种的 `ego-browser skill` 原文（harness 挂之前读过一次，本次运行缓存）。
+   * 它整段进 persona 的 complete 段（`egoBrief`）。
+   */
+  egoGuide?: { version: string; text: string }
 }
 
 /** 一张发出去的边界选择题卡。 */
@@ -228,7 +234,13 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
    * 看不懂的拒绝。**真正管着它们的是后面三道**：域名白名单、读写分类（表外一律按写，
    * 公司端因此拒）、注 JS 公司端硬拒。新来的工具默认落到"按写"，方向是对的。
    */
-  const browserOn = request.browser !== undefined
+  /*
+   * WP463（docs/111 §3）：ego 那一种不是"浏览器工具"那一套——它是三个自己的工具
+   * （`ego_run` / `ego_guide` / `ego_status`），**不过白名单、不按读写拦、不套 WP387**，
+   * 只留痕。所以 `browserOn` 只管另外两种执行器，ego 单独一条 `egoOn`。
+   */
+  const egoOn = request.browser?.mode === 'ego'
+  const browserOn = request.browser !== undefined && !egoOn
   /*
    * WP86（55 §4 第三层）：preset 挂上来的 MCP 工具（`mcp__<workspace>_<kind>__<tool>`）。
    *
@@ -281,6 +293,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     allow.has(name) ||
     presetTools.has(name) ||
     (browserOn && anyBrowserToolName(name) !== undefined) ||
+    (egoOn && isEgoTool(name)) ||
     (shell !== undefined && name === shellTool) ||
     (computerUse !== undefined && isComputerUseOwnTool(name)) ||
     (cuGranted && cuaToolName(name) !== undefined)
@@ -606,6 +619,14 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       return next()
     }
     if (!allowed(exec.name)) return deny(`not_in_allowlist: ${exec.name}`)
+    /*
+     * WP463（Luoye 10-22「用 ego 的时候不要给它加我们的限制，不然测不出真实水平」）：
+     * ego 三个工具**原样放行**——不过网站白名单、不按读写分类（那样公司档的 `executor`
+     * 策略会把它整个当写外部拒掉）、不套 WP387 的受保护页面卡。只留痕：脚本原文在
+     * `tool.call` 里，跑完的那一行（退出码 / 耗时 / 输出摘要）在 post-execute 里记。
+     * 能走到这里的前提是 `RunRequest.browser.mode === 'ego'`，那只有个人档才给得出来。
+     */
+    if (isEgoTool(exec.name)) return next()
     // WP179：网页工具——这次运行开没开、有没有超每条运行的上限（按查询条数算）
     if (isWebTool(exec.name)) {
       const denial = webCounter.take(exec.name, exec.arguments)
@@ -714,6 +735,17 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     // WP89：命令跑完了，CLI 凭据立刻从执行器上撤掉（13 §4：窗口越窄越好）
     if (isShellTool(exec.name)) clearShellEnv()
     const decision = await next()
+    /*
+     * WP463：每段 ego 脚本跑完在时间线上留一行（16 §2 模型看到的 ⟺ 记下的）：
+     * 退出码、耗时、输出摘要。脚本原文已经在这次调用的 `tool.call` 里，不重复记。
+     */
+    if (egoOn && exec.name === EGO_RUN_TOOL) {
+      sink({
+        type: 'progress',
+        step: 'ego_run',
+        note: result.isError ? `出错：${result.error.message}` : egoRunNote(result.value),
+      })
+    }
     if (decision.kind === 'block') {
       note(api, {
         call_id,
@@ -887,6 +919,20 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
             policy: request.tools.side_effect_policy,
             ...(request.browser === undefined ? {} : { mode: request.browser.mode }),
           }),
+        ]
+      : []),
+    /*
+     * WP463：ego 那一种的说明——`ego-browser skill` 原文 + 前面补的几句（把终端写法换成
+     * `ego_run`、Reddit 只起草）。白名单那几句不写：这一种不过白名单（Luoye 10-22）。
+     */
+    ...(egoOn
+      ? [
+          egoBrief(
+            input.egoGuide ?? {
+              version: '?',
+              text: '（这次没取到 ego 的使用说明：先调 `ego_status` 看看 ego 能不能跑）',
+            },
+          ),
         ]
       : []),
     /*

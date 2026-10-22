@@ -15,6 +15,7 @@
  * | 最近一次拒绝 | `tool.result{status:'blocked'}`，按 `call_id` 认回是哪个工具 |
  * | 等人接管 | `progress{step:'browser_handoff'}`（WP92 的 `bsk_assist{request-help}` 放行时记的那一条） |
  * | 还在不在跑 | 有没有 `run.completed` / `run.failed` / `run.cancelled` |
+ * | ego 每段脚本（WP463） | `tool.call` 是 `ego_*` = 执行器是 ego；`progress{step:'ego_run'}` 的 note（退出码 / 耗时 / 输出摘要），最近 20 段 |
  *
  * **不存第二份状态**：这是纯投影，所以运行结束之后照样算得出来——
  * 官方那一侧"会话一销毁摘要就没了"的毛病（`sidebar-compare` §4 第 1 条）我们不学。
@@ -27,7 +28,11 @@ import {
   browserSkillNavigationUrl,
   browserSkillToolName,
   browserToolName,
+  isEgoTool,
 } from '@agentsws/dsh-adapter'
+
+/** WP463：第三栏最多列最近几段 ego 脚本（再多就是翻日志的事了）。 */
+export const RUN_BROWSER_EGO_RUNS = 20
 
 /** 运行结束的三条（有任何一条 = 不在跑了）。 */
 const TERMINAL = new Set(['run.completed', 'run.failed', 'run.cancelled'])
@@ -93,11 +98,23 @@ export function summarizeRunBrowser(
         const note = typeof p.note === 'string' ? p.note : undefined
         handoff = { at: e.at, ...(note === undefined ? {} : { note }) }
       }
+      if (p.step === 'ego_run') {
+        view.ego_runs ??= []
+        const runs = view.ego_runs
+        runs.push({ at: e.at, note: typeof p.note === 'string' ? p.note : '' })
+        if (runs.length > RUN_BROWSER_EGO_RUNS) runs.shift()
+      }
       continue
     }
     if (e.type === 'tool.call') {
       const p = asRecord(e.payload)
       const tool = typeof p.tool === 'string' ? p.tool : ''
+      // WP463：ego 那三个工具——只认执行器；网址在脚本里，不去猜（ego 自己的窗口里看得到）
+      if (isEgoTool(tool)) {
+        view.executor = 'ego'
+        if (typeof p.call_id === 'string') calls.set(p.call_id, tool)
+        continue
+      }
       const playwright = browserToolName(tool)
       const skill = browserSkillToolName(tool)
       if (playwright === undefined && skill === undefined) continue

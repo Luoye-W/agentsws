@@ -9,6 +9,8 @@
  * | 用独立的 Chrome（`launch`） | 指一个本机的 Chrome / Chromium 可执行文件，每次运行起一个干净的 | 都能用 |
  * | 我正在用的浏览器（`browserskill`，WP92 / 55 §10） | 腾讯 BrowserSkill：一个浏览器扩展 + 本机 `bsk` CLI，附到你**日常那个**浏览器上 | **只有个人档** |
  *
+ * | ego（WP463 / docs/111 §3） | 用户自己装的 ego 浏览器；AI 原样调它的命令行 `ego-browser` | **只有个人档** |
+ *
  * 第三种另有两条路由（都在这个文件里）：`GET …/browserskill` 跑一次 `bsk doctor`
  * 看装到哪一步了，`POST …/browserskill/install` 按钉死的版本 + sha256 装 `bsk`。
  *
@@ -22,6 +24,7 @@ import type {
   BrowserProbeResult,
   BrowserSettingsView,
   BrowserSkillStatus,
+  EgoBrowserStatus,
   MaybePromise,
   RunBrowserView,
 } from '@agentsws/contracts'
@@ -57,11 +60,12 @@ export interface BrowserPort {
   setSettings(
     actor: BrowserActor,
     input: {
-      mode: 'off' | 'attach' | 'launch' | 'browserskill'
+      mode: 'off' | 'attach' | 'launch' | 'browserskill' | 'ego'
       endpoint?: string
       executable_path?: string
       headless?: boolean
       bsk_path?: string
+      ego_path?: string
     },
   ): MaybePromise<BrowserSettingsView>
   /** 给了 `endpoint` 就探那一个；不给就把常见端口挨个试一遍。 */
@@ -71,6 +75,11 @@ export interface BrowserPort {
    * 不装配 = 那两条路由回 `not_implemented`（不配这一种照常能用）。
    */
   browserSkillStatus?(actor: BrowserActor): MaybePromise<BrowserSkillStatus>
+  /**
+   * WP463：这台机器上 ego 装没装、能不能跑（现探一次：跑 `ego-browser skill`）。
+   * 不装配 = 那条路由回 `not_implemented`。
+   */
+  egoStatus?(actor: BrowserActor): MaybePromise<EgoBrowserStatus>
   /** WP92：按钉死的版本 + sha256 装 `bsk`，装完顺便把状态端回去。 */
   installBrowserSkill?(actor: BrowserActor): MaybePromise<BrowserSkillStatus>
   /**
@@ -86,12 +95,14 @@ export interface BrowserPort {
 }
 
 const SettingsBody = z.object({
-  mode: z.enum(['off', 'attach', 'launch', 'browserskill']),
+  mode: z.enum(['off', 'attach', 'launch', 'browserskill', 'ego']),
   endpoint: z.string().min(1).max(2048).optional(),
   executable_path: z.string().min(1).max(4096).optional(),
   headless: z.boolean().optional(),
   /** WP92：`bsk` 的路径；不给就用我们自己装的那一份（数据目录下的 `bin/bsk`）。 */
   bsk_path: z.string().min(1).max(4096).optional(),
+  /** WP463：`ego-browser` 的路径；不给就由服务端自己找（PATH → 常见安装位置）。 */
+  ego_path: z.string().min(1).max(4096).optional(),
 })
 
 function portOf(deps: GatewayDeps): BrowserPort {
@@ -172,6 +183,7 @@ export function browserRoutes(): Route[] {
               : { executable_path: input.executable_path }),
             ...(input.headless === undefined ? {} : { headless: input.headless }),
             ...(input.bsk_path === undefined ? {} : { bsk_path: input.bsk_path }),
+            ...(input.ego_path === undefined ? {} : { ego_path: input.ego_path }),
           }),
         )
       },
@@ -221,6 +233,27 @@ export function browserRoutes(): Route[] {
           throw new ApiError('not_implemented', '这个服务进程没有装配 BrowserSkill')
         }
         return ok(c, await port.browserSkillStatus(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/settings/browser/ego',
+        operationId: 'getEgoBrowserStatus',
+        summary:
+          'WP463：这台机器上 ego 装没装、能不能跑——按 PATH 与常见安装位置找 `ego-browser`，跑一次 `ego-browser skill` 取版本',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'EgoBrowserStatus',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.egoStatus === undefined) {
+          throw new ApiError('not_implemented', '这个服务进程没有装配 ego 探测')
+        }
+        return ok(c, await port.egoStatus(actorOf(c)))
       },
     ),
     route(

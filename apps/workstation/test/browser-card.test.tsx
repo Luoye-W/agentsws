@@ -12,7 +12,12 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrowserCard } from '@/components/settings/browser-card'
-import type { BrowserSettings, BrowserSettingsView, BrowserSkillStatus } from '@/lib/api'
+import type {
+  BrowserSettings,
+  BrowserSettingsView,
+  BrowserSkillStatus,
+  EgoBrowserStatus,
+} from '@/lib/api'
 import { renderWithProviders } from './helpers'
 
 const LOCAL: BrowserSettingsView = {
@@ -68,6 +73,10 @@ const state = {
   installs: 0,
   checks: 0,
   status: NOT_INSTALLED as BrowserSkillStatus,
+  /** WP463：组织现在是哪种用法（`useMode()` 读 `listOrganizations`）。 */
+  orgMode: 'solo' as 'solo' | 'peers' | 'company',
+  ego: { allowed: true, installed: false, detail: '没找到' } as EgoBrowserStatus,
+  egoChecks: 0,
   probe: { ok: false, endpoint: '', detail: '连不上' } as {
     ok: boolean
     endpoint: string
@@ -96,6 +105,13 @@ vi.mock('@/lib/api', async () => {
       state.checks += 1
       return state.status
     },
+    getEgoBrowserStatus: async () => {
+      state.egoChecks += 1
+      return state.ego
+    },
+    listOrganizations: async () => [
+      { id: 'org_1', name: '测试', solo: state.orgMode === 'solo', mode: state.orgMode },
+    ],
   }
 })
 
@@ -105,6 +121,9 @@ beforeEach(() => {
   state.installs = 0
   state.checks = 0
   state.status = NOT_INSTALLED
+  state.orgMode = 'solo'
+  state.ego = { allowed: true, installed: false, detail: '没找到' }
+  state.egoChecks = 0
   state.probe = { ok: false, endpoint: '', detail: '连不上' }
 })
 
@@ -198,5 +217,54 @@ describe('设置页浏览器：两种方式并列', () => {
     const bsk = screen.getByTestId('browser-mode-browserskill')
     expect((bsk.querySelector('input') as HTMLInputElement).disabled).toBe(true)
     expect(bsk.textContent).toContain('bsk 连不过来')
+  })
+})
+
+describe('WP463：ego 那一项', () => {
+  const EGO_LOCAL: BrowserSettingsView = { ...LOCAL, ego_allowed: true }
+
+  it('个人用法、探到了：显示版本号，选了保存的是 ego', async () => {
+    state.view = EGO_LOCAL
+    state.ego = { allowed: true, installed: true, version: '2.1.0', ego_path: '/x/ego-browser' }
+    renderWithProviders(<BrowserCard assignment="asg_1" />)
+    const row = await screen.findByTestId('browser-mode-ego')
+    expect((await screen.findByTestId('browser-ego-status')).textContent).toContain('2.1.0')
+    // 悬停那一句（界面少字：不写步骤清单）
+    expect(row.querySelector('[data-slot="hint"]')?.getAttribute('data-hint')).toContain(
+      '不动你开着的标签',
+    )
+    await userEvent.click(row.querySelector('input') as HTMLInputElement)
+    await userEvent.click(screen.getByTestId('browser-save'))
+    expect(state.saved.at(-1)).toEqual({ mode: 'ego' })
+  })
+
+  it('没探到：显示「没装」+ 官网链接（不给安装包直链），这一项选不了', async () => {
+    state.view = EGO_LOCAL
+    renderWithProviders(<BrowserCard assignment="asg_1" />)
+    const row = await screen.findByTestId('browser-mode-ego')
+    expect((await screen.findByTestId('browser-ego-status')).textContent).toContain('没装')
+    expect(screen.getByTestId('browser-ego-site').getAttribute('href')).toBe(
+      'https://lite.ego.app/',
+    )
+    expect((row.querySelector('input') as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('同事互联、公司集体：这一项根本不出现，也不去探', async () => {
+    for (const mode of ['peers', 'company'] as const) {
+      state.view = EGO_LOCAL
+      state.orgMode = mode
+      state.egoChecks = 0
+      const { unmount } = renderWithProviders(<BrowserCard assignment="asg_1" />)
+      await screen.findByTestId('browser-mode-browserskill')
+      expect(screen.queryByTestId('browser-mode-ego'), mode).toBeNull()
+      expect(state.egoChecks, mode).toBe(0)
+      unmount()
+    }
+  })
+
+  it('老服务进程（没有 ego_allowed 这一格）：不出现', async () => {
+    renderWithProviders(<BrowserCard assignment="asg_1" />)
+    await screen.findByTestId('browser-mode-browserskill')
+    expect(screen.queryByTestId('browser-mode-ego')).toBeNull()
   })
 })

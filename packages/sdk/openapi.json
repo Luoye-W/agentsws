@@ -8232,7 +8232,7 @@
                 "properties": {
                   "mode": {
                     "type": "string",
-                    "enum": ["off", "attach", "launch", "browserskill"]
+                    "enum": ["off", "attach", "launch", "browserskill", "ego"]
                   },
                   "endpoint": {
                     "type": "string",
@@ -8248,6 +8248,11 @@
                     "type": "boolean"
                   },
                   "bsk_path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "ego_path": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 4096
@@ -8471,6 +8476,108 @@
           "sensitivity": "internal"
         },
         "x-returns": "BrowserSkillStatus"
+      }
+    },
+    "/v1/settings/browser/ego": {
+      "get": {
+        "operationId": "getEgoBrowserStatus",
+        "summary": "WP463：这台机器上 ego 装没装、能不能跑——按 PATH 与常见安装位置找 `ego-browser`，跑一次 `ego-browser skill` 取版本",
+        "tags": ["settings"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "EgoBrowserStatus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "store_config",
+          "op": "read",
+          "range": "workspace",
+          "sensitivity": "internal"
+        },
+        "x-returns": "EgoBrowserStatus"
       }
     },
     "/v1/settings/browser/browserskill/install": {
