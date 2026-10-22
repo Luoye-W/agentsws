@@ -9,9 +9,11 @@ import {
   composeEmailReply,
   EMAIL_ANSWER_CITE_INSTRUCTION,
   EMAIL_AUTO_REPLY_EXCLUDED_SUB_CHANNELS,
+  EMAIL_QUESTION_MARK,
   emailAnswerPlan,
   emailAnswerPrompt,
   emailAnswerStubScript,
+  emailAnswerSystem,
   emailAutoReplyGate,
   emailHeldShort,
   scoreAutoAnswer,
@@ -43,8 +45,10 @@ const run = (
   const { question } = splitEmailForAnswer(letter)
   const plan = emailAnswerPlan(question)
   const reply =
-    emailAnswerStubScript([{ role: 'user', content: emailAnswerPrompt({ sources, question }) }]) ??
-    ''
+    emailAnswerStubScript([
+      { role: 'system', content: emailAnswerSystem('邮件客服。') },
+      { role: 'user', content: emailAnswerPrompt({ sources, question }) },
+    ]) ?? ''
   return {
     question,
     plan,
@@ -202,8 +206,22 @@ describe('WP440 · 起草格式与称呼落款', () => {
       subject: 'Warranty',
     })
     expect(p).toContain('[K1] ')
-    expect(p).toContain(EMAIL_ANSWER_CITE_INSTRUCTION)
     expect(p).toContain('<external_data>')
+    // WP471：格式要求在系统提示里（固定在前），用户消息里只有这一封的材料与来信
+    expect(p).not.toContain(EMAIL_ANSWER_CITE_INSTRUCTION)
+    expect(emailAnswerSystem('邮件客服。')).toContain(EMAIL_ANSWER_CITE_INSTRUCTION)
+  })
+
+  it('WP471（决策 1549）：同一品牌两封信——系统提示逐字相同，来信在用户消息最后', () => {
+    const base = '你是这家店的邮件客服。'
+    const a = emailAnswerPrompt({ sources: [WARRANTY], question: '保修多久？', subject: 'A' })
+    const b = emailAnswerPrompt({ sources: [WARRANTY], question: '能寄到加拿大吗？', subject: 'B' })
+    expect(emailAnswerSystem(base)).toBe(emailAnswerSystem(base))
+    expect(a).not.toBe(b)
+    for (const p of [a, b]) {
+      expect(p.indexOf('材料：')).toBeLessThan(p.indexOf(EMAIL_QUESTION_MARK))
+      expect(p.trimEnd().endsWith('</external_data>')).toBe(true)
+    }
   })
 
   it('stub 剧本只认邮件直接回那一次', () => {

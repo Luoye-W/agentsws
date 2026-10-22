@@ -153,7 +153,11 @@ export interface SeoActor {
  * WP159：写改动卡初稿的那一口模型（服务端经这个品牌的模型网关打，用量照常进用量账）。
  * 回的是模型原文；读 / 校验在 `@agentsws/seo-core` 的 `parseSeoDraft`。
  */
-export type SeoDraftModel = (input: { prompt: string }) => Promise<{ text: string }>
+/** `system` 可选（WP471）：给了就作系统提示放最前面（固定不变的说明放那里，命中缓存）。 */
+export type SeoDraftModel = (input: {
+  prompt: string
+  system?: string
+}) => Promise<{ text: string }>
 
 /** 开事项那一跳（`@agentsws/work` 的 `createMatter` 的最小子集）。 */
 export interface SeoMatterPort {

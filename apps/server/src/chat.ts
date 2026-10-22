@@ -402,6 +402,11 @@ const SYSTEM = [
   '5. 不要客套开场白，不要复述访客的话。',
 ].join('\n')
 
+/** 审稿模式（出卡给人批）那一句——WP471 起放系统提示末尾（固定内容，命中缓存）。 */
+const CHAT_REVIEW_INSTRUCTION =
+  '这一轮涉及钱、订单变更或访客要人工：写一句给同事审的建议回复——说清你查到的事实，' +
+  '不替商家决定退不退、补不补、赔不赔；同事批了才发给访客。'
+
 export function createChatLane(options: ChatLaneOptions): ChatLane {
   const { clock, workspace_id } = options
   const pack = options.pack ?? DEFAULT_CHAT_PACK
@@ -534,7 +539,32 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     if (models === undefined || position === undefined) {
       return { blocked: 'no_model', sources: [] }
     }
+    /*
+     * WP471（docs/116 §2 第 3 条，决策 1549）：**固定在前、变化在后**——DeepSeek 只对「和之前某次
+     * 请求开头逐字一样」的那段按命中价收。同一品牌不变的大块（职责规矩、品牌话术、出处要求 /
+     * 审稿那句）进系统提示（两种模式各一份固定的）；用户消息里只放这一次才有的：
+     * 会话到哪了 → 钉住的记录 → 订单 → 材料 → 意图 → 访客原话（原话永远最后）。
+     * 内容一个字不改，只调位置。
+     */
+    const fixed: string[] = [SYSTEM]
+    // WP289（决策 318）：人定过的规矩排在知识前面（和运行提示词里一样：一律照做）
+    const rules = options.roleRules?.()
+    if (rules !== undefined && rules !== '') fixed.push(rules)
+    // WP333：品牌话术（这个品牌自己写过才有）
+    const voice = await options.brandVoice?.().catch(() => undefined)
+    if (voice !== undefined && voice !== '') fixed.push(voice)
+    fixed.push(mode === 'review' ? CHAT_REVIEW_INSTRUCTION : CHAT_ANSWER_CITE_INSTRUCTION)
+
     const parts: string[] = []
+    const matter = matterOf(session)
+    if (matter !== undefined) {
+      if (matter.context.summary !== '') parts.push(`这条会话到哪了：${matter.context.summary}`)
+      for (const ref of matter.context.pinned) {
+        const record = await options.source?.record?.(ref)
+        if (record === undefined) continue
+        parts.push(`${options.source?.label?.(ref) ?? ref.type}：${JSON.stringify(record)}`)
+      }
+    }
     /*
      * WP428：直答那一轮的材料带编号（K = 知识，O = 订单现查），模型按编号标每一句的出处——
      * 置信度的「逐句有出处」就靠它（再拿句子里的数字回去对原文，见 `scoreChatAutoAnswer`）。
@@ -559,21 +589,6 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           private_values: privateValuesOf(order),
         })
     }
-    const matter = matterOf(session)
-    if (matter !== undefined) {
-      if (matter.context.summary !== '') parts.push(`这条会话到哪了：${matter.context.summary}`)
-      for (const ref of matter.context.pinned) {
-        const record = await options.source?.record?.(ref)
-        if (record === undefined) continue
-        parts.push(`${options.source?.label?.(ref) ?? ref.type}：${JSON.stringify(record)}`)
-      }
-    }
-    // WP289（决策 318）：人定过的规矩排在知识前面（和运行提示词里一样：一律照做）
-    const rules = options.roleRules?.()
-    if (rules !== undefined && rules !== '') parts.push(rules)
-    // WP333：品牌话术（这个品牌自己写过才有）
-    const voice = await options.brandVoice?.().catch(() => undefined)
-    if (voice !== undefined && voice !== '') parts.push(voice)
     const hits = (await options.searchKnowledge?.(turn_text, MAX_KNOWLEDGE_HITS)) ?? []
     if (mode === 'review') {
       if (hits.length > 0)
@@ -589,14 +604,8 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           ...(h.stale === true ? { stale: true } : {}),
         })
       if (sources.length > 0) parts.push(`材料：\n${formatChatSources(sources)}`)
-      parts.push(CHAT_ANSWER_CITE_INSTRUCTION)
     }
     parts.push(`意图：${plan.intent}；这一轮的收尾问句（可用可不用）：${plan.next_question}`)
-    if (mode === 'review')
-      parts.push(
-        '这一轮涉及钱、订单变更或访客要人工：写一句给同事审的建议回复——说清你查到的事实，' +
-          '不替商家决定退不退、补不补、赔不赔；同事批了才发给访客。',
-      )
     /*
      * WP125（72 §P0-2 / §6.6 #2）：访客原话进 prompt 之前**先打码再围栏**。
      *
@@ -614,7 +623,7 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
     try {
       const completion = await models.complete({
         messages: [
-          { role: 'system', content: SYSTEM },
+          { role: 'system', content: fixed.join('\n\n') },
           { role: 'user', content: parts.join('\n\n') },
         ],
         meta: {

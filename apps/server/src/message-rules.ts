@@ -629,14 +629,15 @@ export function createMessageRuleService(options: MessageRuleServiceOptions): Me
             { role: 'system', content: RULE_PROPOSE_SYSTEM },
             {
               role: 'user',
+              // WP471（决策 1549）：岗位 / 标签 / 去处（同品牌不变）在前，用户那句话最后
               content: JSON.stringify({
-                text,
                 positions: (ctx.positions ?? []).map((p) => ({ id: p.id, name_zh: p.name_zh })),
                 labels: ctx.labels ?? [],
                 sinks: ctx.sinks ?? [],
                 ...(base === undefined
                   ? {}
                   : { current: { name: base.name, when: base.when, actions: base.actions } }),
+                text,
               }),
             },
           ],

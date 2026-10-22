@@ -19,6 +19,7 @@ import {
   EMAIL_AUTO_REPLY_EXCLUDED_SUB_CHANNELS,
   emailAnswerPlan,
   emailAnswerPrompt,
+  emailAnswerSystem,
   evaluateAutonomyGates,
   scoreAutoAnswer,
   splitEmailForAnswer,
@@ -192,7 +193,10 @@ export function installEmailAuto(world: World): EmailAutoLoop {
           messages: [
             {
               role: 'system',
-              content: '你是这家店的邮件客服。只按给你的材料回答；材料里没有的事不编。',
+              // WP471：与服务进程同一个排法（出处要求在系统提示）
+              content: emailAnswerSystem(
+                '你是这家店的邮件客服。只按给你的材料回答；材料里没有的事不编。',
+              ),
             },
             { role: 'user', content: emailAnswerPrompt({ sources, question, subject }) },
           ],

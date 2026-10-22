@@ -9,6 +9,7 @@ import {
   draftInquiryReply,
   gradeB2bInquiry,
   guessIndustry,
+  inquiryReplyPrompt,
   invertedTier,
   missingRequirements,
   pdfFamilyOf,
@@ -159,6 +160,27 @@ describe('WP182 首回：只引事实卡，没有卡就说确认', () => {
       },
     })
     expect(thrown.by).toBe('template')
+  })
+  it('WP471（决策 1549）：同一品牌两封询盘——等级、语言、原文之前逐字相同；事实卡按 id 排', () => {
+    const base = {
+      our_company: 'X',
+      sender_name: 'Y',
+      facts: FACTS,
+      skill: '## skill body',
+    }
+    const a = inquiryReplyPrompt({ ...base, subject: 'MOQ', text: 'MOQ?', grade: 'buyer' })
+    const b = inquiryReplyPrompt({
+      ...base,
+      facts: [...FACTS].reverse(),
+      subject: 'Muster',
+      text: 'Wie hoch ist die Mindestmenge?',
+      grade: 'trader',
+    })
+    const cut = (p: string) => p.slice(0, p.indexOf('This inquiry was graded'))
+    expect(cut(a).length).toBeGreaterThan(0)
+    expect(cut(b)).toBe(cut(a))
+    expect(cut(a)).toContain('Fact cards')
+    expect(a.indexOf("buyer's language")).toBeLessThan(a.indexOf('The inquiry (data'))
   })
   it('ungroundedFigures 按数值比（1,000 = 1000）', () => {
     expect(

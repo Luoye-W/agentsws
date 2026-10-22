@@ -93,7 +93,7 @@ import {
   geoRunEstimate,
   geoTrends,
   guessPromptTopic,
-  judgePrompt,
+  judgeMessages,
   type MetricAnswer,
   marketName,
   mondayOf,
@@ -118,7 +118,10 @@ import type { BrandWatchSettings, GeoStore, StoredPrompt } from './geo-store.js'
 import { answerHash as answerHashOf, defaultWatchSettings } from './geo-store.js'
 
 /** 模型口（这个品牌的模型网关；用量照常进用量账）。 */
-export type WatchModel = (input: { prompt: string }) => Promise<{ text: string }>
+/**
+ * `system` 可选（WP471）：给了就作系统提示放最前面——同一品牌固定不变的说明放那里，命中缓存。
+ */
+export type WatchModel = (input: { prompt: string; system?: string }) => Promise<{ text: string }>
 
 /** 数据能力口（`./data-service.ts` 的那一份，按品牌）。 */
 export interface WatchDataPort {
@@ -628,16 +631,16 @@ export function createGeoMonitor(deps: GeoMonitorDeps) {
         .filter((m) => m.entity !== 'ours' && m.mentioned)
         .map((m) => watch.competitors.find((c) => c.id === m.entity)?.name ?? m.name_snapshot)
       try {
-        const reply = await judge({
-          prompt: judgePrompt({
-            brand: watch.brand,
-            competitors: watch.competitors.map((c) => c.name),
-            answer: text,
-            mentioned: ours?.mentioned === true,
-            facts,
-            rivals,
-          }),
+        // WP471（决策 1549）：两段——固定说明（含品牌名、竞品名单）进系统提示，这条回答在用户消息
+        const asked = judgeMessages({
+          brand: watch.brand,
+          competitors: watch.competitors.map((c) => c.name),
+          answer: text,
+          mentioned: ours?.mentioned === true,
+          facts,
+          rivals,
         })
+        const reply = await judge({ system: asked.system, prompt: asked.user })
         const j = parseJudgeReply(reply.text, text, ours?.mentioned === true)
         if (ours?.mentioned === true) {
           const got = parseInsightReply(reply.text, text, {

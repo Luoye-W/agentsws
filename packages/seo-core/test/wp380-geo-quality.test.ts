@@ -19,6 +19,7 @@ import {
   gapCause,
   geoQualityOf,
   groupFindings,
+  judgeMessages,
   judgePrompt,
   type MetricAnswer,
   mergeFindings,
@@ -102,6 +103,29 @@ describe('WP380 一条回答的 AI 判断（录好的回文）', () => {
     expect(
       judgePrompt({ ...base, mentioned: false, facts: GEO_SAMPLE_FACTS, rivals: ['Anker'] }),
     ).toBe(judgePrompt({ ...base, mentioned: false }))
+  })
+
+  it('WP471（决策 1549）：同一品牌两条回答——系统提示逐字相同；事实表在前、竞品其次、原文最后', () => {
+    const base = { brand: { name: 'NordVolt' }, competitors: ['Anker'], facts: GEO_SAMPLE_FACTS }
+    const a = judgeMessages({
+      ...base,
+      answer: 'NordVolt and Anker.',
+      mentioned: true,
+      rivals: ['Anker'],
+    })
+    const b = judgeMessages({ ...base, answer: 'Only Zendure.', mentioned: false })
+    expect(b.system).toBe(a.system)
+    expect(a.system).toContain('"NordVolt"')
+    expect(a.system).toContain('"Anker"')
+    const u = a.user
+    expect(u.indexOf('<<<FACTS')).toBeLessThan(u.indexOf('"compare"'))
+    expect(u.indexOf('"compare"')).toBeLessThan(u.indexOf('sentiment: how the answer'))
+    expect(u.indexOf('sentiment: how the answer')).toBeLessThan(u.indexOf('<<<ANSWER'))
+    expect(u.trimEnd().endsWith('ANSWER>>>')).toBe(true)
+    // 每一行的字和原来一样，只调位置：拼起来就是一整段的版本
+    expect(judgePrompt({ ...base, answer: 'Only Zendure.', mentioned: false })).toBe(
+      `${b.system}\n${b.user}`,
+    )
   })
 
   it('比较：原话对得上才算；摘错的那条不算；没在比较的不写', () => {

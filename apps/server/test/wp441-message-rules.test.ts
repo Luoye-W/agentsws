@@ -81,7 +81,7 @@ const writer: MailboxWriter = {
 
 /** 模型替身：分拣回固定结论（带规则时按词面回 rule_hits）；数调用次数。其余调用回不能用的字（走兜底）。 */
 function models() {
-  const calls: { kind: string; rules?: unknown }[] = []
+  const calls: { kind: string; rules?: unknown; system?: string; raw?: string }[] = []
   const gateway = {
     async complete(req: { messages: { role: string; content: string }[] }) {
       const system = req.messages[0]?.content ?? ''
@@ -122,7 +122,7 @@ function models() {
           })),
         )
       } else {
-        calls.push({ kind: 'other' })
+        calls.push({ kind: 'other', system, raw: req.messages[1]?.content ?? '' })
       }
       return {
         text,
@@ -305,6 +305,21 @@ describe('WP441 一句话建规则：Shopify 结算通知', () => {
     expect(old.triage?.needs_reply).toBe(false)
     // 过去的信不发铃铛
     expect(h.notes).toEqual([])
+  })
+})
+
+describe('WP471（决策 1549）：一句话变成规则——固定上下文在前、用户那句最后', () => {
+  it('两句话：系统提示逐字相同；JSON 里岗位 / 标签 / 去处在前，text 在最后', async () => {
+    const h = harness()
+    await h.messages.port.proposeMessageRule?.(ACTOR, { text: '推销的都告诉我' })
+    await h.messages.port.proposeMessageRule?.(ACTOR, { text: 'Shopify 结算通知打标签别烦我' })
+    const [a, b] = h.calls.filter((c) => c.kind === 'other')
+    expect(a?.system).toBeDefined()
+    expect(b?.system).toBe(a?.system)
+    const head = (raw: string | undefined) => (raw ?? '').slice(0, (raw ?? '').indexOf('"text":'))
+    expect(head(a?.raw).length).toBeGreaterThan(1)
+    expect(head(b?.raw)).toBe(head(a?.raw))
+    expect(Object.keys(JSON.parse(a?.raw ?? '{}')).at(-1)).toBe('text')
   })
 })
 

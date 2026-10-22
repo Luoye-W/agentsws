@@ -49,6 +49,7 @@ import {
   type EmailHold,
   emailAnswerPlan,
   emailAnswerPrompt,
+  emailAnswerSystem,
   emailAutoReplyGate,
   emailHeldShort,
   scoreAutoAnswer,
@@ -370,7 +371,8 @@ export function createEmailAutoReply(options: EmailAutoReplyOptions): EmailAutoR
     try {
       const completion = await models.complete({
         messages: [
-          { role: 'system', content: SYSTEM },
+          // WP471：固定说明 + 出处要求在系统提示（同品牌每封信逐字一样），信件和材料在用户消息
+          { role: 'system', content: emailAnswerSystem(SYSTEM) },
           {
             role: 'user',
             content: emailAnswerPrompt({

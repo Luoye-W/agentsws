@@ -343,6 +343,11 @@ describe('按理由判（AI 逐张；词重合只预筛）', () => {
     expect(prompt).toContain('「不相关」')
     expect(prompt).toContain('[b]')
     expect(prompt).toContain('只按这条理由判断')
+    // WP471（决策 1549）：固定的判法与格式在前，这一次的理由在后——换个理由，开头一整段不变
+    const other = reasonPrompt({ leader, candidates: picked, reason: '重复了', action: 'snooze' })
+    const head = (p: string) => p.slice(0, p.indexOf('运营刚把'))
+    expect(head(prompt).length).toBeGreaterThan(0)
+    expect(head(other)).toBe(head(prompt))
   })
 
   it('读模型回话：只认 match 为真、id 认得出、带一句为什么的', () => {
