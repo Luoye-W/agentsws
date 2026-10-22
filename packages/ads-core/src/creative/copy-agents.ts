@@ -99,13 +99,18 @@ export function buildCopyMessages(
     `展示 ${ad.impressions}，点击 ${ad.clicks}${ad.conversions === undefined ? '' : `，转化 ${ad.conversions}`}`,
     ...(ctx.weak === undefined ? [] : [`挑中它的理由：${ctx.weak.reason}`]),
   ].join('\n')
+  /*
+   * WP471（docs/116 §2 第 8 条，决策 1549）：固定在前、变化在后——品牌语气、设计规范（同品牌不变）
+   * → 以前的实验（同一轮不变）→ 产品事实（按这条广告取）→「写 N 条」与这条广告的数据 →
+   * 已收下的 / 上一轮被挡的（第二轮才有）。字不改，只调位置。
+   */
   const user = [
-    `写 ${options.want} 条新的${fieldZh}，替换这条广告里表现差的那几条。角度要分开，别十条一个意思。`,
-    ...fence('这条广告', current),
     ...fence('品牌语气', ctx.brand_voice, 2000),
-    ...fence('产品事实', ctx.facts),
     ...fence('品牌设计规范', ctx.design_prompt, 1500),
     ...fence('以前的实验（假设 / 改了什么 / 结果）', ctx.experiments, 3000),
+    ...fence('产品事实', ctx.facts),
+    `写 ${options.want} 条新的${fieldZh}，替换这条广告里表现差的那几条。角度要分开，别十条一个意思。`,
+    ...fence('这条广告', current),
     ...(options.kept === undefined || options.kept.length === 0
       ? []
       : [`已经收下的（别重复）：${options.kept.map((k) => k.text).join(' | ')}`]),
