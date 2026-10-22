@@ -176,7 +176,7 @@ describe('40 §2.2 第 4 条：疑似重复与一键合并', () => {
     expect(screen.getByText(/像 83%/)).toBeTruthy()
     // 两条都打了角标
     expect(
-      container.querySelectorAll('[data-testid="toolbox-entry"].border-amber-400\\/60'),
+      container.querySelectorAll('[data-testid="toolbox-entry"].border-ws-warn\\/60'),
     ).toHaveLength(2)
     await user.click(screen.getByTestId('toolbox-merge'))
     await waitFor(() => {

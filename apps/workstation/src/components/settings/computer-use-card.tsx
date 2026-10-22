@@ -201,7 +201,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
           </span>
         </label>
         {save.error === null || save.error === undefined ? null : (
-          <span className="text-[11px] text-destructive" data-testid="computer-use-save-error">
+          <span className="text-xs text-destructive" data-testid="computer-use-save-error">
             {errorText(save.error, t('error.generic'))}
           </span>
         )}
@@ -233,7 +233,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
               <div className="flex flex-col gap-1" data-testid="computer-use-roles">
                 {roles.isPending ? <Skeleton className="h-6 w-full" /> : null}
                 {(roles.data ?? []).length === 0 && !roles.isPending ? (
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {t('settings.cu.roles.empty')}
                   </span>
                 ) : null}
@@ -254,7 +254,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 {hiddenRoles === 0 ? null : (
                   <button
                     type="button"
-                    className="self-start text-[11px] text-primary underline-offset-4 hover:underline"
+                    className="self-start text-xs text-primary underline-offset-4 hover:underline"
                     data-testid="computer-use-roles-more"
                     onClick={() => {
                       setAllRoles(true)
@@ -283,7 +283,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                     : t('settings.cu.step1.install')}
                 </Button>
                 <span
-                  className="text-[11px] text-muted-foreground"
+                  className="text-xs text-muted-foreground"
                   data-slot="status"
                   data-testid="computer-use-driver"
                 >
@@ -295,10 +295,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 </span>
               </span>
               {install.error === null || install.error === undefined ? null : (
-                <span
-                  className="text-[11px] text-destructive"
-                  data-testid="computer-use-install-error"
-                >
+                <span className="text-xs text-destructive" data-testid="computer-use-install-error">
                   {errorText(install.error, t('error.generic'))}
                 </span>
               )}
@@ -350,7 +347,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 </Button>
                 {check === undefined ? null : (
                   <span
-                    className={`text-[11px] ${check.ok ? 'text-emerald-600' : 'text-destructive'}`}
+                    className={`text-xs ${check.ok ? 'text-ws-good' : 'text-destructive'}`}
                     data-slot="status"
                     data-testid="computer-use-check-summary"
                   >
@@ -365,11 +362,11 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                   data-testid="computer-use-checks"
                 >
                   {check.checks.map((c) => (
-                    <li key={c.name} className="flex flex-col text-[11px]">
+                    <li key={c.name} className="flex flex-col text-xs">
                       <span className="flex items-center gap-1">
                         {/* 驱动原话自带 ✅ / ❌ 就不再叠一个我们的勾叉 */}
                         {/^[✅❌]/u.test(c.detail) ? null : c.ok ? (
-                          <Check className="size-3 text-emerald-600" aria-hidden />
+                          <Check className="size-3 text-ws-good" aria-hidden />
                         ) : (
                           <X className="size-3 text-destructive" aria-hidden />
                         )}
@@ -381,7 +378,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                     </li>
                   ))}
                   {check.raw === undefined ? null : (
-                    <details className="text-[11px] text-muted-foreground">
+                    <details className="text-xs text-muted-foreground">
                       <summary>{t('settings.cu.step3.raw')}</summary>
                       <pre className="whitespace-pre-wrap">{check.raw}</pre>
                     </details>

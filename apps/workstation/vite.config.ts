@@ -137,7 +137,11 @@ const API = process.env.AGENTSWS_API ?? 'http://127.0.0.1:4317'
 export default defineConfig({
   plugins: [genuiShims(), react(), tailwindcss(), bundledPackages()],
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      // WP461：shadcn 组件直接 `import { cn } from 'cn'`；换成认得工坊字号 / 圆角 / 阴影档位的那份（见 src/lib/cn.ts）
+      { find: /^cn$/u, replacement: here('./src/lib/cn.ts') },
+    ],
   },
   server: {
     host: '127.0.0.1',

@@ -241,7 +241,7 @@ export function AccountBlock({
           <span className="block truncate text-sm font-medium" data-testid="account-name">
             {name}
           </span>
-          <span className="block truncate text-[11px] text-muted-foreground">
+          <span className="block truncate text-xs text-muted-foreground">
             {plain && company !== '' ? company : company === '' ? role : `${role} · ${company}`}
           </span>
         </span>
@@ -330,7 +330,7 @@ export function AccountBlock({
           >
             <Settings aria-hidden className="size-4" />
             {t('nav.settings')}
-            <kbd className="ws-num ml-auto text-[11px] text-ws-muted-fg">⌘,</kbd>
+            <kbd className="ws-num ml-auto text-ws-tiny text-ws-muted-fg">⌘,</kbd>
           </button>
           {/* WP136：切到 dsh 的其他场景（只有所有者看得到；这台切不了就整行不出） */}
           <SceneSwitcher variant="menu" />
@@ -368,7 +368,7 @@ export function AccountBlock({
           {/* WP426：一行小字看得到装的是哪个版本（桌面壳的安装包版本；网页里是服务端报的） */}
           {version === undefined ? null : (
             <p
-              className="ws-num px-2 pt-1 pb-0.5 text-[11px] text-ws-muted-fg select-text"
+              className="ws-num px-2 pt-1 pb-0.5 text-xs text-ws-muted-fg select-text"
               data-testid="account-version"
             >
               {t('account.version', { version })}

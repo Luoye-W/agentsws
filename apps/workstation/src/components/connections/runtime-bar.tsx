@@ -33,10 +33,10 @@ const ICONS = {
 } as const
 
 const TONE = {
-  ready: 'text-emerald-700 dark:text-emerald-400',
+  ready: 'text-ws-good',
   absent: 'text-muted-foreground',
   unhardened: 'text-destructive',
-  stand_in: 'text-amber-700 dark:text-amber-400',
+  stand_in: 'text-ws-warn',
 } as const
 
 /** 原因列表先露几条（其余折起来，免得把框撑破）。 */
@@ -146,7 +146,7 @@ export function RuntimeBar({
       ) : null}
       {status.secrets_vault.available ? null : (
         <p
-          className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400"
+          className="flex items-center gap-1 text-xs text-ws-warn"
           data-testid="vault-missing"
           data-slot="status"
         >

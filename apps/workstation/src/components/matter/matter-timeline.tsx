@@ -154,7 +154,7 @@ export function MeBubble({
           ))}
         </div>
       )}
-      <div className="flex gap-2 text-[11.5px] text-ws-muted-fg">
+      <div className="flex gap-2 text-xs text-ws-muted-fg">
         {long ? (
           <button
             type="button"
@@ -200,7 +200,7 @@ function AttachmentChip({ file }: { file: MatterAttachment }): ReactNode {
         ) : null}
       </button>
       {file.unreadable === undefined && file.redacted === undefined ? null : (
-        <span className="text-[11px] text-ws-muted-fg">
+        <span className="text-xs text-ws-muted-fg">
           {[
             file.unreadable,
             file.redacted === undefined
@@ -256,7 +256,7 @@ export function AiShell({
       <div className="flex h-7 items-center gap-2 text-[13px] font-semibold text-ws-ink">
         {head ?? name}
         {at === undefined ? null : (
-          <span className="font-normal text-[11.5px] text-ws-muted-fg">{clockOf(at, lang)}</span>
+          <span className="font-normal text-xs text-ws-muted-fg">{clockOf(at, lang)}</span>
         )}
       </div>
       <div className="col-start-2 min-w-0">
@@ -318,7 +318,7 @@ export function PreviewCard({
       <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
         <Eye aria-hidden className="size-3.5" />
         {t('matter.preview.ready')}
-        <span className="ml-auto inline-flex h-[22px] items-center gap-1.5 rounded-full bg-muted px-2 text-[11.5px] text-ws-body">
+        <span className="ml-auto inline-flex h-[22px] items-center gap-1.5 rounded-full bg-muted px-2 text-xs text-ws-body">
           <i aria-hidden className="size-1.5 rounded-full bg-ws-muted-fg" />
           {t('matter.preview.unpublished')}
         </span>
@@ -346,7 +346,7 @@ export function PreviewCard({
       </div>
       {diff ? (
         <ul
-          className="border-t border-ws-line px-3.5 py-2 font-mono text-[11.5px] text-ws-body"
+          className="border-t border-ws-line px-3.5 py-2 font-mono text-xs text-ws-body"
           data-testid="matter-preview-files"
         >
           {files === undefined || files.length === 0 ? (
@@ -528,13 +528,13 @@ function StepList({ steps, live = false }: { steps: MatterRunStep[]; live?: bool
           ) : (
             <X aria-hidden className="size-3.5 shrink-0 text-ws-bad" />
           )}
-          <span className="min-w-0 truncate font-mono text-[11.5px]">{s.text}</span>
+          <span className="min-w-0 truncate font-mono text-xs">{s.text}</span>
           {s.seconds === undefined ? (
             live && s.status === 'running' ? (
-              <span className="ml-auto text-[11.5px] text-ws-muted-fg">…</span>
+              <span className="ml-auto text-xs text-ws-muted-fg">…</span>
             ) : null
           ) : (
-            <span className="ml-auto shrink-0 text-[11.5px] text-ws-muted-fg tabular-nums">
+            <span className="ml-auto shrink-0 text-xs text-ws-muted-fg tabular-nums">
               {durationText(s.seconds, t)}
             </span>
           )}
@@ -782,7 +782,7 @@ export function RunningEntry({
         <span className="text-ws-brand-ink dark:text-ws-brand">{t('matter.run.doing')}</span>
         <span className="sr-only">{roleName}</span>
         {elapsed === undefined ? null : (
-          <span className="font-normal text-[11.5px] text-ws-muted-fg tabular-nums">
+          <span className="font-normal text-xs text-ws-muted-fg tabular-nums">
             {t('matter.run.elapsed', { dur: durationText(Math.max(0, elapsed), t) })}
           </span>
         )}
@@ -863,7 +863,7 @@ export function BlockedCard({
         <div className="flex items-center gap-2 px-3.5 pt-3 text-[12.5px] text-ws-muted-fg">
           <Plug aria-hidden className="size-3.5" />
           {t('matter.blocked.head')}
-          <span className="ml-auto inline-flex h-[22px] items-center rounded-full bg-ws-bad-bg px-2 text-[11.5px] font-medium text-ws-bad">
+          <span className="ml-auto inline-flex h-[22px] items-center rounded-full bg-ws-bad-bg px-2 text-xs font-medium text-ws-bad">
             {t('matter.blocked.pill')}
           </span>
         </div>
@@ -1148,7 +1148,7 @@ export function InlineCard({
           <Stamp aria-hidden className="size-3.5" />
           {options.length > 0 ? t('matter.card.choice') : t('matter.card.await')}
           {options.length > 0 ? null : (
-            <span className="ml-auto inline-flex h-[22px] items-center rounded-full bg-ws-warn-bg px-2 text-[11.5px] font-medium text-ws-warn">
+            <span className="ml-auto inline-flex h-[22px] items-center rounded-full bg-ws-warn-bg px-2 text-xs font-medium text-ws-warn">
               {approve}
             </span>
           )}

@@ -88,7 +88,7 @@ function RunBrowserStatus({ pathname }: RailPanelBodyProps): ReactNode {
         <span
           className={
             view.running
-              ? 'inline-block size-2 rounded-full bg-emerald-500'
+              ? 'inline-block size-2 rounded-full bg-ws-good'
               : 'inline-block size-2 rounded-full bg-muted-foreground'
           }
           aria-hidden
@@ -107,7 +107,7 @@ function RunBrowserStatus({ pathname }: RailPanelBodyProps): ReactNode {
       */}
       {view.awaiting_handoff === undefined ? null : (
         <p
-          className="rounded-md border border-amber-400/60 bg-amber-50 p-2 text-sm dark:bg-amber-950/30"
+          className="rounded-md border border-ws-warn/60 bg-ws-warn-bg p-2 text-sm"
           data-testid="rail-browser-handoff"
         >
           {t('rail.browser.handoff')}

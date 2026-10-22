@@ -184,7 +184,7 @@ function ClearButton({ onClick, testId }: { onClick(): void; testId: string }): 
     <button
       type="button"
       data-testid={testId}
-      className="self-end text-[11px] text-ws-muted-fg hover:text-ws-ink hover:underline"
+      className="self-end text-xs text-ws-muted-fg hover:text-ws-ink hover:underline"
       onClick={onClick}
     >
       {t('table.filter.clear')}
@@ -261,7 +261,7 @@ export function TableFilterMenu({
         >
           {cols.map((c) => (
             <fieldset key={c.key} className="flex flex-col gap-1">
-              <legend className="mb-1 text-[11px] text-ws-muted-fg">{c.label}</legend>
+              <legend className="mb-1 text-xs text-ws-muted-fg">{c.label}</legend>
               <FilterControl
                 col={c}
                 value={state[c.key]}

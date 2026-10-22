@@ -54,6 +54,7 @@ import type {
   ApprovalBus,
   ApprovalItem,
   Assignment,
+  AssignmentId,
   Clock,
   EventEnvelope,
   Level,
@@ -79,8 +80,10 @@ import {
   parseRole,
   type RangeExpanded,
   ROLE_ID_SPLITS,
+  ROLE_MAJOR_UPGRADES,
   type RoleDefinitionFull,
   RoleError,
+  type RoleMajorUpgrade,
   type RoleStore,
   shopifyLineQuery,
 } from '@agentsws/roles'
@@ -99,6 +102,8 @@ import {
 /** 岗位模板的存储形状（契约 `Position` + 从哪来）。 */
 interface StoredPosition extends Position {
   source: 'bundled' | 'custom'
+  /** WP462：这个岗位补过哪几次职责拆分（`<职责>@<大版本>`，见 `addSplitHeirs`）。 */
+  major_splits?: string[]
 }
 
 /** 一条等审批的制度变更。 */
@@ -261,6 +266,44 @@ export function migrateOwnerPositionName<
       en: enOld ? OWNER_POSITION_NAME.en : position.name.en,
     },
   }
+}
+
+/**
+ * WP462：岗位行上记「这一次拆分补过了」的那一格（`<职责>@<大版本>`）。只补一次的凭据：
+ * 补过之后人自己从岗位里去掉接手的那条，下次启动不再补回来。
+ */
+const SPLIT_MARK = 'major_splits'
+
+/**
+ * WP462：一个岗位里有被拆的那条职责（登记表 `ROLE_MAJOR_UPGRADES` 里 `kind: split` 的），
+ * 就把接手的那几条补在它后面（勾不勾与它一样）。纯函数、可重复跑：补过的（或本来就有的）回 `undefined`。
+ */
+export function addSplitHeirs<
+  T extends { roles: { role: RoleId; default?: boolean }[]; [SPLIT_MARK]?: string[] },
+>(position: T, table: readonly RoleMajorUpgrade[] = ROLE_MAJOR_UPGRADES): T | undefined {
+  const done = new Set(position[SPLIT_MARK] ?? [])
+  let roles = position.roles
+  let changed = false
+  for (const row of table) {
+    if (row.kind !== 'split' || (row.heirs ?? []).length === 0) continue
+    const key = `${row.role_id}@${row.to_major}`
+    if (done.has(key)) continue
+    const at = roles.findIndex((r) => r.role === row.role_id)
+    if (at < 0) continue
+    const missing = (row.heirs ?? []).filter((h) => !roles.some((r) => r.role === h))
+    const source = roles[at]
+    roles = [
+      ...roles.slice(0, at + 1),
+      ...missing.map((role) => ({
+        role,
+        ...(source?.default === undefined ? {} : { default: source.default }),
+      })),
+      ...roles.slice(at + 1),
+    ]
+    done.add(key)
+    changed = true
+  }
+  return changed ? { ...position, roles, [SPLIT_MARK]: [...done] } : undefined
 }
 
 /** WP395（docs/106 §13）：Amazon 运营岗位的模板 id（= `packages/roles/positions/amazon-ops.yml`）。 */
@@ -482,6 +525,11 @@ export interface OrgOptions {
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   /** 给了就落盘（`org.sqlite`）；不给就纯内存。 */
   dbDir?: string
+  /**
+   * WP462：这次启动时职责升大版本、拆分补发出来的分配（`heir`）与它接的原分配（`of`）。
+   * 补发那条安放到原分配所在的岗位（原分配没安放就不动，照老规则算）。不给 = 没有。
+   */
+  majorUpgradeHeirs?: readonly { heir: AssignmentId; of: AssignmentId }[]
   /** 邀请链接的前缀；缺省是相对路径（同源打开工作台就能用）。 */
   baseUrl?: string
   /** WP138：当前品牌的名字（「选范围」里「整个品牌」那一项显示它）；不给就说「整个品牌」。 */
@@ -693,6 +741,18 @@ export function createOrg(options: OrgOptions): OrgAssembly {
   for (const p of backend.positions()) {
     const renamed = migrateOwnerPositionName(p)
     if (renamed !== undefined) backend.putPosition(renamed)
+  }
+  // WP462：职责拆分（WP446「内容」拆出「SEO 与 GEO」）——含被拆那条的岗位补上接手的那几条
+  // （紧跟在它后面、勾不勾与它一样），每个岗位只补一次（人后来自己去掉了不再补回来）。
+  for (const p of backend.positions()) {
+    const patched = addSplitHeirs(p)
+    if (patched !== undefined) backend.putPosition(patched)
+  }
+  // 补发那条跟原分配安放在同一个岗位（原分配没安放 = 老规则，补发那条也照老规则算）
+  for (const { heir, of } of options.majorUpgradeHeirs ?? []) {
+    const placed = backend.placements.get(of)
+    if (placed !== undefined && backend.placements.get(heir) === undefined)
+      backend.placements.set(heir, placed)
   }
 
   const now = (): string => clock.now()

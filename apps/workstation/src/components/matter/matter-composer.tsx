@@ -295,7 +295,7 @@ export function MatterComposer({
               )}
             >
               <span className="truncate">{ghost}</span>
-              <span className="inline-flex h-[18px] shrink-0 items-center rounded-[5px] bg-ws-surface px-[5px] font-sans text-[10.5px] font-semibold tracking-[0.02em] text-ws-muted-fg shadow-[inset_0_0_0_1px_var(--ws-line),0_1px_0_var(--ws-line)]">
+              <span className="inline-flex h-[18px] shrink-0 items-center rounded-[5px] bg-ws-surface px-[5px] font-sans text-ws-tiny font-semibold tracking-[0.02em] text-ws-muted-fg shadow-[inset_0_0_0_1px_var(--ws-line),0_1px_0_var(--ws-line)]">
                 Tab
               </span>
             </div>
@@ -340,7 +340,7 @@ export function MatterComposer({
           {modelSlot}
           <span
             aria-hidden
-            className="mr-2 ml-auto text-[11.5px] whitespace-nowrap text-ws-muted-fg opacity-0 transition-opacity group-focus-within/cmp:opacity-100 group-[.is-has]/cmp:opacity-100"
+            className="mr-2 ml-auto text-xs whitespace-nowrap text-ws-muted-fg opacity-0 transition-opacity group-focus-within/cmp:opacity-100 group-[.is-has]/cmp:opacity-100"
           >
             {t('matter.cmp.hint')}
           </span>

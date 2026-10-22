@@ -164,7 +164,7 @@ export function SocialBroadcast({
 
             {/* 纪律 4：WhatsApp 的两道闸摆在明处 */}
             {channel === 'whatsapp' ? (
-              <div className="flex flex-col gap-1 rounded border border-amber-500/40 bg-amber-500/5 p-2">
+              <div className="flex flex-col gap-1 rounded border border-ws-warn/40 bg-ws-warn-bg p-2">
                 <p
                   className="flex items-start gap-1 text-xs text-muted-foreground"
                   data-slot="warning"

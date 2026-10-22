@@ -273,7 +273,7 @@ export function MatterHeader({
       </button>
       {pinned.length === 0 ? null : (
         <div className="mt-1 border-t border-ws-line px-2 pt-2 pb-1" data-testid="matter-pinned">
-          <p className="mb-1 text-[11.5px] text-ws-muted-fg">{t('matter.pinned')}</p>
+          <p className="mb-1 text-xs text-ws-muted-fg">{t('matter.pinned')}</p>
           <ul className="flex flex-col gap-1">
             {pinned.map((p) => (
               <li key={p.key} className="flex items-center gap-1.5 text-[12.5px] text-ws-body">
@@ -301,7 +301,7 @@ export function MatterHeader({
           {t('archive.action')}
           {archiveWhy === undefined ? null : (
             <span
-              className="ml-auto truncate text-[11px] text-ws-muted-fg"
+              className="ml-auto truncate text-xs text-ws-muted-fg"
               data-testid="matter-archive-why"
             >
               {t(archiveWhy)}
@@ -432,7 +432,7 @@ export function MatterHeader({
                     data-person={p.person_id}
                     title={p.label}
                     className={cn(
-                      'inline-flex size-[18px] items-center justify-center rounded-full bg-ws-warn-bg text-[10px] font-semibold text-ws-warn shadow-[0_0_0_2px_var(--ws-paper)]',
+                      'inline-flex size-[18px] items-center justify-center rounded-full bg-ws-warn-bg text-xs font-semibold text-ws-warn shadow-[0_0_0_2px_var(--ws-paper)]',
                       i > 0 && '-ml-1',
                     )}
                   >
@@ -442,7 +442,7 @@ export function MatterHeader({
                 <span
                   aria-hidden
                   className={cn(
-                    'inline-flex size-[18px] items-center justify-center rounded-full bg-ws-tint text-[9px] font-semibold text-ws-brand-ink shadow-[0_0_0_2px_var(--ws-paper)] dark:text-ws-brand',
+                    'inline-flex size-[18px] items-center justify-center rounded-full bg-ws-tint text-ws-tiny font-semibold text-ws-brand-ink shadow-[0_0_0_2px_var(--ws-paper)] dark:text-ws-brand',
                     people.length > 0 && '-ml-1',
                   )}
                 >
@@ -496,7 +496,7 @@ export function MatterHeader({
                 />
                 <span className="min-w-0 truncate">{todo.title}</span>
                 {todo.cards.length === 0 ? null : (
-                  <span className="ml-auto shrink-0 text-[11.5px] text-ws-muted-fg">
+                  <span className="ml-auto shrink-0 text-xs text-ws-muted-fg">
                     {t('todos.cards', { count: todo.cards.length })}
                   </span>
                 )}

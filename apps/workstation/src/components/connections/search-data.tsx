@@ -289,7 +289,7 @@ export function SearchDataSection({ assignment }: { assignment?: string }): Reac
           ) : null}
 
           {message === undefined ? null : (
-            <p className="text-[11px] text-muted-foreground" data-testid="search-data-result">
+            <p className="text-xs text-muted-foreground" data-testid="search-data-result">
               {message}
             </p>
           )}

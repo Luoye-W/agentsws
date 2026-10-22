@@ -315,7 +315,7 @@ function Body({ view, assignment }: { view: GeoWatchView; assignment: string }):
             {showCandidates
               ? [...groups.entries()].map(([topic, list]) => (
                   <div key={topic} className="flex flex-col gap-0.5 pl-4">
-                    <span className="text-[11px] text-ws-muted-fg">{t(`geo.topic.${topic}`)}</span>
+                    <span className="text-xs text-ws-muted-fg">{t(`geo.topic.${topic}`)}</span>
                     {list.map((q) => (
                       <div
                         key={q.id}

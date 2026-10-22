@@ -102,7 +102,7 @@ function ScoreHero({ score, label }: { score: number | undefined; label: string 
       >
         {score ?? '—'}
       </span>
-      <span className="mt-0.5 block text-[9px] font-semibold tracking-wide text-muted-foreground">
+      <span className="mt-0.5 block text-xs font-semibold tracking-wide text-muted-foreground">
         {label}
       </span>
     </span>
@@ -138,9 +138,7 @@ function Stat({
       data-stat={id}
       data-level={level}
     >
-      <span className="block truncate text-[11px] leading-tight text-muted-foreground">
-        {label}
-      </span>
+      <span className="block truncate text-xs leading-tight text-muted-foreground">{label}</span>
       <span className="flex min-w-0 items-baseline gap-1">
         <span
           className={cn('text-sm font-medium', textual ? 'min-w-0 truncate' : 'ws-num shrink-0')}
@@ -151,7 +149,7 @@ function Stat({
           <span
             className={cn(
               // 色块只有一两个字（好 / 一般 / 弱），不截——截成「…」就白画了
-              'shrink-0 rounded px-1 text-[10px] font-bold leading-[1.35]',
+              'shrink-0 rounded px-1 text-xs font-bold leading-[1.35]',
               JUDGEMENT_BADGE[level],
             )}
           >
@@ -222,7 +220,7 @@ export function CreatorCard({
           ) : null}
         </span>
         {row.blocked === undefined ? null : (
-          <span className="text-[11px] leading-snug text-ws-bad" data-testid="kol-blocked">
+          <span className="text-xs leading-snug text-ws-bad" data-testid="kol-blocked">
             {row.blocked}
           </span>
         )}
@@ -273,7 +271,7 @@ export function CreatorCard({
         {row.audit_health === undefined ? (
           <span />
         ) : (
-          <span className="text-[11px] text-muted-foreground" data-testid="kol-audit">
+          <span className="text-xs text-muted-foreground" data-testid="kol-audit">
             {t('kol.audit', { n: row.audit_health })}
           </span>
         )}

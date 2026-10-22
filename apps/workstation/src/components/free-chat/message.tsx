@@ -46,7 +46,7 @@ export function UserBubble({ message }: { message: FreeChatMessage }): React.Rea
       <div className="flex max-w-[80%] flex-col items-end gap-1.5">
         {message.to === undefined ? null : (
           <span
-            className="inline-flex items-center gap-1 text-[11px] text-ws-brand-ink"
+            className="inline-flex items-center gap-1 text-xs text-ws-brand-ink"
             data-testid="free-chat-user-to"
           >
             <AtSign aria-hidden className="size-3" />
@@ -109,7 +109,7 @@ export function CostLine({ message }: { message: FreeChatMessage }): React.React
         : t('free_chat.cost.tokens', { n: u.input_tokens + u.output_tokens })
   return (
     <p
-      className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+      className="flex items-center gap-1.5 text-xs text-muted-foreground"
       data-testid="free-chat-cost"
       data-slot="status"
     >
@@ -135,7 +135,7 @@ export function Sources({ sources }: { sources: FreeChatSource[] }): React.React
           href={s.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="max-w-[220px] truncate rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+          className="max-w-[220px] truncate rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
           data-testid="free-chat-source"
         >
           {i + 1}. {s.title ?? new URL(s.url).hostname}
@@ -284,7 +284,7 @@ export function AssistantMessage({
       )}
       {(message.citations ?? []).length === 0 ? null : (
         <ol
-          className="flex flex-col gap-0.5 text-[11px] text-muted-foreground"
+          className="flex flex-col gap-0.5 text-xs text-muted-foreground"
           data-testid="free-chat-citations"
         >
           {(message.citations ?? []).map((c) => (

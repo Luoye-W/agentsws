@@ -40,7 +40,7 @@ export function SocialMediaPick(props: {
                 aria-pressed={on}
                 data-testid="social-media-asset"
                 className={cn(
-                  'max-w-32 truncate rounded border px-1.5 text-[11.5px]',
+                  'max-w-32 truncate rounded border px-1.5 text-xs',
                   on && 'border-primary bg-primary/10',
                 )}
                 onClick={() =>

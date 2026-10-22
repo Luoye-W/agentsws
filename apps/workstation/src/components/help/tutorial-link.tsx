@@ -47,7 +47,7 @@ export function TutorialLink({
         data-testid="tutorial-link"
         data-slug={slug}
         className={cn(
-          'inline-flex shrink-0 items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline',
+          'inline-flex shrink-0 items-center gap-1 text-xs text-primary underline-offset-4 hover:underline',
           className,
         )}
         onClick={() => {
@@ -96,7 +96,7 @@ export function InlineGuideLink({
         data-testid="tutorial-link"
         data-slug=""
         className={cn(
-          'inline-flex shrink-0 items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline',
+          'inline-flex shrink-0 items-center gap-1 text-xs text-primary underline-offset-4 hover:underline',
           className,
         )}
         onClick={() => {

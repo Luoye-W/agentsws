@@ -90,7 +90,7 @@ export function SegmentedProgress({
                     {/* WP416（自查 kol U14）：当前那一段加粗；窄的时候只留当前 / 卡住那一段的字 */}
                     <span
                       className={cn(
-                        'w-full truncate text-[11px] leading-tight',
+                        'w-full truncate text-xs leading-tight',
                         TEXT_COLOR[segment.state],
                         segment.state === 'current' || segment.state === 'stalled'
                           ? 'font-semibold'
@@ -102,7 +102,7 @@ export function SegmentedProgress({
                     {segment.caption === undefined ? null : (
                       <span
                         className={cn(
-                          'w-full truncate text-[10px] leading-tight',
+                          'w-full truncate text-xs leading-tight',
                           segment.state === 'stalled'
                             ? TEXT_COLOR.stalled
                             : 'text-muted-foreground/70',

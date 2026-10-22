@@ -306,7 +306,7 @@ export function DeckActiveFilters({
         </div>
       )}
       {pinnedCount === 0 ? null : (
-        <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="deck-pinned-p0">
+        <p className="text-xs text-ws-warn" data-testid="deck-pinned-p0">
           {t('deck.pinned_p0', { n: pinnedCount })}
           <Button
             size="xs"

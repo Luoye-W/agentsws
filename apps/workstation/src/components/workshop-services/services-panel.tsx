@@ -125,7 +125,7 @@ function OrderRow({ row }: { row: WorkshopServiceOrderRow }): ReactNode {
           <i aria-hidden className="size-1.5 shrink-0 rounded-full bg-ws-warn" />
         ) : null}
         <span className="min-w-0 truncate">{lang === 'zh' ? o.label_zh : o.label_en}</span>
-        <span className="ml-auto shrink-0 text-[11px] text-ws-muted-fg">
+        <span className="ml-auto shrink-0 text-xs text-ws-muted-fg">
           {t(`svc.status.${o.status}`)}
         </span>
       </button>
@@ -215,7 +215,7 @@ export function WorkshopServicesPanel(_props: RailPanelBodyProps): ReactNode {
         ) : (
           [...groups.entries()].map(([pos, list]) => (
             <div key={pos} className="mb-2" data-testid="services-group" data-position={pos}>
-              <p className="px-1.5 text-[11.5px] text-ws-muted-fg">
+              <p className="px-1.5 text-xs text-ws-muted-fg">
                 {pos === '' ? t('svc.list.other') : nameOf(pos)}
               </p>
               <ul className="flex flex-col">
@@ -268,7 +268,7 @@ export function WorkshopServicesCard({ scope, limit, onTotal }: RailCardBodyProp
       )}
       {here.length === 0 ? null : (
         <div>
-          <p className="flex items-center gap-1 px-1.5 text-[11.5px] text-ws-muted-fg">
+          <p className="flex items-center gap-1 px-1.5 text-xs text-ws-muted-fg">
             <Handshake aria-hidden className="size-3" />
             {t('svc.list.position')}
           </p>

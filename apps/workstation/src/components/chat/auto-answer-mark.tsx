@@ -34,7 +34,7 @@ export function AutoAnswerMark({
   const list = auto.sources.map((s) => s.label).join('、')
   return (
     <div
-      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground"
+      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground"
       data-testid="chat-auto-answer-mark"
     >
       <span>
@@ -47,7 +47,7 @@ export function AutoAnswerMark({
         <Button
           size="xs"
           variant="ghost"
-          className="h-5 px-1.5 text-[11px]"
+          className="h-5 px-1.5 text-xs"
           data-testid="chat-auto-answer-flag"
           disabled={flag.isPending}
           onClick={() => {

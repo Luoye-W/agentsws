@@ -116,7 +116,7 @@ export function AccountWebLink({ url }: { url: string | undefined }): React.Reac
             href={url}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 text-[11px] font-normal text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-normal text-primary hover:underline"
             data-slot="action"
             data-testid="credits-web-link"
             data-hint={tip}
@@ -295,14 +295,14 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                       data-testid="credits-block"
                       data-block={b}
                     >
-                      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
                         {t(`credits.block.${b}`)}
                         <Hint text={t(`credits.block.${b}.note`)} />
                       </p>
                       <p className="text-base tabular-nums">
                         {cheapest === undefined ? '—' : price(cheapest.credits_per_unit)}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {b === 'workshop_service'
                           ? t('credits.blocks.per_service')
                           : cheapest === undefined
@@ -376,12 +376,12 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                         data-testid="credits-block"
                         data-block={b}
                       >
-                        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
                           {t(`credits.block.${b}`)}
                           <Hint text={t(`credits.block.${b}.note`)} />
                         </p>
                         <p className="text-base tabular-nums">{num(sum.credits)}</p>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {sum.calls === 0
                             ? t('credits.blocks.none')
                             : b === 'workshop_service'
@@ -396,13 +396,13 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
             ) : null}
 
             <div className="flex flex-wrap items-center gap-2" data-slot="status">
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {t('credits.month', { n: num(credits.data?.month_credits ?? 0) })}
               </span>
               {/* WP426：按「还够几轮」判（`credits-runway.ts`），不再用钱包写死的 50 */}
               {creditsLow(balance.available) ? (
                 <span
-                  className="flex items-center gap-1 text-[11px] text-ws-warn"
+                  className="flex items-center gap-1 text-xs text-ws-warn"
                   data-testid="credits-low"
                 >
                   {t('credits.low', { n: roundsLeft(balance.available) })}
@@ -488,7 +488,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               }}
             />
             {order.isError ? (
-              <p className="text-[11px] text-destructive" data-testid="credits-tier-error">
+              <p className="text-xs text-destructive" data-testid="credits-tier-error">
                 {/* WP142：云上说了为什么（demo 里是「不真收钱」）就原样说，不再套一层「建不了充值单：」 */}
                 {order.error instanceof ApiClientError
                   ? order.error.message
@@ -530,7 +530,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
           </Button>
           {showPricing ? (
             <div className="rounded-md border bg-muted/30 p-2.5">
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {pricing.data?.source === 'unavailable' ? (
                   // WP165：价目只在云上，从没取到过——说一句，不编数
                   <span data-testid="credits-pricing-unavailable">
@@ -569,7 +569,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
                   return (
                     <tbody key={b} data-testid="credits-pricing-block" data-block={b}>
                       <tr>
-                        <td colSpan={3} className="pt-2 pb-0.5 text-[11px] text-muted-foreground">
+                        <td colSpan={3} className="pt-2 pb-0.5 text-xs text-muted-foreground">
                           {t(`credits.block.${b}`)}
                         </td>
                       </tr>
@@ -595,7 +595,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
         </section>
 
         {/* WP156：「谁看得到多少」进问号；「每项能力用谁的」是一个去处，留一行链接 */}
-        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
           {t('credits.sources')}
           <Link to="/connections" className="text-primary underline-offset-4 hover:underline">
             {t('nav.connections')}
@@ -644,7 +644,7 @@ export function TierCards({
         <h4 className="text-xs font-medium text-muted-foreground">
           {t(readonly ? 'credits.tiers.readonly' : 'credits.tiers')}
         </h4>
-        <span className="text-[11px] text-muted-foreground" data-slot="status">
+        <span className="text-xs text-muted-foreground" data-slot="status">
           {t('credits.tiers.note')}
         </span>
       </div>
@@ -653,7 +653,7 @@ export function TierCards({
       {pending ? (
         <Skeleton className="h-20 w-full" />
       ) : unavailable !== undefined && (tiers ?? []).length === 0 ? (
-        <p className="text-[11px] text-muted-foreground" data-testid="credits-tiers-unavailable">
+        <p className="text-xs text-muted-foreground" data-testid="credits-tiers-unavailable">
           {t('credits.pricing.unavailable')}
         </p>
       ) : (
@@ -661,7 +661,7 @@ export function TierCards({
           {(tiers ?? []).map((tier: TopupTierView) => {
             const body = (
               <>
-                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   {lang === 'zh' ? tier.label_zh : tier.label_en}
                   {tier.recommended === true ? (
                     <span className="rounded bg-primary/10 px-1 text-primary">
@@ -706,14 +706,14 @@ export function TierCards({
               >
                 {body}
                 {linked ? (
-                  <span className="flex items-center gap-1 text-[11px] text-primary">
+                  <span className="flex items-center gap-1 text-xs text-primary">
                     <Wallet className="size-3" aria-hidden />
                     {t('credits.tiers.go')}
                     <ExternalLink className="size-3" aria-hidden />
                   </span>
                 ) : (
                   <span
-                    className="flex items-center gap-1 text-[11px] text-primary"
+                    className="flex items-center gap-1 text-xs text-primary"
                     data-testid="credits-tier-link-first"
                   >
                     <Link2 className="size-3" aria-hidden />
@@ -775,7 +775,7 @@ function MyAllowance({
         <span className="h-1.5 w-full overflow-hidden rounded bg-muted">
           <span
             className={`block h-full ${
-              state === 'full' ? 'bg-destructive' : state === 'near' ? 'bg-amber-500' : 'bg-primary'
+              state === 'full' ? 'bg-destructive' : state === 'near' ? 'bg-ws-warn' : 'bg-primary'
             }`}
             style={{ width: `${String(Math.min(100, percent))}%` }}
           />
@@ -786,12 +786,12 @@ function MyAllowance({
           {t('credits.mine.full')}
         </p>
       ) : state === 'near' ? (
-        <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="credits-mine-near">
+        <p className="text-xs text-ws-warn" data-testid="credits-mine-near">
           {t('credits.mine.near', { p: String(percent) })}
         </p>
       ) : null}
       {position?.monthly_limit === undefined ? null : (
-        <p className="text-[11px] text-muted-foreground tabular-nums">
+        <p className="text-xs text-muted-foreground tabular-nums">
           {t('credits.mine.position', {
             used: num(position.used),
             limit: num(position.monthly_limit),
@@ -849,7 +849,7 @@ function Figure({
 }): React.ReactNode {
   return (
     <div className="rounded-lg border p-2">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p className={strong ? 'text-lg font-semibold tabular-nums' : 'text-base tabular-nums'}>
         {value}
       </p>

@@ -144,6 +144,9 @@ export const SOURCES = {
     domains: ['linkedin.com', 'licdn.com'],
     sources: [{ page: 'https://www.linkedin.com', note: '官网首页' }],
   },
+  // WP447：投放的 LinkedIn / Reddit 两张卡借社媒那两张官网图（原来只手写在 MANIFEST 里，
+  // 重跑脚本会被冲掉——WP460 补进来）
+  linkedin_ads: { same_as: 'linkedin_api' },
   reddit: {
     brand: 'Reddit',
     domains: ['reddit.com', 'redditstatic.com', 'redditinc.com'],
@@ -158,6 +161,7 @@ export const SOURCES = {
       },
     ],
   },
+  reddit_ads: { same_as: 'reddit' },
   discord_bot: {
     brand: 'Discord',
     // 官网是 Webflow 搭的，<link rel=icon> 声明的图放在 Webflow 的静态资源域上
@@ -242,6 +246,33 @@ export const SOURCES = {
     sources: [
       { page: 'https://www.dingtalk.com', note: '钉钉官网首页 <link rel=icon>' },
       { page: 'https://open.dingtalk.com', note: '兜底：钉钉开放平台 <link rel=icon>' },
+    ],
+  },
+  // ── 投放新平台（WP447 → WP460，决策 1397，Luoye 10-22 定）──────────────────────
+  // 只取 Pinterest、Snapchat 两家：品牌指南允许原样拿标志标明是哪一家。来源写死成一张图（`asset`），
+  // 不让脚本在首页候选里按「越大越好」自己挑（Snapchat 广告站有一张 140 KB 的 1024px 图）。
+  // Microsoft、Apple 的商标指南写明没授权不许用标志——不抓，界面走首字母徽标（brand-icons.tsx）。
+  pinterest_ads: {
+    brand: 'Pinterest',
+    // 官网 <link> 里的图放在 Pinterest 自己的静态资源域 pinimg.com
+    domains: ['pinterest.com', 'pinimg.com'],
+    sources: [
+      {
+        asset: 'https://s.pinimg.com/webapp/logo_transparent_144x144-3da7a67b.png',
+        page: 'https://ads.pinterest.com',
+        note: 'Pinterest 广告站首页的 apple-touch-icon（144px，静态资源域 pinimg.com）',
+      },
+    ],
+  },
+  snapchat_ads: {
+    brand: 'Snapchat',
+    domains: ['snapchat.com'],
+    sources: [
+      {
+        asset: 'https://static.snapchat.com/images/favicon/favicon-192x192.png',
+        page: 'https://www.snapchat.com',
+        note: 'Snapchat 官网首页 <link rel=icon> 的 192px 那张',
+      },
     ],
   },
   // ── 职责角标（WP213）：还没有连接卡、但有职责要挂它的那几家 ─────────────────

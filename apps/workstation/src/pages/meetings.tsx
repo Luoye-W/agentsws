@@ -49,11 +49,11 @@ function MeetingRow({ meeting, onOpen }: { meeting: Meeting; onOpen(): void }): 
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">{meeting.title}</span>
         {external ? (
-          <Badge variant="outline" className="text-[11px]">
+          <Badge variant="outline" className="text-xs">
             {t('meeting.external')}
           </Badge>
         ) : null}
-        <Badge variant="secondary" className="text-[11px]">
+        <Badge variant="secondary" className="text-xs">
           {t(`meeting.status.${meeting.status}`)}
         </Badge>
       </div>

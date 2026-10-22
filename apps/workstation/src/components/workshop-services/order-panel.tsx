@@ -156,7 +156,7 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
         <p className="flex flex-wrap items-center gap-1.5">
           <span className="font-semibold text-ws-ink">{name}</span>
           <span className="text-ws-muted-fg">· {t(`svc.status.${o.status}`)}</span>
-          <span className="text-[11.5px] text-ws-muted-fg">
+          <span className="text-xs text-ws-muted-fg">
             · {t(`svc.provider.${o.provider_label}`)}
           </span>
         </p>
@@ -171,7 +171,7 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
           )}
         </div>
         {(o.milestones ?? []).length > 1 ? (
-          <ol className="flex flex-wrap gap-1.5 text-[11.5px]">
+          <ol className="flex flex-wrap gap-1.5 text-xs">
             {(o.milestones ?? []).map((m) => (
               <li
                 key={m.id}
@@ -286,12 +286,12 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
                 <span className="min-w-0 flex-1 truncate text-ws-ink" title={f.name}>
                   {f.name}
                 </span>
-                <span className="shrink-0 text-[11.5px] text-ws-muted-fg">
+                <span className="shrink-0 text-xs text-ws-muted-fg">
                   {f.from === 'user' ? t('svc.order.file.mine') : t('svc.order.file.delivery')} ·{' '}
                   {Math.max(1, Math.ceil(f.size / 1024))} KB
                 </span>
                 {f.expired === true ? (
-                  <span className="shrink-0 text-[11.5px] text-ws-muted-fg">
+                  <span className="shrink-0 text-xs text-ws-muted-fg">
                     {t('svc.order.file.expired')}
                   </span>
                 ) : (
@@ -330,7 +330,7 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
                   key={m.id}
                   className={
                     m.kind === 'status'
-                      ? 'text-center text-[11.5px] text-ws-muted-fg'
+                      ? 'text-center text-xs text-ws-muted-fg'
                       : m.from === 'user'
                         ? 'ml-6 rounded-lg bg-ws-tint px-2 py-1 text-ws-ink'
                         : 'mr-6 rounded-lg bg-ws-surface px-2 py-1 text-ws-ink shadow-[inset_0_0_0_1px_var(--ws-line)]'
@@ -429,7 +429,7 @@ export function ServiceOrderPanel({ address }: RailPanelBodyProps): ReactNode {
           </button>
           {ledgerOpen ? (
             <ul
-              className="mt-1 flex flex-col gap-0.5 text-[11.5px] text-ws-muted-fg"
+              className="mt-1 flex flex-col gap-0.5 text-xs text-ws-muted-fg"
               data-testid="service-order-ledger"
             >
               {d.ledger.map((l) => (

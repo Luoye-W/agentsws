@@ -77,7 +77,7 @@ export function ReportNote({ message }: { message: FreeChatMessage }): React.Rea
           r.kind === 'done'
             ? 'text-ws-brand'
             : r.kind === 'decide'
-              ? 'text-amber-600'
+              ? 'text-ws-warn'
               : 'text-destructive',
         )}
       />
@@ -180,7 +180,7 @@ export function MentionMenu({
       aria-label={t('assistant.mention.title')}
       data-testid="assistant-mention-menu"
     >
-      <p className="px-2 py-1 text-[11px] text-muted-foreground">{t('assistant.mention.title')}</p>
+      <p className="px-2 py-1 text-xs text-muted-foreground">{t('assistant.mention.title')}</p>
       {options.length === 0 ? (
         <p className="px-2 py-1.5 text-muted-foreground">{t('assistant.mention.none')}</p>
       ) : (
@@ -298,7 +298,7 @@ export function MemoryButton({ highlight }: { highlight?: readonly string[] }): 
               >
                 <div className="min-w-0 flex-1">
                   <p>{m.text}</p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t(m.written_by === 'ai' ? 'assistant.memory.ai' : 'assistant.memory.mine', {
                       date: date(m.at),
                     })}

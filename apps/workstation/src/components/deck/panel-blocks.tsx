@@ -103,7 +103,7 @@ export function ReportBlocks({
               >
                 {figuresOf(r, lang).map(([k, v]) => (
                   <div key={k} className="text-right">
-                    <dt className="text-[11px] text-ws-muted-fg">{k}</dt>
+                    <dt className="text-xs text-ws-muted-fg">{k}</dt>
                     <dd className="ws-display ws-num text-base">{v}</dd>
                   </div>
                 ))}

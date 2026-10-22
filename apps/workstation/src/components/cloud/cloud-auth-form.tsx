@@ -263,14 +263,14 @@ export function CloudAuthForm({
                     ? strength <= 1
                       ? 'bg-destructive'
                       : strength === 2
-                        ? 'bg-amber-500'
+                        ? 'bg-ws-warn'
                         : 'bg-primary'
                     : 'bg-ws-subtle',
                 )}
               />
             ))}
           </div>
-          <span className="text-[11px] text-ws-muted-fg" data-slot="status">
+          <span className="text-xs text-ws-muted-fg" data-slot="status">
             {t(`cauth.strength.${String(strength)}`)}
           </span>
         </div>
@@ -527,7 +527,7 @@ export function CloudAuthForm({
                 aria-pressed={via === k}
                 data-testid={`${p}-via-${k}`}
                 className={cn(
-                  'rounded-sm border px-2 py-0.5 text-[11px]',
+                  'rounded-sm border px-2 py-0.5 text-xs',
                   via === k ? 'border-primary text-foreground' : 'text-ws-muted-fg',
                 )}
                 onClick={() => {

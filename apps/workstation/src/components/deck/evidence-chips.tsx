@@ -186,7 +186,7 @@ export function EvidencePill({
       data-count={lines.length}
       title={lines.join(' · ')}
       aria-label={t('deck.evidence.open')}
-      className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-ws-surface px-2 text-[11px] text-ws-muted-fg hover:text-ws-ink"
+      className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-ws-surface px-2 text-xs text-ws-muted-fg hover:text-ws-ink"
       onClick={onOpen}
     >
       <FileSearch className="size-3" aria-hidden />

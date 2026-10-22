@@ -21,6 +21,9 @@ scopes:
   # 只读：广告数据（拖进来的报表入的那个库）与 analytics。没有 stage——这一期什么都不提
   - { domain: ad_account, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  # 决策 1398：毛利率事实卡要读得到（盈亏线 ROAS = 1 / 毛利率，`unit-economics` 技能从事实卡取）。
+  # 和老四条一样读公司级知识（knowledge 读权限连带 company 域）；只读，白名单见 `GROSS_MARGIN_VISIBLE_ROLES`
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
   # 自己名下的卡与事项要读得到（不读 approval 连一件事都开不了——岗位页开事项要它）；只读，不批任何东西
   - { domain: approval, ops: [read], range: own, max_sensitivity: internal }
 

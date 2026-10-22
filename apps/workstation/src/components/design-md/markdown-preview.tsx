@@ -70,7 +70,7 @@ export function MarkdownPreview({ markdown }: { markdown: string }): React.React
         // 机器可读的那一段：给人看一眼"文件头有东西"，不逐格排版——
         // 逐格排出来的那张表就是左边那个「可视化」页，两处画两遍必然对不上
         <pre
-          className="overflow-auto rounded-sm bg-ws-surface p-2 font-mono text-[11px] text-ws-muted-fg"
+          className="overflow-auto rounded-sm bg-ws-surface p-2 font-mono text-xs text-ws-muted-fg"
           data-testid="design-md-preview-front"
         >
           {front}

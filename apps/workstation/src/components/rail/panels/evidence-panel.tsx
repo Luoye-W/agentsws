@@ -34,7 +34,7 @@ import { formatDateTime } from '@/lib/format'
 function Section({ title, children }: { title: string; children: ReactNode }): ReactNode {
   return (
     <section className="flex flex-col gap-1.5">
-      <h3 className="text-[11px] font-medium text-muted-foreground">{title}</h3>
+      <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
       {children}
     </section>
   )
@@ -128,7 +128,7 @@ export function EvidencePanel(): ReactNode {
         因为它回答的是人看完证据之后第一个会问的问题："是不是还有我没看见的？"
       */}
       {card.detail.enrichment.dropped_refs === 0 ? null : (
-        <p className="text-[11px] text-muted-foreground" data-testid="rail-evidence-dropped">
+        <p className="text-xs text-muted-foreground" data-testid="rail-evidence-dropped">
           {t('deck.enrichment.dropped', { n: card.detail.enrichment.dropped_refs })}
         </p>
       )}

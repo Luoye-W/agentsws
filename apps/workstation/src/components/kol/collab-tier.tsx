@@ -49,7 +49,7 @@ export function TierTag({
   return (
     <span
       className={cn(
-        'inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-medium whitespace-nowrap',
+        'inline-flex h-5 shrink-0 items-center rounded-full px-2 text-xs font-medium whitespace-nowrap',
         TIER_TONE[tier],
         className,
       )}
