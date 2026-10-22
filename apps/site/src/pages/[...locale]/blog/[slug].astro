@@ -1,0 +1,17 @@
+---
+import { siteCatalog } from '../../../lib/catalog.js'
+import { localeStaticPaths } from '../../../lib/locales.js'
+import BlogPost from '../../../views/BlogPost.astro'
+
+export function getStaticPaths() {
+  const { notes } = siteCatalog()
+  return localeStaticPaths().flatMap((l) =>
+    notes[l.props.lang].map((p) => ({
+      params: { ...l.params, slug: p.slug },
+      props: { ...l.props, slug: p.slug },
+    })),
+  )
+}
+const { lang, slug } = Astro.props
+---
+<BlogPost lang={lang} slug={slug} />

@@ -20,6 +20,7 @@ import { ROLES } from '../i18n/roles.js'
 import Base from '../layouts/Base.astro'
 import { loadChangelog } from '../lib/changelog.js'
 import { emph, linkNames } from '../lib/locales.js'
+import { homeLd } from '../lib/schema.js'
 import '../styles/home.css'
 
 interface Props {
@@ -32,7 +33,7 @@ const p = (x: string) => localePath(x, lang)
 const logs = loadChangelog(lang).slice(0, 6)
 const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
 ---
-<Base lang={lang} path="/" title={t.meta.title} description={t.meta.description} og="home" announce>
+<Base lang={lang} path="/" title={t.meta.title} description={t.meta.description} og="home" announce jsonLd={homeLd(lang, t.meta.description)}>
   <section class="hero">
     <div class="wrap">
       <div>

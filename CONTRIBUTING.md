@@ -75,9 +75,39 @@ scripts/review-wp.sh ../agentsws-wt/wp42-my-thing packages/my-package
   一条能复现 bug 的场景 YAML 是最好的 bug 报告
 - **连接器 / provider**：优先贡献到上游（dsh-channels、OpenConnector），本仓 `vendor/`
   只放过渡版本与契约测试
-- **文档**：帮助文章（`docs/help/`）中英各一份；`README.md`（中文）与 `README.en.md`（英文）两份同步；`docs/ARCHITECTURE.md`、
+- **文档**：帮助文章（`docs/help/`）中英各一份，写法见下面「教程怎么写」；`README.md`（中文）与 `README.en.md`（英文）两份同步；`docs/ARCHITECTURE.md`、
   `SECURITY.md`、`CODE_OF_CONDUCT.md`、`.github/` 里的模板保持英文
 - **契约与内核**：见下一节
+
+### 教程怎么写（`docs/help/`，也是官网 agentsws.com/docs/ 与软件右栏「教程」）
+
+教程以官网为主：官网每次部署出一份目录（`/help/index.json`）与每篇的纯文本，软件定时去拉，
+工坊里的 AI 被问到「怎么用」时也在这份里查。所以一篇教程同时给三类读者：用户、搜索引擎、各家 AI。
+
+中文那份头上：
+
+```yaml
+---
+group: connect          # start / models / connect / channels / tools（官网目录分组）
+order: 110              # 组内顺序
+description: 一两句话直接给答案（不写「这篇讲……」）
+positions: [web-ops]    # 归哪些岗位（都空 = 通用）
+roles: [dtc.store]      # 归哪些职责
+requires: next          # 可选：讲的是还没发版的功能就写 next，发版时换成版本号
+aliases: [old-slug]     # 可选：改过名的旧 slug（官网自动留跳转）
+---
+# 标题
+```
+
+英文那份（`<slug>.en.md`）头上只写 `description`。
+
+- **先给答案**：开头一两句把事说完，再展开步骤。
+- **每段自己能看懂**：别用「它」「上面说的」，该说「Agents 工坊」「Shopify 卡」就说。
+- 小标题写成问题或动作（「连不上怎么办」）；限制和前提（要哪一版、要不要登录、要不要钱）写清楚。
+- 数字、版本、日期写死，不写「最近」「新版」。
+- slug 定了不改；非改不可时把旧名写进新那篇的 `aliases`。
+- **讲还没发版的功能**：头上写 `requires: next`。官网先用上一个正式版时的文字，新的一篇先不上；
+  发版前跑 `node scripts/help-stamp-release.mjs <版本号>` 把 `next` 换成版本号。改错字、说清楚一点的修改不用写。
 
 ## 5. 契约改动规则（接口已冻结）
 

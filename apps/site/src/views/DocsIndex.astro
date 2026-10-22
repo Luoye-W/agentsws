@@ -1,9 +1,12 @@
 ---
-/** 文档区目录：按 `HELP_SLUGS` 的顺序，按前缀分几组摆（只是摆法，不改顺序）。 */
+/** 文档区目录：按文章头上的分组与顺序摆；上面一排「按岗位看」链到岗位汇总页。 */
+import { HELP_GROUPS } from '@agentsws/contracts'
 import { type Lang, localePath } from '../i18n/common.js'
 import { PAGES } from '../i18n/pages.js'
+import { ROLES } from '../i18n/roles.js'
 import Base from '../layouts/Base.astro'
-import { helpGroup, helpSlugs, loadHelp } from '../lib/help.js'
+import { siteCatalog } from '../lib/catalog.js'
+import { hubIds } from '../lib/hubs.js'
 import { docHref } from '../lib/markdown.js'
 import '../styles/pages.css'
 
@@ -12,8 +15,8 @@ interface Props {
 }
 const { lang } = Astro.props
 const t = PAGES[lang].docs
-const docs = helpSlugs().map((s) => loadHelp(s, lang))
-const order = ['start', 'models', 'connect', 'channels', 'tools'] as const
+const docs = siteCatalog().guides[lang]
+const hubs = hubIds(lang).flatMap((id) => ROLES[lang].filter((r) => r.id === id))
 ---
 <Base lang={lang} path="/docs/" title={t.meta.title} description={t.meta.description} og="docs" current="docs">
   <section class="page-hero" style="padding-bottom:88px">
@@ -21,14 +24,21 @@ const order = ['start', 'models', 'connect', 'channels', 'tools'] as const
       <div class="eyebrow">{t.eyebrow}</div>
       <h1 class="page-h1">{t.title}</h1>
       <p class="sub">{t.sub}</p>
+      {hubs.length > 0 && (
+        <nav aria-label={t.byRole}>
+          <ul class="role-chips">
+            {hubs.map((r) => <li><a href={localePath(`/docs/roles/${r.id}/`, lang)}>{r.name}</a></li>)}
+          </ul>
+        </nav>
+      )}
       <div class="doc-index">
-        {order.map((g) => {
-          const list = docs.filter((d) => helpGroup(d.slug) === g)
+        {HELP_GROUPS.map((g) => {
+          const list = docs.filter((d) => d.group === g)
           return list.length === 0 ? null : (
             <div>
               <h2>{t.groups[g]}</h2>
               <ul class="doc-cards">
-                {list.map((d) => <li><a href={docHref(d.slug, lang)}><h3>{d.title}</h3><p>{d.summary}</p></a></li>)}
+                {list.map((d) => <li><a href={docHref(d.slug, lang)}><h3>{d.title}</h3><p>{d.description}</p></a></li>)}
               </ul>
             </div>
           )

@@ -25,6 +25,29 @@ const zh = {
     edit: '在 GitHub 上改这一篇',
     prev: '上一篇',
     next: '下一篇',
+    updated: '更新于',
+    related: '相关教程',
+    byRole: '按岗位看',
+    hub: {
+      eyebrow: '岗位教程',
+      title: '「{role}」要看的教程',
+      sub: '{line}',
+      own: '这个岗位的',
+      general: '人人都用得到的',
+      back: '全部教程',
+    },
+  },
+  blog: {
+    meta: {
+      title: '工坊笔记 · Agents 工坊',
+      description: 'Agents 工坊的思考：功能为什么这样设计、我们做了哪些取舍。',
+    },
+    eyebrow: '工坊笔记',
+    title: '为什么这样做。',
+    sub: '功能背后的想法和取舍，写给想知道「为什么」的人。',
+    all: '全部笔记',
+    published: '发表于',
+    edit: '在 GitHub 上看源文件',
   },
   changelog: {
     meta: {
@@ -82,6 +105,30 @@ const en: PagesCopy = {
     edit: 'Edit this page on GitHub',
     prev: 'Previous',
     next: 'Next',
+    updated: 'Updated',
+    related: 'Related guides',
+    byRole: 'By position',
+    hub: {
+      eyebrow: 'Guides by position',
+      title: 'Guides for {role}',
+      sub: '{line}',
+      own: 'For this position',
+      general: 'Everyone needs these',
+      back: 'All guides',
+    },
+  },
+  blog: {
+    meta: {
+      title: 'Notes · Agents Workshop',
+      description:
+        'Notes on Agents Workshop: why features work the way they do and the trade-offs behind them.',
+    },
+    eyebrow: 'Notes',
+    title: 'Why it works this way.',
+    sub: 'The thinking and trade-offs behind the features, for anyone who wants the “why”.',
+    all: 'All notes',
+    published: 'Published',
+    edit: 'View the source on GitHub',
   },
   changelog: {
     meta: {
