@@ -8995,6 +8995,37 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }
         })
       },
+      // WP459（决策 1498）：改判「AI 猜的」→ 撤掉原岗位还没批、指着这条会话 / 这几件事项的卡
+      withdrawCards: async ({ thread_id, matter_ids, reason, person_id }) => {
+        if (approvals.expireNow === undefined) return 0
+        const matters = new Set(matter_ids)
+        // 原岗位的卡发给做那个岗位的人（个人模式就是本人）；本人与第一个持岗位的人两条队列都看
+        const people = [
+          ...new Set([person_id, firstPositionOf(ws)?.person_id ?? person.id]),
+        ] as PersonId[]
+        const byId = new Map<string, ApprovalItem>()
+        for (const who of people)
+          for (const item of (await approvals.queue({
+            workspace_id: ws,
+            person_id: who,
+            lane: 'mine',
+            state: [...QUEUE_STATES],
+          })) as ApprovalItem[])
+            byId.set(item.id, item)
+        let n = 0
+        for (const item of byId.values()) {
+          const object = item.subject.object
+          const thread =
+            object.type === 'thread'
+              ? object.id
+              : item.evidence.provenance?.seen?.find((r) => r.type === 'thread')?.id
+          const matter = item.subject.matter_id ?? item.subject.work_item_id
+          if (thread !== thread_id && (matter === undefined || !matters.has(matter))) continue
+          const out = await approvals.expireNow(item.id, reason).catch(() => undefined)
+          if (out !== undefined) n += 1
+        }
+        return n
+      },
       // WP441 / WP442：今天的简报到点、分拣时抽「对方说哪天答复」都按品牌时区算；列表 / 会话上挂回信跟进、来信撤卡
       tzOffsetMinutes: () => workData.tz_offset_minutes,
       followUp: () => followUpRef,

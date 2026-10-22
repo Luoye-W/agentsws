@@ -41,6 +41,27 @@ export {
 } from './decide.js'
 export { DeckError, type DeckErrorReason, errorCodeFor } from './errors.js'
 export { assembleHome, type HomeInput, type HomePosition } from './home.js'
+// WP459（决策 1497–1505）：收件箱——所有岗位等你批的卡 + 要你判断的信一条队列
+export {
+  filterInbox,
+  INBOX_UNASSIGNED,
+  INBOX_URGENCY_ORDER,
+  type InboxBrief,
+  type InboxCounts,
+  type InboxFilter,
+  type InboxGuess,
+  type InboxItem,
+  type InboxMail,
+  type InboxPosition,
+  type InboxPrimary,
+  type InboxTag,
+  type InboxUrgency,
+  type InboxView,
+  inboxCounts,
+  inboxUrgencyOfCard,
+  inboxUrgencyOfMail,
+  sortInbox,
+} from './inbox.js'
 export {
   DECK_LAYOUTS,
   DEFAULT_LAYOUT,

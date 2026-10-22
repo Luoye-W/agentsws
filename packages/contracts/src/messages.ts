@@ -111,7 +111,28 @@ export interface MessageTriage {
    * 不再按默认的 N 个工作日算。抽不出来、日期已经过去的不写。
    */
   promised_reply_at?: Iso8601
+  /**
+   * WP459（决策 1498）：**AI 自己交给了哪个岗位**——模型判得出岗位就直接交过去（不再留在「没人接的」），
+   * 把握不到 {@link MESSAGE_GUESS_SURE} 的标「AI 猜的」（`guessed`），收件箱里那一行带「AI 猜的 · 改」。
+   * 把握低于 {@link MESSAGE_GUESS_FLOOR}（猜不出）或只能本人定的不交，照旧留在收件箱队列里。
+   */
+  ai_hand?: MessageAiHand
 }
+
+/** WP459（决策 1498）：AI 交给岗位的那一下。 */
+export interface MessageAiHand {
+  /** 岗位模板 id（`customer-care` / `b2b` …）。 */
+  position_id: string
+  /** 0–1。 */
+  confidence: number
+  /** 把握不到 {@link MESSAGE_GUESS_SURE}：界面标「AI 猜的 · 改」，简报里算「猜着交给岗位」。 */
+  guessed: boolean
+}
+
+/** WP459（决策 1498）：把握低于它就算「猜不出」——不交，留在收件箱里等你定。 */
+export const MESSAGE_GUESS_FLOOR = 0.4
+/** WP459：把握到它就不算「猜的」（照常交，不标「AI 猜的」）。 */
+export const MESSAGE_GUESS_SURE = 0.8
 
 /** WP441：一封信命中的一条消息规则。 */
 export interface MessageRuleHit {
@@ -172,6 +193,8 @@ export interface MessageHandled {
   matter_id?: string
   by: PersonId
   at: Iso8601
+  /** WP459（决策 1498）：是 AI 自己交的（不是人点的「交给 X」）。 */
+  by_ai?: boolean
 }
 
 /** 「没人接的」每条那三个建议里 AI 挑的主按钮（docs/88 §3.2）。 */
@@ -461,6 +484,11 @@ export interface MessageThreadSummary {
    * 对方来信了就收掉（这一格没有了）。
    */
   follow_up?: MessageFollowUp
+  /**
+   * WP459（决策 1498）：这条会话是 **AI 交给岗位的**（`handed_to` 就是那个岗位）。`guessed` 时收件箱那一行
+   * 标「AI 猜的 · 改」；人改判过就没有这一格了。
+   */
+  ai_hand?: MessageAiHand & { message_id: string }
 }
 
 /* ── 标签 ─────────────────────────────────────────────────────────────── */
@@ -680,6 +708,48 @@ export interface MessageConfirmRouteResult {
   refused?: string
   /** WP212：勾了「以后都这样」时写下的那一条。 */
   rule?: SenderRule
+}
+
+/**
+ * WP459（决策 1498）：**改判**「AI 猜的」——交给别的岗位 / 我自己处理 / 只是通知。
+ * 原岗位那边**还没批的卡一起撤掉**、那件事项关掉；这封信从此归新的主人（一封信一个主人）。
+ */
+export interface MessageRehandInput {
+  to: 'position' | 'me' | 'notice'
+  /** `to: 'position'` 时交给哪个岗位（岗位模板 id）。 */
+  position_id?: string | undefined
+  /** 「以后这个发件人都交给 X」（决策 1504：默认不勾；同一人改判两次 AI 自己记住）。 */
+  remember_sender?: boolean | undefined
+}
+
+export interface MessageRehandResult {
+  message: MessageRecord
+  /** 原岗位撤掉了几张没批的卡。 */
+  withdrawn: number
+  /** 新主人接住了没有（岗位没开 / 交不出去 = `false`，原岗位的卡不撤、信不动）。 */
+  handed_off: boolean
+  position_id?: string
+  refused?: string
+  /** 勾了「以后都这样」时写下的那一条；或同一个发件人改判第二次、AI 自己记住的那一条（`source: 'ai'`）。 */
+  rule?: SenderRule
+  /** `rule` 是 AI 自己记住的（决策 1504）。 */
+  learned?: boolean
+}
+
+/** WP459：今天「猜着交给岗位」的一封（简报里那个数点开的第三栏）。 */
+export interface MessageGuessRow {
+  message_id: string
+  thread_id: string
+  subject: string
+  from: MessageAddress
+  /** 交给了哪个岗位（岗位模板 id）。 */
+  position_id: string
+  confidence: number
+  at: Iso8601
+  /** 那边还有几张卡等你批。 */
+  open_card_count?: number
+  /** 交出去之后落到的事项（收件箱按它认出「这张卡是 AI 猜着交的那封信来的」）。 */
+  matter_id?: string
 }
 
 /** 写信框每隔几秒打一次的那一份（`id` 为空 = 新建）。 */

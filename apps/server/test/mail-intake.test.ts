@@ -254,7 +254,7 @@ describe('WP167：判不准的放「待确认」，人点一下才交出去', ()
   it('低把握的客服判定：不开事项、不挪；进待确认；点「这是客服」→ 开事项、起 Run、挪信、写事件', async () => {
     const box = new Mailbox()
     box.deliver(3, mime(3, 'ann@customer.example'))
-    const h = assemble({ box, confidence: 0.4 })
+    const h = assemble({ box, confidence: 0.3 })
     await h.tick()
     expect(h.matters()).toHaveLength(0)
     expect(h.runs).toHaveLength(0)
@@ -291,7 +291,7 @@ describe('WP167：判不准的放「待确认」，人点一下才交出去', ()
   it('点「不是」：只记人的判断，信留在收件箱，从待确认里消失', async () => {
     const box = new Mailbox()
     box.deliver(3, mime(3, 'ann@customer.example'))
-    const h = assemble({ box, confidence: 0.4 })
+    const h = assemble({ box, confidence: 0.3 })
     await h.tick()
     const port = h.messages?.port
     const id = (await port?.threads(ACTOR, { pending_route: true }))?.threads[0]
@@ -308,7 +308,7 @@ describe('WP167：判不准的放「待确认」，人点一下才交出去', ()
     const box = new Mailbox()
     box.deliver(3, mime(3, 'ann@customer.example'))
     const roles: RoleId[] = ['dtc.support']
-    const h = assemble({ box, confidence: 0.4, roles })
+    const h = assemble({ box, confidence: 0.3, roles })
     await h.tick()
     roles.length = 0
     const port = h.messages?.port

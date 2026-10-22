@@ -299,7 +299,7 @@ describe('消息：全量同步与分拣（63 §3 / §4）', () => {
     expect(rows[0]?.labels).toContain('newsletters')
   })
 
-  it('低置信度的客服判定不挪信，只挂"像是客服信？"', async () => {
+  it('猜不出（把握低于 0.4）的客服判定不挪信，只挂"像是客服信？"', async () => {
     const h = harness({
       folders: { INBOX: letters([{ uid: 1, mime: mime({ uid: 1 }) }]) },
       roles: ['dtc.support'],
@@ -309,7 +309,7 @@ describe('消息：全量同步与分拣（63 §3 / §4）', () => {
         needs_reply: true,
         priority: 'normal',
         summary: '也许是客服信',
-        confidence: 0.4,
+        confidence: 0.3,
       },
     })
     await h.messages.poll()
@@ -317,6 +317,34 @@ describe('消息：全量同步与分拣（63 §3 / §4）', () => {
     const rows = await h.messages.store.list({})
     expect(rows[0]?.route).toBe('inbox')
     expect(rows[0]?.triage?.suggested_route).toBe('support')
+    expect(rows[0]?.triage?.ai_hand).toBeUndefined()
+  })
+
+  it('WP459（决策 1498）：把握不够但猜得出（0.4–0.8）→ 直接交给客服、标「AI 猜的」，邮箱里不挪', async () => {
+    const h = harness({
+      folders: { INBOX: letters([{ uid: 1, mime: mime({ uid: 1 }) }]) },
+      roles: ['dtc.support'],
+      triage: {
+        route: 'support',
+        labels: [],
+        needs_reply: true,
+        priority: 'normal',
+        summary: '也许是客服信',
+        confidence: 0.5,
+      },
+    })
+    await h.messages.poll()
+    // 猜的只在工坊里交，邮箱里一下都不动（改判时不用挪回来）
+    expect(h.writer.moves).toEqual([])
+    const rows = await h.messages.store.list({})
+    expect(rows[0]?.route).toBe('support')
+    expect(rows[0]?.triage?.ai_hand).toMatchObject({
+      position_id: 'customer-care',
+      guessed: true,
+    })
+    const thread = (await h.messages.port.threads(ACTOR, {})).threads[0]
+    expect(thread?.claim).toBe('handed')
+    expect(thread?.ai_hand?.guessed).toBe(true)
   })
 
   it('halt.model 开着时只跑规则，剩下的标「未分拣」', async () => {
@@ -664,14 +692,17 @@ describe('WP204：消息页按钮背后的那几条（回执、影子模式、�
 /* ── WP212：没人接的 + 交给岗位（docs/88 §3、§8.2 第 1、2 步）──────────────── */
 
 describe('消息：没人接的与交给岗位（WP212）', () => {
-  /** 一个判成「媒体」的来信：模型给类型，不归任何分拣路（留在收件箱没人接）。 */
+  /**
+   * 一个判成「媒体」的来信：模型给类型，不归任何分拣路。WP459（决策 1498）起 AI 猜得出岗位就直接交过去，
+   * 所以这几条「没人接 → 人点交给 X」的用例用一封**猜不出**（把握低于 0.4）的信——它照旧留在收件箱没人接。
+   */
   const mediaTriage = {
     route: 'inbox',
     labels: [],
     needs_reply: true,
     priority: 'normal',
     summary: '想周四采访你 20 分钟',
-    confidence: 0.88,
+    confidence: 0.35,
     kind: 'media',
   }
   const positions = (): ReturnType<NonNullable<MessagesOptions['positions']>> => [
@@ -961,5 +992,179 @@ describe('消息：没人接的与交给岗位（WP212）', () => {
     expect((await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })).threads).toHaveLength(0)
     await h.messages.port.claim?.(ACTOR, row.id, { as: 'none' })
     expect((await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })).threads).toHaveLength(1)
+  })
+})
+
+describe('WP459（决策 1498 / 1504）：AI 猜得出岗位就直接交过去、改判撤卡、改判两次 AI 记住', () => {
+  const positions = (): ReturnType<NonNullable<MessagesOptions['positions']>> => [
+    { id: 'pr', name_zh: '公共关系', name_en: 'PR', open: true },
+    { id: 'social-media', name_zh: '社媒运营', name_en: 'Social', open: true },
+    { id: 'b2b', name_zh: 'B2B', name_en: 'B2B', open: false },
+  ]
+  const media = (confidence: number) => ({
+    route: 'inbox',
+    labels: [],
+    needs_reply: true,
+    priority: 'normal',
+    summary: '想做一期采访',
+    confidence,
+    kind: 'media',
+  })
+  const setup = (confidence: number, from = 'clara@review.example') => {
+    const opened: { position_id: string; matter_id: string }[] = []
+    const withdrawn: { thread_id: string; matter_ids: readonly string[]; reason: string }[] = []
+    const inbox = letters([{ uid: 51, mime: mime({ uid: 51, from, subject: 'Interview' }) }])
+    const ref: { work?: Work } = {}
+    const h = harness({
+      folders: { INBOX: inbox },
+      triage: media(confidence),
+      extra: {
+        positions,
+        openAtPosition: async (input) => {
+          const matter = ref.work?.createMatter({
+            kind: 'adhoc',
+            title: input.title,
+            pinned: [{ type: 'thread', id: input.thread_id }],
+          })
+          const matter_id = matter?.id ?? `mat_${opened.length + 1}`
+          opened.push({ position_id: input.position_id, matter_id })
+          return { matter_id }
+        },
+        withdrawCards: async (input) => {
+          withdrawn.push(input)
+          return 2
+        },
+      },
+    })
+    ref.work = h.work
+    return { h, opened, withdrawn, inbox }
+  }
+
+  it('把握够（≥ 0.8）：直接交给公共关系，不标「AI 猜的」，不进没人接的', async () => {
+    const { h, opened } = setup(0.88)
+    await h.messages.poll()
+    expect(opened.map((o) => o.position_id)).toEqual(['pr'])
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    expect(row.handled).toMatchObject({ as: 'position', position_id: 'pr', by_ai: true })
+    expect((await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })).threads).toHaveLength(0)
+    const t = (await h.messages.port.threads(ACTOR, {})).threads[0]
+    expect(t?.handed_to).toBe('pr')
+    expect(t?.ai_hand?.guessed).toBe(false)
+    expect((await h.messages.port.guessed?.(ACTOR))?.rows).toEqual([])
+  })
+
+  it('把握不够（0.4–0.8）：照样交过去、标「AI 猜的」；今天猜着交的列得出（带事项）', async () => {
+    const { h, opened } = setup(0.6)
+    await h.messages.poll()
+    expect(opened.map((o) => o.position_id)).toEqual(['pr'])
+    const t = (await h.messages.port.threads(ACTOR, {})).threads[0]
+    expect(t?.ai_hand).toMatchObject({ position_id: 'pr', guessed: true })
+    const rows = (await h.messages.port.guessed?.(ACTOR))?.rows ?? []
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      position_id: 'pr',
+      matter_id: opened[0]?.matter_id,
+      confidence: 0.6,
+    })
+    expect(
+      h.events.some(
+        (e) =>
+          e.type === 'messages.route_confirmed' && (e.payload as { by?: string }).by === 'ai_guess',
+      ),
+    ).toBe(true)
+  })
+
+  it('猜不出（< 0.4）：不交，留在没人接的（主按钮仍是 AI 的头号猜测）', async () => {
+    const { h, opened } = setup(0.3)
+    await h.messages.poll()
+    expect(opened).toEqual([])
+    const { threads } = await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })
+    expect(threads[0]?.suggest).toEqual({ action: 'hand', position: 'pr' })
+  })
+
+  it('改判：交给社媒运营 → 原岗位没批的卡撤掉、那件事项关掉，「AI 猜的」没了，记一次纠正', async () => {
+    const { h, opened, withdrawn } = setup(0.6)
+    await h.messages.poll()
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    const out = await h.messages.port.rehand?.(ACTOR, row.id, {
+      to: 'position',
+      position_id: 'social-media',
+    })
+    expect(out?.handed_off).toBe(true)
+    expect(out?.withdrawn).toBe(2)
+    expect(out?.learned).toBeUndefined()
+    expect(opened.map((o) => o.position_id)).toEqual(['pr', 'social-media'])
+    expect(withdrawn).toEqual([
+      {
+        thread_id: row.thread_id,
+        matter_ids: [opened[0]?.matter_id],
+        reason: 'message_rehand',
+        person_id: 'p_owner',
+      },
+    ])
+    expect(h.work.getMatter(opened[0]?.matter_id as never)?.status).toBe('closed')
+    expect(h.work.getMatter(opened[1]?.matter_id as never)?.status).toBe('open')
+    const t = (await h.messages.port.threads(ACTOR, {})).threads[0]
+    expect(t?.handed_to).toBe('social-media')
+    expect(t?.ai_hand).toBeUndefined()
+    expect((await h.messages.port.guessed?.(ACTOR))?.rows).toEqual([])
+    expect(h.events.some((e) => e.type === 'messages.rehanded')).toBe(true)
+  })
+
+  it('改判到没开的岗位：不交、不撤卡，原岗位照旧在办', async () => {
+    const { h, withdrawn } = setup(0.6)
+    await h.messages.poll()
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    const out = await h.messages.port.rehand?.(ACTOR, row.id, {
+      to: 'position',
+      position_id: 'b2b',
+    })
+    expect(out?.handed_off).toBe(false)
+    expect(out?.refused).toContain('没开')
+    expect(withdrawn).toEqual([])
+    expect((await h.messages.port.threads(ACTOR, {})).threads[0]?.handed_to).toBe('pr')
+  })
+
+  it('改判成「我自己处理」：收回来、撤卡，信归我', async () => {
+    const { h, withdrawn } = setup(0.6)
+    await h.messages.poll()
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    const out = await h.messages.port.rehand?.(ACTOR, row.id, { to: 'me' })
+    expect(out?.handed_off).toBe(true)
+    expect(withdrawn).toHaveLength(1)
+    const t = (await h.messages.port.threads(ACTOR, {})).threads[0]
+    expect(t?.handed_to).toBe('me')
+    expect(t?.ai_hand).toBeUndefined()
+  })
+
+  it('决策 1504：默认不记住；同一个发件人改判到同一个岗位第二次，AI 自己记住（source: ai）', async () => {
+    const { h, inbox } = setup(0.6, 'dana@press.example')
+    await h.messages.poll()
+    const first = (await h.messages.store.list({}))[0] as MessageRecord
+    const once = await h.messages.port.rehand?.(ACTOR, first.id, {
+      to: 'position',
+      position_id: 'social-media',
+    })
+    expect(once?.learned).toBeUndefined()
+    expect(once?.rule).toBeUndefined()
+    // 同一个人又来一封（新会话），AI 又猜给了公共关系
+    inbox.push(
+      ...letters([
+        { uid: 52, mime: mime({ uid: 52, from: 'dana@press.example', subject: 'Again' }) },
+      ]),
+    )
+    await h.messages.poll()
+    const second = (await h.messages.store.list({})).find((m) => m.uid === 52) as MessageRecord
+    expect(second.handled?.position_id).toBe('pr')
+    const twice = await h.messages.port.rehand?.(ACTOR, second.id, {
+      to: 'position',
+      position_id: 'social-media',
+    })
+    expect(twice?.learned).toBe(true)
+    expect(twice?.rule).toMatchObject({
+      sender: 'dana@press.example',
+      position: 'social-media',
+      source: 'ai',
+    })
   })
 })
