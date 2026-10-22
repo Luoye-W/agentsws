@@ -916,7 +916,9 @@ export class ApprovalBusImpl implements ApprovalBus {
     if (item?.decision === undefined || item.decision.by !== by) return undefined
     if (item.state === 'rejected' || item.state === 'deferred') return { kind: 'reopen' }
     const until = this.unapproveUntil(item)
-    return until === undefined ? undefined : { kind: 'unapprove', until }
+    if (until === undefined) return undefined
+    const seconds_left = Math.max(1, Math.ceil((ms(until) - ms(this.rt.now())) / 1000))
+    return { kind: 'unapprove', until, seconds_left }
   }
 
   /** 「通过」还能撤到哪一刻（撤不了 = `undefined`）。 */

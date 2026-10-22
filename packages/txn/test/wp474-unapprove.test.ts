@@ -41,6 +41,7 @@ describe('WP474 undoable / unapprove', () => {
     const how = await h.txn.approvals.undoable(item.id, 'p_wang')
     expect(how?.kind).toBe('unapprove')
     expect(Date.parse(how?.until ?? '')).toBe(decidedAt + 120_000)
+    expect(how?.seconds_left).toBe(60)
     // 别人撤不了
     expect(await h.txn.approvals.unapprove(item.id, 'p_li', { reason: 'x' })).toBeUndefined()
     const back = await h.txn.approvals.unapprove(item.id, 'p_wang', { reason: '撤回' })

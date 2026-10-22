@@ -685,6 +685,8 @@ export interface ApprovalBus {
 /** WP474（决策 1514）：一张卡刚才那一下怎么撤（见 {@link ApprovalBus.undoable}）。 */
 export interface ApprovalUndo {
   kind: 'reopen' | 'unapprove'
-  /** 「通过」的撤回截止到哪一刻（批准时刻 + 取消窗口）；「不要」没有 */
+  /** 「通过」的撤回截止到哪一刻（批准时刻 + 取消窗口，服务端的钟）；「不要」没有 */
   until?: Iso8601
+  /** 「通过」的撤回还剩几秒（服务端算好；界面按收到那一刻倒数，不拿本机钟去比 `until`） */
+  seconds_left?: number
 }

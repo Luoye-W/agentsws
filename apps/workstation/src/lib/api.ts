@@ -1313,6 +1313,8 @@ export const getApproval = (id: string, assignment?: string): Promise<ApprovalIt
 export interface ApprovalUndoData {
   kind: 'reopen' | 'unapprove'
   until?: string
+  /** 服务端算好的还剩几秒（按收到那一刻倒数） */
+  seconds_left?: number
 }
 
 /** WP474：一张刚处理掉的卡现在什么状态、还撤不撤得回（单卡详情上带 `undo`）。 */

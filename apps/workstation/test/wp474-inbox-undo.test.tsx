@@ -108,6 +108,19 @@ describe('一张一张：撤回「通过」「不要」（WP474）', () => {
     expect((await screen.findByTestId('inbox-notice')).textContent).toContain('放回来了')
   })
 
+  it('剩几秒按服务端说的算：服务端的钟比本机慢（until 已经过去）也照样能撤', async () => {
+    state.undo.set('ap_reply', {
+      kind: 'unapprove',
+      until: new Date(Date.now() - 3_600_000).toISOString(),
+      seconds_left: 90,
+    })
+    renderWithProviders(<InboxPage />, '/inbox?mode=focus')
+    const focus = await screen.findByTestId('inbox-focus')
+    fireEvent.keyDown(focus, { key: 'a' })
+    const undo = await screen.findByTestId('inbox-focus-undo')
+    expect(undo.textContent).toMatch(/撤回 · (89|90) 秒/)
+  })
+
   it('「不要」的能撤回（没有秒数）', async () => {
     state.undo.set('ap_reply', { kind: 'reopen' })
     renderWithProviders(<InboxPage />, '/inbox?mode=focus')

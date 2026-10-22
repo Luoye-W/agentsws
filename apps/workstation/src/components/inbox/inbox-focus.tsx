@@ -28,12 +28,14 @@ type Done = {
   item: InboxItem
   /** WP474：卡刚才是通过了还是不要了（问过服务端才知道；信、别的去向是 `other`） */
   did?: 'approve' | 'reject' | 'other'
-  /** WP474：还撤不撤得回、撤到哪一刻 */
+  /** WP474：还撤不撤得回 */
   undo?: ApprovalUndoData
+  /** WP474：「通过」的撤回截止到本机哪一刻（收到时 + 服务端说的剩余秒数；不拿本机钟比服务端的钟） */
+  deadline?: number
 }
 
 /** WP474：一张卡不在了之后问一句它现在什么状态、还撤不撤得回。 */
-async function settle(item: InboxItem): Promise<Pick<Done, 'did' | 'undo'>> {
+async function settle(item: InboxItem): Promise<Pick<Done, 'did' | 'undo' | 'deadline'>> {
   const card = item.card
   if (card === undefined) return { did: 'other' }
   try {
@@ -44,16 +46,24 @@ async function settle(item: InboxItem): Promise<Pick<Done, 'did' | 'undo'>> {
         : out.state === 'rejected' || out.state === 'deferred'
           ? 'reject'
           : 'other'
-    return { did, ...(out.undo === undefined ? {} : { undo: out.undo }) }
+    const left = out.undo?.seconds_left
+    return {
+      did,
+      ...(out.undo === undefined ? {} : { undo: out.undo }),
+      ...(left === undefined ? {} : { deadline: Date.now() + left * 1000 }),
+    }
   } catch {
     return { did: 'other' }
   }
 }
 
 /** 「通过」的撤回还剩几秒（「不要」的没有期限 → `undefined`；过了 → 0）。 */
-function secondsLeft(undo: ApprovalUndoData | undefined, now: number): number | undefined {
-  if (undo?.until === undefined) return undefined
-  return Math.max(0, Math.ceil((Date.parse(undo.until) - now) / 1000))
+function secondsLeft(d: Done | undefined, now: number): number | undefined {
+  if (d?.undo?.kind !== 'unapprove') return undefined
+  // 老服务进程只给 until：按 until 算（同一台机器上钟是一样的）
+  const deadline = d.deadline ?? (d.undo.until === undefined ? undefined : Date.parse(d.undo.until))
+  if (deadline === undefined) return undefined
+  return Math.max(0, Math.ceil((deadline - now) / 1000))
 }
 
 /** 按键 → 这张卡上的哪颗按钮（第一个找得到的）。 */
@@ -91,6 +101,8 @@ export function InboxFocus({
   const [fallback, setFallback] = useState(0)
   const [recent, setRecent] = useState<Done[]>([])
   const [undoing, setUndoing] = useState(false)
+  /** WP474：撤回了的那张——等它回到这一轮里再翻过去（重取之前它还不在） */
+  const [returning, setReturning] = useState<string | undefined>()
   const [tick, setTick] = useState(() => Date.now())
   // 这一轮的顺序：跳过的挪到最后
   const order = useMemo(() => {
@@ -122,6 +134,11 @@ export function InboxFocus({
     if (found < 0 && item !== undefined) setCursor(item.id)
   }, [found, item])
   useEffect(() => {
+    if (returning === undefined || !items.some((i) => i.id === returning)) return
+    setCursor(returning)
+    setReturning(undefined)
+  }, [items, returning])
+  useEffect(() => {
     box.current?.focus({ preventScroll: true })
   }, [])
 
@@ -146,7 +163,7 @@ export function InboxFocus({
     undoApproval(card.id, card.position_id)
       .then(() => {
         setRecent((r) => r.filter((x) => x !== d))
-        setCursor(d.item.id)
+        setReturning(d.item.id)
         onNotice({ tone: 'ok', text: t('inbox.focus.undone', { title: itemTitle(d.item) }) })
       })
       .catch((e: unknown) => {
@@ -194,7 +211,7 @@ export function InboxFocus({
   const upcoming = order.slice(index + 1, index + 4)
   const latest = recent[0]
   // WP474：「通过」的撤回按钮带剩几秒，每秒走一下，到点收起
-  const left = secondsLeft(latest?.undo, tick)
+  const left = secondsLeft(latest, tick)
   useEffect(() => {
     if (left === undefined || left <= 0) return
     const timer = setTimeout(() => {
