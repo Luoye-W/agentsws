@@ -21,6 +21,7 @@
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
     "better-sqlite3": "^12.0.0",
+    "chrono-node": "2.10.2",
     "imapflow": "2.0.0",
     "mailparser": "3.9.39",
     "nodemailer": "10.1.1"
