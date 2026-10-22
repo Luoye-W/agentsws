@@ -186,9 +186,6 @@
     "apps/workstation/src/components/onboarding/step-progress.tsx": {
       "font-size": 1
     },
-    "apps/workstation/src/components/org/brand-assets-card.tsx": {
-      "font-size": 1
-    },
     "apps/workstation/src/components/org/roles-tab.tsx": {
       "radius": 2
     },
@@ -304,21 +301,8 @@
     "apps/workstation/src/components/seo/geo-watch-settings.tsx": {
       "radius": 1
     },
-    "apps/workstation/src/components/settings-panel/setting-row.tsx": {
-      "font-size": 1
-    },
-    "apps/workstation/src/components/settings-panel/settings-dialog.tsx": {
-      "font-size": 2
-    },
     "apps/workstation/src/components/settings/credits-panel.tsx": {
-      "font-size": 2,
-      "radius": 2
-    },
-    "apps/workstation/src/components/settings/kol-cloud-card.tsx": {
-      "radius": 3
-    },
-    "apps/workstation/src/components/settings/team-channel.tsx": {
-      "radius": 2
+      "font-size": 2
     },
     "apps/workstation/src/components/setup/connect-card.tsx": {
       "radius": 1
@@ -438,9 +422,6 @@
     },
     "apps/workstation/src/pages/onboarding.tsx": {
       "font-size": 1
-    },
-    "apps/workstation/src/pages/org.tsx": {
-      "font-size": 2
     },
     "apps/workstation/src/pages/position.tsx": {
       "font-size": 2

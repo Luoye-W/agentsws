@@ -40,7 +40,8 @@ export function SettingRow({
           {hint === undefined ? null : <Hint text={hint} />}
         </div>
         {desc === undefined ? null : (
-          <p className="mt-0.5 text-[12.5px] leading-snug text-ws-muted-fg">{desc}</p>
+          // WP456-T6：说明一行 13 灰字（界面字那一档；原来 12.5 是半档）
+          <p className="mt-0.5 text-ws-ui text-ws-muted-fg">{desc}</p>
         )}
       </div>
       <div className={cn('min-w-0', stacked ? 'w-full' : 'shrink-0')}>{control}</div>

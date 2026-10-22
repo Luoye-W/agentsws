@@ -1578,7 +1578,7 @@ const zh: Table = {
   'connections.subtitle': '把店铺、邮箱、数据后台接进来。',
   'connections.connected': '已连接',
   'connections.available': '可以连接',
-  'connections.empty': '还什么都没连。下面挑一个开始，不会就点「看教程」。',
+  'connections.empty': '还没连。先连店铺和邮箱，大多数岗位都用得上。',
   'connections.test': '测试',
   'connections.testing': '测试中…',
   'connections.disconnect': '断开',
@@ -5992,7 +5992,8 @@ const en: Table = {
   'connections.subtitle': 'Hook up your store, mailbox and analytics.',
   'connections.connected': 'Connected',
   'connections.available': 'Available',
-  'connections.empty': 'Nothing connected yet. Pick one below; stuck? Open its tutorial.',
+  'connections.empty':
+    'Nothing connected yet. Start with your store and mailbox; most roles use them.',
   'connections.test': 'Test',
   'connections.testing': 'Testing…',
   'connections.disconnect': 'Disconnect',

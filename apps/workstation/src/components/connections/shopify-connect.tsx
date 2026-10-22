@@ -230,9 +230,14 @@ export function ShopifyConnect({
           ? 'shopconnect.relogin_needed'
           : 'shopconnect.not_linked'
     return (
-      <div className="flex flex-col gap-2" data-testid="shopconnect" data-state={blocked.reason}>
-        <p className="flex items-center gap-1.5 text-xs text-ws-muted-fg" data-slot="status">
-          <AlertTriangle aria-hidden className="size-3.5 shrink-0 text-ws-warn" />
+      // WP456-T6（示意稿 6）：一行——左边「要先登录…」，右边那颗按钮（这一行唯一的主按钮）
+      <div
+        className="flex flex-wrap items-center justify-between gap-2"
+        data-testid="shopconnect"
+        data-state={blocked.reason}
+      >
+        <p className="flex items-center gap-1.5 text-xs text-ws-warn" data-slot="status">
+          <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
           {t(textKey)}
           {blocked.reason === 'offline' ? (
             <Hint
@@ -250,8 +255,7 @@ export function ShopifyConnect({
         {blocked.reason === 'offline' ? (
           <Button
             size="sm"
-            variant="outline"
-            className="self-start"
+            variant="secondary"
             data-testid="shopconnect-retry"
             onClick={() => void view.refetch()}
           >
@@ -260,7 +264,6 @@ export function ShopifyConnect({
         ) : (
           <Button
             size="sm"
-            className="self-start"
             data-testid={relogin ? 'shopconnect-relogin' : 'shopconnect-login'}
             onClick={() => {
               navigate(accountLoginHref(relogin))
@@ -332,10 +335,10 @@ export function ShopifyConnect({
               href={waiting.url}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
+              className="ws-link inline-flex items-center gap-1 text-xs"
             >
               {t('shopconnect.open_again')}
-              <ExternalLink className="size-3" aria-hidden />
+              <ExternalLink className="size-3.5" aria-hidden />
             </a>
             <Button
               size="xs"
@@ -354,7 +357,7 @@ export function ShopifyConnect({
         <Button
           size="xs"
           variant="ghost"
-          className="self-start px-1 text-muted-foreground"
+          className="self-start px-1 text-ws-muted-fg"
           data-testid="shopconnect-another"
           onClick={() => {
             setTyped('')
@@ -390,7 +393,7 @@ export function ShopifyConnect({
               {shop}
               <button
                 type="button"
-                className="text-primary underline-offset-2 hover:underline"
+                className="ws-link"
                 data-testid="shopconnect-change"
                 onClick={() => {
                   setTyped('')
@@ -438,7 +441,7 @@ function ShopRow({
   const can = scopeWords(row.scopes, t)
   return (
     <div
-      className="flex flex-col gap-1 rounded-md border p-2"
+      className="flex flex-col gap-1 rounded-lg bg-ws-surface p-3"
       data-testid="shopconnect-row"
       data-shop={row.shop}
       data-status={row.status}
@@ -475,7 +478,7 @@ function ShopRow({
         ) : null}
         <Button
           size="xs"
-          variant="outline"
+          variant="secondary"
           data-testid="shopconnect-test"
           disabled={busy}
           onClick={onTest}
@@ -493,7 +496,7 @@ function ShopRow({
         </Button>
         {test === undefined ? null : (
           <span
-            className={test.ok ? 'text-xs text-primary' : 'text-xs text-destructive'}
+            className={test.ok ? 'text-xs text-ws-good' : 'text-xs text-ws-bad'}
             data-testid="shopconnect-test-result"
             data-ok={test.ok ? 'true' : 'false'}
           >

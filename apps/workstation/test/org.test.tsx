@@ -366,16 +366,18 @@ describe('公司页：岗位', () => {
     // 收着的时候一条职责都看不见
     expect(within(support).queryByTestId('position-duty')).toBeNull()
     expect(within(support).queryByText('售后（本公司）')).toBeNull()
-    // 点开才是那两条
-    await user.click(within(support).getByTestId('position-duties-toggle'))
+    // 点开才是那两条（WP456-T6：整行点开看详情，职责跟着展开）
+    await user.click(within(support).getByTestId('position-open'))
     expect(within(support).getAllByTestId('position-duty')).toHaveLength(2)
     expect(within(support).getByText('售后（本公司）')).toBeDefined()
   })
 
   it('一个岗位只有一条职责时不折叠：那一条直接摆在岗位下面（WP70）', async () => {
+    const user = userEvent.setup()
     renderWithProviders(<OrgPage />)
     const cards = await screen.findAllByTestId('position-card')
     const member = cards[1] as HTMLElement
+    await user.click(within(member).getByTestId('position-open'))
     expect(within(member).queryByTestId('position-duties-toggle')).toBeNull()
     expect(within(member).getByTestId('position-duties-single')).toBeDefined()
     expect(within(member).getByText('独立站设计')).toBeDefined()
@@ -410,6 +412,7 @@ describe('公司页：岗位上级（WP174）', () => {
     renderWithProviders(<OrgPage />)
     const cards = await screen.findAllByTestId('position-card')
     const support = within(cards[0] as HTMLElement)
+    await user.click(support.getByTestId('position-open'))
     const row = support.getByTestId('position-supervisor')
     expect(row.textContent).toContain('上级')
     // 说明不铺在卡上，在问号里
@@ -439,6 +442,8 @@ describe('公司页：岗位改名（WP196）', () => {
     const cards = await screen.findAllByTestId('position-card')
     const support = within(cards[0] as HTMLElement)
     expect(support.getByTestId('position-name').textContent).toBe('独立站售后客服')
+    // WP456-T6：改名在行上的「⋯」里
+    await user.click(support.getByTestId('position-menu'))
     await user.click(support.getByTestId('position-rename'))
     const form = support.getByTestId('position-rename-form')
     expect(form.querySelector('[data-slot="hint"]')?.getAttribute('data-hint')).toContain('CEO')
@@ -466,8 +471,9 @@ describe('公司页：岗位改名（WP196）', () => {
         },
       ])
     })
-    // 表单收起，「改名」回来
+    // 表单收起，「⋯」里的「改名」还在
     expect(support.queryByTestId('position-rename-form')).toBeNull()
+    await user.click(support.getByTestId('position-menu'))
     expect(support.getByTestId('position-rename')).toBeTruthy()
   })
 
@@ -476,6 +482,7 @@ describe('公司页：岗位改名（WP196）', () => {
     renderWithProviders(<OrgPage />)
     const cards = await screen.findAllByTestId('position-card')
     const member = within(cards[1] as HTMLElement)
+    await user.click(member.getByTestId('position-menu'))
     await user.click(member.getByTestId('position-rename'))
     await user.clear(member.getByTestId('position-rename-en'))
     await user.click(member.getByTestId('position-rename-save'))
@@ -824,7 +831,7 @@ describe('公司页：岗位下面那一层职责（WP70）', () => {
     renderWithProviders(<OrgPage />)
     const cards = await screen.findAllByTestId('position-card')
     const support = cards[0] as HTMLElement
-    await user.click(within(support).getByTestId('position-duties-toggle'))
+    await user.click(within(support).getByTestId('position-open'))
     const row = within(support)
       .getAllByTestId('position-duty')
       .find((x) => (x.textContent ?? '').includes(name)) as HTMLElement
@@ -981,7 +988,7 @@ describe('WP271 三种模式：公司页', () => {
     expect(screen.getByText('你的岗位')).toBeTruthy()
     // 规矩折叠层：看得到「AI 自己能做到哪一步」（决策 244 的词），看不到谁定
     const support = within(cards[0] as HTMLElement)
-    await user.click(support.getByTestId('position-duties-toggle'))
+    await user.click(support.getByTestId('position-open'))
     await user.click(support.getAllByTestId('position-duty-detail')[0] as HTMLElement)
     const detail = await screen.findByTestId('role-detail')
     expect(detail.textContent).toContain('上限内自己做')
@@ -1022,9 +1029,9 @@ describe('WP271 三种模式：公司页', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(8)
     expect(screen.getByTestId('org-owner')).toBeTruthy()
     const support = within(cards[0] as HTMLElement)
+    await user.click(support.getByTestId('position-open'))
     expect(support.getByTestId('position-supervisor').textContent).toContain('上级')
     expect(support.getByTestId('position-assign').textContent).toBe('分给同事')
-    await user.click(support.getByTestId('position-duties-toggle'))
     await user.click(support.getAllByTestId('position-duty-detail')[0] as HTMLElement)
     const detail = await screen.findByTestId('role-detail')
     expect(detail.textContent).toContain('主管定')
