@@ -44,6 +44,7 @@
     "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
     "packages/contracts/src/execution.ts",
+    "packages/contracts/src/feedback.ts",
     "packages/contracts/src/genui-host.ts",
     "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
@@ -162,7 +163,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "cd96e0c6e614d540dbbde19f4907b969",
+  "source_digest": "e7a1c3a30fd5998b3b96dfe97ebebde3",
   "objects": [
     {
       "id": "ad",
