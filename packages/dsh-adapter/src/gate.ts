@@ -28,6 +28,7 @@ import {
   contextItemHash,
   isWebTool,
   ontologyBriefOf,
+  orderContextItems,
   rewriteForChannelGuard,
   WebUsageCounter,
   webQueriesOf,
@@ -982,7 +983,9 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   })
 
   // ── `systemPrompt.context`：每个 ContextItem 一段 + `context.injected` ───
-  request.context.forEach((item, i) => {
+  // WP472（docs/116 §6 A）：与 stub / direct 同一份先后（`orderContextItems`）——每次都变的排在后面；
+  // 哪一层在网关那条边界上按 kind 分（`splitSystemText` → `contextRoleOf`）
+  orderContextItems(request.context).forEach((item, i) => {
     const name = `${CONTEXT_PREFIX}${item.id}`
     ctx.systemPrompt.context({
       name,
