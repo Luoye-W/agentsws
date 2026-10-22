@@ -173,10 +173,30 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
     options.preferences ?? new Map<string, { tile_ids: string[]; range: WorkstationRange }>()
 
   const summarize = (assignment_id: string, role_id: string): PositionSummary => {
-    const config = options.roles.effectiveConfig(assignment_id)
     const definition = options.roles.roles.get(role_id)
     const defaults = defaultTilesFor(role_id)
     const pref = prefs.get(assignment_id)
+    /*
+     * WP462（beta.5 真机）：这条职责升了大版本、分配还没确认——**只这一条**标出来（界面就地出确认卡），
+     * 不往外抛：以前一条分配拦下来，`/v1/positions` 整个 409，首页只剩一行英文、左栏岗位全空。
+     */
+    const stale = options.roles.staleMajor?.(assignment_id)
+    if (stale !== undefined) {
+      const assignment = options.roles.assignments.get(assignment_id)
+      return {
+        position_id: assignment_id,
+        role_id,
+        role_name: definition?.name.zh ?? role_id,
+        ranges: [...(assignment?.ranges ?? [])],
+        ready: false,
+        missing_connectors: [],
+        tile_ids: [],
+        range: pref?.range ?? 'yesterday',
+        show_tiles: false,
+        needs_reconfirm: stale,
+      }
+    }
+    const config = options.roles.effectiveConfig(assignment_id)
     return {
       position_id: assignment_id,
       role_id,
