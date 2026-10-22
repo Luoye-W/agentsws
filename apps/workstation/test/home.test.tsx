@@ -253,6 +253,11 @@ describe('WP438 首页四块（决策 1332）', () => {
   })
 
   it('WP469：收件箱那一行下面是「今天 N 件待办 · 下一件 … · 还有 N 件没排期」，点了去日历与待办', async () => {
+    // 钉在当天上午 10 点：真钟过了 23:00 时「下一件 23:00」已经过去，这条会红（只换 Date，定时器照旧）
+    const morning = new Date()
+    morning.setHours(10, 0, 0, 0)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(morning)
     const later = new Date()
     later.setHours(23, 0, 0, 0)
     const base = {
@@ -289,6 +294,7 @@ describe('WP438 首页四块（决策 1332）', () => {
       expect(line.textContent).toContain('还有 1 件没排期')
     } finally {
       todoState.todos = []
+      vi.useRealTimers()
     }
   })
 
