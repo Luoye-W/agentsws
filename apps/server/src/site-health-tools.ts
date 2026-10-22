@@ -6,7 +6,8 @@
  * 等它跑完再回（最多 {@link WAIT_MS}），免得模型拿上一次的结论当新的。
  */
 import type { SiteHealthRun } from '@agentsws/contracts'
-import { issueLine } from '@agentsws/site-core'
+import { driftLine } from '@agentsws/seo-core'
+import { issueLine, techIssueLine } from '@agentsws/site-core'
 import {
   isSiteHealthRole,
   QUERY_SITE_HEALTH_TOOL,
@@ -37,6 +38,8 @@ type Part =
   | 'chatgpt_shopping'
   | 'ai_traffic'
   | 'settings'
+  | 'tech'
+  | 'drift'
 const PARTS: readonly Part[] = [
   'all',
   'crawlers',
@@ -45,6 +48,8 @@ const PARTS: readonly Part[] = [
   'chatgpt_shopping',
   'ai_traffic',
   'settings',
+  'tech',
+  'drift',
 ]
 
 const bare = (name: string): string =>
@@ -77,7 +82,8 @@ function headline(run: SiteHealthRun | undefined, running: boolean): string {
 }
 
 export function siteHealthQueryData(
-  svc: Pick<SiteHealthService, 'latest' | 'lastTraffic' | 'settings'>,
+  svc: Pick<SiteHealthService, 'latest' | 'lastTraffic' | 'settings'> &
+    Partial<Pick<SiteHealthService, 'driftView'>>,
   part: Part,
   running: boolean,
 ): SiteHealthQueryData {
@@ -133,7 +139,40 @@ export function siteHealthQueryData(
           .filter((f) => f.state !== 'ok' && f.requirement !== 'optional')
           .map((f) => f.field),
       }
+    // WP448：技术体检（只列有问题的）
+    if (want('tech') && run.tech !== undefined) {
+      const sorted = [...run.tech.issues].sort((a, b) => rank(a.severity) - rank(b.severity))
+      data.tech = {
+        indexing: run.tech.indexing,
+        speed: run.tech.speed,
+        issues: sorted
+          .slice(0, MAX_ISSUES)
+          .map((i) => ({ line: techIssueLine(i), severity: i.severity, owner: i.owner })),
+        ...(sorted.length > MAX_ISSUES ? { more: sorted.length - MAX_ISSUES } : {}),
+        ...(run.tech.dispatched === undefined
+          ? {}
+          : {
+              dispatched: run.tech.dispatched.map((d) => ({
+                owner: d.owner,
+                matter_id: d.matter_id,
+              })),
+            }),
+      }
+    }
   }
+  // WP448：最近一次改版回归
+  const drift = want('drift') ? svc.driftView?.().last : undefined
+  if (drift !== undefined)
+    data.drift = {
+      at: drift.finished_at ?? drift.started_at,
+      trigger: drift.trigger.label ?? drift.trigger.kind,
+      ...(drift.trigger.change_id === undefined ? {} : { change_id: drift.trigger.change_id }),
+      status: drift.status,
+      findings: drift.findings
+        .slice(0, MAX_ISSUES)
+        .map((f) => ({ line: driftLine(f), severity: f.severity })),
+      ...(drift.dispatched === undefined ? {} : { dispatched: drift.dispatched.matter_id }),
+    }
   const t = svc.lastTraffic()
   if (want('ai_traffic') && t !== undefined)
     data.ai_traffic = {

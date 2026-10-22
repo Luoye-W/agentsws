@@ -10,9 +10,11 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SitePage } from '@agentsws/contracts'
+import { renderSiteHealthAnswer } from '@agentsws/stand-ins'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { driftAlertCards } from '../src/seo-drift-alerts.js'
 import { createSiteHealthService, type SiteHealthServiceOptions } from '../src/site-health.js'
+import { siteHealthQueryData } from '../src/site-health-tools.js'
 
 vi.setConfig({ testTimeout: 120_000 })
 
@@ -285,6 +287,15 @@ describe('WP448 改版回归（服务端）', () => {
         position: { position_id: 'a', role_id: 'dtc.seo', href: '/x' },
       }),
     ).toEqual([])
+    // 岗位 AI 读体检结论的工具：技术体检与改版回归两块也读得到（数照抄）
+    await svc.run()
+    const data = siteHealthQueryData(svc, 'all', false)
+    expect(data.tech?.issues.length).toBeGreaterThan(0)
+    expect(data.drift).toMatchObject({ trigger: 'manual', status: 'ok' })
+    const onlyDrift = siteHealthQueryData(svc, 'drift', false)
+    expect(onlyDrift.tech).toBeUndefined()
+    const answer = renderSiteHealthAnswer(siteHealthQueryData(svc, 'tech', false))
+    expect(answer).toContain('技术体检要改')
     // 落盘重开：基线与那几页读得回
     const reopened = createSiteHealthService(w.options(dir))
     expect(reopened.driftView().last?.id).toBe(fixed.id)

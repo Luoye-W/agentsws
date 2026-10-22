@@ -31,6 +31,9 @@ const PARTS = [
   'chatgpt_shopping',
   'ai_traffic',
   'settings',
+  // WP448：技术体检与改版回归
+  'tech',
+  'drift',
 ]
 
 export const SITE_HEALTH_TOOL_DEFS: readonly ToolDef[] = [
@@ -39,7 +42,8 @@ export const SITE_HEALTH_TOOL_DEFS: readonly ToolDef[] = [
     description:
       '读最近一次网站 / 商品体检的结论和近 7 天 AI 带来的成交（实测）：AI 爬虫有没有被 robots.txt 挡、' +
       '价格库存这些关键事实不开 JS 看不看得到、店铺后台和商品页 / 结构化数据 / 商品 feed / 其他平台上架页对不对得上、' +
-      '能否进 ChatGPT 购物；还有现在的体检设置。只读：不会现跑体检（每周一自动跑；正在跑就等它跑完再回）。' +
+      '能否进 ChatGPT 购物；技术体检（收录、规范网址、跳转与死链、站点地图、hreflang、结构化数据、页面速度）与最近一次改版回归；' +
+      '还有现在的体检设置。只读：不会现跑体检（每周一自动跑；正在跑就等它跑完再回）。' +
       '写周报、回答「我们站 AI 进得来吗」「AI 带来多少单」时用；数字照抄，没体检过就照实说。' +
       '用户说了商品 feed 地址、其他平台上架页、要加减 AI 爬虫或 AI 来源时，调 request_setup：setting 填 site.health，' +
       'suggestions 给 feed_url（网址）、listings_add（「平台 | 商品 handle | 网址」，多条用 ; 隔开）、listings_remove（网址）、' +
@@ -104,6 +108,23 @@ export interface SiteHealthQueryData {
     visits: string
     rows: { platform: string; orders: number; revenue: number; visits?: number }[]
     previous?: { ai_orders: number; ai_revenue: number }
+  }
+  /** WP448：技术体检（只列有问题的；交给了建站哪条）。 */
+  tech?: {
+    indexing: string
+    speed: string
+    issues: { line: string; severity: string; owner: string }[]
+    more?: number
+    dispatched?: { owner: string; matter_id: string }[]
+  }
+  /** WP448：最近一次改版回归（三级；严重的交给了建站）。 */
+  drift?: {
+    at: string
+    trigger: string
+    change_id?: string
+    status: string
+    findings: { line: string; severity: string }[]
+    dispatched?: string
   }
   settings?: {
     feed_url?: string
@@ -209,6 +230,18 @@ export function renderSiteHealthAnswer(data: SiteHealthQueryData | undefined, fa
     lines.push(
       `- 商品信息对不上 ${String(p.issues.length + (p.more ?? 0))} 处：`,
       ...p.issues.slice(0, 3).map((i) => `  - ${i.line}`),
+    )
+  const tech = data.tech
+  if (tech !== undefined && tech.issues.length > 0)
+    lines.push(
+      `- 技术体检要改 ${String(tech.issues.length + (tech.more ?? 0))} 处：`,
+      ...tech.issues.slice(0, 3).map((i) => `  - ${i.line}`),
+    )
+  const severe = (data.drift?.findings ?? []).filter((f) => f.severity === 'critical')
+  if (severe.length > 0)
+    lines.push(
+      `- 改版回归（${data.drift?.trigger ?? ''}）严重 ${String(severe.length)} 处：`,
+      ...severe.slice(0, 3).map((f) => `  - ${f.line}`),
     )
   const t = data.ai_traffic
   if (t !== undefined)
