@@ -204,9 +204,6 @@
     "apps/workstation/src/components/position/data-board.tsx": {
       "font-size": 4
     },
-    "apps/workstation/src/components/position/position-handoff.tsx": {
-      "font-size": 1
-    },
     "apps/workstation/src/components/position/quick-answer.tsx": {
       "font-size": 1
     },
