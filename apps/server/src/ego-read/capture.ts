@@ -13,13 +13,23 @@
  *
  * 数字一律由采集器读，AI 不填；采集器读不到（不是这几家、页面没渲染出来）时如实回「没读到」，
  * AI 再用 `record_creator_observations` 手记兜底。
+ *
+ * WP498：
+ * - **1740 B**：读到的每个红人主页都「存入红人池」——插件面板那个按钮的**同一个入口**（`ExtensionPort.saveCreator`，
+ *   过插件那条路由同一道 schema），同一份换形（`creatorSaveBodyOf`）外加加入时间 / 近期作品。先存入、再报观测：
+ *   观测那一跳送公共库时就带得上存入时记下的国家（1707b 的资料字段，见 `extension-service.ts` 的 `publicProfileOf`）。
+ *   内容页 / 列表页照旧只报观测。
+ * - **1742 C**：列表页先过插件那套预筛（`prescreenList`：视频页右栏拿种子频道的主题词打分），一行不丢全记，
+ *   分随观测一起记；回给 AI 时按分排序、标出插件会筛掉的那几行。
  */
 import {
   EXTENSION_BIO_LINK_OBSERVATION_SCHEMA,
   EXTENSION_CONTENT_OBSERVATION_SCHEMA,
+  EXTENSION_CREATOR_SAVE_SCHEMA,
   EXTENSION_INGEST_SCHEMA,
   type ExtensionBioLinkObservation,
   type ExtensionContentObservation,
+  type ExtensionCreatorSave,
   type ExtensionObservation,
   type ExtensionPort,
 } from '@agentsws/api'
@@ -33,8 +43,12 @@ import {
   creatorMetrics,
   type IngestPlan,
   ingestPlanOf,
+  type ListPrescreen,
+  listWantsSeedTopics,
   PAGE_ARGS_PLACEHOLDER,
   type PageCapture,
+  type PageListCapture,
+  prescreenList,
 } from '@agentsws/creator-capture'
 import type { EgoPageReader } from './reader.js'
 import { egoReadWhy } from './reader.js'
@@ -114,7 +128,7 @@ export async function egoCapturePage(
 /** 交给本机服务那一侧（和插件同一个 `ExtensionPort`）。 */
 export type EgoCapturePort = Pick<
   ExtensionPort,
-  'ingest' | 'contentObservation' | 'bioLinkObservation'
+  'ingest' | 'contentObservation' | 'bioLinkObservation' | 'saveCreator' | 'seedSignature'
 >
 
 export interface EgoCaptureActor {
@@ -207,6 +221,52 @@ export async function ingestEgoPlan(
   return out
 }
 
+/** WP498（1740 B）：存入红人池的回执（按页；只有主页有）。 */
+export type EgoPoolOutcome =
+  | { saved: true; new: boolean; creator_id: string }
+  | { saved: false; why: string }
+
+/**
+ * WP498（1740 B）：主页那一条「存入红人池」——过插件那条路由（`POST /v1/extension/creators`）同一道 schema，
+ * 交给同一个 `ExtensionPort.saveCreator`（本机红人库 + 页面上的商务邮箱进本机加密库，和插件按钮一样）。
+ */
+export async function saveEgoCreator(
+  port: Pick<EgoCapturePort, 'saveCreator'>,
+  actor: EgoCaptureActor,
+  plan: IngestPlan,
+): Promise<EgoPoolOutcome | undefined> {
+  if (plan.creator_save === undefined) return undefined
+  const parsed = EXTENSION_CREATOR_SAVE_SCHEMA.safeParse(plan.creator_save)
+  if (!parsed.success)
+    return { saved: false, why: `存入红人池：${parsed.error.issues[0]?.message ?? '形状不对'}` }
+  const res = await port.saveCreator(
+    egoSession(actor) as never,
+    parsed.data as unknown as ExtensionCreatorSave,
+  )
+  return { saved: true, new: res.status === 'ok', creator_id: res.creator_id }
+}
+
+/**
+ * WP498（1742 C）：列表页的种子主题词——插件只在视频页右栏要（种子 = 这条视频的频道，按它的平台 id 问本机）。
+ * 种子不在红人库里 / 本机没这一口 / 出错，都是「没有主题词」（不打分），不是故障。
+ */
+export async function seedTopicsOf(
+  port: Pick<EgoCapturePort, 'seedSignature'> | undefined,
+  actor: EgoCaptureActor,
+  list: PageListCapture,
+): Promise<string[] | undefined> {
+  if (port === undefined || !listWantsSeedTopics(list) || list.seed === undefined) return undefined
+  try {
+    const sig = await port.seedSignature(egoSession(actor) as never, {
+      channel: list.target.platform,
+      handle: list.seed.externalId,
+    })
+    return sig === undefined || sig.topic_keywords.length === 0 ? undefined : sig.topic_keywords
+  } catch {
+    return undefined
+  }
+}
+
 /** 回给 AI 的一页摘要（采集器读出来的数 + 面板上那几块算出来的数 + 记下了几条）。 */
 export interface EgoCaptureSummary {
   url: string
@@ -218,6 +278,8 @@ export interface EgoCaptureSummary {
   bio_link?: Record<string, unknown>
   list?: Record<string, unknown>
   recorded?: EgoIngestOutcome
+  /** WP498（1740 B）：这个主页存入红人池了没有、是不是新收的。 */
+  pool?: EgoPoolOutcome
 }
 
 const RECENT_SAMPLE = 5
@@ -228,6 +290,7 @@ export function summarizeCapture(
   plan: IngestPlan,
   capture: PageCapture,
   recorded: EgoIngestOutcome | undefined,
+  prescreen?: ListPrescreen,
 ): EgoCaptureSummary {
   const kind: NonNullable<EgoCaptureSummary['kind']> = []
   const out: EgoCaptureSummary = { url, ok: true, kind }
@@ -293,15 +356,35 @@ export function summarizeCapture(
   }
   if (capture.list !== undefined && capture.list.candidates.length > 0) {
     kind.push('list')
+    // WP498（1742 C）：按插件预筛的分排（有分的从高到低，没分的照页面顺序在后），插件会筛掉的那几行标出来
+    const pre = prescreen ?? prescreenList(capture.list, undefined)
     out.list = {
       target: capture.list.target,
       candidates_total: capture.list.candidates.length,
-      candidates: capture.list.candidates.map((x) => ({
+      relevance: pre.scored
+        ? {
+            scored: true,
+            topics: pre.topics,
+            tally: pre.tally,
+            plugin_would_skip: pre.skipped_keys.length,
+            note: '按插件预筛的相关度分排（0–100，≥40 相关；20–40 疑似无关；<20 无关）。插件会把 plugin_would_skip 的那几行默认不勾、不收；这里全记了，挑人时先看前面的。',
+          }
+        : {
+            scored: false,
+            note: listWantsSeedTopics(capture.list)
+              ? '没打相关度分：这条视频的频道还不在红人库里（或库里没有它的主题词），插件这时也不预筛。先读一次这个频道的主页（会存入红人池），再读这一页就有分。'
+              : '搜索 / 话题页插件不打相关度分（结果本来就按搜索词排过），照页面顺序。',
+          },
+      candidates: pre.ranked.map(({ candidate: x, band, matched_topics, plugin_would_skip }) => ({
         handle: x.handle ?? x.externalId,
         name: x.displayName,
         url: x.url,
         followers_text: x.subscriberCountText,
         videos: (x.videos ?? []).length,
+        ...(typeof x.relevanceScore === 'number'
+          ? { relevance_score: x.relevanceScore, relevance_band: band, matched_topics }
+          : {}),
+        ...(plugin_would_skip ? { plugin_would_skip: true } : {}),
       })),
       ...(capture.list.unidentified === undefined
         ? {}
@@ -340,12 +423,28 @@ export function createEgoCreatorCapture(deps: EgoCreatorCaptureOptions): EgoCrea
           out.push({ url, ok: false, why: got.why })
           continue
         }
-        const plan = ingestPlanOf(got.capture, { now: deps.now(), bio_links: got.bio_links })
-        let recorded: EgoIngestOutcome | undefined
         const port = deps.port()
-        if (options.record !== false && port !== undefined)
+        // WP498（1742 C）：列表页先过插件那套预筛（只有视频页右栏、种子在库里才有分）
+        const list = got.capture.list
+        const prescreen =
+          list === undefined || list.candidates.length === 0
+            ? undefined
+            : prescreenList(list, await seedTopicsOf(port, actor, list))
+        const plan = ingestPlanOf(got.capture, {
+          now: deps.now(),
+          bio_links: got.bio_links,
+          ...(prescreen === undefined ? {} : { list_candidates: prescreen.candidates }),
+        })
+        let recorded: EgoIngestOutcome | undefined
+        let pool: EgoPoolOutcome | undefined
+        if (options.record !== false && port !== undefined) {
+          // WP498（1740 B）：主页先存入红人池（插件按钮同一个入口），再报观测（同插件那几条）
+          pool = await saveEgoCreator(port, actor, plan)
           recorded = await ingestEgoPlan(port, actor, plan)
-        out.push(summarizeCapture(url, plan, got.capture, recorded))
+        }
+        const summary = summarizeCapture(url, plan, got.capture, recorded, prescreen)
+        if (pool !== undefined) summary.pool = pool
+        out.push(summary)
       }
       return out
     },

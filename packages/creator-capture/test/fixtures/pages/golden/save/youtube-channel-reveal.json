@@ -1,0 +1,26 @@
+{
+  "page": "youtube-channel-reveal",
+  "save_creator": [
+    {
+      "channel": "youtube",
+      "handle": "@cablefixture",
+      "external_id": "UCcableFIXTURE000000002",
+      "display_name": "Cable Fixture",
+      "url": "https://www.youtube.com/@cablefixture",
+      "page_url": "https://www.youtube.com/@cablefixture",
+      "avatar_url": "https://yt3.example/avatar-cablefixture.png",
+      "bio": "Cable management, one desk at a time.",
+      "followers": 8400,
+      "avg_views": 1200,
+      "video_count": 57,
+      "total_views": 98765,
+      "contact": {
+        "kind": "email",
+        "value": "hello@cablefixture.example",
+        "source": "channel_about"
+      },
+      "observed_at": "2026-10-23T08:00:00.000Z",
+      "source": "manual_save"
+    }
+  ]
+}
