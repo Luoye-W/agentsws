@@ -2116,7 +2116,18 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   /** 这个来源上被默认 / 按用途选中的那几个模型名。 */
   const defaultRefsOf = (provider_id: string): string[] => {
     const out: string[] = []
-    for (const id of [state.defaults.default, ...Object.values(state.defaults.by_purpose ?? {})]) {
+    // 没明说默认时，现在生效的那一个（第一条能用的来源的主模型）也算——界面上它标着「默认」
+    const implicit =
+      state.defaults.default === undefined
+        ? (() => {
+            const ref = defaultRef()
+            return `${ref.provider}/${ref.model}`
+          })()
+        : undefined
+    for (const id of [
+      state.defaults.default ?? implicit,
+      ...Object.values(state.defaults.by_purpose ?? {}),
+    ]) {
       if (id === undefined || id === '') continue
       const at = id.indexOf('/')
       if (at <= 0 || id.slice(0, at) !== provider_id) continue

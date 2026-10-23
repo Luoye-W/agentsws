@@ -23,7 +23,7 @@ export function enableAnchorOf(provider_id: string): string {
 }
 
 /** 多于这么多个才出搜索框。 */
-const SEARCH_FROM = 8
+const SEARCH_FROM = 12
 /** 亮多久。 */
 const FLASH_MS = 2000
 
