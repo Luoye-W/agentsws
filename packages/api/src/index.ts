@@ -410,6 +410,7 @@ export type {
   ExtensionIngestStatus,
   ExtensionObservation,
   ExtensionPort,
+  ExtensionProfileRow,
   ExtensionRevealPricing,
   ExtensionSeedSignature,
   ExtensionSetup,

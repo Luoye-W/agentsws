@@ -276,6 +276,8 @@ export interface KolImportCommitView {
   /** 历史合作挂的那个归档活动。 */
   campaign_id: string
   campaign_name: string
+  /** 决策 1707：送去公共红人库的公开资料条数（排进转发队；没登录工坊账号 = 0）。 */
+  public_library_queued?: number
 }
 
 /** WP489（决策 1685 / 1686）：读过往邮件判阶段——开跑前的预估。 */
@@ -297,6 +299,10 @@ export interface KolMailStageEstimateView {
   backfill_from?: string
   /** 连着邮箱没有。 */
   mail_connected: boolean
+  /** 决策 1709：拿不准 / 没对上（像合作往来）的几段，判完一张卡给人补。 */
+  uncertain?: number
+  /** 表里来的红人，邮箱里没找到往来的。 */
+  unmatched_creators?: number
   summary: string
   approval_item_id?: string
 }
@@ -312,6 +318,12 @@ export interface KolMailStageRunView {
   by_rule: number
   /** 预算到顶 / 模型出错后改按规则判的人数。 */
   fallback: number
+  /** 决策 1709：靠内容（署名、主页链接、@账号、表里的记录）对上的人数。 */
+  matched_by_content?: number
+  /** 拿不准时模型在候选人里挑中的段数。 */
+  matched_by_model?: number
+  /** 还对不上的（进了那张卡）。 */
+  unresolved?: number
 }
 
 /**

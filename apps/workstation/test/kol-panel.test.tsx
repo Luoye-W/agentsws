@@ -238,7 +238,16 @@ const previewKolImport = vi.fn(async () => ({
   ],
   statuses: [{ source: '在等排期', stage: null, count: 2, by: 'none' }],
   counts: { rows: 3, create: 2, merge: 1, skip: 0, collabs: 2, historical: 1, unknown_status: 2 },
-  rows: [{ source_row: 2, name: '小桌', action: 'merge', merge_into: '小桌', historical: true, stage: 'closed' }],
+  rows: [
+    {
+      source_row: 2,
+      name: '小桌',
+      action: 'merge',
+      merge_into: '小桌',
+      historical: true,
+      stage: 'closed',
+    },
+  ],
   currency: 'USD',
 }))
 const commitKolImport = vi.fn(async () => ({
@@ -643,7 +652,9 @@ describe('WP68 红人岗位面板', () => {
         'asg_yt',
       )
     })
-    expect((await screen.findByTestId('kol-import-result')).textContent).toContain('历史合作（导入）')
+    expect((await screen.findByTestId('kol-import-result')).textContent).toContain(
+      '历史合作（导入）',
+    )
 
     fireEvent.click(screen.getByTestId('kol-mailstage'))
     expect((await screen.findByTestId('kol-mailstage-estimate')).textContent).toContain('3 人')
@@ -667,7 +678,10 @@ describe('WP68 红人岗位面板', () => {
     })
     fireEvent.click(screen.getByTestId('kol-import-link-go'))
     expect((await screen.findByTestId('kol-import-error')).textContent).toContain('登录')
-    expect(previewKolImport).toHaveBeenCalledWith({ url: 'https://acme.feishu.cn/sheets/shtX' }, 'asg_yt')
+    expect(previewKolImport).toHaveBeenCalledWith(
+      { url: 'https://acme.feishu.cn/sheets/shtX' },
+      'asg_yt',
+    )
   })
 })
 

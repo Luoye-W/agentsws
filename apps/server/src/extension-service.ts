@@ -147,6 +147,15 @@ export interface PublicObservationRow {
   observed_at: string
   /** 公开的商务邮箱与它的来源页（用户显式收下过才有）。 */
   contact?: { value: string; source?: string | undefined } | undefined
+  /**
+   * WP489（决策 1707）：表格导入带来的公开资料。云端白名单现在只收 handle / 粉丝 / 互动率，这几格在
+   * 转发那一跳（`extension-contribute.ts`）照白名单裁掉；云端放开之后在那里加上就行。
+   */
+  display_name?: string | undefined
+  url?: string | undefined
+  category?: string | undefined
+  language?: string | undefined
+  region?: string | undefined
 }
 
 /**
@@ -943,6 +952,37 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         public_library_pending: forwardable.length - settled,
         ...extra,
       }
+    },
+
+    /*
+     * WP489（决策 1707）：表格导入的红人——只送公开资料，与插件同一条转发路（同样的筛法：
+     * 认不出 handle 的、没有粉丝数的不送；登录了才送；失败退避重试）。不等云端回话。
+     */
+    contributeProfiles: (session, rows) => {
+      void session
+      const cloud = options.publicLibrary
+      if (cloud === undefined || !cloud.linked()) return { queued: 0 }
+      const out: PublicObservationRow[] = []
+      for (const r of rows) {
+        const bare = normalizeHandle(r.handle)
+        if (bare === '' || (r.channel === 'youtube' && /^uc[a-z0-9_-]{22}$/.test(bare))) continue
+        if (r.followers === undefined) continue
+        out.push({
+          channel: r.channel,
+          handle: r.handle,
+          followers: r.followers,
+          ...(r.engagement_rate === undefined ? {} : { engagement_rate: r.engagement_rate }),
+          observed_at: r.observed_at,
+          ...(r.email === undefined ? {} : { contact: { value: r.email, source: 'import' } }),
+          ...(r.display_name === undefined ? {} : { display_name: r.display_name }),
+          ...(r.url === undefined || r.url === '' ? {} : { url: r.url }),
+          ...(r.category === undefined ? {} : { category: r.category }),
+          ...(r.language === undefined ? {} : { language: r.language }),
+          ...(r.region === undefined ? {} : { region: r.region }),
+        })
+      }
+      if (out.length > 0) void forward(out, 0)
+      return { queued: out.length }
     },
 
     /* ── WP119c：完整版面板要的那一批。每一条都先落本机，云是加分项 ─────── */

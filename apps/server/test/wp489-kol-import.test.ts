@@ -14,7 +14,7 @@ import { LEGACY_IMPORT_CAMPAIGN_ID, type OnlinePageRead } from '@agentsws/kol-co
 import { describe, expect, it } from 'vitest'
 import { buildXlsx } from '../../../packages/knowledge/test/sheet-fixtures.js'
 import { createKolStore } from '../src/kol.js'
-import { createKolImport, type KolImportOptions } from '../src/kol-import.js'
+import { createKolImport, type KolImportOptions, publicProfileRow } from '../src/kol-import.js'
 import { CONTACT_SECRET_FIELD, contactSecretId } from '../src/kol-service.js'
 import { createSecretStore } from '../src/secret-store.js'
 
@@ -320,7 +320,7 @@ const msg = (from: string, to: string, at: string, subject: string, text: string
     account: OURS,
     folder: 'INBOX',
     folder_kind: 'inbox',
-    thread_id: 't1',
+    thread_id: `t_${subject.replace(/^Re:\s*/i, '')}`,
     message_id: `<m${mid}@x>`,
     references: [],
     headers: {},
@@ -345,12 +345,14 @@ function mailbox(records: MessageRecord[], floor = '2025-01-01T00:00:00.000Z') {
     backfills,
     box: () => ({
       store: {
+        // 同消息库：发件人 / 主题 / 正文全文查，不分大小写
         list: ({ q }: { q?: string }) =>
           records.filter((r) =>
-            [r.from.email, ...r.to.map((x) => x.email), r.subject, r.text].some((v) =>
-              v.includes(q ?? ''),
+            [r.from.email, r.from.name ?? '', ...r.to.map((x) => x.email), r.subject, r.text].some(
+              (v) => v.toLowerCase().includes((q ?? '').toLowerCase()),
             ),
           ),
+        thread: (id: string) => records.filter((r) => r.thread_id === id),
       },
       addresses: () => [OURS],
       floor: () => floor,
@@ -552,5 +554,232 @@ describe('WP489 对话里的卡', () => {
     expect(store.collaborations()).toHaveLength(0)
     await imp.onDecided(decided(cards[0] as ApprovalItem, 'run_12'))
     expect(store.collaborations()[0]?.stage).toBe('delivered')
+  })
+})
+
+describe('WP489 决策 1709：邮件对人综合判断 + 对不上的一张卡', () => {
+  /** 表里来的红人：没有邮箱，只有名字、主页、备注（备注里写了经纪人的邮箱）。 */
+  const seedImported = (store: ReturnType<typeof setup>['store']) => {
+    store.saveCreator({ id: 'cre_rosa', display_name: 'Rosa Desk', merged_from: [] })
+    store.saveAccount({
+      id: 'pa_r',
+      creator_id: 'cre_rosa',
+      channel: 'youtube',
+      handle: 'rosadeskstudio',
+      url: 'https://www.youtube.com/@rosadeskstudio',
+      observed_at: T0,
+    })
+    store.saveCollaboration({
+      id: 'col_r',
+      creator_id: 'cre_rosa',
+      channel: 'youtube',
+      stage: 'negotiating',
+      currency: 'USD',
+      stage_source: 'import',
+      import_note: '表格第 2 行；状态：谈价中；日期：2026-05-02',
+    })
+    store.saveCreator({ id: 'cre_mira', display_name: 'Mira Tech', merged_from: [] })
+    store.saveAccount({
+      id: 'pa_m',
+      creator_id: 'cre_mira',
+      channel: 'instagram',
+      handle: 'miratechdesk',
+      url: '',
+      observed_at: T0,
+    })
+    store.saveCollaboration({
+      id: 'col_m',
+      creator_id: 'cre_mira',
+      channel: 'instagram',
+      stage: 'contacted',
+      currency: 'USD',
+      stage_source: 'import',
+      import_note: '表格第 4 行；状态：已联系；备注：经纪人 jo@talentco.example',
+    })
+  }
+
+  it('署名 + 主页链接对上没登记邮箱的红人；备注里写过的经纪人邮箱也对得上；对不上的出一张卡', async () => {
+    const records = [
+      msg(
+        OURS,
+        'rosa.biz@gmail.com',
+        '2026-05-01T00:00:00Z',
+        'Desk lamp',
+        'Hi Rosa, love your setups.',
+      ),
+      {
+        ...msg(
+          'rosa.biz@gmail.com',
+          OURS,
+          '2026-05-03T00:00:00Z',
+          'Re: Desk lamp',
+          'Sounds good, deal!\n\nRosa Desk\nhttps://www.youtube.com/@rosadeskstudio',
+        ),
+        from: { email: 'rosa.biz@gmail.com', name: 'Rosa D.' },
+      },
+      msg(
+        'jo@talentco.example',
+        OURS,
+        '2026-04-01T00:00:00Z',
+        'Mira x your brand',
+        'Mira is not interested at the moment.',
+      ),
+      msg(
+        'stranger@studio.example',
+        OURS,
+        '2026-06-01T00:00:00Z',
+        'Collab inquiry',
+        'Hi! Could we discuss a sponsorship for my channel?',
+      ),
+      msg('news@shop.example', OURS, '2026-06-02T00:00:00Z', 'Weekly deals', 'Big sale'),
+    ]
+    const { store, imp, cards } = setup({ mail: mailbox(records).box })
+    seedImported(store)
+    store.saveCreator({ id: 'cre_leo', display_name: 'Leo Builds', merged_from: [] })
+    store.saveCollaboration({
+      id: 'col_l',
+      creator_id: 'cre_leo',
+      channel: 'youtube',
+      stage: 'sourced',
+      currency: 'USD',
+      stage_source: 'import',
+      import_note: '表格第 5 行',
+    })
+
+    const est = await imp.estimateMailStages(actor, {})
+    expect(est).toMatchObject({ creators: 2, uncertain: 1, unmatched_creators: 1 })
+    const run = await imp.runMailStages(actor, {})
+    expect(run).toMatchObject({ judged: 2, matched_by_content: 2, unresolved: 2 })
+    // 表格写「谈条件中」、邮件看是「已谈妥」→ 冲突卡；经纪人那段 → Mira 谢绝（表格写的是「已建联」→ 也出冲突卡）
+    expect(cards.filter((c) => c.proposer.id === 'kol-stage')).toHaveLength(2)
+    // 一张「没对上」的卡：一段像合作的陌生往来（不是周报那封）、一个没找到往来的红人
+    const card = cards.find((c) => c.proposer.id === 'kol-mail-match') as ApprovalItem
+    const payload = card.payload as {
+      threads: { subject: string }[]
+      creators: { creator_id: string }[]
+    }
+    expect(payload.threads.map((t) => t.subject)).toEqual(['Collab inquiry'])
+    expect(payload.creators.map((c) => c.creator_id)).toEqual(['cre_leo'])
+
+    // 卡里选「这段是 Leo 的」→ 对方邮箱记到 Leo 名下，只对 Leo 再判一次
+    await imp.onDecided({
+      ...card,
+      state: 'approved',
+      decision: {
+        by: 'p_1',
+        edited_payload: {
+          ...payload,
+          assign: [{ thread_id: 't_Collab inquiry', creator_id: 'cre_leo' }],
+          emails: [],
+        },
+      },
+    } as unknown as ApprovalItem)
+    expect(store.contacts('cre_leo')).toMatchObject([{ kind: 'email', source: 'mail_match' }])
+    // 表格写「已找到」、邮件看是「已回复」→ 照规矩出冲突卡（不直接盖掉表格写的）
+    expect(cards.some((c) => c.proposer.id === 'kol-stage' && c.title.includes('Leo Builds'))).toBe(
+      true,
+    )
+    expect(store.exchanges({ creator_id: 'cre_leo' })).toHaveLength(1)
+    expect(cards.filter((c) => c.proposer.id === 'kol-mail-match')).toHaveLength(1)
+  })
+
+  it('拿不准时模型在候选人里挑；挑中就并进那个人的往来', async () => {
+    const records = [
+      msg(
+        'team@deskcollective.example',
+        OURS,
+        '2026-05-05T00:00:00Z',
+        'Rates',
+        'Hi, Rosa Desk asked me to send our rate card: $800 per video.',
+      ),
+    ]
+    const { store, imp } = setup({
+      mail: mailbox(records).box,
+      model: () => async (input) =>
+        input.user.includes('<<<THREAD_START>>>') ? '{"candidate":0}' : '{"stage":"none"}',
+    })
+    seedImported(store)
+    const run = await imp.runMailStages(actor, {})
+    expect(run.matched_by_model).toBe(1)
+    expect(store.exchanges({ creator_id: 'cre_rosa' })).toHaveLength(1)
+  })
+})
+
+describe('WP489 决策 1707：导入的红人把公开资料送去公共红人库', () => {
+  it('只送公开资料（渠道 / 账号 / 主页 / 名字 / 粉丝 / 类目 / 公开邮箱），生意数据一格都不送', async () => {
+    const sent: unknown[] = []
+    const { imp } = setup({
+      contributePublic: async (_a, rows) => {
+        sent.push(...rows)
+        return { queued: rows.length }
+      },
+    })
+    const csv = [
+      '达人名称,主页链接,邮箱,粉丝,类目,合作进度,报价,日期,备注,负责人',
+      'Kai Setup,https://www.youtube.com/@kaisetuplab,kai@kaisetup.example,48000,桌搭,已合作,"¥3,000",2025-11-10,效果很好别外传,阿林',
+    ].join('\n')
+    const view = await imp.previewImport(actor, { filename: 'k.csv', content: csv })
+    const done = await imp.commitImport(actor, { job_id: view.job_id as string })
+    expect(done.public_library_queued).toBe(1)
+    expect(sent).toHaveLength(1)
+    const row = sent[0] as Record<string, unknown>
+    expect(row).toMatchObject({
+      channel: 'youtube',
+      handle: 'kaisetuplab',
+      display_name: 'Kai Setup',
+      url: 'https://youtube.com/@kaisetuplab',
+      followers: 48000,
+      category: '桌搭',
+      email: 'kai@kaisetup.example',
+    })
+    const allowed = [
+      'channel',
+      'handle',
+      'display_name',
+      'url',
+      'followers',
+      'engagement_rate',
+      'category',
+      'language',
+      'region',
+      'email',
+      'observed_at',
+    ]
+    expect(Object.keys(row).every((k) => allowed.includes(k))).toBe(true)
+    const text = JSON.stringify(sent)
+    for (const secret of [
+      '3,000',
+      '3000',
+      '已合作',
+      'closed',
+      '2025-11-10',
+      '效果很好',
+      '阿林',
+      'CNY',
+    ])
+      expect(text).not.toContain(secret)
+  })
+
+  it('publicProfileRow 的形状本身就只有公开资料', () => {
+    const row = publicProfileRow(
+      'X',
+      {
+        id: 'pa',
+        creator_id: 'c',
+        channel: 'tiktok',
+        handle: 'x',
+        url: '',
+        followers: 1,
+        observed_at: T0,
+      },
+      undefined,
+    )
+    expect(Object.keys(row).sort()).toEqual([
+      'channel',
+      'display_name',
+      'followers',
+      'handle',
+      'observed_at',
+    ])
   })
 })

@@ -18,6 +18,7 @@
  */
 import { Buffer } from 'node:buffer'
 import type {
+  ExtensionProfileRow,
   KolActor,
   KolImportCommitView,
   KolImportPreviewView,
@@ -37,6 +38,7 @@ import type {
   KolStageEvidence,
   MessageRecord,
   PersonId,
+  PlatformAccount,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { suppressionKey } from '@agentsws/core'
@@ -60,9 +62,14 @@ import {
   LEGACY_IMPORT_CAMPAIGN_ID,
   LEGACY_IMPORT_CAMPAIGN_NAME,
   locateHeader,
+  looksLikeCollab,
   type MailStage,
   type MailStageVerdict,
+  type MatchCreator,
+  type MatchMail,
   mailStagePrompt,
+  matchPrompt,
+  matchThread,
   normalizeHandle,
   normalizeSheetRow,
   type OnlinePageRead,
@@ -71,6 +78,7 @@ import {
   onlineSheetPlan,
   parseColumnMapping,
   parseMailStage,
+  parseMatch,
   parseStatusMapping,
   planSheetImport,
   reconcileStage,
@@ -98,6 +106,22 @@ export const IMPORT_JOB_TTL_MS = 2 * 60 * 60 * 1000
 export const DEFAULT_MAIL_MONTHS = 12
 /** 一次最多判几个人（再多分几次跑；免得一次把预算花光）。 */
 export const MAX_MAIL_CREATORS = 300
+/** 「没对上 / 拿不准」那张卡上最多列几段往来、几个人。 */
+export const MAX_CARD_ROWS = 20
+/** 「对不上人的往来」那张卡（决策 1709）。 */
+export const KOL_MAIL_MATCH_FORM = 'kol_mail_match'
+export const KOL_MAIL_MATCH_PROPOSER = 'kol-mail-match'
+/** 找「没对上任何人、但像合作往来」的那几个查询词（本机消息库全文查）。 */
+const COLLAB_QUERY_WORDS = [
+  'collab',
+  'sponsor',
+  'rate card',
+  'media kit',
+  '达人',
+  '红人',
+  '博主',
+  '寄样',
+]
 /** 预览卡 / 冲突卡 / 邮件判阶段卡的提议人 id（卡被决定时据此认出来）。 */
 export const KOL_IMPORT_PROPOSER = 'kol-import'
 export const KOL_STAGE_PROPOSER = 'kol-stage'
@@ -121,6 +145,8 @@ export type KolPageReader = (url: string, as: 'page' | 'html') => Promise<Online
 export interface KolMailbox {
   store: {
     list(query: { q?: string; limit?: number }): Promise<MessageRecord[]> | MessageRecord[]
+    /** 一段会话的全部信（有就用它把查到的几封补齐成整段）。 */
+    thread?(thread_id: string): Promise<MessageRecord[]> | MessageRecord[]
   }
   /** 我们自己的邮箱地址。 */
   addresses(): string[]
@@ -145,7 +171,17 @@ export interface KolImportOptions {
   /** 模型网关这个月还剩多少（有上限才有）。 */
   budgetLeft?(actor: KolActor): Promise<number | undefined>
   readPage?: KolPageReader
+  /**
+   * 决策 1708：读在线表的几只浏览器，按优先级排（用户已登录的那几只：ego / 插件里的浏览器 / 内置浏览器）。
+   * 每次现取（用户改了浏览器设置立刻生效）。和 `readPage` 都给时先试这几只。
+   */
+  readers?(): readonly { id: string; read: KolPageReader }[]
   mail?(): KolMailbox | undefined
+  /**
+   * 决策 1707：导入的红人把**公开资料**也送去公共红人库（与插件同一条转发路）。
+   * 只收 {@link ExtensionProfileRow}：合作状态、金额、日期、备注、负责人在这个形状上没有位置。
+   */
+  contributePublic?(actor: KolActor, rows: ExtensionProfileRow[]): Promise<{ queued: number }>
 }
 
 interface ImportJob {
@@ -159,6 +195,97 @@ interface ImportJob {
   samples: string[][]
   currency: string
   created_ms: number
+}
+
+type MatchKindBy = 'address' | 'content' | 'model'
+
+interface PendingThread {
+  thread_id: string
+  subject: string
+  from: string
+  at: string
+  snippet: string
+  mails: MessageRecord[]
+  candidates: {
+    creator_id: string
+    name: string
+    score: number
+    signals: string[]
+    handles: string[]
+    note?: string
+  }[]
+}
+
+interface Gathered {
+  byCreator: {
+    creator_id: string
+    mails: StageMail[]
+    records: Map<string, MessageRecord>
+    by: MatchKindBy
+  }[]
+  /** 拿不准 / 没对上（但像合作往来）的几段。 */
+  pending: PendingThread[]
+  /** 表里来的红人，邮箱里一封都没对上的。 */
+  missing: { creator_id: string; name: string; has_email: boolean }[]
+  ours?: Set<string>
+}
+
+/**
+ * 决策 1707：一个账号 → 送公共库的那一行。**只挑公开资料**——这个函数就是「送了什么」的唯一答案，
+ * 有测试钉着：合作状态、金额、日期、备注、负责人一格都不许出现。
+ */
+export function publicProfileRow(
+  display_name: string,
+  a: PlatformAccount,
+  email: string | undefined,
+): ExtensionProfileRow {
+  return {
+    channel: a.channel,
+    handle: a.handle,
+    display_name,
+    ...(a.url === '' ? {} : { url: a.url }),
+    ...(a.followers === undefined ? {} : { followers: a.followers }),
+    ...(a.engagement_rate === undefined ? {} : { engagement_rate: a.engagement_rate }),
+    ...(a.category === undefined ? {} : { category: a.category }),
+    ...(a.language === undefined ? {} : { language: a.language }),
+    ...(a.region === undefined ? {} : { region: a.region }),
+    ...(email === undefined ? {} : { email }),
+    observed_at: a.observed_at,
+  }
+}
+
+/** 一封消息库里的信 → 对人用的形状。 */
+function matchMailOf(m: MessageRecord): MatchMail {
+  return {
+    id: m.id,
+    thread_id: m.thread_id,
+    from_email: suppressionKey(m.from.email),
+    ...(m.from.name === undefined ? {} : { from_name: m.from.name }),
+    to: [...m.to, ...m.cc].map((x) => suppressionKey(x.email)),
+    at: m.date,
+    subject: m.subject,
+    text: m.text,
+  }
+}
+
+/** 拿不准那段的候选人（给模型挑）。 */
+function candidatesOf(p: PendingThread): { name: string; handles: string[]; note?: string }[] {
+  return p.candidates.map((c) => ({
+    name: c.name,
+    handles: c.handles,
+    ...(c.note === undefined ? {} : { note: c.note }),
+  }))
+}
+
+/** 一堆信 → 判阶段用的形状（我们发的 = out）。 */
+function stageMailsOf(records: Map<string, MessageRecord>, ours: ReadonlySet<string>): StageMail[] {
+  return [...records.values()].map((m) => ({
+    id: m.id,
+    direction: ours.has(suppressionKey(m.from.email)) ? 'out' : 'in',
+    at: m.date,
+    subject: m.subject,
+    text: m.text,
+  }))
 }
 
 export interface KolImportAssembly {
@@ -357,27 +484,39 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
     }
   }
 
+  /**
+   * 决策 1684 / 1708：按顺序试几只浏览器（宿主按用户设置排：WP493 接上 ego 的读页口后它排第一），
+   * 每只按计划里的地址顺序读；读到表就停。全读不了再说是没登录、没权限还是读不出。
+   */
   const readOnline = async (url: string): Promise<Grid> => {
     const plan = onlineSheetPlan(url)
     if (plan === undefined) return { ok: false, message: '这不是一条网页链接。' }
-    if (options.readPage === undefined)
+    const readers = [
+      ...(options.readers?.() ?? []),
+      ...(options.readPage === undefined ? [] : [{ id: 'default', read: options.readPage }]),
+    ]
+    if (readers.length === 0)
       return { ok: false, message: onlineSheetMessage('no_browser', plan.kind) }
     let block: 'login' | 'no_access' | undefined
     let reached = false
-    for (const r of plan.reads) {
-      let read: OnlinePageRead
-      try {
-        read = await options.readPage(r.url, r.as)
-      } catch {
-        continue
+    for (const reader of readers)
+      for (const r of plan.reads) {
+        let read: OnlinePageRead
+        try {
+          read = await reader.read(r.url, r.as)
+        } catch {
+          continue
+        }
+        if (!read.ok) continue
+        reached = true
+        const blocked = onlineSheetBlock(read)
+        if (blocked !== undefined) {
+          block = blocked
+          continue
+        }
+        const grid = gridFromRead(read)
+        if (grid !== undefined) return { ok: true, rows: grid, source: url }
       }
-      if (!read.ok) continue
-      reached = true
-      block = onlineSheetBlock(read) ?? block
-      if (onlineSheetBlock(read) !== undefined) continue
-      const grid = gridFromRead(read)
-      if (grid !== undefined) return { ok: true, rows: grid, source: url }
-    }
     if (!reached) return { ok: false, message: onlineSheetMessage('no_browser', plan.kind) }
     return { ok: false, message: onlineSheetMessage(block ?? 'unreadable', plan.kind) }
   }
@@ -496,7 +635,12 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
 
   /* ── 导入 ──────────────────────────────────────────────────────────── */
 
-  const saveEmail = (creator_id: string, email: string, known: Map<string, string>): boolean => {
+  const saveEmail = (
+    creator_id: string,
+    email: string,
+    known: Map<string, string>,
+    source: 'import' | 'mail_match' = 'import',
+  ): boolean => {
     if (!secrets.available) return false
     const key = suppressionKey(email)
     if (known.get(key) === creator_id) return false
@@ -504,7 +648,7 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
     const id = nextId('ctc')
     const value_ref = contactSecretId(id)
     secrets.put(value_ref, { [CONTACT_SECRET_FIELD]: email.trim() })
-    store.saveContact({ id, creator_id, kind: 'email', value_ref, source: 'import' })
+    store.saveContact({ id, creator_id, kind: 'email', value_ref, source })
     known.set(key, creator_id)
     return true
   }
@@ -551,6 +695,8 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
       campaign_id: LEGACY_IMPORT_CAMPAIGN_ID,
       campaign_name: LEGACY_IMPORT_CAMPAIGN_NAME,
     }
+    /** 决策 1707：这次导入碰到的人 → 表里给的公开邮箱。 */
+    const publicOf = new Map<string, Set<string>>()
     const importKeys = new Set(
       store
         .collaborations()
@@ -583,6 +729,9 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
         out.merged_creators += 1
       }
       const creator_id = creator.id
+      const pub = publicOf.get(creator_id) ?? new Set<string>()
+      for (const e of row.emails) pub.add(e)
+      publicOf.set(creator_id, pub)
       // 账号：库里已有的只补空白；属于别人的那个账号不动（同一个人合并要人点头）
       row.accounts.forEach((a, i) => {
         const profile = {
@@ -672,6 +821,24 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
       if (historical) out.historical += 1
     }
     jobs.delete(job.id)
+    // 决策 1707：公开资料（渠道、账号、主页、名字、粉丝 / 互动率、类目 / 语言 / 地区、公开邮箱）去公共红人库。
+    // 读的是本机库里现在的值（只补空白之后的那一份），不是表里的生意数据。
+    if (options.contributePublic !== undefined && publicOf.size > 0) {
+      const rows: ExtensionProfileRow[] = []
+      for (const [creator_id, emails] of publicOf) {
+        const creator = store.creator(creator_id)
+        if (creator === undefined || creator.sandbox === true) continue
+        const email = [...emails][0]
+        for (const a of store.accounts({ creator_id }))
+          rows.push(publicProfileRow(creator.display_name, a, email))
+      }
+      try {
+        out.public_library_queued = (await options.contributePublic(actor, rows)).queued
+      } catch {
+        // 云那一跳不挡导入
+        out.public_library_queued = 0
+      }
+    }
     const parts = [`新增 ${out.created_creators} 人`, `合并 ${out.merged_creators} 人`]
     if (out.created_collaborations + out.updated_collaborations > 0)
       parts.push(
@@ -704,71 +871,168 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
     return d.toISOString()
   }
 
-  /** 每个红人的往来（只取与他有关的：他的邮箱、他非公共邮箱的域名）。 */
-  const gatherThreads = async (
-    months: number,
-  ): Promise<{ creator_id: string; mails: StageMail[]; records: Map<string, MessageRecord> }[]> => {
+  /**
+   * 决策 1709：每段往来是谁的——**综合判断**（`@agentsws/kol-core` 的 `matchThread`）：
+   * 邮件本身（地址 / 独有域名 / 署名里的名字 / 正文里的主页链接与 @账号）+ 用户表里的记录（名字、账号、
+   * 邮箱、备注里写过的邮箱与域名、日期）。只取与红人有关的往来：按红人的邮箱、域名、账号、名字和几个
+   * 合作用词去本机消息库里查，不是整箱扫。对上的按人归堆；拿不准 / 没对上但像合作往来的，留给一张卡。
+   */
+  const gatherMatches = async (months: number, only?: ReadonlySet<string>): Promise<Gathered> => {
+    const empty: Gathered = { byCreator: [], pending: [], missing: [] }
     const box = options.mail?.()
-    if (box === undefined) return []
+    if (box === undefined) return empty
     const since = sinceOf(months)
     const ours = new Set(box.addresses().map((a) => suppressionKey(a)))
-    const byCreator = new Map<string, Set<string>>()
+    const ourDomains = new Set([...ours].map((a) => a.split('@')[1] ?? ''))
+    const emailsOf = new Map<string, Set<string>>()
     if (secrets.available)
       for (const c of store.contacts()) {
         if (c.kind !== 'email') continue
         const v = reveal(c.value_ref)
         if (v === undefined) continue
-        const set = byCreator.get(c.creator_id) ?? new Set<string>()
+        const set = emailsOf.get(c.creator_id) ?? new Set<string>()
         set.add(suppressionKey(v))
-        byCreator.set(c.creator_id, set)
+        emailsOf.set(c.creator_id, set)
       }
-    // 按域名对人只用「只有这一个红人用」的域名：同一家经纪公司 / MCN 的域名下是好几个人，按域名会把别人的信算到他头上
+    // 按域名对人只用「只有这一个红人用」的域名：同一家经纪公司 / MCN 的域名下是好几个人
     const domainOwners = new Map<string, Set<string>>()
-    for (const [creator_id, addrs] of byCreator)
+    for (const [creator_id, addrs] of emailsOf)
       for (const a of addrs) {
         const d = a.split('@')[1] ?? ''
-        if (d === '' || FREE_MAIL.test(d)) continue
+        if (d === '' || FREE_MAIL.test(d) || ourDomains.has(d)) continue
         const set = domainOwners.get(d) ?? new Set<string>()
         set.add(creator_id)
         domainOwners.set(d, set)
       }
-    const ourDomains = new Set([...ours].map((a) => a.split('@')[1] ?? ''))
-    const out: { creator_id: string; mails: StageMail[]; records: Map<string, MessageRecord> }[] =
-      []
-    for (const [creator_id, addrs] of byCreator) {
-      if (store.creator(creator_id)?.sandbox === true) continue
-      const domains = new Set(
-        [...addrs]
+    const collabs = store.collaborations()
+    const imported = new Set(
+      collabs.filter((c) => c.import_note !== undefined).map((c) => c.creator_id),
+    )
+    const creators: MatchCreator[] = []
+    for (const c of store.creators()) {
+      if (c.sandbox === true) continue
+      const emails = [...(emailsOf.get(c.id) ?? [])]
+      const notes = collabs.filter((x) => x.creator_id === c.id && x.import_note !== undefined)
+      const note = notes.map((x) => x.import_note).join('；')
+      const dates = notes.flatMap((x) => [
+        ...(x.import_note?.match(/日期：(\d{4}-\d{2}-\d{2})/)?.slice(1) ?? []),
+        ...(x.stage_source === 'import' && x.last_activity_at !== undefined
+          ? [x.last_activity_at]
+          : []),
+      ])
+      creators.push({
+        id: c.id,
+        name: c.display_name,
+        handles: store
+          .accounts({ creator_id: c.id })
+          .map((a) => ({ channel: a.channel, handle: a.handle })),
+        emails,
+        domains: emails
           .map((a) => a.split('@')[1] ?? '')
-          .filter((d) => domainOwners.get(d)?.size === 1 && !ourDomains.has(d)),
-      )
-      const matches = (email: string): boolean => {
-        const k = suppressionKey(email)
-        if (addrs.has(k)) return true
-        const d = k.split('@')[1] ?? ''
-        return domains.has(d) && !ours.has(k)
-      }
-      const records = new Map<string, MessageRecord>()
-      for (const q of [...addrs, ...[...domains].map((d) => `@${d}`)]) {
-        const found = await box.store.list({ q, limit: 500 })
-        for (const m of found) {
-          if (m.date < since) continue
-          const involved = matches(m.from.email) || [...m.to, ...m.cc].some((x) => matches(x.email))
-          if (involved) records.set(m.id, m)
-        }
-      }
-      if (records.size === 0) continue
-      const mails: StageMail[] = [...records.values()].map((m) => ({
-        id: m.id,
-        direction: matches(m.from.email) ? 'in' : 'out',
-        at: m.date,
-        subject: m.subject,
-        text: m.text,
-      }))
-      out.push({ creator_id, mails, records })
-      if (out.length >= MAX_MAIL_CREATORS) break
+          .filter((d) => domainOwners.get(d)?.size === 1),
+        ...(note === '' ? {} : { note }),
+        ...(dates.length === 0 ? {} : { dates }),
+      })
     }
-    return out
+    // 查哪些词：邮箱、独有域名；没有邮箱或从表里来的人再加名字与账号；再加几个合作用词（找没对上的）
+    const terms = new Set<string>()
+    for (const c of creators) {
+      if (only !== undefined && !only.has(c.id)) continue
+      for (const e of c.emails) terms.add(e)
+      for (const d of c.domains) terms.add(`@${d}`)
+      // 用户表里备注写过的邮箱（经纪人、助理）
+      for (const e of c.note?.match(/[^\s@；;，,:：]+@[^\s@；;，,]+\.[a-z]{2,}/gi) ?? [])
+        terms.add(e.toLowerCase())
+      if (c.emails.length === 0 || imported.has(c.id)) {
+        if (c.name.trim().length >= 4) terms.add(c.name.trim())
+        for (const h of c.handles)
+          if (normalizeHandle(h.handle).length >= 3) terms.add(normalizeHandle(h.handle))
+      }
+    }
+    if (only === undefined) for (const w of COLLAB_QUERY_WORDS) terms.add(w)
+    const found = new Map<string, MessageRecord>()
+    for (const q of terms) {
+      for (const m of await box.store.list({ q, limit: 300 }))
+        if (m.date >= since) found.set(m.id, m)
+    }
+    // 信所在的那只邮箱也是「我们」（连接页一时取不到地址时，靠它分清谁发的）
+    for (const m of found.values()) ours.add(suppressionKey(m.account))
+    // 按会话归堆；有 `thread` 就把整段取齐（查到的可能只是其中几封）
+    const threads = new Map<string, MessageRecord[]>()
+    for (const m of found.values()) {
+      const list = threads.get(m.thread_id) ?? []
+      list.push(m)
+      threads.set(m.thread_id, list)
+    }
+    if (box.store.thread !== undefined)
+      for (const [id, list] of threads) {
+        const full = (await box.store.thread(id)).filter((m) => m.date >= since)
+        if (full.length > list.length) threads.set(id, full)
+      }
+    const pool = only === undefined ? creators : creators.filter((c) => only.has(c.id))
+    const buckets = new Map<string, { mails: Map<string, MessageRecord>; by: MatchKindBy }>()
+    const pending: PendingThread[] = []
+    for (const [thread_id, list] of threads) {
+      const external = list.some(
+        (m) =>
+          !ours.has(suppressionKey(m.from.email)) ||
+          m.to.some((x) => !ours.has(suppressionKey(x.email))),
+      )
+      if (!external) continue
+      const bulk = list.every(
+        (m) => m.headers['list-unsubscribe'] !== undefined || m.headers['list-id'] !== undefined,
+      )
+      if (bulk) continue
+      const match = matchThread(list.map(matchMailOf), pool, ours)
+      if (match.kind === 'matched' && match.creator_id !== undefined) {
+        const b = buckets.get(match.creator_id) ?? { mails: new Map(), by: match.by ?? 'content' }
+        for (const m of list) b.mails.set(m.id, m)
+        if (match.by === 'content') b.by = 'content'
+        buckets.set(match.creator_id, b)
+        continue
+      }
+      if (only !== undefined) continue
+      if (match.kind === 'unmatched' && !list.some((m) => looksLikeCollab(m))) continue
+      const first = [...list].sort((a, b) => a.date.localeCompare(b.date))[0] as MessageRecord
+      const theirs = list.find((m) => !ours.has(suppressionKey(m.from.email))) ?? first
+      pending.push({
+        thread_id,
+        subject: first.subject.slice(0, 120),
+        from:
+          theirs.from.name === undefined
+            ? theirs.from.email
+            : `${theirs.from.name} <${theirs.from.email}>`,
+        at: first.date,
+        snippet: theirs.snippet.slice(0, 160),
+        mails: list,
+        candidates: match.candidates.map((c) => {
+          const who = creators.find((x) => x.id === c.creator_id)
+          return {
+            creator_id: c.creator_id,
+            name: who?.name ?? c.creator_id,
+            score: c.score,
+            signals: c.signals,
+            handles: (who?.handles ?? []).map((h) => `${h.channel} @${normalizeHandle(h.handle)}`),
+            ...(who?.note === undefined ? {} : { note: who.note }),
+          }
+        }),
+      })
+    }
+    const byCreator: Gathered['byCreator'] = []
+    for (const [creator_id, b] of buckets) {
+      byCreator.push({ creator_id, records: b.mails, by: b.by, mails: stageMailsOf(b.mails, ours) })
+      if (byCreator.length >= MAX_MAIL_CREATORS) break
+    }
+    const seen = new Set(byCreator.map((x) => x.creator_id))
+    const missing =
+      only !== undefined
+        ? []
+        : creators
+            .filter((c) => imported.has(c.id) && !seen.has(c.id))
+            .slice(0, MAX_CARD_ROWS)
+            .map((c) => ({ creator_id: c.id, name: c.name, has_email: c.emails.length > 0 }))
+    pending.sort((a, b) => b.at.localeCompare(a.at))
+    return { byCreator, pending: pending.slice(0, MAX_CARD_ROWS), missing, ours }
   }
 
   const backfillIfShort = (months: number): string | undefined => {
@@ -789,41 +1053,58 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
   const estimateMailStages: KolImportAssembly['estimateMailStages'] = async (actor, input) => {
     const months = input.months ?? DEFAULT_MAIL_MONTHS
     const connected = (options.mail?.()?.addresses().length ?? 0) > 0
-    const threads = connected ? await gatherThreads(months) : []
+    const g: Gathered = connected
+      ? await gatherMatches(months)
+      : { byCreator: [], pending: [], missing: [] }
     const price = options.price?.()
     const model = options.model?.(actor) !== undefined
     const est = estimateMailStage(
-      threads.map((t) => t.mails),
+      g.byCreator.map((t) => t.mails),
       model ? price : undefined,
     )
+    // 拿不准的那几段：有候选人的，模型帮着挑一次（一段一次调用），也算进预估
+    const asks = model ? g.pending.filter((p) => p.candidates.length > 0) : []
+    const askChars = asks.reduce((n, p) => {
+      const pr = matchPrompt(p.mails.map(matchMailOf), candidatesOf(p))
+      return n + pr.system.length + pr.user.length
+    }, 0)
+    const input_tokens = est.input_tokens + Math.ceil(askChars / 4)
+    const output_tokens = est.output_tokens + asks.length * 20
+    const cost =
+      est.cost === undefined || price === undefined
+        ? undefined
+        : (input_tokens * price.in + output_tokens * price.out) / 1_000_000
     const backfill_from = connected ? backfillIfShort(months) : undefined
     const budget_left = model ? await options.budgetLeft?.(actor).catch(() => undefined) : undefined
     const money =
-      est.cost === undefined
+      cost === undefined
         ? ''
-        : `，约 ${est.cost < 0.01 ? '<0.01' : est.cost.toFixed(2)} ${price?.currency ?? ''}`.trimEnd()
+        : `，约 ${cost < 0.01 ? '<0.01' : cost.toFixed(2)} ${price?.currency ?? ''}`.trimEnd()
+    const open = g.pending.length + g.missing.length
     const summary = !connected
       ? '还没连邮箱。'
-      : threads.length === 0
+      : est.creators === 0 && open === 0
         ? `近 ${months} 个月的邮件里没有对得上的红人往来。`
-        : `近 ${months} 个月：${est.creators} 人、${est.messages} 封${
+        : `近 ${months} 个月：对上 ${est.creators} 人、${est.messages} 封${
+            open === 0 ? '' : `；${open} 处没对上，判完出一张卡给你补`
+          }${
             model
-              ? `，约 ${Math.round((est.input_tokens + est.output_tokens) / 1000)}k token${money}`
+              ? `，约 ${Math.round((input_tokens + output_tokens) / 1000)}k token${money}`
               : '（没接模型，按规则判，不花钱）'
           }`
     return {
       months,
       creators: est.creators,
       messages: est.messages,
-      input_tokens: est.input_tokens,
-      output_tokens: est.output_tokens,
-      ...(est.cost === undefined ? {} : { cost: est.cost }),
-      ...(price?.currency === undefined || est.cost === undefined
-        ? {}
-        : { currency: price.currency }),
+      input_tokens,
+      output_tokens,
+      ...(cost === undefined ? {} : { cost }),
+      ...(price?.currency === undefined || cost === undefined ? {} : { currency: price.currency }),
       model,
       ...(budget_left === undefined ? {} : { budget_left }),
       ...(backfill_from === undefined ? {} : { backfill_from }),
+      uncertain: g.pending.length,
+      unmatched_creators: g.missing.length,
       mail_connected: connected,
       summary,
     }
@@ -934,9 +1215,15 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
     })
   }
 
-  const runMailStages: KolImportAssembly['runMailStages'] = async (actor, input) => {
-    const months = input.months ?? DEFAULT_MAIL_MONTHS
-    const threads = await gatherThreads(months)
+  const runMailStages: KolImportAssembly['runMailStages'] = async (actor, input) =>
+    runWith(actor, input.months ?? DEFAULT_MAIL_MONTHS)
+
+  const runWith = async (
+    actor: KolActor,
+    months: number,
+    only?: ReadonlySet<string>,
+  ): Promise<KolMailStageRunView> => {
+    const g = await gatherMatches(months, only)
     const out: KolMailStageRunView = {
       summary: '',
       judged: 0,
@@ -946,8 +1233,47 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
       by_model: 0,
       by_rule: 0,
       fallback: 0,
+      matched_by_content: g.byCreator.filter((t) => t.by === 'content').length,
+      unresolved: 0,
     }
     let call = options.model?.(actor)
+    // 拿不准的几段：模型在候选人里挑一个（或者都不是）；挑中的并进那个人的往来
+    const ours = g.ours ?? new Set<string>()
+    const left: PendingThread[] = []
+    for (const p of g.pending) {
+      if (call === undefined || p.candidates.length === 0) {
+        left.push(p)
+        continue
+      }
+      let pick: number | null | undefined
+      try {
+        pick = parseMatch(
+          await call({
+            ...matchPrompt(p.mails.map(matchMailOf), candidatesOf(p)),
+            max_output_tokens: 40,
+            run_id: `kol_mail_match_${nextId('r')}`,
+          }),
+          p.candidates.length,
+        )
+      } catch (e) {
+        const code = rec(e).code
+        if (code === 'budget_exhausted' || code === 'halted') call = undefined
+      }
+      const chosen = typeof pick === 'number' ? p.candidates[pick] : undefined
+      if (chosen === undefined) {
+        left.push(p)
+        continue
+      }
+      let bucket = g.byCreator.find((t) => t.creator_id === chosen.creator_id)
+      if (bucket === undefined) {
+        bucket = { creator_id: chosen.creator_id, records: new Map(), mails: [], by: 'model' }
+        g.byCreator.push(bucket)
+      }
+      for (const m of p.mails) bucket.records.set(m.id, m)
+      bucket.mails = stageMailsOf(bucket.records, ours)
+      out.matched_by_model = (out.matched_by_model ?? 0) + 1
+    }
+    const threads = g.byCreator
     for (const t of threads) {
       const trimmed = trimThread(t.mails)
       let verdict: MailStageVerdict | undefined
@@ -1034,11 +1360,81 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
         evidence: evidence.map((e) => e.message_id),
       })
     }
+    // 还对不上的：一张卡，人在卡里选 / 补邮箱
+    out.unresolved = left.length + g.missing.length
+    if (only === undefined && out.unresolved > 0) await matchCard(actor, months, left, g.missing)
     const parts = [`判了 ${out.judged} 人`, `更新 ${out.updated}`]
     if (out.conflicts > 0) parts.push(`${out.conflicts} 个和表格不一样，出了卡`)
+    if (out.unresolved > 0) parts.push(`${out.unresolved} 处没对上，出了一张卡`)
     if (out.fallback > 0) parts.push(`${out.fallback} 个改按规则判`)
     out.summary = `${parts.join(' · ')}。`
     return out
+  }
+
+  /** 决策 1709：对不上人的往来、没找到往来的红人——一张卡，卡里就地选 / 补邮箱。 */
+  const matchCard = async (
+    actor: KolActor,
+    months: number,
+    pending: readonly PendingThread[],
+    missing: Gathered['missing'],
+  ): Promise<void> => {
+    if (options.approvals === undefined) return
+    const pool = new Map<string, string>()
+    for (const p of pending) for (const c of p.candidates) pool.set(c.creator_id, c.name)
+    for (const c of missing) pool.set(c.creator_id, c.name)
+    for (const c of store.creators()) {
+      if (pool.size >= 200) break
+      if (c.sandbox !== true && !pool.has(c.id)) pool.set(c.id, c.display_name)
+    }
+    const title =
+      pending.length > 0 && missing.length > 0
+        ? `${pending.length} 段往来没对上红人，${missing.length} 个红人没找到往来`
+        : pending.length > 0
+          ? `${pending.length} 段往来没对上红人`
+          : `${missing.length} 个红人没找到往来`
+    await options.approvals.create({
+      workspace_id,
+      schema_version: 1,
+      kind: 'policy_change',
+      role_id: actor.role_id,
+      subject: { object: { type: 'creator', id: `mail_match_${months}` } },
+      dedupe_key: `${workspace_id}:kol_mail_match:${clock.now().slice(0, 13)}`,
+      title,
+      summary: '选一下是谁，或补个邮箱；不确定的留空。',
+      payload: {
+        form: KOL_MAIL_MATCH_FORM,
+        actor,
+        months,
+        threads: pending.map((p) => ({
+          thread_id: p.thread_id,
+          subject: p.subject,
+          from: p.from,
+          at: p.at,
+          snippet: p.snippet,
+          candidates: p.candidates.map((c) => ({
+            creator_id: c.creator_id,
+            name: c.name,
+            signals: c.signals,
+          })),
+        })),
+        creators: missing,
+        pool: [...pool].map(([creator_id, name]) => ({ creator_id, name })),
+      },
+      evidence: {
+        source_events: [],
+        provenance: { seen: [] },
+        diff: {
+          before: {},
+          after: { threads: pending.length, creators: missing.length },
+          summary: title,
+        },
+        precheck: {},
+      },
+      proposer: { kind: 'system', id: KOL_MAIL_MATCH_PROPOSER, assignment_id: actor.assignment_id },
+      automation: { level_at_creation: 'L1' },
+      routing: routing(actor),
+      priority: 'queue',
+    })
   }
 
   /* ── 对话里的卡 ──────────────────────────────────────────────────────── */
@@ -1164,9 +1560,62 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
     }
   }
 
+  /**
+   * 「没对上」那张卡批了：卡里选了是谁的那几段 → 把对方的邮箱记到这个红人名下（来源 `mail_match`，人定的）；
+   * 卡里补了邮箱的 → 记上。然后只对这几个人再判一次阶段（不再出这张卡）。
+   */
+  const onMatchDecided = async (item: ApprovalItem): Promise<void> => {
+    if (item.state !== 'approved' && item.state !== 'approved_edited' && item.state !== 'applied')
+      return
+    const edited = rec(item.decision?.edited_payload)
+    const payload = rec(item.payload)
+    const actor = actorOfItem(item)
+    const months = typeof payload.months === 'number' ? payload.months : DEFAULT_MAIL_MONTHS
+    const box = options.mail?.()
+    const ours = new Set((box?.addresses() ?? []).map((a) => suppressionKey(a)))
+    const known = emailIndex()
+    const touched = new Set<string>()
+    const assign = Array.isArray(edited.assign) ? (edited.assign as unknown[]) : []
+    for (const a of assign) {
+      const thread_id = rec(a).thread_id
+      const creator_id = rec(a).creator_id
+      if (typeof thread_id !== 'string' || typeof creator_id !== 'string') continue
+      if (store.creator(creator_id) === undefined) continue
+      const mails = (await box?.store.thread?.(thread_id)) ?? []
+      for (const m of mails) ours.add(suppressionKey(m.account))
+      for (const m of mails) {
+        const from = suppressionKey(m.from.email)
+        if (ours.has(from) || known.has(from)) continue
+        if (saveEmail(creator_id, m.from.email, known, 'mail_match')) touched.add(creator_id)
+      }
+      touched.add(creator_id)
+    }
+    const emails = Array.isArray(edited.emails) ? (edited.emails as unknown[]) : []
+    for (const e of emails) {
+      const creator_id = rec(e).creator_id
+      const email = rec(e).email
+      if (typeof creator_id !== 'string' || typeof email !== 'string') continue
+      const v = email.trim().toLowerCase()
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(v) || store.creator(creator_id) === undefined)
+        continue
+      saveEmail(creator_id, v, known, 'mail_match')
+      touched.add(creator_id)
+    }
+    emit('kol.mail_match_resolved', actor.person_id, {
+      threads: assign.length,
+      emails: emails.length,
+      creators: [...touched],
+    })
+    if (touched.size > 0) await runWith(actor, months, touched)
+  }
+
   const onDecided: KolImportAssembly['onDecided'] = async (item) => {
     if (item.workspace_id !== workspace_id || item.kind !== 'policy_change') return false
     const who = item.proposer.id
+    if (who === KOL_MAIL_MATCH_PROPOSER) {
+      await onMatchDecided(item)
+      return true
+    }
     if (
       who !== KOL_IMPORT_PROPOSER &&
       who !== KOL_STAGE_PROPOSER &&

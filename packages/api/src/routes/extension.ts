@@ -155,6 +155,25 @@ export interface ExtensionHello {
 /** WP202：工作台「去建红人岗位」的那一段路径（插件深链与工作台自己的按钮共用）。 */
 export const KOL_SETUP_PATH = '/org?tab=positions&new=kol'
 
+/**
+ * WP489（决策 1707）：表格导入的红人送去公共红人库的那一行——**只有公开资料**。
+ * 合作状态、金额、日期、备注、负责人这类用户自己的生意数据，这个形状上根本没有位置。
+ */
+export interface ExtensionProfileRow {
+  channel: KolChannel
+  handle: string
+  display_name?: string | undefined
+  url?: string | undefined
+  followers?: number | undefined
+  engagement_rate?: number | undefined
+  category?: string | undefined
+  language?: string | undefined
+  region?: string | undefined
+  /** 公开的联系邮箱。 */
+  email?: string | undefined
+  observed_at: Iso8601
+}
+
 export interface ExtensionPort {
   store: ExtensionStore
   ingest(
@@ -162,6 +181,14 @@ export interface ExtensionPort {
     input: { observations: ExtensionObservation[]; batch_id?: string },
   ): MaybePromise<ExtensionIngestResult>
   hello(session: ExtensionSession): MaybePromise<ExtensionHello>
+  /**
+   * WP489（决策 1707）：表格导入的红人只把**公开资料**送去公共红人库（与插件同一条转发路：登录了才送、
+   * 失败退避重试；本机已经写过，这里不落本机）。没有 HTTP 路由。
+   */
+  contributeProfiles?(
+    session: ExtensionSession,
+    rows: readonly ExtensionProfileRow[],
+  ): MaybePromise<{ queued: number }>
 
   /* ── WP119c：完整版面板要的那一批（docs/76 §10；清单出自私有仓 parity.md §六）────
    *

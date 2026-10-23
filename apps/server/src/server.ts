@@ -571,7 +571,12 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createByoSourceStore } from './kol-byo.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
-import { createKolImport, createKolSheetIntake, type KolImportAssembly } from './kol-import.js'
+import {
+  createKolImport,
+  createKolSheetIntake,
+  type KolImportAssembly,
+  type KolPageReader,
+} from './kol-import.js'
 import {
   createKolMail,
   isKolCollaborationCard,
@@ -9964,37 +9969,64 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
         return b.cap_base > 0 ? Math.max(b.cap_base - b.used_base, 0) : undefined
       },
-      readPage: async (url, as) => {
+      /*
+       * 决策 1708：读在线表的浏览器按优先级排。WP493 给 ego 接上通用读页口之后，把它放在最前面
+       * （`{ id: 'ego', read }`）；现在是：设成「插件里的浏览器」走它，然后内置浏览器（同一条节流队）。
+       */
+      readers: () => {
+        const list: { id: string; read: KolPageReader }[] = []
         const own =
           browserSettings.forRun()?.mode === 'browserskill' ? ownBrowserReader() : undefined
-        if (own !== undefined) {
-          const r = await own.read(url, 'html')
-          return r.ok
-            ? { ok: true, final_url: r.final_url, html: r.text }
-            : { ok: false, message: r.message }
-        }
-        if (webSearchChannel === undefined) return { ok: false, message: 'no browser' }
-        const r = await webSearchThrottle.run(() =>
-          webSearchChannel.open({
-            workspace_id: ws,
-            url,
-            kind: 'page',
-            timeout_ms: 30_000,
-            settle_ms: 2_500,
-          }),
-        )
-        void as
-        if (r === undefined) return { ok: false, message: 'busy' }
-        return r.ok
-          ? {
-              ok: true,
-              final_url: r.final_url,
-              ...(r.page === undefined
-                ? {}
-                : { text: r.page.text, password_inputs: r.page.signals.passwordInputs }),
-            }
-          : { ok: false, message: (r as { message: string }).message }
+        if (own !== undefined)
+          list.push({
+            id: 'browserskill',
+            read: async (url) => {
+              const r = await own.read(url, 'html')
+              return r.ok
+                ? { ok: true, final_url: r.final_url, html: r.text }
+                : { ok: false, message: r.message }
+            },
+          })
+        const channel = webSearchChannel
+        if (channel !== undefined)
+          list.push({
+            id: 'builtin',
+            read: async (url) => {
+              const r = await webSearchThrottle.run(() =>
+                channel.open({
+                  workspace_id: ws,
+                  url,
+                  kind: 'page',
+                  timeout_ms: 30_000,
+                  settle_ms: 2_500,
+                }),
+              )
+              if (r === undefined) return { ok: false, message: 'busy' }
+              return r.ok
+                ? {
+                    ok: true,
+                    final_url: r.final_url,
+                    ...(r.page === undefined
+                      ? {}
+                      : { text: r.page.text, password_inputs: r.page.signals.passwordInputs }),
+                  }
+                : { ok: false, message: (r as { message: string }).message }
+            },
+          })
+        return list
       },
+      // 决策 1707：导入的红人把公开资料送去公共红人库（与插件同一条转发路；算在导入的人头上）
+      contributePublic: async (actor, rows) =>
+        (await extensionPortOf.contributeProfiles?.(
+          {
+            token_id: 'sheet_import',
+            workspace_id: ws,
+            person_id: actor.person_id,
+            extension_id: 'sheet_import',
+            scopes: ['kol.observe'],
+          },
+          rows,
+        )) ?? { queued: 0 },
       mail: () => ({
         store: messages.store,
         // 连着的邮箱（连接页那几只 + 发信那一路认的；去重）

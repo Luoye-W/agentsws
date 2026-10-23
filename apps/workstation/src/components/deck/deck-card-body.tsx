@@ -26,6 +26,7 @@ import {
   KolOutreachBody,
   KolReviewBody,
 } from '@/components/kol/kol-card-bodies'
+import { isKolMailMatchPayload, KolMailMatchBody } from '@/components/kol/kol-mail-match-body'
 import { FollowUpCardBody } from '@/components/messages/follow-up-card-body'
 import { isMessageRuleCardPayload, MessageRuleCardBody } from '@/components/messages/rule-card-body'
 import {
@@ -469,6 +470,9 @@ export function DeckCardBody({
               <Note testId="deck-reason">{reasonText}</Note>
             </div>
           )
+        // WP489（决策 1709）：对不上红人的往来 / 没找到往来的红人——卡里就地选、补邮箱（「记下」在卡身里）
+        if (isKolMailMatchPayload(payload))
+          return <KolMailMatchBody card={card} payload={payload} />
         // WP322：「这份表按问答导入」——列对照、一两行预览、几条（按钮就是选项）
         if (isFaqImportPayload(payload)) return <FaqImportBody payload={payload} />
         // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，

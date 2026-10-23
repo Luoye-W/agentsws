@@ -140,6 +140,7 @@ async function main() {
     const actor = { workspace_id: ws, person_id, assignment_id: youtube.id, role_id: 'kol.youtube' }
 
     let cardId
+    let matchCardId
     for (const [i, theme] of ['light', 'dark'].entries()) {
       const context = await browser.newContext({
         viewport: { width: WIDTH, height: HEIGHT },
@@ -234,6 +235,18 @@ async function main() {
             'The lamp has shipped today, tracking number 1Z999AA10123456784 via UPS.',
           ),
         )
+        // 一段对不上任何人的合作来信（陌生地址、没提到表里的谁）→ 判完进「没对上」那张卡
+        await put({
+          ...record(
+            ws,
+            'hi@nightdeskclub.example',
+            OURS,
+            '2026-06-03T08:00:00Z',
+            'Sponsorship for my desk channel?',
+            'Hi! I run a small desk-setup channel. Could we discuss a sponsorship?',
+          ),
+          thread_id: '<wp489-stranger@x.example>',
+        })
         const est = await brand.kolImport.estimateMailStages(actor, {})
         check(est.creators >= 1, `预估：${est.summary}`)
         const run = await brand.kolImport.runMailStages(actor, {})
@@ -252,6 +265,9 @@ async function main() {
           cardId = all.find((c) => c.proposer?.id === 'kol-stage')?.id
         }
         check(cardId !== undefined, '表格与邮件对不上：出了一张卡')
+        const all = await server.approvals.queue({ workspace_id: ws, person_id, lane: 'mine' })
+        matchCardId = all.find((c) => c.proposer?.id === 'kol-mail-match')?.id
+        check(matchCardId !== undefined, '对不上的往来与没找到往来的红人：一张卡')
       }
 
       // ③ 冲突卡
@@ -266,6 +282,19 @@ async function main() {
         )
         check(text.includes('tracking number'), `[${theme}] 卡上有依据原话`)
         await shot(page, theme, '2-conflict-card')
+      }
+
+      // ③b「没对上」那张卡：每段一个下拉、没往来的人一个邮箱框
+      if (matchCardId !== undefined) {
+        await page.goto(`${BASE}/cards/${matchCardId}`, { waitUntil: 'load', timeout: 90_000 })
+        await page.getByTestId('deck-kol-mail-match').waitFor({ timeout: 60_000 })
+        const text = await page.getByTestId('deck-kol-mail-match').innerText()
+        check(text.includes('Sponsorship'), `[${theme}] 卡上列出那段没对上的往来`)
+        check(
+          (await page.getByTestId('kol-mail-match-email').count()) > 0,
+          `[${theme}] 没找到往来的红人可以就地补邮箱`,
+        )
+        await shot(page, theme, '2b-mail-match-card')
       }
 
       if (i === 0 && cardId !== undefined) {
