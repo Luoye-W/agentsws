@@ -290,6 +290,17 @@ export function brandModelsPort(options: BrandModelsPortOptions): ModelsPort {
             await options.deepseekAccount?.signOut(actor)
           },
         }),
+    // WP479：勾选哪些模型跟"跟随公司默认"走同一条写保护（看过了不算写，照常转）
+    setEnabledModels: async (actor: Actor, input: unknown) => {
+      writable(actor.workspace_id)
+      const port = await of(actor.workspace_id)
+      if (port.setEnabledModels === undefined)
+        throw new ApiError('not_implemented', '这个服务进程没有装配模型勾选')
+      return port.setEnabledModels(
+        actor as Parameters<NonNullable<ModelsPort['setEnabledModels']>>[0],
+        input as Parameters<NonNullable<ModelsPort['setEnabledModels']>>[1],
+      )
+    },
     setInheritance: async (actor: Actor, input: { inherit_org: boolean }) => {
       if (brands.isOrgDefault(actor.workspace_id))
         throw new ApiError(

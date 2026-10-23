@@ -158,22 +158,26 @@ const SAVE_BODY = {
 }
 
 describe('WP25 网关：路由与信封', () => {
-  it('十三条路由都在 /v1/models 之下，且都要 Bearer + X-Assignment + 权限元组', async () => {
+  it('模型面的路由都在 /v1/models 之下，且都要 Bearer + X-Assignment + 权限元组', async () => {
     const { h } = await wired()
     const specs = h.gateway.specs.filter((s) => s.path.startsWith('/v1/models'))
     expect(specs.map((s) => `${s.method.toUpperCase()} ${s.path}`).sort()).toEqual([
       'DELETE /v1/models/providers/:id',
       'GET /v1/models/defaults',
+      // WP479：每个已连接来源勾哪些模型
+      'GET /v1/models/enabled',
       // WP127：生图单独一档
       'GET /v1/models/image',
       'GET /v1/models/pricing',
       'GET /v1/models/providers',
       'GET /v1/models/usage',
       // WP42：拉模型清单 + 去官网抓价
+      'POST /v1/models/enabled/seen',
       'POST /v1/models/pricing/refresh',
       'POST /v1/models/providers/:id/discover',
       'POST /v1/models/providers/:id/test',
       'PUT /v1/models/defaults',
+      'PUT /v1/models/enabled',
       'PUT /v1/models/image',
       // WP66（52 O3）：这个品牌的模型设置跟不跟随公司默认
       'PUT /v1/models/inheritance',
