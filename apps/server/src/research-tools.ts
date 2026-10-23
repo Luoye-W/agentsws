@@ -71,13 +71,21 @@ export interface ResearchToolsOptions {
     | { ok: true; parts: { ok: boolean; items: RedditListingItem[]; message?: string }[] }
     | { ok: false; why: string }
   >
+  /**
+   * WP493（决策 1718）：ego 连得上（`pluginRead` 这时由 ego 读、用 ego 里的登录态）→ 先走它，没读到再走前两路。
+   * 不给 / 为假 = 老顺序（它是最后一路）。
+   */
+  egoFirst?(): boolean
 }
 
 /** WP419：三路都读不了时给模型的那一句（照实说、不找第三方站凑）。 */
-export function redditUnreadableText(detail: string): string {
+export function redditUnreadableText(detail: string, via: 'plugin' | 'ego' = 'plugin'): string {
   return (
     `读不了 Reddit：${detail}。Reddit 拦服务器直读，**不要**去第三方镜像 / 统计站（redlib、subredditstats 之类）凑数——` +
-    '照实告诉用户这次没读到，并请他在 Chrome 里装好、连上「Agents 工坊助手」插件（用他自己的登录态读），装好后再读。'
+    (via === 'ego'
+      ? // WP493：ego 能用时不再叫人装插件
+        '照实告诉用户这次没读到，并请他在 ego 里登录 Reddit 品牌号（用他自己的登录态读），登好后再读。'
+      : '照实告诉用户这次没读到，并请他在 Chrome 里装好、连上「Agents 工坊助手」插件（用他自己的登录态读），装好后再读。')
   )
 }
 
@@ -311,18 +319,49 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
         }
       }
     }
-    let got = await router.read(req)
-    // WP419：两路都不行 → 借插件现读一次；还不行就照实说、叮嘱别找第三方站
-    if (!got.ok) {
+    /** WP419：借插件（WP493 起 ego 能用时是 ego）现读一次。 */
+    const viaBrowser = async () => {
       const plug = pluginReadOf(req)
-      const viaPlugin =
+      const res =
         plug === undefined || options.pluginRead === undefined
           ? { ok: false as const, why: '这台电脑上没有连着的「Agents 工坊助手」插件' }
           : await options.pluginRead([plug]).catch((err: unknown) => ({
               ok: false as const,
               why: err instanceof Error ? err.message : String(err),
             }))
-      const part = viaPlugin.ok ? viaPlugin.parts[0] : undefined
+      return { res, part: res.ok ? res.parts[0] : undefined }
+    }
+    const listingLimit = () =>
+      typeof req.input.limit === 'number' ? req.input.limit : READ_REDDIT_DEFAULT_LIMIT
+    // WP493：ego 连得上就先在 ego 里读（不花积分、用你在 ego 里登录的号）；没读到再走前两路
+    const egoFirst = options.egoFirst?.() === true
+    let early: Awaited<ReturnType<typeof viaBrowser>> | undefined
+    let got: Awaited<ReturnType<typeof router.read>> | undefined
+    if (egoFirst) {
+      early = await viaBrowser()
+      if (early.part?.ok === true) {
+        const record: ResearchFetchRecord = {
+          platform: 'reddit',
+          capability: req.capability,
+          route: 'extension',
+          cached: false,
+          fetched_at: new Date(options.nowMs()).toISOString(),
+          items: early.part.items.length,
+          attempts: [{ route: 'extension', outcome: 'ok' }],
+        }
+        options.onRecord?.(record)
+        got = {
+          ok: true,
+          items: early.part.items.flatMap((x) => itemOfListing(x) ?? []).slice(0, listingLimit()),
+          record,
+        }
+      }
+    }
+    got ??= await router.read(req)
+    // WP419：两路都不行 → 借插件现读一次；还不行就照实说、叮嘱别找第三方站
+    if (!got.ok) {
+      // ego 先读过了就不再读一次
+      const { res: viaPlugin, part } = early ?? (await viaBrowser())
       if (part?.ok === true) {
         const limit =
           typeof req.input.limit === 'number' ? req.input.limit : READ_REDDIT_DEFAULT_LIMIT
@@ -339,7 +378,12 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
         options.onRecord?.(got.record)
       } else {
         const why = viaPlugin.ok ? (part?.message ?? '插件没读到') : viaPlugin.why
-        got = { ...got, message: redditUnreadableText(`${got.message}；插件：${why}`) }
+        got = {
+          ...got,
+          message: egoFirst
+            ? redditUnreadableText(`${got.message}；ego：${why}`, 'ego')
+            : redditUnreadableText(`${got.message}；插件：${why}`),
+        }
       }
     }
     const used = budget === undefined ? before : addSpent(run, got.record.credits ?? 0)

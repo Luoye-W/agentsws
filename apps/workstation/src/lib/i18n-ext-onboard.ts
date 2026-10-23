@@ -15,6 +15,7 @@ export const EXT_ONBOARD_ZH: Record<string, string> = {
   'extonboard.use.social': '到点打开你登录着的发帖页、你点发布',
   'extonboard.pair': '装好后点插件图标，填配对码',
   'extonboard.next.title': '插件配上了，还差一步',
+  'extonboard.next.title.ego': '还差一步',
   'extonboard.step.reddit': '在插件里点「连接 Reddit」，并在这个 Chrome 登录品牌号',
   'extonboard.step.google_ads': '在插件里连上 Google 广告后台',
   'extonboard.step.meta_ads': '在插件里连上 Meta 广告后台',
@@ -45,6 +46,7 @@ export const EXT_ONBOARD_EN: Record<string, string> = {
   'extonboard.use.social': 'open your signed-in post composer on time so you click Post',
   'extonboard.pair': 'Once installed, click the extension icon and enter this pairing code',
   'extonboard.next.title': 'Extension paired — one more step',
+  'extonboard.next.title.ego': 'One more step',
   'extonboard.step.reddit':
     'In the extension, click “Connect Reddit” and sign in to the brand account in this Chrome',
   'extonboard.step.google_ads': 'Connect Google Ads in the extension',

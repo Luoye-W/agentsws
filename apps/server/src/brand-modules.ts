@@ -56,6 +56,7 @@ import type {
 import type { ConnectionsAssembly } from './connections.js'
 import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { EconomicsService } from './economics.js'
+import type { OnlineSheetReader, PageReadChain } from './ego-read/index.js'
 import type { GoogleReads } from './google-reads.js'
 import type { KolStore } from './kol.js'
 import type { KolMailAssembly } from './kol-mail.js'
@@ -337,6 +338,16 @@ export interface BrandModuleSet {
   adsWiring?: AdsWiring
   /** WP328：Reddit 每日巡查（托管实例与没有社媒库的装配没有）。 */
   redditWatch?: RedditWatchAssembly
+  /**
+   * WP493（决策 1718）：读页选路（ego → 插件 → 内置浏览器）。`readPage` 与 WP489 的 `KolPageReader` 同形，
+   * 集成时 `kol-import` 的 `readPage` 直接接它（托管实例没有）。
+   */
+  pageRead?: PageReadChain
+  /**
+   * WP493（决策 1708）：在 ego 里读在线表格（Google 导出 CSV / 飞书读格子 → 导出 Excel）。WP489 的 `readOnline`
+   * 集成时先问它：`ok` 用它的格子；`login` / `no_access` 照实说；`off` / `unreadable` / `failed` 再走 `readPage` 那条老路。
+   */
+  onlineSheet?: OnlineSheetReader
   /** WP392（docs/104）：竞品监控（托管实例没有）。 */
   competitorWatch?: CompetitorWatchAssembly
   /** WP393（docs/104 一期 A）：店铺管理「竞品动向」（方案卡、探平台、自家比价、简报那一段；跟着竞品监控走）。 */

@@ -110,6 +110,13 @@ export interface BrowserSettingsAssembly {
    * 本机档、探得到才有；别的情况（用户选了别的浏览器 = 选了插件路）回 `undefined`。走缓存，每次发之前都问。
    */
   egoWritePath(): string | undefined
+  /**
+   * WP493（决策 1718）：只读那一路（读页 / 读 Reddit / 读在线表格）用的 `ego-browser` 路径——判据与 {@link egoWritePath}
+   * 相同（选了 ego 或默认 ego、本机档、探得到）。分开一口是为了两条路能各自关（`AGENTSWS_EGO_READ=off`）。
+   */
+  egoReadPath(): string | undefined
+  /** WP493：插件（BrowserSkill）装着没有——装着回 `bsk` 路径（选了 ego 时它是备用那一条）。 */
+  bskInstalledPath(): string | undefined
 }
 
 /** CDP 的 endpoint 只允许 http(s) / ws(s)，且不能带空白（上游 provider 的同一条口径）。 */
@@ -373,6 +380,16 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
       if (effective().mode !== 'ego' || !egoAllowed()) return undefined
       const found = egoDetection(false)
       return found.ok ? found.path : undefined
+    },
+    egoReadPath() {
+      if (effective().mode !== 'ego' || !egoAllowed()) return undefined
+      const found = egoDetection(false)
+      return found.ok ? found.path : undefined
+    },
+    bskInstalledPath() {
+      if (!browserSkillAllowed()) return undefined
+      const path = bskPathOf()
+      return path !== undefined && bskExists(path) ? path : undefined
     },
     egoStatus() {
       if (!egoAllowed()) {
