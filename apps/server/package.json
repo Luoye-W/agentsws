@@ -37,6 +37,7 @@
     "@agentsws/connect-adapter": "workspace:*",
     "@agentsws/contracts": "workspace:*",
     "@agentsws/core": "workspace:*",
+    "@agentsws/creator-capture": "workspace:*",
     "@agentsws/credentials-openconnector": "workspace:*",
     "@agentsws/data": "workspace:*",
     "@agentsws/deck": "workspace:*",
@@ -75,6 +76,8 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/ws": "^8.5.13"
+    "@types/jsdom": "^21.1.7",
+    "@types/ws": "^8.5.13",
+    "jsdom": "^25.0.1"
   }
 }

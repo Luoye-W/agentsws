@@ -68,6 +68,18 @@ export function EgoRecommend({
         <CheckCircle2 className="size-3.5" aria-hidden />
         {t('ego.ready', { version: status.version ?? '?' })}
         <Hint text={t('ego.ready.hint')} testId="ego-ready-hint" />
+        {status.update_available === true ? (
+          <a
+            href={EGO_DOWNLOAD_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-1 rounded-md bg-ws-tint px-1.5 py-0.5 hover:underline"
+            title={t('ego.update.hint')}
+            data-testid="ego-update"
+          >
+            {t('ego.update')}
+          </a>
+        ) : null}
       </p>
     )
   if (status.installed)

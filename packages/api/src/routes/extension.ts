@@ -608,6 +608,12 @@ const ingestSchema = z.object({
   batch_id: z.string().regex(EXTENSION_BATCH_ID).optional(),
 })
 
+/**
+ * WP496：ego 路采集红人走**同一道闸**——插件那三条路由的请求体 schema 原样导出，
+ * ego 那一路在调 `ExtensionPort` 之前先过它（多一个键整批拒，和插件一样）。
+ */
+export const EXTENSION_INGEST_SCHEMA = ingestSchema
+
 const autoScoreSchema = z.object({ enabled: z.boolean() }).strict()
 
 const pairSchema = z.object({ code: z.string().min(1).max(12) })
@@ -660,6 +666,9 @@ const contentObservationSchema = z
     source_url: z.string().max(600).optional(),
   })
   .strict()
+
+/** WP496：ego 路的内容观测也过这一道（见 {@link EXTENSION_INGEST_SCHEMA}）。 */
+export const EXTENSION_CONTENT_OBSERVATION_SCHEMA = contentObservationSchema
 
 const contentCommentSchema = z
   .object({
@@ -755,6 +764,9 @@ const bioLinkObservationSchema = z
     captured_at: z.string().min(1),
   })
   .strict()
+
+/** WP496：ego 路的链接页观测也过这一道（见 {@link EXTENSION_INGEST_SCHEMA}）。 */
+export const EXTENSION_BIO_LINK_OBSERVATION_SCHEMA = bioLinkObservationSchema
 
 /** scope 检查的统一出口：三个 scope 的名字与话术都收在这一个函数里。 */
 function requireScope(session: ExtensionSession, scope: ExtensionScope, doing: string): void {

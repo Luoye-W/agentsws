@@ -48,6 +48,8 @@ export interface EgoReadStepResult {
   clicked?: string[]
   /** `copy` 那一步截住的 (type, value)。 */
   copied?: [string, string][]
+  /** WP496：`capture` 那一步读到的（第一份是那一页本身，后面是顺手读的 link-in-bio 页）。 */
+  captures?: Record<string, unknown>[]
   final_url?: string
 }
 
@@ -67,6 +69,8 @@ export interface EgoReadCall {
   settle_ms?: number
   /** 下载类的步不用给 `save_as`（这里在临时目录里补）。 */
   steps: DistributiveOmit<EgoReadStep, 'save_as'>[]
+  /** WP496：`capture` 步用的页面脚本模板（`@agentsws/creator-capture`）。 */
+  capture?: { template: string; placeholder: string }
 }
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 
@@ -158,6 +162,12 @@ export async function runEgoRead(input: RunEgoReadInput): Promise<EgoReadResult>
       out: scriptPath(out),
       ...(input.call.settle_ms === undefined ? {} : { settle_ms: input.call.settle_ms }),
       steps,
+      ...(input.call.capture === undefined
+        ? {}
+        : {
+            capture_template: input.call.capture.template,
+            capture_placeholder: input.call.capture.placeholder,
+          }),
     }
     const proc = await (input.spawn ?? spawnEgo)({
       egoPath: input.egoPath,

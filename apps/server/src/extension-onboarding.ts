@@ -64,6 +64,8 @@ export interface ExtensionOnboardingOptions {
    * 这几样不再催装插件，插件对它们只是备用。
    */
   egoCovers?(workspace_id: string): readonly BrowserExtensionUse[]
+  /** WP496（决策 1729 A）：ego 上一次真连时说了「有新版本」。不给 = 不提。 */
+  egoUpdate?(): boolean
   /** 事项时间线上说一句（不在乎成没成）。 */
   note(workspace_id: string, matter_id: string, text: string): void | Promise<void>
   /** 记一笔「主动带过」（只有 id）。 */
@@ -121,7 +123,10 @@ export function createExtensionOnboarding(
       full === undefined
         ? undefined
         : { ...full, uses: full.uses.filter((u) => !egoCan.includes(u)) }
-    const ego = egoCan.length === 0 ? {} : { ego_covers: egoCan }
+    const ego =
+      egoCan.length === 0
+        ? {}
+        : { ego_covers: egoCan, ...(options.egoUpdate?.() === true ? { ego_update: true } : {}) }
     if (need === undefined)
       return {
         needed: false,

@@ -16,6 +16,10 @@ export const EGO_ZH: Record<string, string> = {
   'ego.ready': 'ego 已就绪 · {version}',
   'ego.ready.hint':
     '第一次用：在 ego 里打开 facebook.com 等网站，弹「显示通知」时点「阻止」；要发帖的网站在 ego 里登录好。',
+  // WP496（决策 1729 A）：ego 自己说有新版本——提一句 + 去下载页，不替人升级
+  'ego.update': '有新版本',
+  'ego.update.hint':
+    'ego 提示有新版本。在 ego 里按提示升级，或点这里到下载页装最新版；工坊不会替你升级。',
   'ego.recommended': '推荐',
   'ego.default': '没选过，默认用 ego',
   // 岗位设置：发之前让我看一眼
@@ -42,6 +46,9 @@ export const EGO_EN: Record<string, string> = {
   'ego.ready': 'ego is ready · {version}',
   'ego.ready.hint':
     'First time: open sites like facebook.com in ego and click “Block” when it asks to show notifications; sign in to the sites you post on inside ego.',
+  'ego.update': 'Update available',
+  'ego.update.hint':
+    'ego says a newer version is out. Update it from inside ego, or click here for the download page. The app never updates it for you.',
   'ego.recommended': 'Recommended',
   'ego.default': 'Not chosen yet, using ego by default',
   'ego.review.label': 'Let me check before it sends',

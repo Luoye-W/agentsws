@@ -377,6 +377,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsws/creator-capture':
+        specifier: workspace:*
+        version: link:../../packages/creator-capture
       '@agentsws/credentials-openconnector':
         specifier: workspace:*
         version: link:../../packages/credentials-openconnector
@@ -486,9 +489,15 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
+      '@types/jsdom':
+        specifier: ^21.1.7
+        version: 21.1.7
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
 
   apps/site:
     dependencies:

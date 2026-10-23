@@ -274,6 +274,11 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
       now: () => T0,
       // WP483：ego 读到的公开数据（这里只核回执形状；走插件同一入口那一段在 wp483-ego-kol.test.ts）
       observe: async (_a, rows) => ({ saved: rows.length, deduped: 0, forwarded: rows.length }),
+      // WP496：ego 用插件同一套采集器读页（这里只核回执形状；真跑脚本那一段在 wp496-ego-capture.test.ts）
+      egoCapture: {
+        available: () => true,
+        capture: async (_a, urls) => urls.map(() => ({ ok: true })),
+      },
     })
 
   it('读工具回 rows + provenance；写工具回卡 id', async () => {
@@ -319,6 +324,11 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
         'record_creator_observations',
         { observations: [{ handle: 'deskrosa', followers: 31_000 }] },
         (r) => expect((r.data as { backed_up_to_cloud: number }).backed_up_to_cloud).toBe(1),
+      ],
+      [
+        'capture_creator_pages',
+        { urls: ['https://www.youtube.com/@deskrosa'] },
+        (r) => expect((r.data as { read: number }).read).toBe(1),
       ],
       [
         'add_to_campaign',
