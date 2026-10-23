@@ -275,7 +275,7 @@ import {
 import { fileEvidenceStore, memoryEvidenceStore } from './ads-actions/evidence-store.js'
 import { brandAdsActionsPort } from './ads-actions/port.js'
 import { createAdsActionsService } from './ads-actions/service.js'
-import { createAdsExportIntake } from './ads-data/export-intake.js'
+import { composeIntakes, createAdsExportIntake } from './ads-data/export-intake.js'
 import { exportDeckData } from './ads-data/export-view.js'
 import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
 import { autoStopLoss, dayBefore, yesterdayBasis } from './ads-data/stop-loss.js'
@@ -571,6 +571,12 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createByoSourceStore } from './kol-byo.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
+import {
+  createKolImport,
+  createKolSheetIntake,
+  type KolImportAssembly,
+  type KolPageReader,
+} from './kol-import.js'
 import {
   createKolMail,
   isKolCollaborationCard,
@@ -6169,6 +6175,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               }),
           })
     const adsDataRef = adsData
+    /*
+     * WP489：红人岗位里拖进来的表 → 后台出「导入红人表」预览卡。导入器在下面才建（晚绑定）。
+     * 卡给拖表的那个人（用他在红人岗位上的那条分配）。
+     */
+    const kolImportLate: { current?: KolImportAssembly } = {}
+    const kolSheetIntake = createKolSheetIntake({
+      importer: () => kolImportLate.current,
+      actorOf: (person_id) => {
+        const a = roles.assignments
+          .listByPerson(person_id as PersonId)
+          .find(
+            (x) =>
+              x.workspace_id === ws && x.revoked_at === undefined && x.role_id.startsWith('kol.'),
+          )
+        return a === undefined
+          ? undefined
+          : {
+              workspace_id: ws,
+              person_id: person_id as PersonId,
+              assignment_id: a.id,
+              role_id: a.role_id,
+            }
+      },
+      log: (e) =>
+        process.stdout.write(
+          `kol_sheet_intake_failed ${e instanceof Error ? e.message : String(e)}\n`,
+        ),
+    })
     /** WP447：拖进对话的投放报表入库（六个新平台；岗位页 / 事项输入框两处都走它）。 */
     const adsExportIntake =
       adsDataRef === undefined
@@ -6182,6 +6216,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             now: () => clock.now(),
             tzOffsetMinutes: () => workData.tz_offset_minutes,
           })
+    /** 拖进对话的附件：投放报表入库（WP447）、红人表出预览卡（WP489）。 */
+    const brandFileIntake = composeIntakes(adsExportIntake, kolSheetIntake)
     /**
      * WP224（docs/91 §2.2 #1）：本周经营一页纸。面板上下文用的就是工作台那一份端口
      * （同 `workstationPortFor` 的装法，这里直接建一份，免得引用一个还没走到的定义）。
@@ -7375,6 +7411,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             kolTools: createKolToolExecutor({
               workspace_id: ws,
               port: () => kolService.port,
+              importer: () => kolImportLate.current,
               now: () => clock.now(),
               // WP346（决策 872）：模型没给关键词时按品牌档案里的品类关键词搜
               brandQuery: () => brandSearchQuery(onboardingRef?.brandProfile(ws) ?? {}),
@@ -8480,7 +8517,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       clock,
       // WP447：拖进来的投放报表直接入库
-      ...(adsExportIntake === undefined ? {} : { fileIntake: adsExportIntake }),
+      ...(brandFileIntake === undefined ? {} : { fileIntake: brandFileIntake }),
       roles,
       work,
       approvals,
@@ -9899,6 +9936,136 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return ownBrowserMemo.reader
     }
     ownChromeLate.reader = ownBrowserReader
+    /*
+     * WP489（决策 1683–1686）：红人表格 / 在线表导入、读过往邮件判合作阶段。
+     * - 认列 / 认状态词 / 判阶段先按规则，认不出的才问这个品牌的默认模型（`extraction` 档、不思考、封住输出；
+     *   只有 stub 就只按规则）；用量走同一个网关（上限照算）。
+     * - 在线表用工坊自己已登录的浏览器读：设成「插件里的浏览器」走它，否则走内置浏览器（同一条节流队）。
+     * - 邮件只取消息库里与红人有关的往来（按红人邮箱 / 非公共域名查）。
+     */
+    const kolImport = createKolImport({
+      workspace_id: ws,
+      store: kol,
+      secrets: brandSecrets,
+      clock,
+      approvals: txn.approvals,
+      random,
+      appendEvent,
+      model: (actor) => {
+        const models = effectiveModels()
+        const ref = models.configured() ? models.defaultRef() : undefined
+        if (ref === undefined || ref.provider === 'stub') return undefined
+        return async (input) => {
+          const completion = await gatewayProxy.complete({
+            messages: [
+              { role: 'system', content: input.system },
+              { role: 'user', content: input.user },
+            ],
+            meta: {
+              workspace_id: ws,
+              assignment_id: actor.assignment_id as never,
+              role_id: actor.role_id as never,
+              run_id: input.run_id as never,
+              purpose: 'extraction',
+            },
+            model: ref,
+            max_output_tokens: input.max_output_tokens,
+            thinking: 'off',
+          })
+          return completion.text
+        }
+      },
+      price: () => {
+        const models = effectiveModels()
+        if (!models.configured()) return undefined
+        const ref = models.defaultRef()
+        const c = models.exportSettings().providers.find((p) => p.id === ref.provider)
+        if (c === undefined) return undefined
+        return {
+          in: c.price_in ?? 0,
+          out: c.price_out ?? 0,
+          ...(c.price_currency === undefined ? {} : { currency: c.price_currency }),
+        }
+      },
+      budgetLeft: async (actor) => {
+        const b = await gatewayProxy.budget({
+          workspace_id: ws,
+          assignment_id: actor.assignment_id as never,
+        })
+        return b.cap_base > 0 ? Math.max(b.cap_base - b.used_base, 0) : undefined
+      },
+      /*
+       * 决策 1708：读在线表的浏览器按优先级排。WP493 给 ego 接上通用读页口之后，把它放在最前面
+       * （`{ id: 'ego', read }`）；现在是：设成「插件里的浏览器」走它，然后内置浏览器（同一条节流队）。
+       */
+      readers: () => {
+        const list: { id: string; read: KolPageReader }[] = []
+        const own =
+          browserSettings.forRun()?.mode === 'browserskill' ? ownBrowserReader() : undefined
+        if (own !== undefined)
+          list.push({
+            id: 'browserskill',
+            read: async (url) => {
+              const r = await own.read(url, 'html')
+              return r.ok
+                ? { ok: true, final_url: r.final_url, html: r.text }
+                : { ok: false, message: r.message }
+            },
+          })
+        const channel = webSearchChannel
+        if (channel !== undefined)
+          list.push({
+            id: 'builtin',
+            read: async (url) => {
+              const r = await webSearchThrottle.run(() =>
+                channel.open({
+                  workspace_id: ws,
+                  url,
+                  kind: 'page',
+                  timeout_ms: 30_000,
+                  settle_ms: 2_500,
+                }),
+              )
+              if (r === undefined) return { ok: false, message: 'busy' }
+              return r.ok
+                ? {
+                    ok: true,
+                    final_url: r.final_url,
+                    ...(r.page === undefined
+                      ? {}
+                      : { text: r.page.text, password_inputs: r.page.signals.passwordInputs }),
+                  }
+                : { ok: false, message: (r as { message: string }).message }
+            },
+          })
+        return list
+      },
+      // 决策 1707：导入的红人把公开资料送去公共红人库（与插件同一条转发路；算在导入的人头上）
+      contributePublic: async (actor, rows) =>
+        (await extensionPortOf.contributeProfiles?.(
+          {
+            token_id: 'sheet_import',
+            workspace_id: ws,
+            person_id: actor.person_id,
+            extension_id: 'sheet_import',
+            scopes: ['kol.observe'],
+          },
+          rows,
+        )) ?? { queued: 0 },
+      mail: () => ({
+        store: messages.store,
+        // 连着的邮箱（连接页那几只 + 发信那一路认的；去重）
+        addresses: () => [
+          ...new Set([
+            ...connections.mailAccounts().map((a) => a.address),
+            ...(kolMailBox.current?.addresses() ?? []),
+          ]),
+        ],
+        floor: (address) => messages.sync.backfillFloor(address),
+        backfill: (address, days) => messages.sync.backfill(address, days),
+      }),
+    })
+    kolImportLate.current = kolImport
     const amazonOwnHolder = ():
       | { person_id: string; assignment_id: string; role_id: string }
       | undefined => {
@@ -10760,6 +10927,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kolService,
       kolSandbox,
       kolMail,
+      kolImport,
       kolPublic,
       searchData,
       ...(webBrowser === undefined ? {} : { webBrowser }),
@@ -10791,7 +10959,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       adCreativeService,
       ...(adsActions === undefined ? {} : { adsActions }),
       ...(adsDataRef === undefined ? {} : { adsData: adsDataRef }),
-      ...(adsExportIntake === undefined ? {} : { adsExportIntake }),
+      ...(brandFileIntake === undefined ? {} : { adsExportIntake: brandFileIntake }),
       adsWiring: adsWiringNow,
       // WP329：Reddit 写（起草 / 出卡 / 交给插件 / 读回 / 记发出记录）
       // WP419：信息监控每天一份简报
@@ -11012,6 +11180,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP416：建合作卡点了「不要」→ 等着点头的那一行删掉（批了由执行器落库）
     if (isKolCollaborationCard(item)) return brand?.kolMail?.onDecided(item)
     // WP416：同一人合并卡——卡上选「合」= 面板上点「接受」；选「不是同一个人」/ 驳回 = 记下、不再提
+    // WP489：导入红人表卡 / 表格与邮件对不上那张卡 / 用邮件更新阶段卡
+    if (brand?.kolImport !== undefined && (await brand.kolImport.onDecided(item))) return
     if (isKolMergeCard(item)) {
       const choice = mergeChoiceOf(item)
       const id = (item.payload as { suggestion_id?: unknown }).suggestion_id
@@ -15176,6 +15346,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const sandbox = brand.kolSandbox
     return {
       ...brand.kolService.port,
+      // WP489：表格 / 在线表导入（先预览再导）、读过往邮件判阶段
+      ...(brand.kolImport === undefined
+        ? {}
+        : {
+            previewImport: brand.kolImport.previewImport,
+            commitImport: brand.kolImport.commitImport,
+            estimateMailStages: brand.kolImport.estimateMailStages,
+            runMailStages: brand.kolImport.runMailStages,
+          }),
       sandboxStatus: () => sandbox.status(),
       sandboxStart: (_actor: unknown, input: { channel: KolChannel }) => sandbox.start(input),
       sandboxAdvance: (_actor: unknown, input: { days: number }) => sandbox.advance(input),

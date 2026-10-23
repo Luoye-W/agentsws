@@ -431,6 +431,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         files === undefined || options.fileIntake === undefined
           ? []
           : options.fileIntake(files, {
+              person_id: actor.person_id,
               ...(m0?.role_id === undefined ? {} : { role_id: m0.role_id }),
               ...(m0?.position_template_id === undefined
                 ? {}

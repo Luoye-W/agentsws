@@ -761,6 +761,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         ? []
         : options.fileIntake(input.files, {
             position_template_id: template.id,
+            person_id: input.person_id,
             ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
           })
     const attachments: MatterAttachment[] = (input.files ?? []).map((f, i) =>
