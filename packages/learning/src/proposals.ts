@@ -58,6 +58,8 @@ export interface LessonSource {
   /** 改了字的那一次：原来那一版 / 改成的那一版 */
   before?: string
   after?: string
+  /** WP487：只删了几个字的那一次——删掉的那几段 */
+  deleted?: string[]
 }
 
 export interface LessonProposalCard {
@@ -354,6 +356,7 @@ export function sourcesOf(cluster: readonly PooledLesson[]): LessonSource[] {
         ...(e.run_id === undefined ? {} : { run_id: e.run_id }),
         ...(e.before === undefined ? {} : { before: e.before }),
         ...(e.after === undefined ? {} : { after: e.after }),
+        ...(e.deleted === undefined ? {} : { deleted: [...e.deleted] }),
       })
     }
   }
@@ -370,9 +373,25 @@ const clip = (s: string, n: number): string => {
 }
 
 /** 这一类纠正人话怎么说（「都」字由调用方按次数加）。 */
-function didWhat(signals: ReadonlySet<LessonSignal>, rule: string): string {
+function didWhat(
+  signals: ReadonlySet<LessonSignal>,
+  rule: string,
+  sources: readonly LessonSource[] = [],
+): string {
   const quoted = `「${clip(rule, 40)}」`
   if (signals.size === 1 && signals.has('reject')) return `点了「不要」，理由是${quoted}`
+  // WP487（决策 1679）：每一次都只是删了几个字——说删了什么（规矩那一句在选项里）
+  const deleted = [...new Set(sources.flatMap((s) => s.deleted ?? []))]
+  if (
+    signals.size === 1 &&
+    signals.has('edit_diff') &&
+    deleted.length > 0 &&
+    sources.every((s) => (s.deleted?.length ?? 0) > 0)
+  )
+    return `把草稿里的${deleted
+      .slice(0, 3)
+      .map((d) => `「${clip(d, 20)}」`)
+      .join('')}删掉了`
   if (signals.size === 1 && signals.has('edit_diff')) return `把草稿改成了${quoted}`
   if (signals.size === 1 && signals.has('redirect')) return `给了指导：${quoted}`
   if ([...signals].every((s) => s === 'reject' || s === 'edit_diff' || s === 'redirect'))
@@ -412,7 +431,7 @@ export function storyOf(
         : `${titles.slice(0, 3).join('')}等 ${n} 张卡上`
   const times = Math.max(sources.length, hits)
   const all = times > 1 ? '都' : ''
-  const what = didWhat(new Set(sources.map((s) => s.signal)), rule)
+  const what = didWhat(new Set(sources.map((s) => s.signal)), rule, sources)
   return `你 ${dates.slice(0, 3).join('、')}${dates.length > 3 ? ' 等' : ''} 在${where}${all}${what}。${tail}`
 }
 

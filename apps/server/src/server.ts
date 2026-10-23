@@ -10794,6 +10794,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             })
           ).text
       },
+      // WP487（决策 1679）：夜里提炼「只删了几个字」那几条（便宜档；stub / 没配 → 留着规则版）
+      lessonComplete: () => {
+        const models = effectiveModels()
+        if (!models.configured()) return undefined
+        const ref = models.purposeRef('extraction')
+        if (ref.provider === 'stub') return undefined
+        const owner = brandAnchor(ws)
+        if (owner === undefined) return undefined
+        return async (prompt) =>
+          (
+            await gatewayProxy.complete({
+              messages: [{ role: 'user', content: prompt }],
+              meta: {
+                workspace_id: ws,
+                // 用量记在这个品牌负责人那条分配上（学习卡也是发给他的）
+                assignment_id: owner.assignment.id as never,
+                role_id: owner.assignment.role_id as never,
+                run_id: `lesson_refine_${randomBytes(4).toString('hex')}` as never,
+                purpose: 'extraction',
+              },
+              model: ref,
+              max_output_tokens: 80,
+              thinking: 'off',
+            })
+          ).text
+      },
       ...(redditWatch === undefined ? {} : { redditWatch }),
       ...(competitorWatch === undefined ? {} : { competitorWatch }),
       ...(competitorStore === undefined ? {} : { competitorStore }),
@@ -11636,7 +11662,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       weeklyConsolidate: (w, now) => learning.weeklyConsolidate(w, now),
     })
-    registerLearning(s, { clock, proposeDaily: (now) => learning.proposeDailyFor(ws, now) })
+    // WP487（决策 1679）：出卡前用这个品牌的便宜档模型提炼「只删了几个字」那几条（没配 → 规则版）
+    registerLearning(s, {
+      clock,
+      proposeDaily: async (now) =>
+        learning.proposeDailyFor(ws, now, { refine: (await of()).lessonComplete?.() }),
+    })
     // ⑭ 重复的组织对象
     registerOrgDuplicateScan(s, { scan: () => orgDuplicatesOf(ws).run() })
     // ⑨ 收信：这个品牌的信只从这个品牌的邮箱进这个品牌的队列

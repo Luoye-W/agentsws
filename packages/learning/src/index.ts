@@ -24,6 +24,8 @@ export * from './history.js'
 export * from './pool.js'
 export * from './promote.js'
 export * from './proposals.js'
+// WP487（决策 1679）：夜里把「只删了几个字」提炼成一句规矩
+export * from './refine.js'
 export * from './resolved.js'
 export * from './semantic.js'
 export * from './sqlite.js'

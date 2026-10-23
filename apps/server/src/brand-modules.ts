@@ -375,6 +375,11 @@ export interface BrandModuleSet {
    */
   reasonComplete?: () => ReasonComplete | undefined
   /**
+   * WP487（决策 1679）：夜里把「只删了几个字」的修改提炼成一句规矩用的那一份模型（这个品牌真在用的
+   * 便宜档 `extraction`；stub / 没配回 `undefined`，学习回路留着规则版那一句）。
+   */
+  lessonComplete?: () => ((prompt: string) => Promise<string>) | undefined
+  /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */
   economics: EconomicsService

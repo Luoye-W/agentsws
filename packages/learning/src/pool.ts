@@ -175,6 +175,19 @@ export class LearningPool {
     return this.#store.list(filter)
   }
 
+  /**
+   * WP487（决策 1679）：**只换说法**——夜里模型把「删掉了『DM us』」提炼成一句人话规矩时用。
+   * 语义键、命中次数、置信度、证据一个都不动（模型不能抬高置信度，也不能让它变成另一条经验）；
+   * 以后同一个删法再进池，照语义键合并到这一条上。
+   */
+  reword(id: string, text: string, at?: Iso8601): PooledLesson {
+    const lesson = this.#store.get(id)
+    if (lesson === undefined) throw notFoundLesson(id)
+    const next: PooledLesson = { ...lesson, text, updated_at: at ?? this.#clock.now() }
+    this.#store.put(next)
+    return next
+  }
+
   /** 接受 → accepted；忽略 → 置信度 ×0.7；驳回 → 0 并进黑名单（24 §3）。 */
   mark(id: string, status: PooledLesson['status'], at?: Iso8601): PooledLesson {
     const lesson = this.#store.get(id)
