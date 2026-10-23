@@ -240,7 +240,7 @@ function Heading({
   // WP264：事项页对话里的 AI 交代——小标题像 Claude 那样单独一行、稍大一号
   if (variant === 'chat')
     return (
-      <h3 className="ws-display mt-2.5 text-[15px] font-semibold tracking-[-0.01em] text-ws-ink">
+      <h3 className="ws-display mt-2.5 text-[14px] font-semibold tracking-[-0.01em] text-ws-ink">
         {body}
       </h3>
     )
@@ -329,7 +329,7 @@ export function SafeMarkdown({
         article
           ? 'gap-2 text-[13px] leading-6 text-ws-body'
           : variant === 'chat'
-            ? 'gap-2.5 text-[14.5px] leading-[1.7] text-ws-ink [&_li::marker]:text-ws-muted-fg'
+            ? 'gap-2.5 text-[14px] leading-[1.7] text-ws-ink [&_li::marker]:text-ws-muted-fg'
             : 'gap-1.5',
         className,
       )}

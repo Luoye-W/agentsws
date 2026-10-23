@@ -329,6 +329,8 @@ describe('WP260 回放 ci.16：网页模板的运行真把活干完', () => {
       gateway,
       clock: { now: () => new Date().toISOString() },
       seed: 42,
+      // ci.16 当时的缺省压缩线（WP472 起缺省按模型窗口定，对照里钉回当时的 1.2 万）
+      compactThresholdTokens: 12_000,
       executeTool: async (call) =>
         THEME_TOOL_NAMES.includes(call.name)
           ? tools(call)

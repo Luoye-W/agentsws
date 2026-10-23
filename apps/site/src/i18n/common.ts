@@ -33,7 +33,7 @@ const zh = {
   },
   announce: {
     badge: '内测中',
-    text: 'v0.2.0-beta.7：Reddit 天天巡查、AI 回答监测，回答直接出图表。',
+    text: 'v0.2.1-beta.11：收件箱、日历与待办合成一页，网站运营多了 SEO 与 GEO。',
     link: '看更新',
   },
   footer: {
@@ -90,7 +90,7 @@ const en: Common = {
   },
   announce: {
     badge: 'Beta',
-    text: 'v0.2.0-beta.7: daily Reddit checks, AI answer tracking, and answers that come as charts.',
+    text: 'v0.2.1-beta.11: one inbox, calendar and to-dos on one page, and SEO & GEO for Web Operations.',
     link: "See what's new",
   },
   footer: {

@@ -32,6 +32,7 @@ import {
   CornerDownLeft,
   Home,
   MessageCircle,
+  MessageSquareText,
   MessagesSquare,
   Search,
   Settings,
@@ -74,39 +75,22 @@ import {
   switchBrand,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { openFeedback } from '@/lib/feedback'
 import type { ReasoningEffort } from '@/lib/free-chat'
 import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
 import { helpAddress } from '@/lib/help'
 import { useMode } from '@/lib/mode'
 import { myAssignments } from '@/lib/positions'
+import { shortAgo } from '@/lib/short-ago'
 import { cn } from '@/lib/utils'
 import { findArchivedWork, getWorkRail, RAIL_KEY, searchWork } from '@/lib/work-archive'
 
-/** 右边那个时间（照 Claude：「刚刚 / 5 分钟 / 3 小时 / 2 天」，再早写月日）。 */
-export function shortAgo(
-  iso: string,
-  t: (key: string, vars?: Record<string, string | number>) => string,
-  lang: 'zh' | 'en',
-  now: number = Date.now(),
-): string {
-  const at = Date.parse(iso)
-  if (!Number.isFinite(at)) return ''
-  const min = Math.max(0, Math.floor((now - at) / 60_000))
-  if (min < 1) return t('ago.now')
-  if (min < 60) return t('ago.m', { n: min })
-  const h = Math.floor(min / 60)
-  if (h < 24) return t('ago.h', { n: h })
-  const d = Math.floor(h / 24)
-  if (d < 7) return t('ago.d', { n: d })
-  return new Date(at).toLocaleDateString(lang === 'en' ? 'en-US' : 'zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-  })
-}
+// WP456-T3：挪到 lib（看板「对话」卡的行也用它），这里照旧 re-export
+export { shortAgo } from '@/lib/short-ago'
 
 /** 搜索弹窗里一行的样子（照 Claude：左图标、标题、右边灰字）。 */
 // 最后那个是 cmdk 行自带的勾（这里用不着，不占位）
-const ROW = 'gap-2.5 rounded-lg! px-2.5 py-2 text-[13.5px] [&>svg:last-child]:hidden'
+const ROW = 'gap-2.5 rounded-lg! px-2.5 py-2 text-[13px] [&>svg:last-child]:hidden'
 const ROW_ICON = 'size-4 shrink-0 text-ws-muted-fg'
 const ROW_RIGHT = 'ml-auto shrink-0 pl-3 text-[12px] text-ws-muted-fg'
 
@@ -465,7 +449,7 @@ export function CommandPalette({
             placeholder={t('search.placeholder')}
             value={search}
             onValueChange={setSearch}
-            className="h-full w-full bg-transparent text-[15px] outline-hidden placeholder:text-ws-muted-fg"
+            className="h-full w-full bg-transparent text-[14px] outline-hidden placeholder:text-ws-muted-fg"
           />
         </div>
         <CommandList className="max-h-[min(60vh,440px)] p-1.5">
@@ -550,6 +534,19 @@ export function CommandPalette({
             >
               <Home aria-hidden className={ROW_ICON} />
               {t('nav.home')}
+            </CommandItem>
+            {/* WP475：⌘K 里也能找到「反馈」 */}
+            <CommandItem
+              value={`${t('command.feedback')} feedback bug 反馈 问题 建议`}
+              data-testid="command-feedback"
+              className={ROW}
+              onSelect={() => {
+                onOpenChange(false)
+                openFeedback('new')
+              }}
+            >
+              <MessageSquareText aria-hidden className={ROW_ICON} />
+              {t('command.feedback')}
             </CommandItem>
             {/* WP70：岗位排在职责前面 */}
             {byPosition.map((p) => {
@@ -818,13 +815,13 @@ export function CommandPalette({
           data-testid="search-footer"
         >
           <span className="inline-flex items-center gap-1">
-            <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-ws-line px-1 font-sans">
+            <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-ws-line px-1 font-sans">
               <CornerDownLeft aria-hidden className="size-3" />
             </kbd>
             {t('search.open')}
           </span>
           <span className="inline-flex items-center gap-1">
-            <kbd className="inline-flex h-5 items-center justify-center rounded border border-ws-line px-1 font-sans text-ws-tiny">
+            <kbd className="inline-flex h-5 items-center justify-center rounded-sm border border-ws-line px-1 font-sans text-ws-tiny">
               Esc
             </kbd>
             {t('search.close')}

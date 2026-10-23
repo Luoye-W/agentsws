@@ -41,7 +41,7 @@ export function MiniReport({
   return (
     <section className="ws-card relative" data-testid="mini-report" data-id={data.id}>
       <header className="flex items-center gap-2.5 px-[18px] pt-3.5">
-        <h3 className="text-[15px] font-semibold text-ws-ink">{data.title}</h3>
+        <h3 className="text-[14px] font-semibold text-ws-ink">{data.title}</h3>
         <span className="inline-flex h-[22px] items-center rounded-full bg-ws-secondary px-2 text-xs text-ws-body">
           {chart?.title ?? t('report.range.days', { days })}
         </span>
@@ -53,7 +53,7 @@ export function MiniReport({
         {kpis === undefined ? null : (
           <div className="mb-3 grid grid-cols-3 gap-2.5">
             {kpis.items.slice(0, 3).map((m) => (
-              <div key={m.key} className="rounded-[10px] bg-ws-surface">
+              <div key={m.key} className="rounded-lg bg-ws-surface">
                 <KpiCell m={m} compact />
               </div>
             ))}

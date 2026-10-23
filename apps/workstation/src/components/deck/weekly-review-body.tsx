@@ -59,7 +59,7 @@ export function WeeklyReviewBody({ payload }: { payload: WeeklyReviewPayload }):
               {payload.findings.map((f) => (
                 <li
                   key={`${f.panel}:${f.text}`}
-                  className="flex items-baseline gap-3 rounded-[10px] bg-ws-surface px-3 py-2"
+                  className="flex items-baseline gap-3 rounded-lg bg-ws-surface px-3 py-2"
                 >
                   <Tooltip>
                     <TooltipTrigger asChild>

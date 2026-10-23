@@ -46,7 +46,7 @@ function GoalNodeView({ node, depth }: { node: Node; depth: number }): React.Rea
           </span>
         </div>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
-          <span className="text-xl font-semibold tabular-nums text-foreground">
+          <span className="text-[22px] font-semibold tabular-nums text-foreground">
             {p?.value === undefined ? '—' : p.value.toLocaleString()}
           </span>
           <span>
@@ -54,7 +54,7 @@ function GoalNodeView({ node, depth }: { node: Node; depth: number }): React.Rea
           </span>
           <span>{p === undefined ? t('goal.no_data') : daysLeftLabel(p.days_left, t)}</span>
           {p?.status === 'behind' ? (
-            <span className="rounded border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-destructive">
+            <span className="rounded-sm border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-destructive">
               {t('goal.behind')}
             </span>
           ) : null}

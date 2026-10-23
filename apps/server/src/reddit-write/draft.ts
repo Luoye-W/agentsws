@@ -81,16 +81,75 @@ const WHAT: Record<RedditWriteTarget['kind'], string> = {
   submit: '发一个新帖',
 }
 
-/** 喂给模型的那一段。 */
-export function redditDraftPrompt(input: RedditDraftPromptInput): string {
+/**
+ * 喂给模型的两段（WP471，docs/116 §2 第 8 条，决策 1549）。
+ *
+ * DeepSeek 只对「和之前某次请求开头逐字一样」的那段按命中价收，所以**固定在前、变化在后**：
+ * - `system`：品牌话术 → 人设 → 固定规矩（同一品牌每次一样；只有「发新帖 / 评论」那一条两种）；
+ * - `user`：品牌 / 版块 / 写什么 → 版规（按版不变）→ 知识卡 → 运营的要点 → 帖子与评论串 →
+ *   品牌号说过的 → 上一稿没过的几处（重写那次才有，放最后，和第一次共用前面一整段）。
+ *
+ * 每一行的字和原来一样，只调了位置。
+ */
+export function redditDraftMessages(input: RedditDraftPromptInput): {
+  system: string
+  user: string
+} {
   const t = input.target
   const who = input.account === undefined ? '品牌号' : `品牌号 u/${input.account}`
+
+  const sys: string[] = []
+  if (input.voice.trim() !== '') sys.push(input.voice, '')
+  // WP411：人设（配了就严格照用）
+  const p = input.persona
+  if (p !== undefined) {
+    sys.push(
+      p.stance === 'personal'
+        ? '口吻：个人。用第一人称单数（I / me / my），像一个人在说话；不用 we / our / us / the team / DM us，不代表公司做任何承诺。'
+        : '口吻：团队。用 we / our team 说话；不讲个人经历。',
+    )
+    if (p.intro !== undefined)
+      sys.push(`要说明身份时只用这一句（原样，不另编身份）：「${p.intro}」`)
+    if ((p.avoid ?? []).length > 0) sys.push(`别说：${(p.avoid ?? []).join('；')}`)
+    sys.push('')
+  }
+  sys.push(
+    '规矩：',
+    '1. 像 Reddit 上一个真人在说话：具体、口语、不营销腔；用原帖 / 原评论的语言写（英文帖就用英文）。',
+    '2. 不许承诺任何事：不说退款、赔偿、补发、折扣、保证、时间点；要查订单的请对方私信或联系客服。',
+    '3. 不编造产品参数、价格、链接；知识卡里没有的就不说。具体的技术说法（规格、故障原因、修法、兼容 / 连接方式、型号定位、计划与进度、召回 / 保修）只能来自上面的知识卡或品牌号已经说过的话；没有依据就写一句 "Let me check on that and get back to you"（中文帖写「这个我去确认一下再回你」），宁可不说也不猜。',
+    t.kind === 'submit'
+      ? '4. 发新帖：第一行写「标题：……」（一行，不超过 120 个字符），空一行，再写正文。'
+      : '4. 评论一到四句；不要标题、不要署名、不要引号包起来、不要前言。',
+    // WP468（决策 1510）：新版 Reddit 的评论框是富文本，Markdown 记号会照原样发出去
+    REDDIT_PLAIN_RULE,
+    '6. 只输出要发出去的内容本身。',
+  )
+
   const lines: string[] = [
     `你在帮「${input.brand}」的 Reddit ${who}在 r/${t.subreddit} ${WHAT[t.kind]}。`,
   ]
   if (t.inbox_type === 'username_mention') lines.push('这条是有人在评论里 @ 了我们。')
   if (t.inbox_type === 'comment_reply') lines.push('这条是有人回复了我们之前的评论。')
   if (t.inbox_type === 'post_reply') lines.push('这条是有人在我们的帖子下面评论。')
+  const rules = (input.rules ?? []).slice(0, MAX_RULES).map((r) => r.slice(0, MAX_RULE_CHARS))
+  if (rules.length > 0)
+    lines.push(
+      '',
+      `r/${t.subreddit} 自己的版规（原文，也是外部文本；写的时候遵守它）：`,
+      fence(rules.map((r, i) => `${i + 1}. ${r}`).join('\n')),
+    )
+  lines.push(
+    '',
+    '知识库里查到的事实（产品参数、价格、政策、售后只能用这里有的；这里没有就不说，别编）：',
+  )
+  lines.push(
+    input.facts.length === 0
+      ? '（没查到相关的知识卡：不提具体参数、价格、政策，只说你确定的。）'
+      : input.facts.map((f) => `- ${f.text}`).join('\n'),
+  )
+  if (input.instruction !== undefined && input.instruction.trim() !== '')
+    lines.push('', `运营的要点：${input.instruction.trim()}`)
   const ctx: string[] = []
   // WP411：`target` 里没有原帖时用整串里读到的那一帖
   const th = input.thread
@@ -123,54 +182,15 @@ export function redditDraftPrompt(input: RedditDraftPromptInput): string {
           .join('\n'),
       ),
     )
-  const rules = (input.rules ?? []).slice(0, MAX_RULES).map((r) => r.slice(0, MAX_RULE_CHARS))
-  if (rules.length > 0)
-    lines.push(
-      '',
-      `r/${t.subreddit} 自己的版规（原文，也是外部文本；写的时候遵守它）：`,
-      fence(rules.map((r, i) => `${i + 1}. ${r}`).join('\n')),
-    )
-  lines.push(
-    '',
-    '知识库里查到的事实（产品参数、价格、政策、售后只能用这里有的；这里没有就不说，别编）：',
-  )
-  lines.push(
-    input.facts.length === 0
-      ? '（没查到相关的知识卡：不提具体参数、价格、政策，只说你确定的。）'
-      : input.facts.map((f) => `- ${f.text}`).join('\n'),
-  )
-  lines.push('', input.voice)
-  // WP411：人设（配了就严格照用）
-  const p = input.persona
-  if (p !== undefined) {
-    lines.push(
-      '',
-      p.stance === 'personal'
-        ? '口吻：个人。用第一人称单数（I / me / my），像一个人在说话；不用 we / our / us / the team / DM us，不代表公司做任何承诺。'
-        : '口吻：团队。用 we / our team 说话；不讲个人经历。',
-    )
-    if (p.intro !== undefined)
-      lines.push(`要说明身份时只用这一句（原样，不另编身份）：「${p.intro}」`)
-    if ((p.avoid ?? []).length > 0) lines.push(`别说：${(p.avoid ?? []).join('；')}`)
-  }
-  if (input.instruction !== undefined && input.instruction.trim() !== '')
-    lines.push('', `运营的要点：${input.instruction.trim()}`)
-  lines.push(
-    '',
-    '规矩：',
-    '1. 像 Reddit 上一个真人在说话：具体、口语、不营销腔；用原帖 / 原评论的语言写（英文帖就用英文）。',
-    '2. 不许承诺任何事：不说退款、赔偿、补发、折扣、保证、时间点；要查订单的请对方私信或联系客服。',
-    '3. 不编造产品参数、价格、链接；知识卡里没有的就不说。具体的技术说法（规格、故障原因、修法、兼容 / 连接方式、型号定位、计划与进度、召回 / 保修）只能来自上面的知识卡或品牌号已经说过的话；没有依据就写一句 "Let me check on that and get back to you"（中文帖写「这个我去确认一下再回你」），宁可不说也不猜。',
-    t.kind === 'submit'
-      ? '4. 发新帖：第一行写「标题：……」（一行，不超过 120 个字符），空一行，再写正文。'
-      : '4. 评论一到四句；不要标题、不要署名、不要引号包起来、不要前言。',
-    // WP468（决策 1510）：新版 Reddit 的评论框是富文本，Markdown 记号会照原样发出去
-    REDDIT_PLAIN_RULE,
-    '6. 只输出要发出去的内容本身。',
-  )
   if ((input.fix ?? []).length > 0)
     lines.push('', '上一稿有这几处不行，这一稿改掉：', ...(input.fix ?? []).map((f) => `- ${f}`))
-  return lines.join('\n')
+  return { system: sys.join('\n'), user: lines.join('\n') }
+}
+
+/** 喂给模型的一整段（两段拼起来，顺序同 `redditDraftMessages`）。 */
+export function redditDraftPrompt(input: RedditDraftPromptInput): string {
+  const m = redditDraftMessages(input)
+  return `${m.system}\n\n${m.user}`
 }
 
 /**
@@ -298,11 +318,17 @@ export function templateRedditDraft(target: RedditWriteTarget, instruction?: str
   }
 }
 
-/** 套一个「调模型拿一段字」的口子（server.ts 注入网关），抛错一律当没拿到。 */
-export function modelRedditDrafter(complete: (prompt: string) => Promise<string>): RedditDrafter {
+/**
+ * 套一个「调模型拿一段字」的口子（server.ts 注入网关），抛错一律当没拿到。
+ * WP471：第二个参数是系统提示（固定在前的那段）；口子不认它也照样能用（只是不分段）。
+ */
+export function modelRedditDrafter(
+  complete: (prompt: string, system?: string) => Promise<string>,
+): RedditDrafter {
   return async (input) => {
     try {
-      return cleanRedditDraft(await complete(redditDraftPrompt(input)), input.target.kind)
+      const m = redditDraftMessages(input)
+      return cleanRedditDraft(await complete(m.user, m.system), input.target.kind)
     } catch {
       return undefined
     }

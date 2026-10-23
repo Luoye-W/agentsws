@@ -16,6 +16,7 @@ import {
   Coins,
   type LucideIcon,
   Mail,
+  MessageSquareText,
   RefreshCw,
   SendHorizontal,
   Settings2,
@@ -59,6 +60,8 @@ export const CATEGORY_LOOK: Record<NotificationCategory, { icon: LucideIcon; ton
   messages: { icon: Mail, tone: 'bg-ws-info-bg text-ws-info' },
   // WP466：原首页告警区那几样（紧急档的换成红色，见 {@link URGENT_TONE}）
   alert: { icon: TriangleAlert, tone: 'bg-ws-warn-bg text-ws-warn' },
+  // WP475：你提的反馈有了回复
+  feedback: { icon: MessageSquareText, tone: 'bg-ws-brand-soft text-ws-brand' },
 }
 
 /** WP466：紧急档（店铺日报异常、改版回归·严重……）的图标底色与未读点。 */

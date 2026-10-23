@@ -29,36 +29,39 @@
  *   右边那一排见 `RailTopBar`，中间插着外壳给的两个插槽（WP429 的通知铃铛、这一页的设置按钮）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
   Home,
   Inbox,
-  ListTodo,
   type LucideIcon,
   MessageCircle,
   PanelLeft,
   Search,
 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
+import { useOpenTodos } from '@/components/cal-todo/use-todos'
 import { CommandPalette } from '@/components/command-palette'
 import {
   type ConversationActions,
   ConversationActionsProvider,
 } from '@/components/conversations/actions'
+import { CountBadge } from '@/components/design'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { FeedbackButton } from '@/components/feedback/feedback-button'
+import { FeedbackHost } from '@/components/feedback/feedback-host'
+import { useInbox } from '@/components/inbox/inbox-model'
 import { useSiteChatUnread } from '@/components/messages/site-chat'
-import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { type ComposeTarget, type Handoff, PaletteProvider } from '@/components/palette-context'
 import { type ShellSize, ShellSizeContext } from '@/components/rail/board-fit'
-import { RailStateProvider, useRailState } from '@/components/rail/rail-state'
+import { RailStateProvider } from '@/components/rail/rail-state'
 import { RailHost, RailTopBar } from '@/components/rail/right-rail'
 import { PositionIcon } from '@/components/role-icons/role-icon'
 import {
@@ -77,12 +80,7 @@ import { StandbyBadge } from '@/components/standby-badge'
 import { DemoBadge } from '@/components/ui/demo-badge'
 import { UpdateButton } from '@/components/update-button'
 import { MemoryNotice } from '@/components/work/memory-notice'
-import {
-  listMessageAccounts,
-  type Me,
-  type PositionInstanceData,
-  type PositionSummary,
-} from '@/lib/api'
+import type { Me, PositionInstanceData, PositionSummary } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { desktopChrome, useDesktopChromeTheme } from '@/lib/desktop-chrome'
 import { dutyHref } from '@/lib/duty-href'
@@ -163,8 +161,6 @@ function PositionNav({
   person_id?: string
 }): ReactNode {
   const { lang, t } = useApp()
-  const rail = useRailState()
-  const navigate = useNavigate()
   const { pathname } = useLocation()
   const [adding, setAdding] = useState(false)
   const first = myAssignments(instance)[0]
@@ -265,15 +261,10 @@ function PositionNav({
                   >
                     <span className="truncate">{r.role_name}</span>
                   </NavLink>
-                  <RailPlus
-                    hover
-                    label={t('rail.new_matter', { name: r.role_name })}
-                    testId="rail-new-matter"
-                    onClick={() => {
-                      rail.openCard('conversations', { intent: 'compose', pathname: to })
-                      void navigate(to)
-                    }}
-                  />
+                  {/*
+                    WP456-T3（§3.2）：职责行右边不再挂「+」（和职责名挤在一起）——「+」只在岗位行上；
+                    在这条职责下开新对话走职责页看板「对话」卡头的「+」。
+                  */}
                 </div>
               </li>
             )
@@ -285,25 +276,29 @@ function PositionNav({
 }
 
 /**
- * 左栏「消息」右边那个未读点。
+ * 左栏「收件箱」右边那一格（WP459，决策 1499）：**等你处理的件数**，品牌色数字；清空了就不显示。
  *
- * **是一个点，不是一个数字**（36 减字 / 图形化，WP96 那一轮定的调子）：
- * 未读 132 封时一个红色的 "132" 会让整块左栏看起来像在报警，而它要说的只有
- * "那边有没读的"。数字留给点进去之后的文件夹。
+ * 以前是邮箱「未读」那个点（未读不等于要你管：通知、推销都算未读）。现在数的是收件箱那一条队列——
+ * 各岗位等你批的卡 + 要你判断的信，和点进去看到的「全部 N」同一个数。网站访客的对话有没看过的、
+ * 而队列又是空的时，照旧亮一个点（WP351）。
  *
- * 取不到（没装配消息面 / 一只邮箱都没连）就什么都不画——不报错、不占位。
+ * 取不到（没装配 / 还在取）就什么都不画——不报错、不占位。
  */
-function MessagesUnread(): ReactNode {
-  const accounts = useQuery({
-    queryKey: ['messages', 'accounts'],
-    queryFn: listMessageAccounts,
-    retry: false,
-    staleTime: 60_000,
-  })
-  const unread = (accounts.data?.accounts ?? []).reduce((n, a) => n + a.unread, 0)
-  // WP351：网站访客的对话也是消息——有没看过的也亮这个点
+function InboxCount({ corner = false }: { corner?: boolean }): ReactNode {
+  const inbox = useInbox()
   const siteChat = useSiteChatUnread()
-  if (unread === 0 && !siteChat) return null
+  const n = inbox.data?.counts.all ?? 0
+  if (n > 0)
+    return (
+      <CountBadge
+        n={n}
+        tone="brand"
+        corner={corner}
+        className={corner ? undefined : 'ml-auto'}
+        data-testid="nav-inbox-count"
+      />
+    )
+  if (!siteChat) return null
   return (
     <i
       aria-hidden
@@ -311,6 +306,14 @@ function MessagesUnread(): ReactNode {
       className="ml-auto size-1.5 shrink-0 rounded-full bg-ws-brand"
     />
   )
+}
+
+/** WP469：「日历与待办」右边那个灰色数字——今天还没做完的待办；没有就不显示。 */
+function TodayTodoCount(): ReactNode {
+  const open = useOpenTodos()
+  const n = (open.data?.todos ?? []).filter((x) => x.horizon === 'today').length
+  if (n === 0) return null
+  return <CountBadge n={n} className="ml-auto" data-testid="nav-cal-todo-count" />
 }
 
 /**
@@ -420,9 +423,14 @@ function ShellCorner({
 function pageNameKey(pathname: string): string | undefined {
   if (pathname === '/') return 'nav.home'
   if (pathname.startsWith('/assistant')) return 'nav.free_chat'
-  if (pathname.startsWith('/messages')) return 'nav.messages'
-  if (pathname.startsWith('/todos')) return 'nav.todos'
-  if (pathname.startsWith('/calendar')) return 'nav.calendar'
+  if (pathname.startsWith('/messages') || pathname.startsWith('/inbox')) return 'nav.messages'
+  // WP469：待办与日历合成「日历与待办」（老地址转过来，顶栏也写新名字）
+  if (
+    pathname.startsWith('/planner') ||
+    pathname.startsWith('/todos') ||
+    pathname.startsWith('/calendar')
+  )
+    return 'nav.cal_todo'
   return SHELL_PAGES.find((p) => pathname === p.to || pathname.startsWith(`${p.to}/`))?.key
 }
 
@@ -655,14 +663,11 @@ export function AppShell({
                     </IconNavLink>
                     <IconNavLink to="/messages" label={t('nav.messages')} testId="nav-messages">
                       <NavIcon icon={Inbox} />
-                      <span className="absolute top-1.5 right-1.5 flex">
-                        <MessagesUnread />
+                      <span className="absolute top-0.5 right-0.5 flex">
+                        <InboxCount corner />
                       </span>
                     </IconNavLink>
-                    <IconNavLink to="/todos" label={t('nav.todos')}>
-                      <NavIcon icon={ListTodo} />
-                    </IconNavLink>
-                    <IconNavLink to="/calendar" label={t('nav.calendar')}>
+                    <IconNavLink to="/planner" label={t('nav.cal_todo')} testId="nav-cal-todo">
                       <NavIcon icon={CalendarDays} />
                     </IconNavLink>
                     <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-ws-line" />
@@ -713,23 +718,30 @@ export function AppShell({
               一个 tab，`/goals` 路由留着，⌘K 里仍然搜得到。
               顺序：首页 / 消息 / 待办 / 日历。
             */}
-                    <NavLink to="/messages" className={navClass} data-testid="nav-messages">
+                    <NavLink
+                      to="/messages"
+                      // WP459：`/inbox` 是同一页
+                      className={({ isActive }) =>
+                        navClass({ isActive: isActive || pathname.startsWith('/inbox') })
+                      }
+                      data-testid="nav-messages"
+                    >
                       <NavIcon icon={Inbox} />
                       {t('nav.messages')}
-                      <MessagesUnread />
+                      <InboxCount />
                     </NavLink>
                     {/*
               WP351（Luoye 10-16）：左栏不再有「聊天窗」。访客的对话并进「消息」（来源「网站聊天」），
               挂件设置在账号菜单「设置」组的「消息渠道」页（渠道「网站聊天窗」）；老地址跳到消息里，⌘K 两处都搜得到。
             */}
-                    {/* 37 工作模型：待办 / 日历 */}
-                    <NavLink to="/todos" className={navClass}>
-                      <NavIcon icon={ListTodo} />
-                      {t('nav.todos')}
-                    </NavLink>
-                    <NavLink to="/calendar" className={navClass}>
+                    {/*
+              37 工作模型：待办 / 日历。WP469（决策 1521）合成一格「日历与待办」，右边灰色数字是今天没做完的待办
+              （不催，所以不用品牌色——品牌色数字只给收件箱「等你处理」）。
+            */}
+                    <NavLink to="/planner" className={navClass} data-testid="nav-cal-todo">
                       <NavIcon icon={CalendarDays} />
-                      {t('nav.calendar')}
+                      {t('nav.cal_todo')}
+                      <TodayTodoCount />
                     </NavLink>
                     {/* WP207：标题右边一个常显的「+」= 新建岗位（照 Claude 的做法；只有所有者有） */}
                     <div className="flex items-center justify-between px-2 pt-3 pb-1">
@@ -811,7 +823,7 @@ export function AppShell({
                 {iconRail || (undo === undefined && undoError === undefined) ? null : (
                   <div
                     role="status"
-                    className="mt-2 flex items-center gap-2 rounded-[10px] bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
+                    className="mt-2 flex items-center gap-2 rounded-lg bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
                     data-testid="rail-undo"
                   >
                     <span className="min-w-0 flex-1 truncate">
@@ -842,7 +854,16 @@ export function AppShell({
                   {iconRail ? null : <BrandSwitcher />}
                   {/* WP218：账号区正上方——有新版本时才出现（桌面壳里），点一下就更新 */}
                   {iconRail ? null : <UpdateButton />}
-                  <AccountBlock {...(me === undefined ? {} : { me })} compact={iconRail} />
+                  {/* WP475：用户名旁一颗「反馈」；收成图标列时叠在头像上面 */}
+                  <div
+                    className={cn('flex items-center gap-1', iconRail && 'flex-col-reverse')}
+                    data-testid="rail-account-row"
+                  >
+                    <div className={cn('min-w-0', !iconRail && 'flex-1')}>
+                      <AccountBlock {...(me === undefined ? {} : { me })} compact={iconRail} />
+                    </div>
+                    <FeedbackButton />
+                  </div>
                 </div>
               </aside>
 
@@ -850,7 +871,7 @@ export function AppShell({
                 <div className="flex min-w-0 flex-1 flex-col">
                   {/*
             WP372（决策 1001 / 1002，Luoye 10-17，学 Claude 桌面版）：顶栏 = **窗口右上角那一排**。
-            左边只剩几条整个工作区的状态（演示数据 / 值守中 / 还没接 AI / 余额不足），右边是六张卡的图标
+            左边只剩几条整个工作区的状态（演示数据 / 值守中 / 余额不足；WP456-T3 起「还没接 AI」只在输入框说），右边是六张卡的图标
             与「⋮」（`RailTopBar`；WP412 起：露出的工具 →「⋮」溢出菜单 → 最右专门的面板开关）。原来中间那个「交给某个岗位一件事… ⌘K」搜索框去掉了——派活由助理做（WP343），
             ⌘K 快捷键还在（跳转岗位、搜卡片 / 教程 / 设置、找回归档），只是不再画一个框。
             WP424 起桌面壳藏了系统标题栏（`desktopChrome()`）：这一排就是标题栏——Mac 红绿灯在左栏顶部，
@@ -896,7 +917,7 @@ export function AppShell({
                     />
                     {topBar.claimed || pageName === undefined ? null : (
                       <span
-                        className="truncate px-1.5 text-[13.5px] font-medium"
+                        className="truncate px-1.5 text-[13px] font-medium"
                         data-testid="top-bar-page-name"
                       >
                         {t(pageName)}
@@ -906,8 +927,10 @@ export function AppShell({
                     <span className="ml-1 flex shrink-0 items-center gap-2">
                       <DemoBadge />
                       <StandbyBadge />
-                      {/* WP98 / WP121b：「还没接模型」小胶囊（向导期间不出）；WP151：余额不足 */}
-                      {onboarding ? null : <NoModelBanner variant="chip" />}
+                      {/*
+                        WP456-T3（决策 1447）：「还没接 AI」只在输入框那一颗说（点了就地接），顶栏不再出「还没接模型」胶囊。
+                        WP151：余额不足照旧。
+                      */}
                       {onboarding ? null : <QuotaChip />}
                     </span>
                     <div className="ml-auto flex shrink-0 items-center">
@@ -970,6 +993,9 @@ export function AppShell({
                   instances={byPosition}
                 />
               )}
+
+              {/* WP475：反馈框（左下角按钮、⌘K「反馈」、铃铛 ?feedback=mine 都打开它） */}
+              <FeedbackHost />
 
               <CommandPalette
                 open={paletteOpen}

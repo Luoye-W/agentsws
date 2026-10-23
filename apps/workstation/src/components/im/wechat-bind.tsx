@@ -177,7 +177,7 @@ export function WechatBind({
       <img
         src={login.qrcode_url}
         alt={t('im.wechat.qr.alt')}
-        className="size-48 rounded border bg-white p-2"
+        className="size-48 rounded-sm border bg-white p-2"
       />
       <p className="text-sm">{poll?.message ?? t('im.wechat.qr.hint')}</p>
       {poll?.status === 'need_verify_code' ? (

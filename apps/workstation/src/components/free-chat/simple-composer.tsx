@@ -72,7 +72,7 @@ export function SimpleComposer({ testId = 'simple-composer' }: { testId?: string
         take(e.dataTransfer.files)
       }}
       className={cn(
-        'ws-composer-glass flex flex-col rounded-[26px] transition-[box-shadow,background-color]',
+        'ws-composer-glass flex flex-col rounded-full transition-[box-shadow,background-color]',
       )}
     >
       {attached.docs.length > 0 ? (
@@ -141,7 +141,7 @@ export function SimpleComposer({ testId = 'simple-composer' }: { testId?: string
               submit()
             }
           }}
-          className="block max-h-[140px] min-h-9 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-[7px] text-[15px] leading-[1.45] text-ws-ink outline-none placeholder:text-ws-muted-fg"
+          className="block max-h-[140px] min-h-9 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-[7px] text-[14px] leading-[1.45] text-ws-ink outline-none placeholder:text-ws-muted-fg"
         />
         <button
           type="submit"

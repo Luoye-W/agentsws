@@ -1,27 +1,12 @@
 /*
- * 设置页的样式。与面板同一套 `--ws-*` 令牌（36 §界面规范），只是这一页不在
- * shadow root 里，所以令牌挂在 `:root` 上。
+ * 设置页的样式。令牌（浅 / 深两套、字体栈、字号 / 圆角档位）在 `@/ui/tokens.css`，由
+ * `scripts/gen-extension-tokens.mjs` 从工作台 `index.css` 生成（WP456-T7）；这里的数字只用档位。
  */
 
-:root {
-  --ws-paper: #f3f5f2;
-  --ws-card: #ffffff;
-  --ws-line: #ecefea;
-  --ws-ink: #263331;
-  --ws-body: #4b5550;
-  --ws-muted-fg: #6b746f;
-  --ws-brand: #007b67;
-  --ws-brand-ink: #045246;
-  --ws-brand-fg: #ffffff;
-  --ws-tint: #e8f3f0;
-  --ws-good: #158a4b;
-  --ws-good-bg: #e3f5ea;
-  --ws-warn: #b26e0b;
-  --ws-warn-bg: #fff4db;
-  --ws-bad-bg: #fde9e7;
-  --ws-bad: #c93b30;
-  --ws-radius-card: 16px;
-  --ws-shadow: 0 1px 2px rgba(20, 40, 30, 0.04), 0 8px 24px rgba(20, 40, 30, 0.05);
+/* Windows 细滚动条（`data-os` 由 main.tsx 挂） */
+:where(html[data-os="windows"]) * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ws-line-strong) transparent;
 }
 
 * {
@@ -33,8 +18,7 @@ body {
   padding: 28px 20px 48px;
   background: var(--ws-paper);
   color: var(--ws-body);
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+  font-family: var(--font-stack-sans);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -66,7 +50,7 @@ body {
 }
 
 h1 {
-  font-size: 17px;
+  font-size: 16px;
   margin: 0;
   color: var(--ws-ink);
 }
@@ -74,8 +58,8 @@ h1 {
 .ws-card {
   background: var(--ws-card);
   border-radius: var(--ws-radius-card);
-  box-shadow: var(--ws-shadow);
-  padding: 18px;
+  box-shadow: var(--ws-card-edge), var(--ws-shadow);
+  padding: 20px;
 }
 
 .ws-card h2 {
@@ -109,9 +93,10 @@ h1 {
 }
 
 .ws-input {
-  border: 1px solid var(--ws-line);
-  border-radius: 10px;
-  padding: 9px 12px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--ws-line-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
   font-size: 14px;
   font-family: inherit;
   color: var(--ws-ink);
@@ -127,8 +112,8 @@ h1 {
 
 .ws-btn {
   border: 0;
-  border-radius: 10px;
-  padding: 10px 16px;
+  border-radius: 8px;
+  padding: 8px 16px;
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
@@ -137,24 +122,25 @@ h1 {
 }
 
 .ws-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.4;
   cursor: default;
 }
 
 .ws-btn--primary {
   background: var(--ws-brand);
   color: var(--ws-brand-fg);
+  font-weight: 600;
 }
 
 .ws-btn--ghost {
-  background: var(--ws-paper);
+  background: var(--ws-secondary);
   color: var(--ws-ink);
 }
 
 .ws-note {
   font-size: 13px;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 8px 12px;
   background: var(--ws-tint);
   color: var(--ws-brand-ink);
   margin: 12px 0 0;

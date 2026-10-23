@@ -114,7 +114,7 @@ export function MessageBody({ message }: { message: MessageRecord }): ReactNode 
     return (
       <pre
         data-testid="message-text"
-        className="whitespace-pre-wrap font-sans text-[13.5px] leading-relaxed text-ws-body"
+        className="whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-ws-body"
       >
         {message.text}
       </pre>

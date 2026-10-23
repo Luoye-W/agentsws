@@ -14,6 +14,7 @@ import {
   type ThemeChoicePayload,
 } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
+import { categoryKey } from '@agentsws/deck'
 import { cn } from 'cn'
 import {
   ArrowLeftRight,
@@ -35,15 +36,18 @@ import {
   LoaderCircle,
   Plug,
   Rocket,
-  Stamp,
   X,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
+import { focusEvidenceCard } from '@/components/deck/deck-focus'
+import { EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
 import { isThemeChoicePayload, ThemeChoiceBody } from '@/components/deck/theme-choice-body'
+import { CategoryTag } from '@/components/design/kit'
 import { StatusPill } from '@/components/design/primitives'
 import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
+import { useRailState } from '@/components/rail/rail-state'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { isSetupCard, SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { Button } from '@/components/ui/button'
@@ -51,6 +55,7 @@ import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { isServiceCard, ServiceCardBody } from '@/components/workshop-services/service-card-body'
 import { ServiceOfferLine } from '@/components/workshop-services/service-offer-line'
 import { useApp } from '@/lib/app-context'
+import { formatDateTime } from '@/lib/format'
 import {
   bubbleIsLong,
   digestFacts,
@@ -95,7 +100,10 @@ export function DaySep({ at }: { at: string }): ReactNode {
   )
 }
 
-/** 职责头像：圆角方块里一枚职责图标（运行中外圈呼吸）。 */
+/**
+ * 职责头像：圆角方块里一枚职责图标（运行中外圈呼吸）。
+ * WP456-T3（§3.3）：缩成 22，和「AI · 时间」那一行一样高；正文往里缩进 30（22 + 8）。
+ */
 export function DutyAvatar({
   roleId,
   live = false,
@@ -107,13 +115,17 @@ export function DutyAvatar({
     <span
       aria-hidden
       className={cn(
-        'relative grid size-7 place-items-center rounded-[9px] bg-ws-tint text-ws-ink',
+        'relative grid size-[22px] place-items-center rounded-md bg-ws-tint text-ws-ink',
         live &&
-          'after:absolute after:-inset-[3px] after:animate-pulse after:rounded-[11px] after:shadow-[0_0_0_2px_var(--ws-brand)] after:opacity-50 motion-reduce:after:animate-none',
+          'after:absolute after:-inset-[3px] after:animate-pulse after:rounded-lg after:shadow-[0_0_0_2px_var(--ws-brand)] after:opacity-50 motion-reduce:after:animate-none',
       )}
       style={{ '--ia': 'var(--ws-brand)' } as React.CSSProperties}
     >
-      {roleId === undefined ? <Bot className="size-4" /> : <DutyIcon role_id={roleId} size={17} />}
+      {roleId === undefined ? (
+        <Bot className="size-3.5" />
+      ) : (
+        <DutyIcon role_id={roleId} size={14} />
+      )}
     </span>
   )
 }
@@ -139,7 +151,7 @@ export function MeBubble({
     >
       <div
         className={cn(
-          'rounded-[18px_18px_6px_18px] bg-secondary px-3.5 py-2.5 text-[14.5px] leading-[1.6] break-words whitespace-pre-wrap text-ws-ink',
+          'rounded-[18px_18px_6px_18px] bg-secondary px-3.5 py-2.5 text-[14px] leading-[1.6] break-words whitespace-pre-wrap text-ws-ink',
           long && !open && 'line-clamp-6',
           queued && 'opacity-70',
         )}
@@ -251,13 +263,17 @@ export function AiShell({
       {...(id === undefined ? {} : { id })}
       data-testid="timeline-event"
       data-kind="agent_message"
-      className="group/ai grid grid-cols-[28px_minmax(0,1fr)] gap-x-3 gap-y-1 target:rounded-xl target:outline-2 target:outline-ws-brand/40"
+      className="group/ai grid grid-cols-[22px_minmax(0,1fr)] gap-x-2 gap-y-1.5 target:rounded-xl target:outline-2 target:outline-ws-brand/40"
     >
       <DutyAvatar roleId={roleId} live={live} />
-      <div className="flex h-7 items-center gap-2 text-[13px] font-semibold text-ws-ink">
-        {head ?? name}
+      {/* WP456-T3（§3.3）：一律「AI · 时间」一行灰字（12），不再是粗体名字 + 另一种灰的钟点 */}
+      <div className="flex h-[22px] items-center gap-1 text-xs text-ws-muted-fg">
+        <span className="font-medium">{head ?? name}</span>
         {at === undefined ? null : (
-          <span className="font-normal text-xs text-ws-muted-fg">{clockOf(at, lang)}</span>
+          <>
+            <span aria-hidden>·</span>
+            <span className="ws-num">{clockOf(at, lang)}</span>
+          </>
         )}
       </div>
       <div className="col-start-2 min-w-0">
@@ -268,7 +284,7 @@ export function AiShell({
               type="button"
               aria-label={copied ? t('matter.copied') : t('matter.copy')}
               title={copied ? t('matter.copied') : t('matter.copy')}
-              className="grid size-[22px] place-items-center rounded-[7px] hover:bg-muted hover:text-ws-ink"
+              className="grid size-[22px] place-items-center rounded-md hover:bg-muted hover:text-ws-ink"
               onClick={() => {
                 void globalThis.navigator?.clipboard?.writeText(copyText).then(
                   () => {
@@ -372,7 +388,7 @@ export function PreviewCard({
           onClick={() => {
             setDiff((v) => !v)
           }}
-          className="ws-link-muted ml-auto inline-flex items-center gap-1 text-[12.5px]"
+          className="ws-link-muted ml-auto inline-flex items-center gap-1 text-[13px]"
         >
           <FileCode aria-hidden className="size-3" />
           {t('matter.preview.diff')}
@@ -434,7 +450,7 @@ export function AiEntry({
       {...(text === '' ? {} : { copyText: text })}
     >
       {item.event === undefined ? (
-        <p className="text-[14.5px] leading-[1.7] text-ws-ink">{t('matter.preview.lead')}</p>
+        <p className="text-[14px] leading-[1.7] text-ws-ink">{t('matter.preview.lead')}</p>
       ) : null}
       {card}
       {text === '' ? null : (
@@ -462,7 +478,7 @@ export function AiEntry({
               onClick={() => {
                 setOpen((v) => !v)
               }}
-              className="mt-1.5 inline-flex h-[26px] items-center gap-1 rounded-full bg-ws-card px-2.5 text-[12.5px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:text-ws-ink"
+              className="mt-1.5 inline-flex h-[26px] items-center gap-1 rounded-full bg-ws-card px-2.5 text-[13px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)] hover:text-ws-ink"
             >
               {open ? (
                 <ChevronUp aria-hidden className="size-3" />
@@ -498,7 +514,7 @@ function StepList({ steps, live = false }: { steps: MatterRunStep[]; live?: bool
   const { t } = useApp()
   return (
     <ul
-      className="w-full max-w-[560px] rounded-xl bg-ws-surface px-3 py-2 text-[12.5px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)]"
+      className="w-full max-w-[560px] rounded-xl bg-ws-surface px-3 py-2 text-[13px] text-ws-body shadow-[inset_0_0_0_1px_var(--ws-line)]"
       data-testid="matter-steps"
     >
       {steps.map((s, i) => (
@@ -625,7 +641,7 @@ export function SysLine({
       )
     const options = (e.route?.options ?? []).filter((o) => o.role_id !== currentRole)
     detail = (
-      <div className="flex max-w-[560px] flex-col items-center gap-2 text-center text-[12.5px] text-ws-body">
+      <div className="flex max-w-[560px] flex-col items-center gap-2 text-center text-[13px] text-ws-body">
         {name === undefined || e.route?.task === true ? null : <p>{e.text}</p>}
         {onRoute === undefined || options.length === 0 ? null : (
           <div className="flex flex-wrap justify-center gap-1.5" data-testid="matter-route-options">
@@ -684,7 +700,7 @@ export function SysLine({
           onClick={() => {
             setOpen((v) => !v)
           }}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[12.5px] text-ws-muted-fg enabled:hover:bg-muted enabled:hover:text-ws-body disabled:cursor-default"
+          className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[13px] text-ws-muted-fg enabled:hover:bg-muted enabled:hover:text-ws-body disabled:cursor-default"
         >
           <Icon aria-hidden className={cn('size-3.5 shrink-0', tone)} />
           <span className="truncate">{text}</span>
@@ -699,7 +715,7 @@ export function SysLine({
           <button
             type="button"
             data-testid="matter-route-switch"
-            className="text-[12.5px] text-ws-muted-fg underline-offset-2 hover:text-ws-ink hover:underline"
+            className="text-[13px] text-ws-muted-fg underline-offset-2 hover:text-ws-ink hover:underline"
             onClick={() => {
               setOpen(true)
             }}
@@ -764,12 +780,12 @@ export function RunningEntry({
     started === undefined || Number.isNaN(started) ? undefined : (now - started) / 1000
   return (
     <div
-      className="grid grid-cols-[28px_minmax(0,1fr)] gap-x-3 gap-y-1"
+      className="grid grid-cols-[22px_minmax(0,1fr)] gap-x-2 gap-y-1.5"
       data-testid="matter-running"
       aria-live="polite"
     >
       <DutyAvatar roleId={roleId} live />
-      <div className="flex h-7 items-center gap-2 text-[13px] font-semibold text-ws-ink">
+      <div className="flex h-[22px] items-center gap-2 text-xs font-medium text-ws-ink">
         <span className="text-ws-brand-ink dark:text-ws-brand">{t('matter.run.doing')}</span>
         <span className="sr-only">{roleName}</span>
         {elapsed === undefined ? null : (
@@ -815,7 +831,7 @@ export function RunningEntry({
         {/* WP287：AI 边做边说的话，流式出现在线程里（跑完以时间线上那条为准） */}
         {live?.text === undefined ? null : (
           <p
-            className="mt-1.5 max-w-[640px] text-[14.5px] leading-[1.7] whitespace-pre-wrap text-ws-ink"
+            className="mt-1.5 max-w-[640px] text-[14px] leading-[1.7] whitespace-pre-wrap text-ws-ink"
             data-testid="matter-running-text"
           >
             {live.text}
@@ -846,7 +862,7 @@ export function BlockedCard({
   const what = event.blocked?.connections.join('、') ?? ''
   return (
     <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
-      <p className="text-[14.5px] leading-[1.7] text-ws-ink">{event.text}</p>
+      <p className="text-[14px] leading-[1.7] text-ws-ink">{event.text}</p>
       <div className="mt-3 ws-dcard max-w-[520px]" data-testid="matter-blocked-card">
         <div className="ws-dcard-head">
           <Plug aria-hidden className="size-3.5" />
@@ -1047,7 +1063,7 @@ export function InlineCard({
             <div className="ws-dcard-foot">
               <Button
                 size="sm"
-                variant="ghost"
+                variant="secondary"
                 data-testid="matter-card-reject"
                 disabled={deciding}
                 onClick={() => {
@@ -1078,7 +1094,7 @@ export function InlineCard({
             <div className="ws-dcard-foot">
               <Button
                 size="sm"
-                variant="ghost"
+                variant="secondary"
                 data-testid="matter-card-reject"
                 disabled={deciding}
                 onClick={() => {
@@ -1104,6 +1120,28 @@ export function InlineCard({
         />
       </AiShell>
     )
+  return (
+    <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
+      <MatterDecisionCard card={card} onDecide={onDecide} deciding={deciding} />
+    </AiShell>
+  )
+}
+
+/**
+ * 事项里一张等你批 / 要你选的卡（WP456-T3，规范 §2.6 第 13 条，决策 1483）：和「要你处理」同一种决定卡——
+ * 头一行「分类标签 + 状态药丸」、右边「证据 N」；标题 16 + 一句灰字；底一行主按钮 + 次按钮（灰底）。
+ */
+function MatterDecisionCard({
+  card,
+  onDecide,
+  deciding,
+}: {
+  card: DeckCard
+  onDecide: (card: DeckCard, action: Exclude<DeckAction, 'open'>, option?: string) => void
+  deciding: boolean
+}): ReactNode {
+  const { t, lang } = useApp()
+  const rail = useRailState()
   const approve = deckActionLabel(card, 'approve', t)
   const summary = (card.content_variants.zh_summary ?? card.summary)
     .split('\n')
@@ -1111,77 +1149,86 @@ export function InlineCard({
     .filter((l) => l !== '')
     .slice(0, 4)
   const options = card.options ?? []
+  const category = t(categoryKey(card.kind, card.change_kind) ?? `kind.${card.kind}`)
+  const evidence = evidenceLines(card, t, (iso) => formatDateTime(iso, lang))
   return (
-    <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
-      <div className="ws-dcard max-w-[520px]" data-testid="matter-card" data-card={card.id}>
-        <div className="ws-dcard-head">
-          <Stamp aria-hidden className="size-3.5" />
+    <div className="ws-dcard max-w-[520px]" data-testid="matter-card" data-card={card.id}>
+      <div className="ws-dcard-head">
+        <CategoryTag data-testid="matter-card-tag">{category}</CategoryTag>
+        <StatusPill tone={options.length > 0 ? 'neutral' : 'warn'} data-testid="matter-card-state">
           {options.length > 0 ? t('matter.card.choice') : t('matter.card.await')}
-          {options.length > 0 ? null : (
-            <StatusPill tone="warn" className="ml-auto">
-              {approve}
-            </StatusPill>
-          )}
-        </div>
-        <div className="ws-dcard-body pb-2">
-          <p className="ws-dcard-title">{card.title}</p>
-        </div>
-        {summary.length === 0 ? null : (
-          <ul className="flex flex-col gap-1 px-5 pb-4 text-ws-ui text-ws-body">
-            {summary.map((l) => (
-              <li key={l} className="break-words">
-                {l}
-              </li>
-            ))}
-          </ul>
+        </StatusPill>
+        {evidence.length === 0 ? null : (
+          <span className="ws-dcard-head-end">
+            <EvidencePill
+              lines={evidence}
+              onOpen={() => {
+                focusEvidenceCard(card)
+                rail.show('evidence')
+              }}
+            />
+          </span>
         )}
-        <div className="ws-dcard-foot">
-          {options.length > 0 ? (
-            options.map((o) => (
-              <Button
-                key={o.id}
-                size="sm"
-                variant="outline"
+      </div>
+      <div className="ws-dcard-body">
+        <p className="ws-dcard-title">{card.title}</p>
+        {summary.length === 0 ? null : (
+          <div className="ws-dcard-desc flex flex-col gap-0.5">
+            {summary.map((l) => (
+              <p key={l} className="break-words">
+                {l}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="ws-dcard-foot">
+        {options.length > 0 ? (
+          options.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className="ws-btn ws-btn-secondary"
+              disabled={deciding}
+              onClick={() => {
+                onDecide(card, 'approve', o.id)
+              }}
+            >
+              {o.label}
+            </button>
+          ))
+        ) : (
+          <>
+            <button
+              type="button"
+              className="ws-btn ws-btn-primary"
+              data-testid="matter-card-approve"
+              disabled={deciding || !card.available_actions.includes('approve')}
+              onClick={() => {
+                onDecide(card, 'approve')
+              }}
+            >
+              <Check aria-hidden className="size-4" />
+              {approve}
+            </button>
+            {/* WP456-T3（§3.3）：「驳回」是次按钮（灰底），不再是一行纯文字 */}
+            {card.available_actions.includes('reject') ? (
+              <button
+                type="button"
+                className="ws-btn ws-btn-secondary"
+                data-testid="matter-card-reject"
                 disabled={deciding}
                 onClick={() => {
-                  onDecide(card, 'approve', o.id)
+                  onDecide(card, 'reject')
                 }}
               >
-                {o.label}
-              </Button>
-            ))
-          ) : (
-            <>
-              <Button
-                size="sm"
-                className="gap-1.5"
-                data-testid="matter-card-approve"
-                disabled={deciding || !card.available_actions.includes('approve')}
-                onClick={() => {
-                  onDecide(card, 'approve')
-                }}
-              >
-                <Check aria-hidden />
-                {approve}
-              </Button>
-              {card.available_actions.includes('reject') ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="matter-card-reject"
-                  disabled={deciding}
-                  onClick={() => {
-                    onDecide(card, 'reject')
-                  }}
-                >
-                  {deckActionLabel(card, 'reject', t)}
-                </Button>
-              ) : null}
-            </>
-          )}
-        </div>
+                {deckActionLabel(card, 'reject', t)}
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
-    </AiShell>
+    </div>
   )
 }
 
@@ -1201,9 +1248,12 @@ function MatterThemeChoice({
   const [option, setOption] = useState('')
   return (
     <div className="ws-dcard max-w-[520px]" data-testid="matter-card" data-card={card.id}>
+      {/* WP456-T3：头一行「分类标签 + 状态药丸」，和别的决定卡同一种 */}
       <div className="ws-dcard-head">
-        <Stamp aria-hidden className="size-3.5" />
-        {t('matter.card.choice')}
+        <CategoryTag>
+          {t(categoryKey(card.kind, card.change_kind) ?? `kind.${card.kind}`)}
+        </CategoryTag>
+        <StatusPill tone="neutral">{t('matter.card.choice')}</StatusPill>
       </div>
       <div className="ws-dcard-body">
         <p className="ws-dcard-title">{card.title}</p>
@@ -1230,7 +1280,7 @@ function MatterThemeChoice({
         {card.available_actions.includes('reject') ? (
           <Button
             size="sm"
-            variant="ghost"
+            variant="secondary"
             data-testid="matter-card-reject"
             disabled={deciding}
             onClick={() => {

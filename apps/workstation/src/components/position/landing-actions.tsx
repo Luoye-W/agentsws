@@ -11,7 +11,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUpRight } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useScopeConversations } from '@/components/conversations/conversation-data'
 import { connectionNeedsYou, useScopeConnections } from '@/components/rail/card-status'
@@ -25,6 +25,8 @@ import { useApp } from '@/lib/app-context'
 
 /** 最多几个（决策 1019：4–6 个）。 */
 export const LANDING_MAX = 6
+/** WP456-T3（§3.1）：一排最多露 4 个，其余收进「更多」（点了就地展开）。 */
+export const LANDING_VISIBLE = 4
 
 /**
  * WP418（审计 U11）：中文模板「连上{name}」——名字是中文时紧挨着写（「连上店铺后台」），
@@ -153,15 +155,23 @@ export function useLandingActions(
   return [...shown, ...sends].slice(0, LANDING_MAX)
 }
 
+const CHIP =
+  'inline-flex h-[26px] items-center gap-1 rounded-full border border-ws-line-strong bg-ws-card px-2.5 text-xs text-ws-body hover:bg-ws-hover hover:text-ws-ink'
+
 export function LandingActions({ actions }: { actions: readonly LandingAction[] }): ReactNode {
+  const { t } = useApp()
+  // WP456-T3（§3.1）：最多露 4 个、一行排得下；多的收进「更多」
+  const [all, setAll] = useState(false)
   if (actions.length === 0) return null
+  const folded = !all && actions.length > LANDING_VISIBLE
+  const shown = folded ? actions.slice(0, LANDING_VISIBLE) : actions
   return (
     <div className="flex flex-wrap items-center gap-1.5" data-testid="landing-actions">
-      {actions.map((a) => (
+      {shown.map((a) => (
         <button
           key={a.id}
           type="button"
-          className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          className={CHIP}
           data-testid="landing-action"
           data-kind={a.kind}
           data-action={a.id}
@@ -171,6 +181,19 @@ export function LandingActions({ actions }: { actions: readonly LandingAction[] 
           {a.kind === 'open' ? <ArrowUpRight aria-hidden className="size-3" /> : null}
         </button>
       ))}
+      {folded ? (
+        <button
+          type="button"
+          className={`${CHIP} text-ws-muted-fg`}
+          data-testid="landing-more"
+          aria-expanded={false}
+          onClick={() => {
+            setAll(true)
+          }}
+        >
+          {t('landing.more')}
+        </button>
+      ) : null}
     </div>
   )
 }

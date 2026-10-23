@@ -245,8 +245,7 @@ describe('待办箱（37 §2.2b：打勾 / 菜单 / 点标题 / 拖到日历）'
   it('三段都在；没有事项的待办不给链接，只能打勾', async () => {
     listTodos.mockResolvedValueOnce({ todos: [todo({ horizon: 'backlog' })] })
     renderWithProviders(<TodosPage />)
-    await screen.findByTestId('todos')
-    expect(screen.getByTestId('horizon-today')).toBeDefined()
+    await screen.findByTestId('horizon-today')
     expect(screen.getByTestId('horizon-week')).toBeDefined()
     expect(screen.getByTestId('horizon-backlog')).toBeDefined()
     expect(screen.queryByRole('link', { name: '回 Anna 的退货' })).toBeNull()
@@ -257,8 +256,7 @@ describe('待办箱（37 §2.2b：打勾 / 菜单 / 点标题 / 拖到日历）'
       todos: [todo({ matter_id: 'mat_1', anchor: { matter_event_id: 'mev_9' } })],
     })
     renderWithProviders(<TodosPage />)
-    await screen.findByTestId('todos')
-    const link = screen.getByTestId('todo-title')
+    const link = await screen.findByTestId('todo-title')
     expect(link.getAttribute('href')).toBe('/matters/mat_1#mev_9')
 
     // 打勾只发 done，不改地址
@@ -280,19 +278,17 @@ describe('待办箱（37 §2.2b：打勾 / 菜单 / 点标题 / 拖到日历）'
       ],
     })
     renderWithProviders(<TodosPage />)
-    await screen.findByTestId('todos')
-    expect(screen.getByTestId('todo-cards').textContent).toContain('2')
+    expect((await screen.findByTestId('todo-cards')).textContent).toContain('2')
     expect(screen.getByTestId('todo-delegated')).toBeDefined()
   })
 
   it.each([
     ['交给 AI 做', () => delegateTodo],
-    ['关闭', () => dropTodo],
+    ['关闭（不做了）', () => dropTodo],
     ['改到明天', () => updateTodo],
   ])('菜单里的「%s」打对应的接口', async (label, fn) => {
     renderWithProviders(<TodosPage />)
-    await screen.findByTestId('todos')
-    fireEvent.click(screen.getByRole('button', { name: '更多' }))
+    fireEvent.click(await screen.findByRole('button', { name: '更多' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: label }))
     await waitFor(() => {
       expect(fn()).toHaveBeenCalled()
@@ -301,8 +297,7 @@ describe('待办箱（37 §2.2b：打勾 / 菜单 / 点标题 / 拖到日历）'
 
   it('待办可以拖走（拖出去的就是 todo id）', async () => {
     renderWithProviders(<TodosPage />)
-    await screen.findByTestId('todos')
-    expect(screen.getByTestId('todo-row').getAttribute('draggable')).toBe('true')
+    expect((await screen.findByTestId('todo-row')).getAttribute('draggable')).toBe('true')
   })
 })
 
@@ -351,11 +346,15 @@ describe('日历（37 C3 + §2.5：一个日历，多图层）', () => {
    * 钉的是画布上那几件看得见的事：左栏是"安排一件事"主按钮 + 小月历 + 图层列，
    * 顶栏是今天 / 翻页 / 范围与统计 / 四选一的视图分段，图层勾选是颜色方块带数量。
    */
-  it('左栏照画布：安排一件事 + 小月历 + 图层列', async () => {
+  it('左栏：还没排期的 + 图层列；小月历收进标题的弹层（WP469）', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderWithProviders(<CalendarPage />)
     await host()
     expect(screen.getByTestId('calendar-meet').textContent).toBe('安排一件事')
-    const mini = screen.getByTestId('calendar-mini-month')
+    expect(screen.getByTestId('caltodo-rail')).toBeTruthy()
+    expect(screen.queryByTestId('calendar-mini-month')).toBeNull()
+    await user.click(screen.getByTestId('calendar-title'))
+    const mini = await screen.findByTestId('calendar-mini-month')
     // 6 行 × 7 列，今天那一格标出来
     expect(within(mini).getAllByTestId('mini-day')).toHaveLength(42)
     expect(mini.querySelector('[data-today="true"]')).not.toBeNull()
@@ -532,14 +531,15 @@ describe('日历（37 C3 + §2.5：一个日历，多图层）', () => {
  * `/goals` 路由本身仍然在（`App.tsx` 里那一条），⌘K 也照样搜得到。
  */
 describe('目标入口收进待办页（WP113 / 63 §1）', () => {
-  it('待办页有两个 tab，点「目标」出目标树，并记在 ?tab=goals 上', async () => {
+  it('WP469（决策 1525）：清单右边「目标」小卡，「全部目标」进目标页（?tab=goals），回得去', async () => {
     const user = userEvent.setup()
     renderWithProviders(<TodosPage />)
-    await screen.findByTestId('todos-tabs')
-    await user.click(screen.getByTestId('todos-tab-goals'))
+    const card = await screen.findByTestId('caltodo-goals')
+    await waitFor(() => {
+      expect(card.textContent).toContain('本月销售额 12 万')
+    })
+    await user.click(screen.getByTestId('caltodo-goals-all'))
     expect(await screen.findByTestId('goals-page')).toBeDefined()
-    // 记在 URL 上（`MemoryRouter` 不动 `window.location`，所以看选中态）
-    expect(screen.getByTestId('todos-tab-goals').getAttribute('aria-selected')).toBe('true')
     // 回得去
     await user.click(screen.getByTestId('todos-tab-todos'))
     expect(await screen.findByTestId('horizon-today')).toBeDefined()
@@ -577,7 +577,9 @@ describe('事项页（37 §2.2b：唯一的上下文容器）', () => {
     expect(screen.queryByTestId('matter-summary')).toBeNull()
     // 有未决的卡 → 状态「等你批」
     expect(screen.getByTestId('matter-state').textContent).toBe('等你批')
-    expect(screen.getByTestId('matter-participant').getAttribute('title')).toBe('李默')
+    // WP456-T3（§3.3）：状态是一颗状态药丸；参与者只在多于一个人时出（一个人不画头像）
+    expect(screen.getByTestId('matter-state').className).toContain('ws-pill')
+    expect(screen.queryByTestId('matter-participant')).toBeNull()
     // 待办有才出：灰字行尾「1 个待办」，点开就地展开
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
     await user.click(screen.getByTestId('matter-todos-chip'))

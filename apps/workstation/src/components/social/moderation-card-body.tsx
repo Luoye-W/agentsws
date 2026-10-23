@@ -35,7 +35,7 @@ export function ModerationCardBody({ payload }: { payload: Record<string, unknow
       </div>
       {excerpt === undefined ? null : (
         <blockquote
-          className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
+          className="rounded-lg bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
           data-testid="deck-moderation-original"
           aria-label={t('moderation.card.original')}
         >

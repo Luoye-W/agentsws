@@ -118,8 +118,9 @@ describe('WP180 现在时间 + 公司时区（金样口径）', () => {
 
     // ① 多出来的那一条
     const injected = events.filter((e) => e.type === 'context.injected')
-    expect(injected.map((e) => (e.payload as { kind: string }).kind)).toEqual(['thread', 'time'])
-    const time = injected[1]?.payload as Record<string, unknown>
+    // WP472：时间排在这一次的话之前（三个运行时同一张表 `orderContextItems`）
+    expect(injected.map((e) => (e.payload as { kind: string }).kind)).toEqual(['time', 'thread'])
+    const time = injected[0]?.payload as Record<string, unknown>
     expect(time).toMatchObject({ item_id: 'now', kind: 'time', source: 'request' })
     expect(time.bytes).toBe(new TextEncoder().encode(TEXT).byteLength)
 

@@ -148,13 +148,13 @@ export function Composer({
     <div
       data-testid="composer"
       data-mode={seed.mode}
-      className="flex flex-col gap-2 rounded-[14px] border border-ws-line bg-ws-card p-3 shadow-ws"
+      className="flex flex-col gap-2 rounded-xl border border-ws-line bg-ws-card p-3 shadow-ws"
     >
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-medium">{t(`messages.compose.${seed.mode}`)}</span>
         <button
           type="button"
-          className="ml-auto rounded p-1 text-ws-muted-fg hover:bg-ws-surface"
+          className="ml-auto rounded-sm p-1 text-ws-muted-fg hover:bg-ws-surface"
           aria-label={t('messages.compose.close')}
           data-testid="composer-close"
           onClick={onClose}

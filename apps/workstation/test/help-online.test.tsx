@@ -134,6 +134,19 @@ describe('Luoye 10-23 三条', () => {
     expect(screen.queryByTestId('help-panel')).toBeNull()
   })
 
+  it('设置里列表行的问号（点开是教程）也跳官网', async () => {
+    const bridge = await import('@/components/connections/bridge')
+    const open = vi.spyOn(bridge, 'openExternal').mockImplementation(() => undefined)
+    const { TutorialHint, TutorialOpensSite } = await import('@/components/help/tutorial-link')
+    renderWithProviders(
+      <TutorialOpensSite>
+        <TutorialHint slug="model-deepseek" text="介绍" testId="hint-x" />
+      </TutorialOpensSite>,
+    )
+    fireEvent.click(screen.getByTestId('hint-x'))
+    expect(open).toHaveBeenCalledWith('https://agentsws.com/docs/model-deepseek/')
+  })
+
   it('右栏正文开头的元数据一律拿掉（CRLF / BOM 的文件也是）', async () => {
     api.article.mockResolvedValue({
       ...ONLINE_ONLY,

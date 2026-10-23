@@ -32,6 +32,7 @@ import type {
   WorkArchiveSettings,
 } from '@agentsws/contracts'
 import { DEFAULT_ARCHIVE_IDLE_DAYS, DEFAULT_HANDOFF_RETURN_DAYS } from '@agentsws/contracts'
+import { EXTERNAL_FENCE } from '@agentsws/core'
 import {
   RECALL_MAX_LIMIT,
   type RecallDoc,
@@ -450,4 +451,24 @@ export function createWorkArchive(options: WorkArchiveOptions): WorkArchiveAssem
     recall,
     hasArchived: (actor) => archivedOf(actor.person_id).length > 0,
   }
+}
+
+/**
+ * ⌘K「让 AI 找回」重排那一次的用户消息（WP471，docs/116 §2 第 10 条，决策 1549）。
+ *
+ * 固定在前、变化在后：归档清单在前、**按 id 排**（确定的顺序；归档的不多时这一堆每次都一样，
+ * 整段命中缓存——原来「关键词命中的在前」那层意思交给模型重排，不靠位置），用户的描述与「今天」在后。
+ */
+export function archiveRerankUser(
+  pool: readonly { id: string; title: string; summary: string; last_activity: string }[],
+  query: string,
+  today: string,
+): string {
+  const lines = [...pool]
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map(
+      (c) =>
+        `${c.id} | ${c.last_activity.slice(0, 10)} | ${c.title.replace(/\s+/g, ' ')} | ${c.summary.replace(/\s+/g, ' ').slice(0, 160)}`,
+    )
+  return `${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(lines.join('\n'), 8000)}\n${EXTERNAL_FENCE.close}\n\n用户的描述：${query}\n今天：${today}`
 }

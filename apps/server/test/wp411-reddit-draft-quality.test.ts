@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 import {
   conflictNote,
   type RedditDraftPromptInput,
+  redditDraftMessages,
   redditDraftPrompt,
 } from '../src/reddit-write/draft.js'
 import { createRedditPersona } from '../src/reddit-write/persona.js'
@@ -120,6 +121,39 @@ describe('起草：读整串、照口径、没依据不写、口吻照用', () =
     expect(p).toContain('「I used to work at IVRA」')
     expect(p).toContain('别说：DM me')
     expect(p).toContain('Let me check on that and get back to you')
+  })
+
+  it('WP471（决策 1549）：同一品牌两条——系统提示逐字相同；帖子串在用户消息后面，重写那次只往后加', () => {
+    const base = {
+      brand: 'IVRA',
+      account: 'ivra_official',
+      voice: '【品牌话术｜brand-voice】\nFriendly, short.',
+      persona: { stance: 'personal', intro: 'I used to work at IVRA' } as RedditPersona,
+    }
+    const a = redditDraftMessages({ ...base, target: TARGET, facts: [], thread: THREAD })
+    const b = redditDraftMessages({
+      ...base,
+      target: { ...TARGET, parent_text: 'Does it fog up?', post_title: 'Air3 fog' },
+      facts: [{ id: 'fc_1', text: 'An anti-fog insert ships in the box.' }],
+    })
+    expect(b.system).toBe(a.system)
+    expect(a.system).toContain('Friendly, short.')
+    expect(a.system).toContain('口吻：个人')
+    expect(a.system).toContain('规矩：')
+    expect(a.user).not.toContain('规矩：')
+    // 用户消息：品牌 / 版块在前，帖子与评论串在后
+    expect(a.user.startsWith('你在帮「IVRA」')).toBe(true)
+    expect(a.user.indexOf('知识库里查到的事实')).toBeLessThan(a.user.indexOf('Is the recall real'))
+    // 重写那次：前面一整段原样，只在最后加「上一稿有这几处不行」
+    const again = redditDraftMessages({
+      ...base,
+      target: TARGET,
+      facts: [],
+      thread: THREAD,
+      fix: ['和品牌号说过的矛盾'],
+    })
+    expect(again.system).toBe(a.system)
+    expect(again.user.startsWith(a.user)).toBe(true)
   })
 
   it('和品牌号说过的矛盾：照着问题重写一次；重写对了就不标', async () => {

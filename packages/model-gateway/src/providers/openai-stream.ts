@@ -14,6 +14,8 @@ export interface StreamWireUsage {
   completion_tokens?: number
   prompt_cache_hit_tokens?: number
   prompt_tokens_details?: { cached_tokens?: number }
+  /** WP473：个别中转把命中数放在顶层。 */
+  cached_tokens?: number
 }
 
 interface WireDelta {

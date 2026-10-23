@@ -33,7 +33,7 @@ export function ReportRow({
     <li className="list-none">
       <div
         className={cn(
-          'group/row relative grid grid-cols-[1fr_auto] items-center gap-x-2.5 rounded-[10px] px-2 py-[9px] hover:bg-ws-surface',
+          'group/row relative grid grid-cols-[1fr_auto] items-center gap-x-2.5 rounded-lg px-2 py-[9px] hover:bg-ws-surface',
           open === true && 'bg-ws-tint',
           fresh === true && 'bg-ws-card shadow-[var(--ws-glow)]',
         )}
@@ -54,7 +54,7 @@ export function ReportRow({
           {m.status === 'ok' ? (
             <>
               <span className="truncate">{report.headline_label}</span>
-              <span className="ws-display text-[15px] text-ws-ink" data-slot="data">
+              <span className="ws-display text-[14px] text-ws-ink" data-slot="data">
                 {fmtValue(m.value, m.format, m.currency ?? 'USD')}
               </span>
               {d === undefined ? null : <Delta {...d} />}

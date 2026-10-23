@@ -40,7 +40,7 @@ export function PendingNavItem({
         data-testid="messages-pending"
         data-active={active ? 'true' : undefined}
         className={cn(
-          'flex flex-1 items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left text-[13px]',
+          'flex flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px]',
           active
             ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
             : 'text-ws-body hover:bg-sidebar-accent/60',

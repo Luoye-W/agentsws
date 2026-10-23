@@ -68,6 +68,7 @@ import {
   getMatterTimeline,
   getPosition,
   getPositionByTemplate,
+  getPositions,
   postMatterMessage,
   promoteAskMatter,
   rerouteMatter,
@@ -81,6 +82,7 @@ import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 import type { FreeChatFile, ReasoningEffort } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
+import { assignmentForPosition, myAssignments } from '@/lib/positions'
 import { cn } from '@/lib/utils'
 import {
   archiveMatter,
@@ -99,7 +101,7 @@ const names = (files: readonly { name: string }[]): string =>
   files.map((f) => `「${f.name}」`).join('')
 
 export function MatterPage(): ReactNode {
-  const { t, lang } = useApp()
+  const { t, lang, selectPosition, position: current } = useApp()
   const client = useQueryClient()
   const openConnect = useOpenConnect()
   const params = useParams()
@@ -172,6 +174,18 @@ export function MatterPage(): ReactNode {
   const view = matter.data
   const positionId = view?.matter.position_id
   const templateId = view?.matter.position_template_id
+  /*
+   * WP456-T3：直接打开一件事项（链接、搜索、刷新）时，把当前岗位切到这件事所在的岗位——看板（对话 / 计划 / 报表 /
+   * 清单卡）跟着当前岗位走，不切就是一列「先选一个岗位」。只认本人在那个岗位里有分配的；同一个岗位里已经对了就不动。
+   */
+  const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  useEffect(() => {
+    const instances = mine.data?.instances
+    if (positionId === undefined || instances === undefined) return
+    if (!instances.some((p) => myAssignments(p).includes(positionId))) return
+    const next = assignmentForPosition(instances, positionId, current)
+    if (next !== current) selectPosition(next)
+  }, [positionId, mine.data?.instances, current, selectPosition])
   // 职责的人话名与「换职责」清单（WP153：一进来就取，标签写名字不写 id）
   const position = useQuery({
     queryKey: ['position-instance', positionId ?? templateId ?? ''],
@@ -731,7 +745,7 @@ export function MatterPage(): ReactNode {
         {/* WP207：归档的事照样能看；一句话 + 一个「放回左栏」 */}
         {view.matter.archived_at === undefined ? null : (
           <div
-            className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] bg-ws-tint/60 px-3 py-2 text-[13px]"
+            className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-ws-tint/60 px-3 py-2 text-[13px]"
             data-testid="matter-archived"
           >
             <Archive aria-hidden className="size-3.5 text-ws-muted-fg" />
@@ -810,7 +824,7 @@ export function MatterPage(): ReactNode {
           {running ? <RunningEntry live={live} roleId={roleId} roleName={roleName} /> : null}
           {closed ? (
             <div
-              className="flex items-center justify-center gap-2 text-[12.5px] text-ws-muted-fg"
+              className="flex items-center justify-center gap-2 text-[13px] text-ws-muted-fg"
               data-testid="matter-closed-line"
             >
               <CircleCheck aria-hidden className="size-3.5 text-ws-good" />
@@ -824,7 +838,7 @@ export function MatterPage(): ReactNode {
           testId="matter-dock"
           above={
             say.error === null ? null : (
-              <p role="alert" className="text-center text-[12.5px] text-destructive">
+              <p role="alert" className="text-center text-[13px] text-destructive">
                 {say.error.message}
               </p>
             )

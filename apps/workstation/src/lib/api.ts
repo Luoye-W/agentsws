@@ -56,6 +56,8 @@ import type {
   MessageLabel,
   MessageOverview,
   MessageRecord,
+  MessageRehandInput,
+  MessageRehandResult,
   MessageRule,
   MessageRuleDraft,
   MessageRuleList,
@@ -73,6 +75,7 @@ import type {
   SenderRuleList,
   TeamSubscriptionView,
   Todo,
+  TodoSlotResult,
   BattleReport as WorkBattleReport,
 } from '@agentsws/contracts'
 import type {
@@ -80,6 +83,7 @@ import type {
   BlockData,
   DeckCard,
   DeckFilters,
+  InboxView,
   PositionTiles,
   RangeName,
   RecordRow,
@@ -906,6 +910,16 @@ export const getAutoMemory = (): Promise<{ enabled: boolean }> =>
 export const setAutoMemory = (enabled: boolean): Promise<{ enabled: boolean }> =>
   api<{ enabled: boolean }>('/v1/settings/auto-memory', { method: 'PUT', body: { enabled } })
 
+/** WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」（一台机器一份）。 */
+export type TelemetrySettings = import('@agentsws/contracts').TelemetryView
+export const getTelemetrySettings = (): Promise<TelemetrySettings> =>
+  api<TelemetrySettings>('/v1/settings/telemetry')
+export const putTelemetrySettings = (patch: {
+  enabled?: boolean
+  notice_seen?: boolean
+}): Promise<TelemetrySettings> =>
+  api<TelemetrySettings>('/v1/settings/telemetry', { method: 'PUT', body: patch })
+
 export interface LayerMemoryData {
   tier: string
   scope_id?: string
@@ -1308,6 +1322,35 @@ export const getApproval = (id: string, assignment?: string): Promise<ApprovalIt
     assignment === undefined ? {} : { assignment },
   )
 
+/** WP474（决策 1514）：本人刚才那一下怎么撤——「不要」随时；「通过」到 `until` 为止（取消窗口）。 */
+export interface ApprovalUndoData {
+  kind: 'reopen' | 'unapprove'
+  until?: string
+  /** 服务端算好的还剩几秒（按收到那一刻倒数） */
+  seconds_left?: number
+}
+
+/** WP474：一张刚处理掉的卡现在什么状态、还撤不撤得回（单卡详情上带 `undo`）。 */
+export const getApprovalUndo = (
+  id: string,
+  assignment?: string,
+): Promise<ApprovalItem & { undo?: ApprovalUndoData }> =>
+  api<ApprovalItem & { undo?: ApprovalUndoData }>(
+    `/v1/approvals/${encodeURIComponent(id)}`,
+    assignment === undefined ? {} : { assignment },
+  )
+
+/** WP474：撤回本人刚才那一下（放回待处理）。过了窗口 / 已经发了回 409。 */
+export const undoApproval = (
+  id: string,
+  assignment?: string,
+): Promise<{ item: ApprovalItem; undone: 'reopen' | 'unapprove' }> =>
+  api(`/v1/approvals/${encodeURIComponent(id)}/undo`, {
+    method: 'POST',
+    body: {},
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
 export const listGoals = (): Promise<GoalsData> => api<GoalsData>('/v1/goals')
 
 export const listTodos = (query = ''): Promise<TodosData> => api<TodosData>(`/v1/todos${query}`)
@@ -1315,6 +1358,12 @@ export const listTodos = (query = ''): Promise<TodosData> => api<TodosData>(`/v1
 export const createTodo = (input: {
   title: string
   due?: string
+  /** WP469：「周五 14:00 …」一建就排上（第三档） */
+  scheduled?: { start: string; end: string }
+  /** WP469：什么日子都没写就进「本周」 */
+  horizon?: 'backlog' | 'week' | 'today'
+  /** WP469（决策 1521）：从收件箱哪一行记的（`card:…` / `mail:…`） */
+  from_inbox?: string
   matter_id?: string
   /** 主题对象（订单 / 客户 / 会议 / 店铺）——撞车第一把钥匙 */
   refs?: { type: string; id: string }[]
@@ -1390,7 +1439,15 @@ export const dropTodo = (id: string): Promise<{ todo: Todo }> =>
 
 export const updateTodo = (
   id: string,
-  patch: { title?: string; due?: string | null; horizon?: 'backlog' | 'week' | 'today' },
+  patch: {
+    title?: string
+    due?: string | null
+    horizon?: 'backlog' | 'week' | 'today'
+    /** WP469：一次换档（拖到某个钟点 / 全天 / 拖回「还没排期的」） */
+    scheduled?: { start: string; end: string } | null
+    /** WP469：日历上把做完的勾掉 = 回到 open */
+    status?: 'open' | 'done'
+  },
 ): Promise<{ todo: Todo }> =>
   api(`/v1/todos/${encodeURIComponent(id)}`, { method: 'PUT', body: patch })
 
@@ -1412,11 +1469,30 @@ export const delegateTodo = (id: string, brief?: string): Promise<{ todo: Todo }
  * `sources` 是逗号分隔的图层名，**不传 = 全部**——日历那一页要全部，因为图层开关
  * 旁边那个数字得把关掉的层也数出来。
  */
-export const getCalendar = (from: string, to: string, sources?: string): Promise<CalendarData> =>
+export const getCalendar = (
+  from: string,
+  to: string,
+  sources?: string,
+  /** WP469（决策 1524）：做完的待办也要（划掉、变淡） */
+  done?: boolean,
+): Promise<CalendarData> =>
   api<CalendarData>(
     `/v1/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-      (sources === undefined || sources === '' ? '' : `&sources=${encodeURIComponent(sources)}`),
+      (sources === undefined || sources === '' ? '' : `&sources=${encodeURIComponent(sources)}`) +
+      (done === true ? '&done=true' : ''),
   )
+
+/**
+ * WP469（决策 1522）：「帮我排进空档」——几件没日子的待办各找空档。**只给候选**：
+ * 人点「采用」才走 {@link updateTodo} 写 `scheduled`。
+ */
+export const proposeTodoSlots = (input: {
+  todo_ids: string[]
+  from: string
+  to: string
+  tz_offset_minutes?: number
+}): Promise<TodoSlotResult> =>
+  api<TodoSlotResult>('/v1/todos/slots', { method: 'POST', body: input })
 
 export const getTodayPlan = (): Promise<PlanData> => api<PlanData>('/v1/plans/today')
 
@@ -2689,8 +2765,22 @@ export interface ModelAiSourceView {
   fallback_to_cloud: boolean
 }
 
+/** WP473：「运行」按功能拆开的那一格（服务端 `ModelFeature`）。 */
+export type ModelFeatureName =
+  | 'position_run'
+  | 'support_chat'
+  | 'email_auto_reply'
+  | 'seo'
+  | 'b2b'
+  | 'ads'
+  | 'social'
+  | 'assistant'
+  | 'other'
+
 export interface ModelUsageRow {
   purpose: ModelPurposeName
+  /** WP473：`purpose = run` 的行按功能拆开；别的 purpose 没有这一格。 */
+  feature?: ModelFeatureName
   calls: number
   input_tokens: number
   output_tokens: number
@@ -6877,6 +6967,19 @@ export const ackMessageNotices = (input: {
 
 /** WP212：「没人接的」顶上那一行、只是通知几捆、你教过它。 */
 export const getMessageOverview = (): Promise<MessageOverview> => api('/v1/messages/overview')
+
+/**
+ * WP459（决策 1497）：收件箱——所有岗位等你批的卡 + 要你判断的信一条队列（要紧 / 今天 / 不急）、
+ * 筛选件数、今天 AI 猜着交给岗位的、简报的数。
+ */
+export const getInbox = (): Promise<InboxView> => api('/v1/inbox')
+
+/** WP459（决策 1498 / 1504）：改判「AI 猜的」——原岗位没批的卡一起撤掉。 */
+export const rehandMessage = (
+  id: string,
+  input: MessageRehandInput,
+): Promise<MessageRehandResult> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/rehand`, { method: 'POST', body: input })
 
 export const setMessageLabels = (
   id: string,

@@ -218,7 +218,7 @@ function ItemRow({
   const [open, setOpen] = useState(false)
   return (
     <li className="border-b last:border-b-0" data-testid={testId}>
-      <div className="flex items-center gap-2 px-3 py-2 text-[12.5px]">
+      <div className="flex items-center gap-2 px-3 py-2 text-[13px]">
         {onCheck === undefined ? null : (
           <input
             type="checkbox"

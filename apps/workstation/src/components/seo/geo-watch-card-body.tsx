@@ -153,7 +153,7 @@ function SetupBody({ card, payload }: { card: DeckCard; payload: SetupPayload })
         </Button>
       ) : (
         <form
-          className="flex flex-col gap-2.5 rounded-[10px] border border-ws-line p-2.5"
+          className="flex flex-col gap-2.5 rounded-lg border border-ws-line p-2.5"
           data-testid="deck-geo-watch-form"
           onSubmit={(e) => {
             e.preventDefault()

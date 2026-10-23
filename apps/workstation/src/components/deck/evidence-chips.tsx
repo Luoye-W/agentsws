@@ -20,7 +20,6 @@
 
 import { GROSS_MARGIN_FILL_PATH } from '@agentsws/contracts'
 import type { DeckCard, DeckEntityChip, DeckHighlight } from '@agentsws/deck'
-import { FileSearch } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { FactChip, ObjectChip } from '@/components/chips'
 import { Badge } from '@/components/ui/badge'
@@ -186,10 +185,10 @@ export function EvidencePill({
       data-count={lines.length}
       title={lines.join(' · ')}
       aria-label={t('deck.evidence.open')}
-      className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-ws-surface px-2 text-xs text-ws-muted-fg hover:text-ws-ink"
+      // WP456-T3（§2.6 第 13 条）：右上角「证据 N」是一个灰色链接，不再是带图标的小药丸
+      className="ws-link-muted shrink-0 text-xs"
       onClick={onOpen}
     >
-      <FileSearch className="size-3" aria-hidden />
       {t('deck.evidence.pill', { n: lines.length })}
     </button>
   )

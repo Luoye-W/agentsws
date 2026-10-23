@@ -52,6 +52,10 @@ export const SITE_CHAT_SEEN_KEY = 'agentsws.site_chat.seen'
 export const CALENDAR_LAYERS_KEY = 'agentsws.calendar.layers'
 /** 日历上次停在哪个视图（日 / 周 / 月 / 议程）。 */
 export const CALENDAR_VIEW_KEY = 'agentsws.calendar.view'
+/** WP469（决策 1523）：「日历与待办」上次看的是哪一面（`list` / `calendar`）；第一次是清单。 */
+export const CAL_TODO_FACE_KEY = 'agentsws.cal_todo.face'
+/** WP469（决策 1524）：日历上画不画做完的待办（`on` / `off`，默认画）。 */
+export const CALENDAR_DONE_KEY = 'agentsws.calendar.done'
 
 /**
  * WP195：「界面动效：跟随系统 / 开 / 关」（`system` | `on` | `off`）。与主题、语言同一类——

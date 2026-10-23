@@ -6,17 +6,20 @@
  *
  * WP350：能附文本类资料（会议记录、文档：.txt / .md / .docx / .pdf，WP357 加 .xlsx / .csv；回形针那个钮；拖进来也行）；
  * 粘贴一大段字（超过 {@link PASTE_AS_FILE_CHARS} 字）收成一份「粘贴的文字」附件，不塞满输入框。
+ *
+ * WP456-T8（WP456 §3.7）：长相并进岗位页那一个完整对话框（`MatterComposer`，WP437）——这里只剩助理自己的状态
+ * （图、资料、`@` 选的岗位、两个开关）。附资料、加图进左下「+」点开的小菜单，联网 / 公司资料是菜单里的两个开关，
+ * 开着时在框里显示成一颗小标（点 × 关掉）；发送 / 停、模型钮、拖进来 / 粘贴都和岗位页一样。
  */
-import { ArrowUp, FileText, Globe, ImagePlus, Library, Paperclip, Square, X } from 'lucide-react'
+import { AtSign, FileText, Globe, ImagePlus, Library, X } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { MentionMenu, mentionOptions, mentionQuery } from '@/components/free-chat/assistant-bits'
+import { MatterComposer } from '@/components/matter/matter-composer'
 import {
-  MentionChip,
-  MentionMenu,
-  mentionOptions,
-  mentionQuery,
-} from '@/components/free-chat/assistant-bits'
-import { Button } from '@/components/ui/button'
-import { Hint } from '@/components/ui/hint'
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { useApp } from '@/lib/app-context'
 import {
   type AssistantState,
@@ -30,7 +33,6 @@ import {
   readImage,
   textToBase64,
 } from '@/lib/free-chat'
-import { cn } from '@/lib/utils'
 
 const MAX_IMAGES = 4
 const MAX_BYTES = 5 * 1024 * 1024
@@ -43,44 +45,39 @@ export interface ComposerToggles {
   knowledge: boolean
 }
 
-function Toggle({
-  on,
+/** 框里的一颗小标（`@` 选的岗位、开着的开关），× 去掉。 */
+function Chip({
   icon: Icon,
   label,
-  disabled,
-  hint,
+  removeLabel,
+  onRemove,
   testId,
-  onChange,
+  kind,
 }: {
-  on: boolean
   icon: typeof Globe
   label: string
-  disabled?: boolean
-  hint?: string
+  removeLabel: string
+  onRemove: () => void
   testId: string
-  onChange: (on: boolean) => void
+  kind?: string
 }): React.ReactNode {
   return (
-    <span className="inline-flex items-center gap-1">
+    <span
+      className="inline-flex h-6 items-center gap-1 rounded-full bg-ws-tint pr-0.5 pl-2 text-xs text-ws-brand-ink"
+      data-testid={testId}
+      {...(kind === undefined ? {} : { 'data-kind': kind })}
+    >
+      <Icon aria-hidden className="size-3.5" />
+      {label}
       <button
         type="button"
-        aria-pressed={on}
-        disabled={disabled}
-        data-testid={testId}
-        className={cn(
-          'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors disabled:opacity-50',
-          on
-            ? 'border-ws-brand bg-ws-tint text-ws-brand-ink'
-            : 'text-muted-foreground hover:text-foreground',
-        )}
-        onClick={() => {
-          onChange(!on)
-        }}
+        aria-label={removeLabel}
+        title={removeLabel}
+        className="grid size-5 place-items-center rounded-full hover:bg-ws-hover"
+        onClick={onRemove}
       >
-        <Icon aria-hidden className="size-3.5" />
-        {label}
+        <X aria-hidden className="size-3" />
       </button>
-      {hint === undefined ? null : <Hint text={hint} />}
     </span>
   )
 }
@@ -101,7 +98,7 @@ export function Composer({
   busy: boolean
   canSeeImages: boolean
   toggles: ComposerToggles
-  /** 联网搜不了时的那句人话（开关变灰，原因进问号）。 */
+  /** 联网搜不了时的那句人话（开关变灰，原因写在菜单那一行下面）。 */
   webReason?: string
   knowledgeAvailable: boolean
   onToggles: (next: ComposerToggles) => void
@@ -128,7 +125,7 @@ export function Composer({
   const options = targets === undefined || query === undefined ? [] : mentionOptions(targets, query)
   const menuOpen = targets !== undefined && query !== undefined
 
-  /** 选了一个：把打到一半的 `@…` 从字里拿掉，换成上面的小胶囊。 */
+  /** 选了一个：把打到一半的 `@…` 从字里拿掉，换成框里的小标。 */
   const pick = (o: AssistantTarget): void => {
     const caret = area.current?.selectionStart ?? text.length
     const before = text.slice(0, caret)
@@ -153,23 +150,19 @@ export function Composer({
   const addDocs = async (files: File[]): Promise<void> => {
     if (files.length === 0) return
     const ok = files.filter((f) => isDocFile(f.name) && f.size <= MAX_BYTES)
-    if (ok.length < files.length) setProblem(t('assistant.doc.bad'))
+    setProblem(ok.length < files.length ? t('assistant.doc.bad') : undefined)
     const read = await Promise.all(ok.map((f) => readDoc(f)))
     setDocs((prev) => [...prev, ...read].slice(0, MAX_DOCS))
   }
 
-  const add = async (all: File[]): Promise<void> => {
-    // WP350：拖进来 / 贴进来的资料走资料那一路，图走图
-    const docFiles = all.filter((f) => isDocFile(f.name))
-    if (docFiles.length > 0) void addDocs(docFiles)
-    const files = all.filter((f) => !isDocFile(f.name))
+  const addImages = async (files: File[]): Promise<void> => {
     if (files.length === 0) return
     if (!canSeeImages) {
       setProblem(t('free_chat.image.no_vision'))
       return
     }
     const ok = files.filter((f) => IMAGE_TYPES.includes(f.type) && f.size <= MAX_BYTES)
-    if (ok.length < files.length) setProblem(t('free_chat.image.too_big'))
+    setProblem(ok.length < files.length ? t('free_chat.image.too_big') : undefined)
     const read = await Promise.all(ok.map((f) => readImage(f)))
     setImages((prev) => [...prev, ...read].slice(0, MAX_IMAGES))
   }
@@ -185,227 +178,209 @@ export function Composer({
     setProblem(undefined)
   }
 
+  const webName = t('free_chat.web_search')
+  const knowledgeName = t('free_chat.knowledge')
+  const chips = [
+    ...(target === undefined
+      ? []
+      : [
+          <Chip
+            key="target"
+            icon={AtSign}
+            label={target.label}
+            removeLabel={t('assistant.mention.remove')}
+            testId="assistant-mention-chip"
+            onRemove={() => setTarget(undefined)}
+          />,
+        ]),
+    ...(toggles.web_search
+      ? [
+          <Chip
+            key="web"
+            kind="web"
+            icon={Globe}
+            label={webName}
+            removeLabel={t('assistant.toggle.off', { name: webName })}
+            testId="assistant-toggle-chip"
+            onRemove={() => onToggles({ ...toggles, web_search: false })}
+          />,
+        ]
+      : []),
+    ...(toggles.knowledge
+      ? [
+          <Chip
+            key="knowledge"
+            kind="knowledge"
+            icon={Library}
+            label={knowledgeName}
+            removeLabel={t('assistant.toggle.off', { name: knowledgeName })}
+            testId="assistant-toggle-chip"
+            onRemove={() => onToggles({ ...toggles, knowledge: false })}
+          />,
+        ]
+      : []),
+  ]
+
+  // 「+」点开：附资料、加图；下面两个开关（开着时框里一颗小标）
+  const plusMenu = (
+    <>
+      <DropdownMenuItem
+        data-testid="composer-plus-doc"
+        onSelect={() => {
+          docInput.current?.click()
+        }}
+      >
+        <FileText aria-hidden />
+        {t('assistant.doc.add')}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        data-testid="composer-plus-image"
+        disabled={!canSeeImages}
+        {...(canSeeImages ? {} : { title: t('free_chat.image.no_vision') })}
+        onSelect={() => {
+          file.current?.click()
+        }}
+      >
+        <ImagePlus aria-hidden />
+        {t('free_chat.image.add')}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuCheckboxItem
+        data-testid="composer-plus-web"
+        checked={toggles.web_search}
+        disabled={webReason !== undefined}
+        onCheckedChange={(on) => {
+          onToggles({ ...toggles, web_search: on === true })
+        }}
+      >
+        <Globe aria-hidden />
+        <span className="flex min-w-0 flex-col">
+          {webName}
+          {webReason === undefined ? null : (
+            <span className="text-xs text-ws-muted-fg">{webReason}</span>
+          )}
+        </span>
+      </DropdownMenuCheckboxItem>
+      <DropdownMenuCheckboxItem
+        data-testid="composer-plus-knowledge"
+        checked={toggles.knowledge}
+        disabled={!knowledgeAvailable}
+        onCheckedChange={(on) => {
+          onToggles({ ...toggles, knowledge: on === true })
+        }}
+      >
+        <Library aria-hidden />
+        {knowledgeName}
+      </DropdownMenuCheckboxItem>
+    </>
+  )
+
   return (
-    <fieldset
-      className="flex min-w-0 flex-col gap-2 rounded-2xl border bg-ws-card p-3 shadow-ws"
-      data-testid="free-chat-composer"
-      aria-label={hint}
-      onDragOver={(e) => {
-        e.preventDefault()
-      }}
-      onDrop={(e) => {
-        e.preventDefault()
-        void add([...e.dataTransfer.files])
-      }}
-    >
-      {images.length === 0 ? null : (
-        <div className="flex flex-wrap gap-1.5" data-testid="free-chat-attachments">
-          {images.map((img, i) => (
-            <span
-              // biome-ignore lint/suspicious/noArrayIndexKey: 还没发出去的图没有 id
-              key={i}
-              className="relative"
-            >
-              <img
-                src={`data:${img.mime};base64,${img.data}`}
-                alt=""
-                className="size-14 rounded-md border object-cover"
-              />
-              <button
-                type="button"
-                aria-label={t('free_chat.image.remove')}
-                className="absolute -top-1.5 -right-1.5 rounded-full border bg-background p-0.5"
-                onClick={() => {
-                  setImages((prev) => prev.filter((_, j) => j !== i))
-                }}
-              >
-                <X aria-hidden className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {docs.length === 0 ? null : (
-        <div className="flex flex-wrap gap-1.5" data-testid="free-chat-docs">
-          {docs.map((d, i) => (
-            <span
-              // biome-ignore lint/suspicious/noArrayIndexKey: 还没发出去的资料没有 id
-              key={i}
-              className="inline-flex max-w-[240px] items-center gap-1.5 rounded-md border bg-ws-surface px-2 py-1 text-xs"
-              data-testid="free-chat-doc"
-            >
-              <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">{d.name}</span>
-              <button
-                type="button"
-                aria-label={t('assistant.doc.remove')}
-                onClick={() => {
-                  setDocs((prev) => prev.filter((_, j) => j !== i))
-                }}
-              >
-                <X aria-hidden className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {target === undefined ? null : (
-        <MentionChip target={target} onClear={() => setTarget(undefined)} />
-      )}
-      {menuOpen ? <MentionMenu options={options} active={active} onPick={pick} /> : null}
-      <textarea
-        ref={area}
-        value={text}
-        rows={2}
-        placeholder={hint}
-        aria-label={hint}
-        data-testid="free-chat-input"
-        className="max-h-60 min-h-12 w-full resize-none bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
+    <div className="relative" data-testid="free-chat-composer">
+      <input
+        ref={file}
+        type="file"
+        accept={IMAGE_TYPES.join(',')}
+        multiple
+        hidden
+        data-testid="free-chat-image-input"
         onChange={(e) => {
-          setText(e.target.value)
+          void addImages([...(e.target.files ?? [])])
+          e.target.value = ''
+        }}
+      />
+      <input
+        ref={docInput}
+        type="file"
+        accept={DOC_EXTENSIONS.map((x) => `.${x}`).join(',')}
+        multiple
+        hidden
+        data-testid="free-chat-doc-input"
+        onChange={(e) => {
+          void addDocs([...(e.target.files ?? [])])
+          e.target.value = ''
+        }}
+      />
+      <MatterComposer
+        value={text}
+        onChange={(v) => {
+          setText(v)
           if (targets !== undefined) {
-            const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length)
+            const caret = area.current?.selectionStart ?? v.length
+            const q = mentionQuery(v, caret)
             setQuery(q)
             if (q === undefined) setActive(0)
           }
         }}
-        onPaste={(e) => {
-          const files = [...e.clipboardData.files]
-          if (files.length > 0) {
-            e.preventDefault()
-            void add(files)
-            return
-          }
-          // WP350：一大段字（会议记录、聊天记录）收成一份附件
-          const pasted = e.clipboardData.getData('text/plain')
-          if (pasted.length > PASTE_AS_FILE_CHARS && docs.length < MAX_DOCS) {
-            e.preventDefault()
-            setDocs((prev) => [
-              ...prev,
-              {
-                name: t('assistant.doc.pasted', { n: prev.length + 1 }),
-                data: textToBase64(pasted),
-                size: pasted.length,
-              },
-            ])
-          }
+        onSend={send}
+        onStop={onStop}
+        running={busy}
+        closed={false}
+        sending={busy}
+        docked={false}
+        placeholderText={hint}
+        label={hint}
+        testId="free-chat-input"
+        areaRef={area}
+        modelSlot={modelSlot}
+        attachments={images.map((img, i) => ({
+          id: String(i),
+          url: `data:${img.mime};base64,${img.data}`,
+        }))}
+        onAttach={(files) => {
+          void addImages(files)
         }}
-        onKeyDown={(e) => {
-          if (menuOpen && !e.nativeEvent.isComposing) {
-            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-              e.preventDefault()
-              const n = Math.max(1, options.length)
-              setActive((i) => (i + (e.key === 'ArrowDown' ? 1 : n - 1)) % n)
-              return
-            }
-            if (e.key === 'Escape') {
-              e.preventDefault()
-              setQuery(undefined)
-              return
-            }
-            if ((e.key === 'Enter' || e.key === 'Tab') && options[active] !== undefined) {
-              e.preventDefault()
-              pick(options[active] as AssistantTarget)
-              return
-            }
-          }
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        onDetach={(id) => {
+          setImages((prev) => prev.filter((_, j) => String(j) !== id))
+        }}
+        docs={docs}
+        onAttachDocs={(files) => {
+          void addDocs(files)
+        }}
+        onDetachDoc={(i) => {
+          setDocs((prev) => prev.filter((_, j) => j !== i))
+        }}
+        notice={problem}
+        plusMenu={plusMenu}
+        sendTrack="assistant.send"
+        chips={chips.length === 0 ? undefined : chips}
+        overlay={
+          menuOpen ? <MentionMenu options={options} active={active} onPick={pick} /> : undefined
+        }
+        onKeyDownFirst={(e) => {
+          if (!menuOpen || e.nativeEvent.isComposing) return false
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault()
-            send()
+            const n = Math.max(1, options.length)
+            setActive((i) => (i + (e.key === 'ArrowDown' ? 1 : n - 1)) % n)
+            return true
           }
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            setQuery(undefined)
+            return true
+          }
+          if ((e.key === 'Enter' || e.key === 'Tab') && options[active] !== undefined) {
+            e.preventDefault()
+            pick(options[active] as AssistantTarget)
+            return true
+          }
+          return false
+        }}
+        // WP350：一大段字（会议记录、聊天记录）收成一份附件
+        onPasteText={(pasted) => {
+          if (pasted.length <= PASTE_AS_FILE_CHARS || docs.length >= MAX_DOCS) return false
+          setDocs((prev) => [
+            ...prev,
+            {
+              name: t('assistant.doc.pasted', { n: prev.length + 1 }),
+              data: textToBase64(pasted),
+              size: pasted.length,
+            },
+          ])
+          return true
         }}
       />
-      {problem === undefined ? null : <p className="text-xs text-destructive">{problem}</p>}
-      <div className="flex flex-wrap items-center gap-2">
-        {modelSlot}
-        <Toggle
-          on={toggles.web_search}
-          icon={Globe}
-          label={t('free_chat.web_search')}
-          disabled={webReason !== undefined}
-          testId="free-chat-web-toggle"
-          {...(webReason === undefined ? {} : { hint: webReason })}
-          onChange={(on) => {
-            onToggles({ ...toggles, web_search: on })
-          }}
-        />
-        <Toggle
-          on={toggles.knowledge}
-          icon={Library}
-          label={t('free_chat.knowledge')}
-          disabled={!knowledgeAvailable}
-          testId="free-chat-knowledge-toggle"
-          onChange={(on) => {
-            onToggles({ ...toggles, knowledge: on })
-          }}
-        />
-        <span className="ml-auto flex items-center gap-1.5">
-          <input
-            ref={file}
-            type="file"
-            accept={IMAGE_TYPES.join(',')}
-            multiple
-            hidden
-            onChange={(e) => {
-              void add([...(e.target.files ?? [])])
-              e.target.value = ''
-            }}
-          />
-          <input
-            ref={docInput}
-            type="file"
-            accept={DOC_EXTENSIONS.map((x) => `.${x}`).join(',')}
-            multiple
-            hidden
-            data-testid="free-chat-doc-input"
-            onChange={(e) => {
-              void addDocs([...(e.target.files ?? [])])
-              e.target.value = ''
-            }}
-          />
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={t('assistant.doc.add')}
-            title={t('assistant.doc.add')}
-            data-testid="free-chat-attach-doc"
-            onClick={() => docInput.current?.click()}
-          >
-            <Paperclip aria-hidden />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={t('free_chat.image.add')}
-            title={canSeeImages ? t('free_chat.image.add') : t('free_chat.image.no_vision')}
-            disabled={!canSeeImages}
-            data-testid="free-chat-attach"
-            onClick={() => file.current?.click()}
-          >
-            <ImagePlus aria-hidden />
-          </Button>
-          {busy ? (
-            <Button
-              size="icon-sm"
-              aria-label={t('free_chat.stop')}
-              data-testid="free-chat-stop"
-              onClick={onStop}
-            >
-              <Square aria-hidden className="fill-current" />
-            </Button>
-          ) : (
-            <Button
-              size="icon-sm"
-              aria-label={t('free_chat.send')}
-              data-testid="free-chat-send"
-              disabled={text.trim() === '' && images.length === 0 && docs.length === 0}
-              onClick={send}
-            >
-              <ArrowUp aria-hidden />
-            </Button>
-          )}
-        </span>
-      </div>
-    </fieldset>
+    </div>
   )
 }

@@ -18,7 +18,13 @@ import { createServer, type Server } from '../src/index.js'
 import { createSocialStore, type SocialStore, socialDeckData } from '../src/social.js'
 import { createSocialChannels } from '../src/social-channels.js'
 import { createSocialService, type SocialServiceAssembly } from '../src/social-service.js'
-import { parseTagReview, type TagReviewer, tagReviewPrompt } from '../src/social-tags.js'
+import {
+  modelTagReviewer,
+  parseTagReview,
+  TAG_REVIEW_SYSTEM,
+  type TagReviewer,
+  tagReviewPrompt,
+} from '../src/social-tags.js'
 import { createFakeDiscord, type FakeDiscord } from './fake-discord-api.js'
 
 const WS = 'ws_1' as WorkspaceId
@@ -230,6 +236,24 @@ describe('WP257 模型复核（默认关）', () => {
     expect(parseTagReview('unsure')).toBe('unsure')
     expect(parseTagReview('嗯')).toBe('unsure')
     expect(parseTagReview(undefined)).toBe('unsure')
+  })
+
+  it('WP471（决策 1549）：两条帖子——系统提示逐字相同（六类说明）；原话在用户消息最后', async () => {
+    const seen: { user: string; system?: string }[] = []
+    const review = modelTagReviewer(async (user, system) => {
+      seen.push({ user, ...(system === undefined ? {} : { system }) })
+      return 'praise'
+    })
+    await review({ channel: 'discord', text: 'love it', rule: 'praise' })
+    await review({ channel: 'telegram_group', text: 'where is my order', rule: 'other' })
+    const [a, b] = seen
+    expect(a?.system).toBe(TAG_REVIEW_SYSTEM)
+    expect(b?.system).toBe(a?.system)
+    expect(a?.user).not.toContain('六类')
+    expect(a?.user.trimEnd().endsWith('</external_data>')).toBe(true)
+    expect(b?.user.indexOf('按关键词规则判的是 other')).toBeLessThan(
+      b?.user.indexOf('<external_data>') ?? -1,
+    )
   })
 })
 

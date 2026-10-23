@@ -57,6 +57,11 @@ export interface SubscriptionChatRequest {
   reasoning_effort?: ReasoningEffort
   on_delta?: (text: string) => void
   signal?: AbortSignal
+  /**
+   * WP473（只加）：缓存分组键（宿主给的是「工作区 + 职责」或助理段的**哈希**，不含个人信息）。
+   * 交给 pi-ai 当会话标识：订阅那头据此把同一组请求排到一起，开头相同的部分才命中缓存。
+   */
+  session_id?: string
 }
 
 export interface SubscriptionChatResult {
@@ -379,6 +384,9 @@ export function createSubscriptionChat(
           : choice === undefined
             ? {}
             : { toolChoice: 'auto' }),
+        ...(request.session_id === undefined || request.session_id === ''
+          ? {}
+          : { sessionId: request.session_id }),
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
       })
       for await (const event of stream) {

@@ -229,7 +229,7 @@ export function DutyPage(): React.ReactNode {
                 <Link
                   to={`/positions/${encodeURIComponent(assignment)}`}
                   data-testid="duty-breadcrumb"
-                  className="shrink-0 truncate rounded-md px-1.5 py-1 text-[13.5px] text-ws-muted-fg hover:bg-foreground/[0.06] hover:text-foreground"
+                  className="shrink-0 truncate rounded-md px-1.5 py-1 text-[13px] text-ws-muted-fg hover:bg-foreground/[0.06] hover:text-foreground"
                 >
                   {positionName === '' ? t('nav.positions') : positionName}
                 </Link>
@@ -242,11 +242,24 @@ export function DutyPage(): React.ReactNode {
             testId="duty-name"
             menuTestId="duty-title-menu"
             menuLabel={t('topbar.menu.duty', { name: dutyName })}
-            after={
-              description === '' ? null : <Hint text={description} testId="duty-description" />
-            }
             menu={(close) => (
               <>
+                {/*
+                  WP456-T3（§3.2）：职责介绍不再是标题旁边挤着下拉箭头的问号——进下拉菜单第一行（最多三行，
+                  整段在悬停里）。
+                */}
+                {description === '' ? null : (
+                  <>
+                    <p
+                      className="line-clamp-3 px-2 pt-1.5 pb-1 text-xs leading-[18px] text-ws-muted-fg"
+                      data-testid="duty-description"
+                      title={description}
+                    >
+                      {description}
+                    </p>
+                    <TitleMenuSeparator />
+                  </>
+                )}
                 <TitleMenuItem
                   icon={ArrowLeft}
                   label={t('topbar.duty.back', {
@@ -334,12 +347,15 @@ export function DutyPage(): React.ReactNode {
               onOpen={(card) => {
                 navigate(matterUrl(card))
               }}
-              title={
-                <h3 className="flex min-w-0 items-center gap-2" data-testid="duty-deck-title">
-                  <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
-                  <Hint text={t('pos2.deck.hint')} />
+              // WP456-T3：和岗位页同一种节标题（14/600 + 灰色计数），方向键的说明在卡底最右边
+              title={(total) => (
+                <h3 className="ws-sec-title min-w-0" data-testid="duty-deck-title">
+                  {t('pos2.deck.title')}
+                  {total === undefined || total === 0 ? null : (
+                    <span className="ws-sec-count ws-num">{total}</span>
+                  )}
                 </h3>
-              }
+              )}
             />
           )}
           {/* WP437：对话框在中栏底部居中、悬浮在内容之上（放在内容最后） */}

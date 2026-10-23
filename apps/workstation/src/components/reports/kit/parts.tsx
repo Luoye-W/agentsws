@@ -163,7 +163,7 @@ export function BlockShell({
         <header className="mb-3 flex items-start gap-2.5">
           <div className="min-w-0">
             {block.title === undefined ? null : (
-              <h3 className="text-[14.5px] font-semibold text-ws-ink">{block.title}</h3>
+              <h3 className="text-[14px] font-semibold text-ws-ink">{block.title}</h3>
             )}
             {block.subtitle === undefined ? null : (
               <p className="mt-0.5 text-[12px] text-ws-muted-fg">{block.subtitle}</p>
@@ -226,7 +226,7 @@ export function MissingBody({
     <div className="relative min-h-[170px]" data-testid="report-missing" data-status={status}>
       <GhostChart />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-6 text-center">
-        <div className="pointer-events-none absolute top-1/2 left-1/2 h-[120px] w-[min(340px,100%)] -translate-x-1/2 -translate-y-1/2 rounded-[14px] bg-ws-card shadow-[0_0_40px_30px_var(--ws-card)]" />
+        <div className="pointer-events-none absolute top-1/2 left-1/2 h-[120px] w-[min(340px,100%)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-ws-card shadow-[0_0_40px_30px_var(--ws-card)]" />
         {status === 'not_connected' ? (
           <Plug aria-hidden className="relative size-4 text-ws-muted-fg" />
         ) : null}
@@ -242,7 +242,7 @@ export function MissingBody({
                 data-testid="report-connect"
                 data-source={n.source}
                 className={cn(
-                  'inline-flex h-[26px] items-center rounded-[7px] px-2.5 text-[12px] font-medium',
+                  'inline-flex h-[26px] items-center rounded-md px-2.5 text-[12px] font-medium',
                   i === 0
                     ? 'bg-ws-brand text-ws-brand-fg hover:brightness-95'
                     : 'bg-ws-secondary text-ws-ink hover:brightness-95',
@@ -285,7 +285,7 @@ export function ConclusionCard({
         <p className="mb-1.5 text-[12px] text-ws-muted-fg">
           {conclusion.by === 'ai' ? t('report.conclusion.ai') : t('report.conclusion.rules')}
         </p>
-        <ul className="flex flex-col gap-1.5 text-[13.5px] text-ws-body" data-slot="data">
+        <ul className="flex flex-col gap-1.5 text-[13px] text-ws-body" data-slot="data">
           {conclusion.lines.map((line) => (
             <li key={line}>
               {boldParts(line).map((p, i) =>
@@ -308,7 +308,7 @@ export function ConclusionCard({
           type="button"
           disabled={busy === true}
           data-testid="report-action"
-          className="col-start-2 inline-flex h-[26px] items-center gap-1.5 self-start justify-self-start rounded-[7px] bg-ws-secondary px-2.5 text-[12px] font-medium text-ws-ink hover:brightness-95 disabled:opacity-60 sm:col-start-3"
+          className="col-start-2 inline-flex h-[26px] items-center gap-1.5 self-start justify-self-start rounded-md bg-ws-secondary px-2.5 text-[12px] font-medium text-ws-ink hover:brightness-95 disabled:opacity-60 sm:col-start-3"
           onClick={() => {
             if (conclusion.action !== undefined) onAction(conclusion.action.prompt)
           }}

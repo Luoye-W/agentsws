@@ -80,6 +80,8 @@ describe('bridge-types', () => {
       sessionRenew: 'agentsws:session-renew',
       // WP424：藏了系统标题栏后，Windows 叠加按钮跟主题换色
       titleBarTheme: 'agentsws:title-bar-theme',
+      // WP475：反馈框「附上截图」
+      captureWindow: 'agentsws:capture-window',
     })
   })
 

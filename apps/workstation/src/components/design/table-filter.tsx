@@ -167,7 +167,7 @@ function Funnel({ active, label, testId }: { active: boolean; label: string; tes
         title={label}
         data-testid={testId}
         data-active={active ? 'true' : 'false'}
-        className={`inline-flex size-5 shrink-0 items-center justify-center rounded hover:bg-ws-surface ${active ? 'text-ws-brand' : 'text-ws-muted-fg/70 hover:text-ws-muted-fg'}`}
+        className={`inline-flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-ws-surface ${active ? 'text-ws-brand' : 'text-ws-muted-fg/70 hover:text-ws-muted-fg'}`}
       >
         <Filter aria-hidden className="size-3" fill={active ? 'currentColor' : 'none'} />
       </button>

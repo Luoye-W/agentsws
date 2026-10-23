@@ -14,11 +14,28 @@
  *   WP283：现在的改图型号认遮罩时，每张图左下多一个笔刷「圈出要改的地方」（不认的型号不给这个入口）。
  * - 建议输入：框空着、又有合适的下一步时浅灰字直接显示在框里 + 小 Tab 键帽；按 Tab 收下变正文，
  *   打别的字就消失。涉及花钱 / 对外的也只是填进框，仍要人按发送。
+ * - **WP456-T8（§3.7）**：「我的助理」也用这一个框（不再是另一种长相）。为它多开的几个口子都是可选的：
+ *   `plusMenu`（「+」点开是一个小菜单：附资料、加图，联网 / 公司资料两个开关）、`chips`（框里输入区上面一排小标：
+ *   `@` 选的岗位、开着的开关）、`overlay`（框上方的 `@` 菜单）、`onKeyDownFirst` / `onPasteText` / `areaRef`
+ *   （`@` 选人、一大段字收成附件）、`notice`（框里说一句）。图可以是素材库的地址，也可以是页面内的 `data:` 图。
  */
 import { cn } from 'cn'
 import { ArrowUp, Brush, FileText, Plus, Square, X } from 'lucide-react'
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react'
 import { AuthedImage } from '@/components/images/authed-image'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { BRAND_ASSET_ACCEPT } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { DOC_EXTENSIONS, isDocFile } from '@/lib/free-chat'
@@ -49,6 +66,14 @@ export function MatterComposer({
   onAttachDocs,
   onDetachDoc,
   docProblem = false,
+  plusMenu,
+  chips,
+  sendTrack,
+  overlay,
+  onKeyDownFirst,
+  onPasteText,
+  areaRef,
+  notice,
 }: {
   value: string
   onChange: (v: string) => void
@@ -85,9 +110,26 @@ export function MatterComposer({
   onDetachDoc?: ((index: number) => void) | undefined
   /** WP357：有资料没收下（太大 / 太多 / 读不了）——框里说一句只收哪几种。 */
   docProblem?: boolean
+  /** WP456-T8：「+」点开是这个小菜单（`DropdownMenuItem` 们）；不给 = 「+」直接开选文件。 */
+  plusMenu?: ReactNode
+  /** WP456-T8：框里输入区上面那一排小标（`@` 选的岗位、开着的联网 / 公司资料）。 */
+  chips?: ReactNode
+  /** WP476：发送键的 `data-track`（匿名使用数据的按钮编号；不给 = 按 `matter-send` 记）。 */
+  sendTrack?: string | undefined
+  /** WP456-T8：贴在框上方的浮层（`@` 菜单）。 */
+  overlay?: ReactNode
+  /** WP456-T8：按键先给调用方（`@` 菜单的上下 / 回车 / Esc）；回 `true` = 它处理了。 */
+  onKeyDownFirst?: ((e: KeyboardEvent<HTMLTextAreaElement>) => boolean) | undefined
+  /** WP456-T8：粘贴的是字时先给调用方（一大段字收成附件）；回 `true` = 它收下了。 */
+  onPasteText?: ((text: string) => boolean) | undefined
+  /** WP456-T8：调用方要拿输入框（`@` 选人时看光标在哪）。 */
+  areaRef?: RefObject<HTMLTextAreaElement | null> | undefined
+  /** WP456-T8：框里说一句（看不了图、图太大……），和收不下文件那一句同一个位置。 */
+  notice?: string | undefined
 }): ReactNode {
   const { t } = useApp()
-  const area = useRef<HTMLTextAreaElement>(null)
+  const ownArea = useRef<HTMLTextAreaElement>(null)
+  const area = areaRef ?? ownArea
   const hintId = useId()
   const picker = useRef<HTMLInputElement>(null)
   const canImages = onAttach !== undefined
@@ -150,6 +192,30 @@ export function MatterComposer({
         ? t('matter.cmp.attach.doc')
         : t('matter.cmp.attach.image')
 
+  // WP456-T8：给了 `plusMenu` 时「+」点开是小菜单（附资料 / 加图在菜单里），否则直接开选文件
+  const plusButton = (
+    <button
+      type="button"
+      disabled={!canAttach || attaching}
+      data-testid="matter-attach"
+      aria-label={plusMenu === undefined ? attachLabel : t('assistant.plus')}
+      title={plusMenu === undefined ? attachLabel : t('assistant.plus')}
+      {...(plusMenu === undefined
+        ? {
+            onClick: () => {
+              picker.current?.click()
+            },
+          }
+        : {})}
+      className={cn(
+        'grid size-8 place-items-center rounded-md',
+        canAttach ? 'text-ws-body hover:bg-muted' : 'text-ws-muted-fg/70',
+      )}
+    >
+      <Plus aria-hidden className="size-[18px]" />
+    </button>
+  )
+
   return (
     <div
       className={
@@ -175,22 +241,33 @@ export function MatterComposer({
           take(e.dataTransfer.files)
         }}
         onPaste={(e) => {
-          if (!canAttach || e.clipboardData.files.length === 0) return
-          if (take(e.clipboardData.files)) e.preventDefault()
+          if (canAttach && e.clipboardData.files.length > 0) {
+            if (take(e.clipboardData.files)) e.preventDefault()
+            return
+          }
+          if (onPasteText?.(e.clipboardData.getData('text/plain')) === true) e.preventDefault()
         }}
         className={cn(
           'ws-composer group/cmp relative rounded-[20px] bg-ws-card transition-[box-shadow,background-color]',
           has && 'is-has',
         )}
       >
+        {overlay === undefined || overlay === null ? null : (
+          <div className="absolute bottom-full left-0 z-30 mb-2 w-72 max-w-full">{overlay}</div>
+        )}
         {canImages && (attachments ?? []).length > 0 ? (
           <div className="flex flex-wrap gap-1.5 px-4 pt-3" data-testid="matter-attachments">
             {(attachments ?? []).map((a) => (
               <div
                 key={a.id}
-                className="relative size-14 overflow-hidden rounded-[10px] ring-1 ring-ws-line"
+                className="relative size-14 overflow-hidden rounded-lg ring-1 ring-ws-line"
+                data-testid="matter-attachment"
               >
-                <AuthedImage src={a.url} alt={a.id} className="size-full" />
+                {a.url.startsWith('data:') ? (
+                  <img src={a.url} alt="" className="size-full object-cover" />
+                ) : (
+                  <AuthedImage src={a.url} alt={a.id} className="size-full" />
+                )}
                 <button
                   type="button"
                   aria-label={t('matter.cmp.attach.remove')}
@@ -227,6 +304,11 @@ export function MatterComposer({
             ))}
           </div>
         ) : null}
+        {chips === undefined || chips === null ? null : (
+          <div className="flex flex-wrap items-center gap-1.5 px-4 pt-3" data-testid="matter-chips">
+            {chips}
+          </div>
+        )}
         {canDocs && (docs ?? []).length > 0 ? (
           <div className="flex flex-wrap gap-1.5 px-4 pt-3" data-testid="matter-docs">
             {(docs ?? []).map((d, i) => (
@@ -255,7 +337,11 @@ export function MatterComposer({
           <p className="px-4 pt-2 text-[12px] text-ws-warn" data-testid="matter-attach-rejected">
             {t('assistant.doc.bad')}
           </p>
-        ) : null}
+        ) : notice === undefined || notice === '' ? null : (
+          <p className="px-4 pt-2 text-[12px] text-ws-warn" data-testid="matter-notice">
+            {notice}
+          </p>
+        )}
         <div className="relative">
           <textarea
             ref={area}
@@ -270,6 +356,7 @@ export function MatterComposer({
               onChange(e.target.value)
             }}
             onKeyDown={(e) => {
+              if (onKeyDownFirst?.(e) === true) return
               if (e.key === 'Tab' && !e.shiftKey && ghost !== undefined) {
                 e.preventDefault()
                 onChange(ghost)
@@ -281,7 +368,7 @@ export function MatterComposer({
               }
             }}
             className={cn(
-              'block max-h-[240px] min-h-14 w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 text-[15px] leading-[1.55] text-ws-ink outline-none placeholder:text-ws-muted-fg',
+              'block max-h-[240px] min-h-14 w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 text-[14px] leading-[22px] text-ws-ink outline-none placeholder:text-ws-muted-fg',
               'pt-3.5',
             )}
           />
@@ -290,12 +377,12 @@ export function MatterComposer({
               aria-hidden
               data-testid="matter-suggest"
               className={cn(
-                'pointer-events-none absolute inset-x-0 top-0 flex items-baseline gap-2 overflow-hidden px-4 pb-1 text-[15px] leading-[1.55] whitespace-nowrap text-ws-muted-fg/80',
+                'pointer-events-none absolute inset-x-0 top-0 flex items-baseline gap-2 overflow-hidden px-4 pb-1 text-[14px] leading-[22px] whitespace-nowrap text-ws-muted-fg/80',
                 'pt-3.5',
               )}
             >
               <span className="truncate">{ghost}</span>
-              <span className="inline-flex h-[18px] shrink-0 items-center rounded-[5px] bg-ws-surface px-[5px] font-sans text-ws-tiny font-semibold tracking-[0.02em] text-ws-muted-fg shadow-[inset_0_0_0_1px_var(--ws-line),0_1px_0_var(--ws-line)]">
+              <span className="inline-flex h-[18px] shrink-0 items-center rounded-sm bg-ws-surface px-[5px] font-sans text-ws-tiny font-semibold tracking-[0.02em] text-ws-muted-fg shadow-[inset_0_0_0_1px_var(--ws-line),0_1px_0_var(--ws-line)]">
                 Tab
               </span>
             </div>
@@ -307,22 +394,21 @@ export function MatterComposer({
           )}
         </div>
         <div className="flex items-center gap-0.5 px-2 pt-1 pb-2">
-          <button
-            type="button"
-            disabled={!canAttach || attaching}
-            data-testid="matter-attach"
-            aria-label={attachLabel}
-            title={attachLabel}
-            onClick={() => {
-              picker.current?.click()
-            }}
-            className={cn(
-              'grid size-8 place-items-center rounded-[10px]',
-              canAttach ? 'text-ws-body hover:bg-muted' : 'text-ws-muted-fg/70',
-            )}
-          >
-            <Plus aria-hidden className="size-[18px]" />
-          </button>
+          {plusMenu === undefined ? (
+            plusButton
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>{plusButton}</DropdownMenuTrigger>
+              <DropdownMenuContent
+                side="top"
+                align="start"
+                className="w-64 rounded-xl"
+                data-testid="composer-plus-menu"
+              >
+                {plusMenu}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {canAttach ? (
             <input
               ref={picker}
@@ -359,6 +445,7 @@ export function MatterComposer({
             <button
               type="submit"
               data-testid="matter-send"
+              data-track={sendTrack}
               aria-label={t('matter.cmp.send')}
               title={t('matter.cmp.send')}
               disabled={!has || sending || disabled}

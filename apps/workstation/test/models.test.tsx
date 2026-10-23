@@ -167,6 +167,25 @@ const USAGE: ModelUsageView = {
       cached_tokens: 0,
       cost_base: 0.0007,
     },
+    // WP473：「运行」按功能拆开的两行（一行命中八成、一行没命中）
+    {
+      purpose: 'run',
+      feature: 'position_run',
+      calls: 2,
+      input_tokens: 1000,
+      output_tokens: 100,
+      cached_tokens: 800,
+      cost_base: 0.0002,
+    },
+    {
+      purpose: 'run',
+      feature: 'support_chat',
+      calls: 5,
+      input_tokens: 500,
+      output_tokens: 50,
+      cached_tokens: 0,
+      cost_base: 0.0001,
+    },
   ],
   total: {
     purpose: 'run',
@@ -309,7 +328,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-const { ModelsPanel } = await import('@/components/models/models-panel')
+const { ModelsPanel, cacheRateText } = await import('@/components/models/models-panel')
 const { suggestProviderId } = await import('@/components/models/model-form')
 const { NoModelBanner } = await import('@/components/models/no-model-banner')
 const { AppShell } = await import('@/components/app-shell')
@@ -396,7 +415,7 @@ describe('WP25 §C 「还没接模型」黄条', () => {
    * 向导第 ① 步问的就是"用哪个 AI"，同一屏上再顶一条黄条等于同一句话说两遍。
    * 走完向导（包括走了演示旁路那条路）之后它照常出现——那时它才是一条新消息。
    */
-  it('WP121b：向导那一页顶栏不出这个胶囊；别的页照出', async () => {
+  it('WP121b → WP456-T3（决策 1447）：顶栏一律不出这个胶囊——「还没接 AI」只在输入框那一颗说', async () => {
     renderWithProviders(
       <AppShell positions={[]} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
         <div>向导</div>
@@ -404,9 +423,7 @@ describe('WP25 §C 「还没接模型」黄条', () => {
       '/onboarding',
     )
     await screen.findByTestId('top-bar')
-    await waitFor(() => {
-      expect(screen.queryByTestId('no-model-chip')).toBeNull()
-    })
+    expect(screen.queryByTestId('no-model-chip')).toBeNull()
 
     renderWithProviders(
       <AppShell positions={[]} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
@@ -414,7 +431,10 @@ describe('WP25 §C 「还没接模型」黄条', () => {
       </AppShell>,
       '/',
     )
-    expect(await screen.findByTestId('no-model-chip')).toBeTruthy()
+    await screen.findAllByTestId('top-bar')
+    // 等模型清单回来（别的页原来就是这时出胶囊的），顶栏仍然没有
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId('no-model-chip')).toBeNull()
   })
 })
 
@@ -742,6 +762,30 @@ describe('WP25 §C 模型面板：已配的那几条', () => {
     const table = await screen.findByTestId('model-usage')
     expect(table.textContent).toContain('跑活')
     expect(table.textContent).toContain('3')
+  })
+
+  it('WP473：每行一个「命中缓存」百分比（问号里说为什么省钱）；「运行」按功能拆开', async () => {
+    state.providers = [ACTIVE]
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const table = await screen.findByTestId('model-usage')
+    expect(table.textContent).toContain('命中缓存')
+    expect(table.querySelector('[data-hint]')?.getAttribute('data-hint')).toContain('1/30～1/50')
+    const rows = [...table.querySelectorAll('[data-testid="model-usage-row"]')]
+    const cell = (feature: string) => rows.find((r) => r.getAttribute('data-feature') === feature)
+    expect(cell('position_run')?.textContent).toContain('岗位运行')
+    expect(
+      cell('position_run')?.querySelector('[data-testid="model-usage-cache"]')?.textContent,
+    ).toBe('80%')
+    expect(cell('support_chat')?.textContent).toContain('客服聊天窗')
+    expect(
+      cell('support_chat')?.querySelector('[data-testid="model-usage-cache"]')?.textContent,
+    ).toBe('0%')
+  })
+
+  it('WP473：命中率按 cached / input 算；没有输入显示「—」', () => {
+    expect(cacheRateText({ input_tokens: 1000, cached_tokens: 774 })).toBe('77%')
+    expect(cacheRateText({ input_tokens: 0, cached_tokens: 0 })).toBe('—')
+    expect(cacheRateText({ input_tokens: 10, cached_tokens: 99 })).toBe('100%')
   })
 
   it('按 purpose 选模型：六件事各一行，选项来自能用的那几条', async () => {

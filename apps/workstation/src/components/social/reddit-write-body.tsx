@@ -84,7 +84,7 @@ export function RedditWriteBody({
   const rules = payload.rules ?? []
   const blank = text.trim() === '' || (target.kind === 'submit' && title.trim() === '')
   const field =
-    'w-full rounded-[10px] border border-ws-border bg-ws-surface p-2.5 text-sm leading-6 text-ws-body disabled:opacity-70'
+    'w-full rounded-lg border border-ws-border bg-ws-surface p-2.5 text-sm leading-6 text-ws-body disabled:opacity-70'
   return (
     <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-reddit-write">
       {/* 版块与回复谁已经在卡的标题里（界面少字）；这里只放版规条数，原文进问号 */}
@@ -98,7 +98,7 @@ export function RedditWriteBody({
       {payload.in_reply_to === undefined ? null : (
         <blockquote
           data-testid="reddit-write-quote"
-          className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-muted-fg"
+          className="rounded-lg bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-muted-fg"
         >
           {payload.in_reply_to}
         </blockquote>

@@ -38,6 +38,7 @@ import {
   type SceneOpenOutcome,
 } from './bridge-types.js'
 import { browserEntryUrl } from './browser-entry.js'
+import { encodeCapture } from './capture.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
 import {
   createLocalConnectLauncher,
@@ -146,6 +147,7 @@ import {
   resolveServerRuntime,
   type ServerRuntime,
   serverSpawnRequest,
+  telemetryHostFor,
 } from './server-process.js'
 import { createSessionKeeper } from './session-keeper.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
@@ -538,6 +540,8 @@ async function bootstrap(): Promise<void> {
   //     WP247：打包版（且没用 `AGENTSWS_CONNECT_URL` 指外部 runtime）由壳自己起本机连接器——
   //     不要 Docker；第一次点「连接店铺」时服务进程按需下载，壳当后台服务起停。端口第一次选好就记进配置。
   const connectPlan = planConnectRuntime({ env: process.env, packaged: app.isPackaged, remote })
+  // WP476：匿名使用数据的上报地址（只有安装包给；`AGENTSWS_TELEMETRY_HOST=off` 关掉）
+  const telemetryHost = telemetryHostFor({ env: process.env, packaged: app.isPackaged })
   let connectPort: number | undefined
   if (connectPlan.kind === 'local') {
     connectPort = await pickConnectPort({
@@ -634,6 +638,8 @@ async function bootstrap(): Promise<void> {
         ...(staticDir === undefined ? {} : { staticDir }),
         // WP345：浏览器插件的固定文件夹（远程档没有：插件只连本机）
         ...(remote ? {} : { extensionDir: extensionFolder(paths.userData) }),
+        // WP476：匿名使用数据的上报地址——只有打包后的安装包给（开发期不给 = 一条都不发）
+        ...(telemetryHost === undefined ? {} : { telemetryHost }),
         ...(systemProxy === undefined ? {} : { systemProxy }),
         // WP353：应用内搜索浏览器的本机通道（地址 + 一次性口令）
         ...(searchChannel === undefined
@@ -967,6 +973,18 @@ async function bootstrap(): Promise<void> {
     if (target === null || target !== window) return false
     target.setTitleBarOverlay(titleBarOverlay(theme))
     return true
+  })
+  // WP475：反馈框「附上截图」——只截发起调用的那个工坊窗口（不截屏幕、不截别的应用）
+  ipcMain.handle(BRIDGE_CHANNELS.captureWindow, async (event) => {
+    if (!fromLocalWindow(event)) return null
+    const target = BrowserWindow.fromWebContents(event.sender)
+    if (target === null || target.isDestroyed()) return null
+    try {
+      return encodeCapture(await target.webContents.capturePage())
+    } catch (err) {
+      logger.warn('截图没成', { error: String(err) })
+      return null
+    }
   })
   ipcMain.handle(BRIDGE_CHANNELS.notify, (event, raw: unknown) => {
     if (!fromLocalWindow(event)) return false

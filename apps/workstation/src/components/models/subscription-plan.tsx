@@ -216,7 +216,7 @@ export function SubscriptionPlan({
             <p className="text-xs">
               {t('models.subscription.code')}
               <code
-                className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-sm tracking-widest"
+                className="ml-1 rounded-sm bg-muted px-1.5 py-0.5 font-mono text-sm tracking-widest"
                 data-testid="subscription-code"
               >
                 {data.notice.code}

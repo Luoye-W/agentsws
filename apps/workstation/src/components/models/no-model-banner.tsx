@@ -27,6 +27,8 @@ import { useApp } from '@/lib/app-context'
  *
  * WP334（决策 726）：点了不再跳设置页——在第三栏开「接模型」那张连接卡（与开工向导第 ① 步同一个件，
  * key 走本机原生表单），就地接上；设置页仍在，是总览与管理。
+ *
+ * WP456-T3（决策 1447）：「还没接 AI」只在输入框那一颗说——外壳顶栏不再放 `chip`（这个变体留着，没有页面在用）。
  */
 export type NoModelVariant = 'banner' | 'chip'
 

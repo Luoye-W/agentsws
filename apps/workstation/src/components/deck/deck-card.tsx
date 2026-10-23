@@ -35,6 +35,7 @@ import {
   isTypingTarget,
   secondsLeft as secondsLeftOf,
 } from '@/components/deck/deck-gestures'
+import { deckKeys } from '@/components/deck/deck-keys'
 import {
   DECK_CARD_BODY_SCROLL_CLASS,
   DECK_CARD_MIN_HEIGHT_CLASS,
@@ -42,7 +43,8 @@ import {
 import { DeckNotePanel, type NoteMode } from '@/components/deck/deck-panels'
 import { CardChips, EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
 import { ExecutionPill, WiringNote } from '@/components/deck/execution-note'
-import { GoButton, StatusPill, type Tone, WsAvatar } from '@/components/design'
+import { GoButton, StatusPill } from '@/components/design'
+import { CategoryTag } from '@/components/design/kit'
 import {
   HandoffDecide,
   isHandoffOfferCard,
@@ -50,12 +52,12 @@ import {
 } from '@/components/peers/handoff-strip'
 import { LeaveConfirm } from '@/components/peers/leave-confirm'
 import { useRailState } from '@/components/rail/rail-state'
-import { Button } from '@/components/ui/button'
 import { ensureSession, getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { contentUpdatesAddress, isContentDigestPayload } from '@/lib/content-digest-api'
 import { formatDateTime } from '@/lib/format'
 import { recordText, tOr } from '@/lib/humanize'
+import { cn } from '@/lib/utils'
 
 export interface DeckDecideRequest {
   /**「打开」不是一次决定（它只是进入事项），所以这里不出现 */
@@ -169,19 +171,14 @@ function WaitPill({ card }: { card: DeckCard }): React.ReactNode {
   )
 }
 
-/**
+/*
  * 头一行第一枚：**岗位 · 类别**（画布《卡片排版一览》那一行的头一格）。
  *
  * 岗位名从首页那把 `['positions']` 的缓存里认（这张卡那条职责挂在哪个岗位下）——
  * 没装岗位面的服务进程查不到，那就只出类别，不编一个岗位名。
- * 优先级不再单占一枚胶囊，它变成这一枚的**颜色**：P0 红、P1 黄、P2 蓝、P3 灰。
+ * WP456-T3（规范 §2.4 / §2.6 第 13 条，决策 1483）：这一枚是**灰色分类标签**（不再按优先级上色——颜色只表示状态）；
+ * 急不急由后面那颗状态药丸说（剩几天 / 过期），P0 再多一颗红的「马上」。
  */
-const BAND_TONE: Record<DeckCard['priority_band'], Tone> = {
-  P0: 'bad',
-  P1: 'warn',
-  P2: 'info',
-  P3: 'neutral',
-}
 
 /**
  * 头一行第一枚上那个**类别**（WP100，09-18 画布）。
@@ -247,6 +244,7 @@ export function DeckCardView({
   busy,
   exiting,
   error,
+  keys,
 }: {
   card: DeckCard
   /** 队列级的语言选择（37 §1 第 4 行） */
@@ -257,6 +255,11 @@ export function DeckCardView({
   busy?: boolean
   exiting?: DeckExitDirection | null
   error?: string
+  /**
+   * WP456-T3（§3.1）：这张卡的快捷键提示（「→ 通过 · ↑ 稍后」），灰字放在卡底最右边；
+   * 卡下面那一行和后面叠着的假卡边都去掉了。不给就不出（事项页、收件箱里那张卡没有方向键）。
+   */
+  keys?: readonly string[]
 }): React.ReactNode {
   const { t, lang } = useApp()
   const [detail, setDetail] = useState(false)
@@ -411,9 +414,14 @@ export function DeckCardView({
         渠道、合并 N 张、预检那些都在右上角那个"证据 N"里，点开在第三栏看。
       */}
       <div className="ws-dcard-head" data-testid="deck-tag-row">
-        <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
+        <CategoryTag data-testid="deck-band" data-band={card.priority_band}>
           {pillPosition === undefined ? category : `${pillPosition} · ${category}`}
-        </StatusPill>
+        </CategoryTag>
+        {card.priority_band === 'P0' ? (
+          <StatusPill tone="bad" data-testid="deck-urgent">
+            {t('band.P0')}
+          </StatusPill>
+        ) : null}
         {/*
           WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长。
           WP278：交给你的卡正文里已经有「几号前不接就退回」——不再出「剩 N 天」说第二遍。
@@ -449,15 +457,10 @@ export function DeckCardView({
               }}
             />
           )}
-          {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。
-              WP418（审计 U8）：选主题卡上「AI」这个角标对人没用，不出 */}
-          {pickOne ? null : (
-            <WsAvatar
-              name={t(`deck.proposer.${card.detail.proposer.kind}`)}
-              tone={card.detail.proposer.kind === 'agent' ? 'good' : 'neutral'}
-              className="size-[22px] text-xs"
-            />
-          )}
+          {/*
+            WP456-T3（§2.6 第 13 条）：头一行右边只留「证据 N」——原来最后那个「AI」角标（谁提的）去掉，
+            谁提的点卡面在详情里写（`CardDetail`）。
+          */}
         </span>
       </div>
 
@@ -559,10 +562,11 @@ export function DeckCardView({
           ) : panel === null && routeChoice ? (
             <div className="flex flex-wrap items-center gap-2" data-testid="deck-route-choice">
               {(card.options ?? []).map((o, i) => (
-                <Button
+                <button
                   key={o.id}
-                  size="sm"
-                  variant={i === 0 ? 'default' : 'outline'}
+                  type="button"
+                  // WP456-T3：主 / 次两级（第一个是主按钮，其余灰底次按钮）
+                  className={cn('ws-btn', i === 0 ? 'ws-btn-primary' : 'ws-btn-secondary')}
                   disabled={busy === true}
                   data-option={o.id}
                   onClick={() => {
@@ -575,7 +579,7 @@ export function DeckCardView({
                   }}
                 >
                   {o.label}
-                </Button>
+                </button>
               ))}
               <LeaveConfirm
                 open={leaving}
@@ -601,19 +605,20 @@ export function DeckCardView({
               disabled={busy === true}
               optionMissing={isQuestion && option === ''}
               onAction={act}
+              {...(keys === undefined ? {} : { keys: deckKeys(card, t).map((k) => k.action) })}
               {...(isContentCard
                 ? {
                     extra: (
-                      <Button
-                        size="sm"
-                        variant="ghost"
+                      <button
+                        type="button"
+                        className="ws-btn ws-btn-ghost"
                         data-testid="deck-content-compare"
                         onClick={() => {
                           setCompare(true)
                         }}
                       >
                         {t(`verb.${card.kind}.open`)}
-                      </Button>
+                      </button>
                     ),
                   }
                 : {})}
@@ -640,6 +645,12 @@ export function DeckCardView({
             />
           )}
         </div>
+        {/* WP456-T3（§3.1）：快捷键提示灰字放卡底最右边（按钮上悬停也有，见 DeckActionBar 的 title） */}
+        {panel !== null || keys === undefined || keys.length === 0 ? null : (
+          <span className="ws-dcard-keys shrink-0" data-testid="deck-keyboard">
+            {keys.join(' · ')}
+          </span>
+        )}
         {/*
           09-18 定：**每张卡右下角都有一个 → 圆钮**，没按钮的卡也有。
           它不是第四个动作，是出口——点它离开队列，进这件事的详情 / 工作线程。

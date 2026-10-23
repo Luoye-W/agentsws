@@ -30,7 +30,7 @@ const FILE_KINDS = new Set(['publish_theme', 'deploy', 'merge_pr'])
 /** 一条 diff 正文按行上色：`+` 绿、`-` 红、`@@` 灰。 */
 function DiffBody({ diff }: { diff: string }): ReactNode {
   return (
-    <pre className="max-h-80 overflow-auto rounded bg-muted/50 p-2 text-xs leading-4">
+    <pre className="max-h-80 overflow-auto rounded-sm bg-muted/50 p-2 text-xs leading-4">
       {diff.split('\n').map((line, i) => (
         <div
           // biome-ignore lint/suspicious/noArrayIndexKey: diff 的行没有 id——行号**就是**它在这一段里的身份，而且这一段只读、不排序、不增删
@@ -80,7 +80,7 @@ function ChangeFiles({ change_id }: { change_id: string }): ReactNode {
               type="button"
               aria-expanded={open}
               data-testid={`rail-changes-file-${f.path}`}
-              className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs hover:bg-accent"
+              className="flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left text-xs hover:bg-accent"
               onClick={() => {
                 setOpenPath(open ? null : f.path)
               }}

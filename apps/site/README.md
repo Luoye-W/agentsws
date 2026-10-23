@@ -39,7 +39,7 @@ AGENTSWS_SITE_OFFLINE=1 pnpm --filter @agentsws/site build   # 不打网，价�
 node apps/site/scripts/serve.mjs        # 本机起 dist（只听 127.0.0.1）
 node apps/site/scripts/shots.mjs        # 审稿截图 → docs/assets/wp197/（本地，不进仓库）
 node apps/site/scripts/og.mjs           # 重出分享图（改了 OG 标题或标记之后）
-node apps/site/scripts/app-shots.mjs    # 重拍工作台截图（先编好 apps/cli 与工作台；默认自己起 demo 在 4398）
+node apps/site/scripts/app-shots.mjs    # 重拍工作台截图（官网与 README 共用；先编好 apps/cli 与工作台；本进程里起 demo，默认端口 4861）
 pnpm --filter @agentsws/site launch:check   # 上线前：dist 里不许剩占位，条款 / 联系邮箱 / 价格都在
 ```
 

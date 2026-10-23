@@ -12,12 +12,17 @@
  * 36 §2：这一屏里不出现任何原始店铺 id / 账号 id——目录说的是"哪一类东西"。
  * 13 §4.3：凭据一概不在这里填。点"去连接"跳到那张 provider 卡上的**原生表单**去；
  * 只有自定义 MCP 服务器的表单在这里，而它也是原生 `<form>` + `FormData`（见下）。
+ *
+ * WP456-T6（WP456 §3.8「『添加连接』『可以连接』说的是同一件事」）：设置 → 账号连接里不再单独一节、
+ * 不再有自己的标题和「看全部」按钮——连接页顶上那一个搜索框、底下那一行「看全部 N 个」管着它
+ * （`embedded`）：只列**连接页那张列表里没有的**几条（还没做的、去别的页接的、自定义 MCP），
+ * 按分类分组、每组一张列表组。单独用（没给 `embedded`）时还是原来那样：默认收起、自带搜索。
  */
 import { useQuery } from '@tanstack/react-query'
 import { CircleAlert, CircleCheck, CircleDashed, Plus, Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge } from '@/components/ui/badge'
+import { CategoryTag, GroupLabel, ListGroup } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -61,7 +66,7 @@ function StateDot({ state }: { state: ConnectionDirectoryItem['state'] }): React
   )
 }
 
-function matches(entry: ConnectionDirectoryItem, q: string): boolean {
+export function matches(entry: ConnectionDirectoryItem, q: string): boolean {
   if (q === '') return true
   const needle = q.trim().toLowerCase()
   return (
@@ -71,6 +76,14 @@ function matches(entry: ConnectionDirectoryItem, q: string): boolean {
   )
 }
 
+/**
+ * WP456-T6：连接页的列表里已经有这一条了（它背后那张 provider 卡就在列表里）——目录里不再重复列。
+ */
+export function inCatalog(entry: ConnectionDirectoryItem, services: ReadonlySet<string>): boolean {
+  const service = entry.connect_service ?? entry.service
+  return service !== undefined && services.has(service)
+}
+
 function EntryRow({ entry }: { entry: ConnectionDirectoryItem }): React.ReactNode {
   const { t, lang } = useApp()
   const name = lang === 'zh' ? entry.name.zh : entry.name.en
@@ -78,7 +91,7 @@ function EntryRow({ entry }: { entry: ConnectionDirectoryItem }): React.ReactNod
   const external = entry.docs_url !== undefined && entry.docs_url.startsWith('/')
   return (
     <li
-      className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-2"
+      className="ws-row flex-wrap justify-between"
       data-testid="directory-entry"
       data-kind={entry.kind}
       data-state={entry.state}
@@ -88,20 +101,18 @@ function EntryRow({ entry }: { entry: ConnectionDirectoryItem }): React.ReactNod
           <StateDot state={entry.state} />
         </span>
         <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-2 text-sm">
+          <p className="flex flex-wrap items-center gap-2 text-ws-ui">
             {name}
             {/* WP157（36 §7）：每条的说明进问号，目录一行只留名字、状态与动作 */}
             {note === undefined ? null : <Hint text={note} testId="directory-note" />}
             {entry.status === 'planned' ? (
-              <Badge variant="outline" data-testid="directory-planned">
+              <CategoryTag outline data-testid="directory-planned">
                 {t('connections.directory.planned')}
-              </Badge>
+              </CategoryTag>
             ) : null}
             {/* 54 §3 的读写分类：能改外面的东西要让人一眼看见 */}
             {entry.side_effect === 'write_external' ? (
-              <span className="text-xs text-muted-foreground">
-                {t('connections.directory.writes')}
-              </span>
+              <span className="text-xs text-ws-muted-fg">{t('connections.directory.writes')}</span>
             ) : null}
           </p>
           {entry.state_detail === undefined ? null : (
@@ -112,7 +123,7 @@ function EntryRow({ entry }: { entry: ConnectionDirectoryItem }): React.ReactNod
         </div>
       </div>
       {entry.status === 'available' && entry.connect_service !== undefined ? (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant="secondary">
           <Link
             to={`/connections?service=${encodeURIComponent(entry.connect_service)}`}
             data-testid="directory-go"
@@ -130,7 +141,7 @@ function EntryRow({ entry }: { entry: ConnectionDirectoryItem }): React.ReactNod
           </Link>
         </Button>
       ) : (
-        <span className="text-xs text-muted-foreground">{t('connections.directory.later')}</span>
+        <span className="text-xs text-ws-muted-fg">{t('connections.directory.later')}</span>
       )}
     </li>
   )
@@ -138,18 +149,59 @@ function EntryRow({ entry }: { entry: ConnectionDirectoryItem }): React.ReactNod
 
 export function ConnectionDirectorySection({
   assignment,
+  embedded,
 }: {
   assignment?: string
+  /**
+   * WP456-T6：嵌在连接页的列表下面——搜索词由连接页那一个搜索框给，`catalog` 里的（列表里已有的）不重复列，
+   * 不画标题和「看全部」按钮。一条都不剩时整块不画。
+   */
+  embedded?: { query: string; catalog: ReadonlySet<string> }
 }): React.ReactNode {
   const { t } = useApp()
-  const [open, setOpen] = useState(false)
-  const [q, setQ] = useState('')
+  const [openSelf, setOpen] = useState(false)
+  const [qSelf, setQ] = useState('')
+  const open = embedded !== undefined || openSelf
+  const q = embedded?.query ?? qSelf
   const directory = useQuery({
     queryKey: ['connection-directory', assignment],
     // 收起来的时候不查：目录是一张静态表，没人打开就没必要拉
     enabled: open,
     queryFn: () => getConnectionDirectory(assignment),
   })
+
+  if (embedded !== undefined) {
+    const extra = (directory.data?.entries ?? []).filter(
+      (e) => !inCatalog(e, embedded.catalog) && matches(e, q),
+    )
+    if (extra.length === 0) return null
+    return (
+      <section className="flex flex-col gap-4" data-testid="connection-directory">
+        {CATEGORY_ORDER.map((category) => {
+          const rows = extra.filter((e) => e.category === category)
+          if (rows.length === 0) return null
+          return (
+            <section
+              key={category}
+              className="flex flex-col gap-2"
+              data-testid="directory-category"
+              data-category={category}
+            >
+              <GroupLabel>{t(`connections.category.${category}`)}</GroupLabel>
+              <ListGroup as="ul">
+                {rows.map((entry) => (
+                  <EntryRow key={entry.kind} entry={entry} />
+                ))}
+              </ListGroup>
+              {category === 'custom' ? (
+                <McpServers {...(assignment === undefined ? {} : { assignment })} />
+              ) : null}
+            </section>
+          )
+        })}
+      </section>
+    )
+  }
 
   return (
     <section className="flex flex-col gap-2" data-testid="connection-directory">
@@ -160,7 +212,7 @@ export function ConnectionDirectorySection({
         </h3>
         <Button
           size="sm"
-          variant={open ? 'ghost' : 'outline'}
+          variant={open ? 'ghost' : 'secondary'}
           data-testid="directory-toggle"
           aria-expanded={open}
           onClick={() => {
@@ -202,14 +254,12 @@ export function ConnectionDirectorySection({
             if (rows.length === 0) return null
             return (
               <section key={category} data-testid="directory-category" data-category={category}>
-                <h4 className="mb-2 text-xs font-medium text-muted-foreground">
-                  {t(`connections.category.${category}`)}
-                </h4>
-                <ul className="flex flex-col gap-2">
+                <GroupLabel className="mb-2">{t(`connections.category.${category}`)}</GroupLabel>
+                <ListGroup as="ul">
                   {rows.map((entry) => (
                     <EntryRow key={entry.kind} entry={entry} />
                   ))}
-                </ul>
+                </ListGroup>
                 {/* 自定义 MCP 服务器那一条点开就是它自己的表单，不跳别处 */}
                 {category === 'custom' ? (
                   <McpServers {...(assignment === undefined ? {} : { assignment })} />

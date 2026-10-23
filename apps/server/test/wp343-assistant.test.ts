@@ -288,11 +288,12 @@ describe('WP343「我的助理」', () => {
       await call('GET', '/v1/memory/changes?written_by=ai'),
     )
     expect(changes.some((c) => c.tier === 'personal' && c.entry_id === memory[0]?.id)).toBe(true)
-    // 下一轮的系统提示里带着它
+    // 下一轮带着它——WP470：同一段里新记的接在这一轮那句话后面（系统提示不变，缓存照常命中）；下一段才进系统提示
     upstream.length = 0
     await send(session, '在吗')
-    const system = ((upstream[0]?.messages ?? []) as Msg[])[0]
-    expect(String(system?.content)).toContain('回 Reddit 一律用英文')
+    const sent = (upstream[0]?.messages ?? []) as Msg[]
+    expect(String(sent[0]?.content)).not.toContain('回 Reddit 一律用英文')
+    expect(String(sent.at(-1)?.content)).toContain('回 Reddit 一律用英文')
     // 删掉 → 没了；模型再写一样的 <remember>（人没明说）也不记回来
     const removed = await call('DELETE', `/v1/free-chat/memory/${memory[0]?.id}`)
     expect(removed.status).toBe(200)

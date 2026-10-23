@@ -55,6 +55,16 @@ function renderTab(handlers: {
   )
 }
 
+/** WP456-T6：合并 / 拆出 / 移动在岗位行的「⋯」里——先打开菜单再点那一项。 */
+async function pick(
+  user: ReturnType<typeof userEvent.setup>,
+  row: ReturnType<typeof within>,
+  item: string,
+): Promise<void> {
+  await user.click(row.getByTestId('position-menu'))
+  await user.click(row.getByTestId(item))
+}
+
 const card = (id: string): HTMLElement =>
   screen
     .getAllByTestId('position-card')
@@ -74,7 +84,7 @@ describe('WP234 公司页：岗位合并 / 拆出 / 移动职责', () => {
     const onMerge = vi.fn()
     renderTab({ onMerge })
     const reddit = within(card('pos-reddit'))
-    await user.click(reddit.getByTestId('position-merge'))
+    await pick(user, reddit, 'position-merge')
     const target = reddit.getByTestId('position-merge-target') as HTMLSelectElement
     expect([...target.options].map((o) => o.value)).toEqual(['social-media'])
     const name = reddit.getByTestId('position-merge-name') as HTMLInputElement
@@ -90,7 +100,7 @@ describe('WP234 公司页：岗位合并 / 拆出 / 移动职责', () => {
     const onSplit = vi.fn()
     renderTab({ onSplit })
     const social = within(card('social-media'))
-    await user.click(social.getByTestId('position-split'))
+    await pick(user, social, 'position-split')
     const go = social.getByTestId('position-split-go') as HTMLButtonElement
     expect(go.disabled).toBe(true)
     await user.type(social.getByTestId('position-split-name'), '短视频')
@@ -111,7 +121,7 @@ describe('WP234 公司页：岗位合并 / 拆出 / 移动职责', () => {
     const onMoveDuty = vi.fn()
     renderTab({ onMoveDuty })
     const reddit = within(card('pos-reddit'))
-    await user.click(reddit.getByTestId('position-move'))
+    await pick(user, reddit, 'position-move')
     await user.selectOptions(reddit.getByTestId('position-move-duty'), 'social.reddit')
     await user.click(reddit.getByTestId('position-move-go'))
     expect(onMoveDuty).toHaveBeenCalledWith('pos-reddit', 'social.reddit', 'social-media')
@@ -246,12 +256,13 @@ describe('WP235 公司页：你们的岗位 / 可以加的岗位（模板）', (
     const onMerge = vi.fn()
     renderOld(onMerge)
     const pr = within(card('pr'))
-    // 公关只做一条：没有「拆出」
+    // 公关只做一条：「⋯」里没有「拆出」
+    await user.click(pr.getByTestId('position-menu'))
     expect(pr.queryByTestId('position-split')).toBeNull()
     await user.click(pr.getByTestId('position-move'))
     const duty = pr.getByTestId('position-move-duty') as HTMLSelectElement
     expect([...duty.options].map((o) => o.value)).toEqual(['pr.reddit'])
-    await user.click(pr.getByTestId('position-merge'))
+    await pick(user, pr, 'position-merge')
     const target = pr.getByTestId('position-merge-target') as HTMLSelectElement
     expect([...target.options].map((o) => o.value)).toEqual(['social-media'])
     expect((pr.getByTestId('position-merge-name') as HTMLInputElement).value).toBe('Reddit 运营')

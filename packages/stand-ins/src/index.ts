@@ -60,6 +60,7 @@ export * from './runtime/assistant.js'
 export * from './runtime/b2b-outbound.js'
 // WP393：店铺管理「竞品动向」的探平台 / 现在读一次（定义并进报告积木那张表，三个运行时同一份）
 export * from './runtime/competitor-store.js'
+export * from './runtime/context-order.js'
 // WP421：公关 / 内容与搜索 / B2B / 设计的读数与起草工具
 export * from './runtime/desk-tools.js'
 export * from './runtime/dev-stub.js'

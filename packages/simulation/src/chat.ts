@@ -257,15 +257,19 @@ export function installChat(world: World): ChatLoop {
     } catch {
       // 知识层不可用：没有出处，照样问模型（之后按「没有出处」转人）
     }
+    // WP471（决策 1549）：与服务进程同一个排法——出处要求是固定内容，进系统提示（命中缓存）；
+    // 用户消息只放这一次的材料与访客原话（原话最后）
     const user = [
       ...(sources.length === 0 ? [] : [`材料：\n${formatChatSources(sources)}`]),
-      CHAT_ANSWER_CITE_INSTRUCTION,
       `访客说：\n${fenceForPrompt(turn_text).text}`,
     ].join('\n\n')
     try {
       const completion = await world.gateway().complete({
         messages: [
-          { role: 'system', content: '你是网站聊天窗里的客服。短、具体、不承诺钱。' },
+          {
+            role: 'system',
+            content: `你是网站聊天窗里的客服。短、具体、不承诺钱。\n\n${CHAT_ANSWER_CITE_INSTRUCTION}`,
+          },
           { role: 'user', content: user },
         ],
         meta: {

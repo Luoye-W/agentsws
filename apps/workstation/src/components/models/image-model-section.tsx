@@ -157,8 +157,8 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
           <span
             className={
               using.own_key
-                ? 'rounded bg-ws-good-bg px-1.5 py-px text-xs text-ws-good'
-                : 'rounded bg-muted px-1.5 py-px text-xs text-muted-foreground'
+                ? 'rounded-sm bg-ws-good-bg px-1.5 py-px text-xs text-ws-good'
+                : 'rounded-sm bg-muted px-1.5 py-px text-xs text-muted-foreground'
             }
             data-slot="badge"
             data-testid="models-image-badge"

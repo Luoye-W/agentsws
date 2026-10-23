@@ -44,6 +44,7 @@
     "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
     "packages/contracts/src/execution.ts",
+    "packages/contracts/src/feedback.ts",
     "packages/contracts/src/genui-host.ts",
     "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
@@ -100,6 +101,7 @@
     "packages/contracts/src/subscription.ts",
     "packages/contracts/src/task-text.ts",
     "packages/contracts/src/team-link.ts",
+    "packages/contracts/src/telemetry.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
@@ -162,7 +164,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "ce312eb439af3e0df85c3b4bbe2aa5b2",
+  "source_digest": "1a2afdfa62f2a8271415e86416cf1c6f",
   "objects": [
     {
       "id": "ad",
@@ -5209,6 +5211,18 @@
           "optional": false
         },
         {
+          "name": "horizon_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "carried_over",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
           "name": "due",
           "type": "Iso8601",
           "sensitivity": "internal",
@@ -5282,6 +5296,12 @@
         },
         {
           "name": "origin.alert_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "origin.inbox_item",
           "type": "string",
           "sensitivity": "internal",
           "optional": true

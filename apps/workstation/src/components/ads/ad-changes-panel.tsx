@@ -63,15 +63,15 @@ function Shot({
       type="button"
       data-testid="ads-change-shot"
       onClick={() => setOpen((v) => !v)}
-      className="flex cursor-zoom-in flex-col items-start gap-0.5 rounded text-xs text-ws-muted-fg outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex cursor-zoom-in flex-col items-start gap-0.5 rounded-sm text-xs text-ws-muted-fg outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
     >
       <img
         src={`data:image/png;base64,${shot.data.png_base64}`}
         alt={label}
         className={
           open
-            ? 'max-h-80 w-full rounded border object-contain'
-            : 'h-10 w-16 rounded border object-cover'
+            ? 'max-h-80 w-full rounded-sm border object-contain'
+            : 'h-10 w-16 rounded-sm border object-cover'
         }
       />
       {label}

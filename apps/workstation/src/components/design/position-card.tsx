@@ -83,13 +83,13 @@ export function PositionCard({
           </span>
         )}
         {onOpen === undefined ? (
-          <span className="ws-display text-[15px]">{name}</span>
+          <span className="ws-display text-[14px]">{name}</span>
         ) : (
           <button
             type="button"
             data-testid="ws-position-card-open"
             onClick={onOpen}
-            className="ws-display text-left text-[15px] hover:underline"
+            className="ws-display text-left text-[14px] hover:underline"
           >
             {name}
           </button>
@@ -110,7 +110,7 @@ export function PositionCard({
         </span>
         <span className="text-[13px] text-ws-muted-fg">{pendingLabel}</span>
       </div>
-      <p className="text-[12.5px] leading-[18px] text-ws-muted-fg">{line}</p>
+      <p className="text-[13px] leading-[18px] text-ws-muted-fg">{line}</p>
       <div className="flex items-center gap-2">
         <span className="flex pl-1.5">
           {holders.map((h) => (
@@ -128,7 +128,7 @@ export function PositionCard({
           type="button"
           data-testid="ws-position-entry"
           onClick={onEntry}
-          className={`inline-flex h-8 items-center rounded-[10px] px-3 text-xs font-medium ${
+          className={`inline-flex h-8 items-center rounded-md px-3 text-xs font-medium ${
             selected === true
               ? 'bg-ws-brand text-ws-brand-fg'
               : 'bg-ws-surface text-ws-ink hover:bg-ws-tint'

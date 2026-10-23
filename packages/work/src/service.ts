@@ -94,7 +94,7 @@ import {
   newHandoff,
   settleHandoff,
 } from './handoff.js'
-import { isOpen, resolveHorizon } from './horizon.js'
+import { isOpen, resolveHorizon, viewTodo } from './horizon.js'
 import { type DailyPlanInput, draftDailyPlanWithFilter, type FilteredSuggestion } from './plan.js'
 import { MemoryWorkStore } from './store.js'
 import { DAY_MS, localDay, makeIdFactory, ms, startOfDay, uniq } from './util.js'
@@ -965,6 +965,7 @@ export class Work {
       title: input.title,
       owner: input.owner,
       horizon: resolveHorizon(input, at, this.tz_offset_minutes),
+      horizon_at: at,
       source: input.source ?? 'manual',
       status: 'open',
       cards: [],
@@ -1005,11 +1006,17 @@ export class Work {
         ...(todo.due === undefined ? {} : { due: todo.due }),
       },
     )
-    return todo
+    return this.view(todo)
+  }
+
+  /** WP474（决策 1531）：读出去的那一份按现在重算分档（本周 = 周一到周日），跨周没做完的标「上周没做完」。 */
+  private view(todo: Todo): Todo {
+    return viewTodo(todo, this.now(), this.tz_offset_minutes)
   }
 
   getTodo(id: TodoId): Todo | undefined {
-    return this.store.getTodo(id)
+    const t = this.store.getTodo(id)
+    return t === undefined ? undefined : this.view(t)
   }
 
   requireTodo(id: TodoId): Todo {
@@ -1019,7 +1026,17 @@ export class Work {
   }
 
   listTodos(filter: Omit<TodoFilter, 'workspace_id'> = {}): Todo[] {
-    return this.store.listTodos({ workspace_id: this.workspace_id, ...filter })
+    // 分档按读的这一刻算（存的那一档可能是上周定的），所以按分档筛要在重算之后
+    const { horizon, limit, ...rest } = filter
+    const all = this.store
+      .listTodos({
+        workspace_id: this.workspace_id,
+        ...rest,
+        ...(horizon === undefined && limit !== undefined ? { limit } : {}),
+      })
+      .map((t) => this.view(t))
+    const picked = horizon === undefined ? all : all.filter((t) => horizon.includes(t.horizon))
+    return horizon !== undefined && limit !== undefined ? picked.slice(0, limit) : picked
   }
 
   /** 待办箱三段：backlog / 本周 / 今天（只算未完的）。 */
@@ -1045,21 +1062,35 @@ export class Work {
       patch.position_id === null ? undefined : (patch.position_id ?? todo.position_id)
     const status = patch.status ?? todo.status
     const closing = status === 'done' || status === 'dropped'
+    /**
+     * WP469：没日子的待办（「本周」或「以后」）只是改个字 / 打个勾，`horizon` 照旧——
+     * 以前一律按 due / scheduled 重推，「本周」那几条没日子的一碰就掉回「以后」。
+     */
+    const keepHorizon =
+      patch.horizon === undefined &&
+      due === undefined &&
+      scheduled === undefined &&
+      todo.due === undefined &&
+      todo.scheduled === undefined
     const next: Todo = {
       ...todo,
       title: patch.title ?? todo.title,
       status,
-      horizon: resolveHorizon(
-        {
-          ...(due === undefined ? {} : { due }),
-          ...(scheduled === undefined ? {} : { scheduled }),
-          ...(patch.horizon === undefined ? {} : { horizon: patch.horizon }),
-        },
-        at,
-        this.tz_offset_minutes,
-      ),
+      horizon: keepHorizon
+        ? todo.horizon
+        : resolveHorizon(
+            {
+              ...(due === undefined ? {} : { due }),
+              ...(scheduled === undefined ? {} : { scheduled }),
+              ...(patch.horizon === undefined ? {} : { horizon: patch.horizon }),
+            },
+            at,
+            this.tz_offset_minutes,
+          ),
       updated_at: at,
     }
+    // WP474：换了档（或这一次明说了放哪一档）就记下是这一刻定的——「本周」从这一周算起
+    if (next.horizon !== todo.horizon || patch.horizon !== undefined) next.horizon_at = at
     // exactOptionalPropertyTypes：可空字段要么有值要么整个键不在
     if (patch.note !== undefined) next.note = patch.note
     if (due === undefined) delete next.due
@@ -1103,7 +1134,7 @@ export class Work {
         ...(next.matter_id === undefined ? {} : { matter_id: next.matter_id }),
       },
     )
-    return next
+    return this.view(next)
   }
 
   /** 打勾 = 完成（37 §2.2b：打勾 / 关闭 / 删除都不进现场）。 */
@@ -2388,7 +2419,11 @@ export class Work {
   calendar(range: CalendarRange, actor: { person_id?: PersonId }, sources: CalendarSources = {}) {
     const todos = this.listTodos({
       ...(actor.person_id === undefined ? {} : { owner: actor.person_id }),
-      status: ['open', 'doing', 'blocked'],
+      // WP469（决策 1524）：要了「做完的」才把做完的也取出来（划掉、变淡）
+      status:
+        range.include_done === true
+          ? ['open', 'doing', 'blocked', 'done']
+          : ['open', 'doing', 'blocked'],
     })
     const input: CalendarInput = {
       range,

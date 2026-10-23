@@ -39,7 +39,7 @@ import {
 } from 'react'
 import { useLocation } from 'react-router-dom'
 import { railLayoutBucket, railPageKind } from '@/components/rail/rail-layout'
-import { resolvePanel, resolvePanelId } from '@/components/rail/registry'
+import { railCard, resolvePanel, resolvePanelId } from '@/components/rail/registry'
 import {
   bindRightPaneHost,
   closeRightPane as closePane,
@@ -254,6 +254,15 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
 
   const openCard = useCallback(
     (id: string, options: { intent?: string; pathname?: string } = {}) => {
+      // WP456-T3（决策 1448）：合进清单卡的那几张没有「展开」——点名它 = 在第三栏开它的完整一格
+      const listed = railCard(id)
+      if (listed?.list === true && listed.panel !== undefined && options.pathname === undefined) {
+        setAddress(null)
+        setFocus(null)
+        setIntent(options.intent ?? null)
+        setOpen(listed.panel)
+        return
+      }
       setAddress(null)
       setFocus(id)
       setIntent(options.intent ?? null)
@@ -266,7 +275,7 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       }
       setState((prev) => expandIn(prev, id))
     },
-    [bucket, position, expandIn],
+    [bucket, position, expandIn, setOpen],
   )
 
   const setCardOpen = useCallback((id: string, open: boolean) => {
@@ -304,6 +313,17 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
       const panel = resolvePanel({ address: next_address })
       if (panel === undefined) return false
       // WP372：归卡的面板（连接卡）= 展开那张卡、滚到那一条（同一份再点一次也只是再滚一次）
+      // WP456-T3（决策 1448）：那张卡合进了清单卡 = 在第三栏开它的完整一格，带着这份地址（连接卡在那一格顶上就地连）
+      const listed = panel.card === undefined ? undefined : railCard(panel.card)
+      if (listed?.list === true && listed.panel !== undefined) {
+        const target = listed.panel
+        if (layout.open_panel_id === target && address === next_address) return true
+        setAddress(next_address)
+        setFocus(null)
+        setIntent(null)
+        setOpen(target)
+        return true
+      }
       if (panel.card !== undefined) {
         const card = panel.card
         setAddress(next_address)

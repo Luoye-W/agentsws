@@ -276,7 +276,7 @@ export function RailTopBar({
           <div
             role="menu"
             data-testid="rail-menu"
-            className="absolute top-9 right-0 z-50 flex w-48 flex-col gap-px rounded-[10px] border border-ws-line bg-popover p-1 text-[13px] shadow-lg"
+            className="absolute top-9 right-0 z-50 flex w-48 flex-col gap-px rounded-lg border border-ws-line bg-popover p-1 text-[13px] shadow-lg"
           >
             {/*
               「设定」卡里那几个标签（Luoye 10-19：只藏在卡里会以为没了）：点了打开面板直达那一格

@@ -137,7 +137,7 @@ export function MailAiAssistant({
   }
   return (
     <section
-      className="flex flex-col gap-3 rounded-[14px] border border-ws-line bg-ws-surface p-3"
+      className="flex flex-col gap-3 rounded-xl border border-ws-line bg-ws-surface p-3"
       data-testid="mail-ai"
       data-open={open && !atPosition ? 'true' : 'false'}
       data-claim={claim}
@@ -152,7 +152,7 @@ export function MailAiAssistant({
             aria-label={t('messages.ai.toggle')}
             title={t('messages.ai.toggle')}
             data-testid="mail-ai-toggle"
-            className="ml-auto rounded p-1 text-ws-muted-fg hover:bg-ws-card"
+            className="ml-auto rounded-sm p-1 text-ws-muted-fg hover:bg-ws-card"
             onClick={() => {
               setOpen((v) => !v)
             }}

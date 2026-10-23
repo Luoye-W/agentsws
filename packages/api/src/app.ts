@@ -58,6 +58,7 @@ import { extensionActionRoutes } from './routes/extension-actions.js'
 import { extensionInstallRoutes } from './routes/extension-install.js'
 import { extensionOnboardingRoutes } from './routes/extension-onboarding.js'
 import { extensionPanelRoutes } from './routes/extension-panel.js'
+import { feedbackRoutes } from './routes/feedback.js'
 import { freeChatRoutes } from './routes/free-chat.js'
 import { genuiImageHostsRoutes } from './routes/genui-image-hosts.js'
 import { haltRoutes } from './routes/halt.js'
@@ -65,6 +66,7 @@ import { handoffRoutes } from './routes/handoff.js'
 import { healthRoutes } from './routes/health.js'
 import { helpRoutes } from './routes/help.js'
 import { identityRoutes } from './routes/identity.js'
+import { inboxRoutes } from './routes/inbox.js'
 import { joinRoutes } from './routes/join.js'
 import { knowledgeRoutes } from './routes/knowledge.js'
 // WP68（48 §5.4）：本地红人库 `/v1/kol/*`
@@ -106,6 +108,7 @@ import { socialRoutes } from './routes/social.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面（切档向导与"接回本机"）
 import { standbyRoutes } from './routes/standby.js'
 import { storageRoutes } from './routes/storage.js'
+import { telemetryRoutes } from './routes/telemetry.js'
 import { updatePauseRoutes } from './routes/update-pause.js'
 import { workRoutes } from './routes/work.js'
 import { workArchiveRoutes } from './routes/work-archive.js'
@@ -232,6 +235,8 @@ export function collectRoutes(): Route[] {
     ...wsRoutes(),
     // 36 工作台面：首页 / 岗位 / 积木；`/v1/positions/:id/...` 里的 id 就是 assignment_id
     ...workstationRoutes(),
+    // WP459（决策 1497）：收件箱——所有岗位的决策卡 + 要你判断的信一条队列
+    ...inboxRoutes(),
     // WP438：报表（看板那几行、一整份、快照、跟 AI 说想看什么 → 固定）
     ...reportRoutes(),
     // WP52（47 J1）数据地图：`/v1/positions/:id/ontology`。排在 workstationRoutes 之后——
@@ -256,6 +261,9 @@ export function collectRoutes(): Route[] {
     ...autoMemoryRoutes(),
     // WP429：站内通知（铃铛）与「设置 → 通知」开关
     ...notificationsRoutes(),
+    ...feedbackRoutes(),
+    // WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」
+    ...telemetryRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
     // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）

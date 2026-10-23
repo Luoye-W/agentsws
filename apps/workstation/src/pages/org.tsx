@@ -818,13 +818,16 @@ export function OrgPage({
       )
     if (receipt?.position_id === position_id)
       return (
-        <div className="flex items-center gap-4 rounded-md border p-3" data-testid="assign-receipt">
+        <div
+          className="flex items-center gap-4 rounded-lg bg-ws-surface p-3"
+          data-testid="assign-receipt"
+        >
           <BrandMark size={44} motion="split" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <p className="ws-display text-[15px]">
+            <p className="ws-display text-ws-title">
               {tm('org.assign.receipt', { person: receipt.person, position: receipt.position })}
             </p>
-            <p className="text-[12.5px] text-ws-muted-fg">{tm('org.assign.receipt.hint')}</p>
+            <p className="text-ws-ui text-ws-muted-fg">{tm('org.assign.receipt.hint')}</p>
           </div>
           <Button
             variant="ghost"

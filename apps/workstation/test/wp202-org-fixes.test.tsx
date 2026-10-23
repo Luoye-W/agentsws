@@ -215,14 +215,18 @@ describe('WP202 ② 不再列已拆分的「Meta 社媒运营」', () => {
     const user = userEvent.setup()
     renderWithProviders(<OrgPage />)
     const support = await cardOf('support')
-    await user.click(within(support).getByRole('button', { name: '加减职责' }))
+    // WP456-T6：「加减职责」在岗位行的「⋯」里
+    await user.click(within(support).getByTestId('position-menu'))
+    await user.click(within(support).getByRole('menuitem', { name: '加减职责' }))
     const plain = within(support)
       .getAllByTestId('position-role-toggle')
       .map((b) => b.textContent)
     expect(plain).not.toContain('Meta 社媒运营')
 
     const old = await cardOf('social-old')
-    await user.click(within(old).getByRole('button', { name: '加减职责' }))
+    // WP456-T6：「加减职责」在岗位行的「⋯」里
+    await user.click(within(old).getByTestId('position-menu'))
+    await user.click(within(old).getByRole('menuitem', { name: '加减职责' }))
     const held = within(old)
       .getAllByTestId('position-role-toggle')
       .map((b) => b.textContent)

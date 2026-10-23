@@ -290,7 +290,7 @@ export function TokensView({ profile, onEdit }: TokensViewProps): React.ReactEle
   const colors = Object.entries(profile.colors ?? {})
   const typography = Object.entries(profile.typography ?? {})
   const spacing = Object.entries(profile.spacing ?? {})
-  const rounded = Object.entries(profile.rounded ?? {})
+  const radii = Object.entries(profile.rounded ?? {})
   const logos = profile.logos?.value ?? []
 
   const [editingPath, setEditingPath] = useState<string | undefined>(undefined)
@@ -372,7 +372,7 @@ export function TokensView({ profile, onEdit }: TokensViewProps): React.ReactEle
 
       <Section
         titleKey="design.md.section.spacing"
-        empty={spacing.length === 0 && rounded.length === 0}
+        empty={spacing.length === 0 && radii.length === 0}
         testId="design-md-spacing"
       >
         <div className="flex flex-wrap items-end gap-4">
@@ -389,7 +389,7 @@ export function TokensView({ profile, onEdit }: TokensViewProps): React.ReactEle
               </div>
             </WithSource>
           ))}
-          {rounded.map(([token, value]) => (
+          {radii.map(([token, value]) => (
             <WithSource key={token} value={value}>
               <div className="flex flex-col items-center gap-1">
                 <div

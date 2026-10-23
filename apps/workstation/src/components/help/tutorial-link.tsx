@@ -10,7 +10,7 @@
  * 右栏不在（单测里只渲染一张卡、没有 `AppShell`）时 `openAddress` 回假——
  * 那时退回在当前位置弹一个对话框显示同一篇，人照样看得到，不会点了没反应。
  */
-import { BookOpen } from 'lucide-react'
+import { BookOpen, CircleHelp } from 'lucide-react'
 import { createContext, lazy, type ReactNode, Suspense, useContext, useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
 import { useRailState } from '@/components/rail/rail-state'
@@ -63,7 +63,7 @@ function BookButton({
             data-slug={slug}
             aria-label={tip}
             className={cn(
-              'inline-flex size-6 shrink-0 items-center justify-center rounded-md text-ws-muted-fg hover:bg-accent hover:text-primary',
+              'inline-flex size-6 shrink-0 items-center justify-center rounded-md text-ws-muted-fg transition-colors hover:bg-ws-hover hover:text-ws-ink focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2',
               className,
             )}
             onClick={onClick}
@@ -155,6 +155,95 @@ export function InlineGuideLink({
           </DialogContent>
         </Dialog>
       ) : null}
+    </>
+  )
+}
+
+/**
+ * WP456-T6（§3.8「问号里放教程链接，去掉『看教程』」）：一行里只留**一个问号**——
+ * 悬停 / 聚焦出那几句介绍（和 `<Hint>` 一样，原话一字不少），点它打开教程
+ * （有文章的在右栏「教程」里开，没有的把步骤与外链在对话框里现拼）。
+ * 连接列表、模型列表每一行右边就是它，不再是「ⓘ + 看教程」两颗。
+ *
+ * 和 `<Hint>` 一样把那几句写进 `aria-label` / `data-hint`（jsdom 里 tooltip 打不开，测试照样拿得到）。
+ */
+export function TutorialHint({
+  slug,
+  guide,
+  text,
+  testId = 'tutorial-link',
+  className,
+}: {
+  /** 有教程文章：点了在右栏打开这一篇。 */
+  slug?: HelpSlug | undefined
+  /** 没有文章：点了在对话框里排这一小篇（标题 + markdown）。两样都没有 = 只是个问号。 */
+  guide?: { title: string; markdown: string } | undefined
+  /** 悬停出的那几句（服务端介绍、连上之后会怎样）；空着就只说「看教程」。 */
+  text?: string | undefined
+  testId?: string
+  className?: string
+}): ReactNode {
+  const { t, lang } = useApp()
+  const rail = useRailState()
+  const toSite = useContext(OpensSite)
+  const [open, setOpen] = useState<'article' | 'guide' | null>(null)
+  const about = (text ?? '').replace(/\*\*/g, '').trim()
+  const action = slug !== undefined || guide !== undefined
+  const tip = action ? [about, t('help.open.tip')].filter((x) => x !== '').join(' ') : about
+  return (
+    <>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-slot="hint"
+              data-testid={testId}
+              data-slug={slug ?? ''}
+              data-hint={about}
+              aria-label={tip}
+              className={cn(
+                'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-ws-muted-fg transition-colors hover:bg-ws-hover hover:text-ws-ink focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2',
+                className,
+              )}
+              onClick={(e) => {
+                e.preventDefault()
+                if (slug !== undefined) {
+                  // Luoye 10-23：设置弹窗里跳官网那一篇（右栏在弹窗后面看不到）
+                  if (toSite) openExternal(helpSiteUrl(slug, lang))
+                  else if (!rail.openAddress(helpAddress(slug))) setOpen('article')
+                } else if (guide !== undefined) setOpen('guide')
+              }}
+            >
+              <CircleHelp aria-hidden className="size-4" />
+            </button>
+          </TooltipTrigger>
+          {tip === '' ? null : <TooltipContent className="max-w-80">{tip}</TooltipContent>}
+        </Tooltip>
+      </TooltipProvider>
+      {open === null ? null : (
+        <Dialog
+          open
+          onOpenChange={(v) => {
+            if (!v) setOpen(null)
+          }}
+        >
+          <DialogContent className="max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {open === 'article' && slug !== undefined ? helpTitle(slug, lang) : guide?.title}
+              </DialogTitle>
+            </DialogHeader>
+            <Suspense fallback={null}>
+              {open === 'article' && slug !== undefined ? (
+                <HelpBody slug={slug} />
+              ) : (
+                <HelpArticleLazy markdown={guide?.markdown ?? ''} />
+              )}
+            </Suspense>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   )
 }

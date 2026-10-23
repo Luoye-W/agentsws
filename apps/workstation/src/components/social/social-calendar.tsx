@@ -201,7 +201,7 @@ export function SocialCalendar({
         />
 
         {composing === undefined ? null : (
-          <div className="flex flex-col gap-2 rounded border p-2" data-testid="social-compose">
+          <div className="flex flex-col gap-2 rounded-sm border p-2" data-testid="social-compose">
             <Textarea
               rows={3}
               value={draft}

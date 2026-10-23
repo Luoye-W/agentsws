@@ -14,7 +14,7 @@ export function AssistantNotesBody({
       {payload.groups.map((g) => (
         <section
           key={g.name}
-          className="flex flex-col gap-1 rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5"
+          className="flex flex-col gap-1 rounded-lg bg-ws-surface p-3 text-[13px] leading-5"
           data-testid="assistant-notes-group"
         >
           <p className="text-xs font-medium text-ws-muted-fg">{g.name}</p>

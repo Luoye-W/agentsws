@@ -8,6 +8,7 @@
 import type {
   BridgeInfo,
   DesktopBridge,
+  DesktopCapture,
   DesktopInstallOutcome,
   DesktopRestartChoice,
   DesktopRestartReadiness,
@@ -45,6 +46,7 @@ const CHANNELS = {
   launchAtLoginChanged: 'agentsws:launch-at-login-changed',
   sessionRenew: 'agentsws:session-renew',
   titleBarTheme: 'agentsws:title-bar-theme',
+  captureWindow: 'agentsws:capture-window',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -150,6 +152,9 @@ const bridge: DesktopBridge = {
   session: {
     renew: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.sessionRenew) as Promise<boolean>,
   },
+  // WP475：反馈框「附上截图」（只截工坊自己的窗口；回 base64，不经文件）
+  captureWindow: (): Promise<DesktopCapture | null> =>
+    ipcRenderer.invoke(CHANNELS.captureWindow) as Promise<DesktopCapture | null>,
   // WP424：藏了系统标题栏才有这一项（页面据此给红绿灯 / 系统按钮留位置、设拖动区）
   ...(info.title_bar === undefined
     ? {}

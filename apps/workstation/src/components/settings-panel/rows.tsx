@@ -134,9 +134,10 @@ export function OrgSummaryRow(): ReactNode {
         }
       />
       {/* WP426：开 / 关公司模式挪到上面那三张卡上，这里只留去「全部品牌」 */}
+      {/* WP456-T6（§3.8 P1）：能点的字一律 `ws-link`（原来是绿字、没有下划线，看不出能点） */}
       <Link
         to="/settings/brands"
-        className="w-fit text-sm text-primary underline-offset-4 hover:underline"
+        className="ws-link w-fit text-ws-ui"
         data-testid="settings-org-manage"
       >
         {t('sp.brands')}
@@ -206,7 +207,7 @@ export function AppUpdateRow(): ReactNode {
           {check === undefined ? null : (
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               disabled={checking}
               data-testid="settings-update-check"
               onClick={() => {

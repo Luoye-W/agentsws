@@ -188,7 +188,7 @@ export function ArchivedDialog({
                   navigate(`/matters/${encodeURIComponent(m.id)}`)
                 }}
               >
-                <span className="block truncate text-[13.5px] font-medium">{m.title}</span>
+                <span className="block truncate text-[13px] font-medium">{m.title}</span>
                 {m.snippet !== undefined || m.summary !== '' ? (
                   <span className="line-clamp-2 block text-[12px] text-ws-muted-fg">
                     {m.snippet ?? m.summary}
@@ -223,7 +223,7 @@ export function ArchivedDialog({
         </ul>
         {/* 让 AI 找回：说个大概 → 几张候选卡 → 点一张放回来（不点不恢复） */}
         <form
-          className="flex flex-col gap-2 rounded-[10px] bg-ws-tint/50 p-2.5"
+          className="flex flex-col gap-2 rounded-lg bg-ws-tint/50 p-2.5"
           data-testid="archived-ai"
           onSubmit={(e) => {
             e.preventDefault()

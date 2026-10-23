@@ -80,7 +80,7 @@ afterEach(() => {
 })
 
 describe('岗位页顶上那张卡', () => {
-  it('没配上：一句为什么 + 配对码；按本岗位的职责问；稍后 → 当天收起', async () => {
+  it('没配上：一行提醒（一句为什么 +「装插件」），点了才出配对码；按本岗位的职责问；稍后 → 当天收起', async () => {
     renderWithProviders(
       <ExtensionOnboardCard
         roleIds={['social.reddit', 'pr.reddit']}
@@ -90,12 +90,15 @@ describe('岗位页顶上那张卡', () => {
     )
     const card = await screen.findByTestId('extension-onboard')
     expect(card.getAttribute('data-phase')).toBe('install')
+    // WP456-T3（§3.1）：岗位页上是一行提醒，不再是占满第一屏的整卡
     expect(screen.getByTestId('extension-onboard-why').textContent).toBe(
-      '这个岗位要靠它读 Reddit、把批过的回复填进页面。',
+      '先装好浏览器插件，这个岗位要靠它读 Reddit、把批过的回复填进页面',
     )
     expect(state.asked[0]).toEqual(['social.reddit', 'pr.reddit'])
-    // 复用连接页那块配对码
-    expect(screen.getByTestId('extension-generate')).toBeTruthy()
+    expect(screen.queryByTestId('extension-generate')).toBeNull()
+    // 点「装插件」才展开：复用连接页那块配对码
+    fireEvent.click(screen.getByTestId('extension-onboard-open'))
+    expect(await screen.findByTestId('extension-generate')).toBeTruthy()
     fireEvent.click(screen.getByTestId('extension-onboard-later'))
     await waitFor(() => expect(screen.queryByTestId('extension-onboard')).toBeNull())
     expect(state.snoozed).toEqual([['social.reddit', 'pr.reddit']])

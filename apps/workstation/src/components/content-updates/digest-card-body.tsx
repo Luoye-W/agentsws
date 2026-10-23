@@ -64,7 +64,7 @@ export function DigestCardBody({
   return (
     <div className="mt-2.5 flex flex-col gap-2" data-testid="content-digest">
       {payload.advice === undefined ? null : (
-        <p className="text-[12.5px] text-ws-body" data-testid="content-digest-advice">
+        <p className="text-[13px] text-ws-body" data-testid="content-digest-advice">
           {payload.advice}
         </p>
       )}
@@ -72,7 +72,7 @@ export function DigestCardBody({
         {payload.items.map((i) => (
           <li
             key={i.item_id}
-            className="flex items-center gap-2 px-3 py-1.5 text-[12.5px]"
+            className="flex items-center gap-2 px-3 py-1.5 text-[13px]"
             data-testid="content-digest-item"
             data-mine={i.mine}
           >

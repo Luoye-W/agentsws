@@ -20,12 +20,21 @@
  */
 import { VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ChevronDown, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Plus, RefreshCw, Sparkles, Trash2, XCircle } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
-import { BrandMark, GroupLabel, InfoTip, StatusPill, testedMs, useFresh } from '@/components/design'
-import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
+import {
+  BrandMark,
+  EmptyState,
+  GroupLabel,
+  InfoTip,
+  ListGroup,
+  StatusPill,
+  testedMs,
+  useFresh,
+} from '@/components/design'
+import { TutorialHint } from '@/components/help/tutorial-link'
 import { AiSourceOrder } from '@/components/models/ai-source-order'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
@@ -442,12 +451,12 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         )}
 
         {inUseCount === 0 ? (
-          <p
-            className="rounded-xl border border-dashed border-ws-line px-4 py-6 text-center text-xs text-ws-muted-fg"
-            data-testid="models-empty"
-          >
-            {t('models.empty')}
-          </p>
+          // WP456-T6：空状态走共用件（灰图标 + 一句话），放在列表组里，不再是虚线框
+          <ListGroup>
+            <div className="ws-row">
+              <EmptyState icon={Sparkles} text={t('models.empty')} data-testid="models-empty" />
+            </div>
+          </ListGroup>
         ) : (
           <ul className="ws-group divide-y divide-ws-line">
             {subSignedIn && subProvider !== undefined ? (
@@ -640,16 +649,34 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   <th className="py-1 text-left font-normal">{t('models.usage.purpose')}</th>
                   <th className="py-1 text-right font-normal">{t('models.usage.calls')}</th>
                   <th className="py-1 text-right font-normal">{t('models.usage.tokens')}</th>
+                  <th className="py-1 text-right font-normal">
+                    <span className="inline-flex items-center justify-end gap-1">
+                      {t('models.usage.cache')}
+                      <Hint text={t('models.usage.cache.hint')} />
+                    </span>
+                  </th>
                   <th className="py-1 text-right font-normal">{t('models.usage.cost')}</th>
                 </tr>
               </thead>
               <tbody>
                 {usage.data.rows.map((row) => (
-                  <tr key={row.purpose} className="border-b border-ws-line last:border-0">
-                    <td className="py-1">{t(`models.purpose.${row.purpose}`)}</td>
+                  <tr
+                    key={`${row.purpose}:${row.feature ?? ''}`}
+                    className="border-b border-ws-line last:border-0"
+                    data-testid="model-usage-row"
+                    data-feature={row.feature}
+                  >
+                    <td className="py-1">
+                      {row.feature === undefined
+                        ? t(`models.purpose.${row.purpose}`)
+                        : t(`models.feature.${row.feature}`)}
+                    </td>
                     <td className="py-1 text-right tabular-nums">{row.calls}</td>
                     <td className="py-1 text-right tabular-nums">
                       {(row.input_tokens + row.output_tokens).toLocaleString()}
+                    </td>
+                    <td className="py-1 text-right tabular-nums" data-testid="model-usage-cache">
+                      {cacheRateText(row)}
                     </td>
                     <td className="py-1 text-right tabular-nums">{row.cost_base.toFixed(4)}</td>
                   </tr>
@@ -674,6 +701,16 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
       </Fold>
     </div>
   )
+}
+
+/**
+ * WP473（docs/116 §6 D）：这一行的输入里有多少命中了缓存——`cached_tokens / input_tokens`，取整到百分之一。
+ * 没有输入（只有向量 / 转写之类）显示「—」。
+ */
+export function cacheRateText(row: { input_tokens: number; cached_tokens: number }): string {
+  if (!(row.input_tokens > 0)) return '—'
+  const ratio = Math.min(Math.max(row.cached_tokens, 0), row.input_tokens) / row.input_tokens
+  return `${Math.round(ratio * 100)}%`
 }
 
 /** 一块：标题（+ 问号 + 个数）在上，内容在下。 */
@@ -1341,24 +1378,25 @@ function AddRow({
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 text-sm font-medium text-ws-ink">
             <span className="truncate">{name}</span>
-            {/* WP156：服务端那段整句介绍进问号；卡面上是下面那一句 */}
-            {item.summary === '' ? null : (
-              <Hint text={item.summary} testId="model-template-summary" />
-            )}
           </p>
           <p className="truncate text-xs text-ws-muted-fg" data-testid="model-template-line">
             {line}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {tutorial !== undefined ? (
-            <TutorialLink slug={tutorial} className="text-ws-muted-fg hover:text-primary" />
-          ) : plan.steps.length + plan.links.length === 0 ? null : (
-            <InlineGuideLink
-              title={item.label}
-              markdown={templateGuide(plan)}
-              className="text-ws-muted-fg hover:text-primary"
+          {/*
+            WP156：服务端那段整句介绍进问号。WP456-T6（§3.8 P2）：每家只留**一个**问号——悬停是介绍，
+            点开是教程（原来是「ⓘ +『看教程』」两颗）。
+          */}
+          {tutorial !== undefined || plan.steps.length + plan.links.length > 0 ? (
+            <TutorialHint
+              text={item.summary}
+              {...(tutorial !== undefined
+                ? { slug: tutorial }
+                : { guide: { title: item.label, markdown: templateGuide(plan) } })}
             />
+          ) : item.summary === '' ? null : (
+            <Hint text={item.summary} testId="model-template-summary" />
           )}
           {keyGroup ? (
             <Button

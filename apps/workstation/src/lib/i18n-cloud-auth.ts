@@ -5,6 +5,7 @@
  * 少字（36 §7）：每块一行说明，长的进问号；状态用图标。
  */
 export const CLOUD_AUTH_ZH: Record<string, string> = {
+  'cauth.tab.label': '注册还是登录',
   'cauth.tab.signup': '注册新账号',
   'cauth.tab.login': '已有账号，登录',
   'cauth.name': '名字或公司名',
@@ -60,6 +61,7 @@ export const CLOUD_AUTH_ZH: Record<string, string> = {
 }
 
 export const CLOUD_AUTH_EN: Record<string, string> = {
+  'cauth.tab.label': 'Sign up or log in',
   'cauth.tab.signup': 'Create account',
   'cauth.tab.login': 'I have an account',
   'cauth.name': 'Your name or company',

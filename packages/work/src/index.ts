@@ -90,7 +90,16 @@ export {
   newHandoff,
   settleHandoff,
 } from './handoff.js'
-export { deriveHorizon, type HorizonInput, isOpen, resolveHorizon, WEEK_DAYS } from './horizon.js'
+export {
+  deriveHorizon,
+  effectiveHorizon,
+  type HorizonInput,
+  isOpen,
+  resolveHorizon,
+  startOfWeek,
+  viewTodo,
+  WEEK_DAYS,
+} from './horizon.js'
 export { type Migration, migrate, schemaVersion, WORK_MIGRATIONS } from './migrations.js'
 export {
   BUSY_MAX_SUGGESTIONS,
@@ -141,6 +150,19 @@ export {
   type WorkExtraEventType,
   type WorkOptions,
 } from './service.js'
+// WP469（决策 1522）：「帮我排进空档」的纯函数（候选，不写）
+export {
+  busySpans,
+  estimateTodoMinutes,
+  LIVE_BUFFER_MIN,
+  normalizeWorkHours,
+  proposeSlots,
+  SLOT_OPTIONS_MAX,
+  SLOT_STEP_MIN,
+  slotStarts,
+  WORK_END_MIN,
+  WORK_START_MIN,
+} from './slots.js'
 export {
   createSqliteWorkStore,
   SqliteWorkStore,

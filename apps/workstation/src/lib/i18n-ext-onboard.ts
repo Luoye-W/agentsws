@@ -5,6 +5,9 @@
 export const EXT_ONBOARD_ZH: Record<string, string> = {
   'extonboard.title': '先装好浏览器插件',
   'extonboard.why': '这个岗位要靠它{what}。',
+  'extonboard.line': '先装好浏览器插件，这个岗位要靠它{what}',
+  'extonboard.install': '装插件',
+  'extonboard.collapse': '收起',
   'extonboard.use.reddit': '读 Reddit、把批过的回复填进页面',
   'extonboard.use.kol': '在 YouTube / Instagram / TikTok 上收红人',
   'extonboard.use.google_ads': '在 Google 广告后台执行批过的改动',
@@ -32,6 +35,9 @@ export const EXT_ONBOARD_ZH: Record<string, string> = {
 export const EXT_ONBOARD_EN: Record<string, string> = {
   'extonboard.title': 'Install the browser extension first',
   'extonboard.why': 'This position needs it to {what}.',
+  'extonboard.line': 'Install the browser extension first; this position needs it to {what}',
+  'extonboard.install': 'Install',
+  'extonboard.collapse': 'Hide',
   'extonboard.use.reddit': 'read Reddit and fill approved replies into the page',
   'extonboard.use.kol': 'save creators from YouTube / Instagram / TikTok',
   'extonboard.use.google_ads': 'carry out approved changes in Google Ads',

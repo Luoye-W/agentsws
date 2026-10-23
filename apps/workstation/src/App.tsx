@@ -13,6 +13,7 @@ import { PageError } from '@/components/page-error'
 import { RoleUpgradeNotice } from '@/components/role-upgrade-notice'
 import { SettingsDialog } from '@/components/settings-panel/settings-dialog'
 import { useSettingsRoute } from '@/components/settings-panel/use-settings-route'
+import { TelemetryRoot } from '@/components/telemetry/telemetry-root'
 import {
   ensureSession,
   getHome,
@@ -28,7 +29,7 @@ import { useBrandLink } from '@/lib/brand-link'
 import { connectRealtime } from '@/lib/realtime'
 import { BrandAssetsPage } from '@/pages/brand-assets'
 import { BrandDesignPage } from '@/pages/brand-design'
-import { CalendarPage } from '@/pages/calendar'
+import { CalTodoPage, CalTodoRedirect } from '@/pages/cal-todo'
 // WP333（决策 584）：一张卡自己的页面（个人微信卡片链接）
 import { CardPage } from '@/pages/card'
 // WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒
@@ -48,12 +49,11 @@ import { MatterPage } from '@/pages/matter'
 import { MeetingPage } from '@/pages/meeting'
 import { MeetingsPage } from '@/pages/meetings'
 // WP113（63）：消息——统一收件处（左栏那个入口从「目标」换过来的）
-import { MessagesPage } from '@/pages/messages'
+import { MessagesRoute } from '@/pages/messages'
 import { OnboardingPage, onboardingSkipped } from '@/pages/onboarding'
 import { PeoplePage, PersonPage } from '@/pages/people'
 import { PositionPage } from '@/pages/position'
 import { SkillsPage } from '@/pages/skills'
-import { TodosPage } from '@/pages/todos'
 
 /** WP456-T2：组件一览（`/ui-kit`，左栏不放入口；单独一块，平时不下载）。 */
 const UiKitPage = lazy(() => import('@/pages/ui-kit'))
@@ -220,6 +220,8 @@ function Workspace(): ReactNode {
       {session.data === undefined ? null : <BrandLinkNote brand={session.data.workspace.name} />}
       {/* WP462：职责升了大版本、自动接不上的那几条，就地确认（别的岗位照常） */}
       <RoleUpgradeNotice positions={positions.data.positions} />
+      {/* WP476：匿名使用数据（没配置 / 关了就什么都不加载）+ 第一次那句提示 */}
+      <TelemetryRoot />
       <SettingsDialog target={settings.target} onNavigate={settings.go} onClose={settings.close} />
       {/*
         WP356：设置类的老地址（`/settings*`、`/connections`、`/im-channels`、`/org`）不在这里——
@@ -240,8 +242,13 @@ function Workspace(): ReactNode {
         <Route path="/matters/:id" element={<MatterPage />} />
         {/* WP333（决策 584）：个人微信卡片里的链接 `/cards/<卡号>`，打开就是那一张 */}
         <Route path="/cards/:id" element={<CardPage />} />
-        <Route path="/todos" element={<TodosPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
+        {/*
+          WP469（决策 1521 / 1526）：待办与日历合成一页「日历与待办」（`/planner`，页头切「清单 / 日历」）。
+          老地址留着、转到对应那一面：岗位页「在日历里看」、通知、⌘K、老聊天记录里都有这两个地址。
+        */}
+        <Route path="/planner" element={<CalTodoPage />} />
+        <Route path="/todos" element={<CalTodoRedirect face="list" />} />
+        <Route path="/calendar" element={<CalTodoRedirect face="calendar" />} />
         {/*
           WP113（63 §1）：`/goals` **留着**。左栏入口换成「消息」之后目标收进
           待办页的一个 tab（`/todos?tab=goals`），但这条路由还在——⌘K 搜得到、
@@ -249,7 +256,9 @@ function Workspace(): ReactNode {
         */}
         <Route path="/goals" element={<GoalsPage />} />
         {/* WP113（63）：消息——整只邮箱 */}
-        <Route path="/messages" element={<MessagesPage />} />
+        {/* WP459（决策 1499）：「消息」改名「收件箱」——`/messages` 留着，`/inbox` 同一页 */}
+        <Route path="/messages" element={<MessagesRoute />} />
+        <Route path="/inbox" element={<MessagesRoute />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />

@@ -197,7 +197,9 @@ export class SqliteWorkStore implements WorkStore {
   }
 
   // ── 待办
-  putTodo(todo: Todo): void {
+  putTodo(input: Todo): void {
+    // WP474：`carried_over` 是读的时候算的，不存
+    const { carried_over: _read, ...todo } = input
     this.db
       .prepare(
         `INSERT INTO todos (id, workspace_id, owner, position_id, matter_id, goal_id, parent_id,

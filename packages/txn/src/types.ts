@@ -268,6 +268,8 @@ export interface TxnStore {
   /** 宿主（审批总线）写的批准标记；执行器只信这一处（15 §5.2） */
   markApproved(change_id: string): void
   isApproved(change_id: string): boolean
+  /** WP474（决策 1514）：取消窗口里撤回「通过」——批准标记一起拿掉（没实现的存储留着标记，状态回 staged 也施行不了） */
+  unmarkApproved?(change_id: string): void
 
   /**
    * 拿一把施行锁。拿到回 {@link ApplyLock}（`token` 比上一次大）；

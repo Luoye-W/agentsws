@@ -47,7 +47,7 @@ export function SimilarChoiceCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {candidates.map((c) => (
-          <div key={c.entry.id} className="flex flex-col rounded border px-2 py-1.5">
+          <div key={c.entry.id} className="flex flex-col rounded-sm border px-2 py-1.5">
             <span className="text-sm font-medium">{c.entry.title}</span>
             <span className="text-xs text-muted-foreground">
               {t('toolbox.owner', { who: c.entry.owner })} ·{' '}

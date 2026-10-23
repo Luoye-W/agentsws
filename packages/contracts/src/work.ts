@@ -545,6 +545,16 @@ export interface Todo {
   owner: PersonId
   delegate?: TodoDelegate
   horizon: TodoHorizon
+  /**
+   * WP474（决策 1531，只加）：`horizon` 是哪一刻定下的（建的时候、换档的时候）。
+   * 「本周」= 那一刻所在的周一到周日；跨了周还没做完的读出来标 {@link Todo.carried_over}。老待办没有这一格（看 `updated_at`）。
+   */
+  horizon_at?: Iso8601
+  /**
+   * WP474（决策 1531，只加）：**读的时候算的**，不存——没日子的「本周」待办跨了周还没做完，
+   * 周一自动挪进新的「本周」顶上，清单上标「上周没做完」。
+   */
+  carried_over?: boolean
   /** 截止 → 短期 */
   due?: Iso8601
   /** 排期 → 上日历 */
@@ -558,7 +568,17 @@ export interface Todo {
   /** 委托给 Agent 后回来的卡（`ApprovalItem.id`） */
   cards: string[]
   runs: RunId[]
-  origin?: { meeting_id?: string; card_id?: string; review_id?: string; alert_id?: string }
+  origin?: {
+    meeting_id?: string
+    card_id?: string
+    review_id?: string
+    alert_id?: string
+    /**
+     * WP469（决策 1521）：从收件箱「记成待办」来的——那一行的 id（`card:<审批项>` / `mail:<会话>`）。
+     * 收件箱按它把那一行收成「已记成待办」；清单上写「来自收件箱」，有 `due` 时读作「周五前」。
+     */
+    inbox_item?: string
+  }
   created_at: Iso8601
   updated_at: Iso8601
   closed_at?: Iso8601
@@ -645,12 +665,77 @@ export interface CalendarRange {
   /** 关掉「卡片到期」叠层 */
   include_card_due?: boolean
   /**
+   * WP469（决策 1524）：做完的待办也上日历（划掉、变淡）。不传 = 不要（老调用方行为不变）。
+   * 做完的那一条 `status: 'done'`、`drag: 'readonly'`。
+   */
+  include_done?: boolean
+  /**
    * 只要这几个图层（WP74）。**不传 = 全部**——老调用方一个字不用改。
    *
    * 传空数组与不传不是一回事：空数组 = 一个图层都不开 = 一条都不回。
    */
   sources?: readonly CalendarSource[]
 }
+
+// ── 帮我排进空档（WP469，决策 1522）────────────────────────────────────
+
+/**
+ * 「帮我排进空档」：选几件没日子的待办，按估的时长在这一段的空档里各提一个位置。
+ *
+ * **只是候选**：这一步什么都不写；人点「采用」才写 `Todo.scheduled`（走改待办那条路）。
+ * 空档按日历上已有的事（会议、排了钟点的待办……）和工作时间算，不碰别人的日历。
+ */
+export interface TodoSlotRequest {
+  todo_ids: TodoId[]
+  /** 在哪一段里找（[from, to)；通常是这一周，从现在起） */
+  from: Iso8601
+  to: Iso8601
+  /** 看的人那台电脑的时区偏移（分钟，东八区 = 480）：工作时间按它切 */
+  tz_offset_minutes?: number
+}
+
+export interface TodoSlotProposal {
+  todo_id: TodoId
+  title: string
+  /** 估的时长（分钟） */
+  minutes: number
+  /** 头一个候选 + 「换一个」时依次换到的几个（互不重叠，也不和别的待办的头一个候选重叠） */
+  options: { start: Iso8601; end: Iso8601 }[]
+}
+
+export interface TodoSlotResult {
+  proposals: TodoSlotProposal[]
+  /** 这一段里实在找不到空档的那几件 */
+  unplaced: TodoId[]
+}
+
+/**
+ * WP474（决策 1530，只加）：「我的作息」——**只影响「帮我排进空档」的候选**（设置 → 通用一行，每人一份）。
+ * 默认就是 WP469 写死的那一套：9:00–18:00、不排周末、直播前后各空 30 分钟、不避午饭。
+ */
+export interface WorkHours {
+  /** 上班（本地分钟，9:00 = 540） */
+  start_min: number
+  /** 下班（本地分钟，18:00 = 1080；晚于上班） */
+  end_min: number
+  /** 周末也排 */
+  weekends: boolean
+  /** 直播前后各空多久（分钟，0 = 不空） */
+  live_buffer_min: number
+  /** 避开午饭（12:00–13:00） */
+  avoid_lunch: boolean
+}
+
+export const DEFAULT_WORK_HOURS: WorkHours = {
+  start_min: 9 * 60,
+  end_min: 18 * 60,
+  weekends: false,
+  live_buffer_min: 30,
+  avoid_lunch: false,
+}
+
+/** 午饭那一段（本地分钟）：12:00–13:00。 */
+export const LUNCH_SPAN_MIN = { start: 12 * 60, end: 13 * 60 } as const
 
 // ── 每日计划（37 §2.4 早上）────────────────────────────────────────────
 

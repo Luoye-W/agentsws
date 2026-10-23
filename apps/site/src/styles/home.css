@@ -1637,3 +1637,536 @@
     flex: 0 1 auto;
   }
 }
+
+/* ───────── 10-23（私有 docs/117）：页面压短——截图滑动、功能按组点开、接 AI 与上网各一段、本地优先合并 ───────── */
+/* 首页的样式排在全站样式前面，同权重会被 site.css 的 .sec 盖掉，所以写 section.sec */
+section.sec {
+  padding: 72px 0;
+}
+section.why {
+  padding-bottom: 80px;
+}
+.why .stairs {
+  margin-top: 36px;
+}
+.why .stair:nth-child(1) {
+  margin-top: 90px;
+}
+.why .stair:nth-child(2) {
+  margin-top: 60px;
+}
+.why .stair:nth-child(3) {
+  margin-top: 30px;
+}
+section.final {
+  padding: 88px 0;
+}
+
+/* 一天怎么过：截图滑动（不自动播放；没开脚本也能横着滑，标签是页内锚点） */
+.slider {
+  margin-top: 36px;
+}
+.slider-tabs {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.slider-tab {
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  color: var(--body);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.slider-tab[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.slides {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding: 4px 0 18px;
+}
+.slides::-webkit-scrollbar {
+  display: none;
+}
+.slide {
+  flex: 0 0 100%;
+  margin: 0;
+  scroll-snap-align: center;
+}
+.slide .frame {
+  max-width: 880px;
+  margin: 0 auto;
+}
+.slide figcaption {
+  max-width: 760px;
+  margin: 14px auto 0;
+  text-align: center;
+  font-size: 15px;
+  color: var(--muted);
+}
+.slide figcaption b {
+  color: var(--ink);
+  margin-right: 10px;
+}
+.slider-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+}
+.slider-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font: 400 20px / 1 var(--display);
+  cursor: pointer;
+}
+.slider-btn:hover {
+  box-shadow: var(--glow);
+}
+.slider-dots {
+  display: flex;
+  gap: 6px;
+}
+.slider-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 7px;
+  background: var(--line);
+  transition: width 0.2s;
+}
+.slider-dots i.on {
+  width: 20px;
+  background: var(--brand);
+}
+
+/* 岗位墙收紧 */
+.roles {
+  margin-top: 36px;
+  gap: 12px;
+}
+.role {
+  padding: 14px 16px 12px;
+}
+.role .role-ic {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 8px;
+}
+.role h3 {
+  font-size: 16px;
+}
+.role p {
+  font-size: 13px;
+}
+
+/* 几句话交代：按组切，每行点开 */
+.feat-groups {
+  margin-top: 32px;
+  text-align: left;
+}
+.feat-tabs {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+.feat-tab {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.feat-tab[aria-selected="true"] {
+  background: var(--tint);
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+/* 没开脚本时每组都摊开、组名当小标题；有脚本时只露当前那组 */
+.feat-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+.feat-groups.js .feat-label {
+  display: none;
+}
+.feat-groups:not(.js) .feat-tabs {
+  display: none;
+}
+.feats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.feats-3 {
+  margin-top: 32px;
+  text-align: left;
+}
+.feat,
+.more {
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+}
+.sec-alt .feat,
+.sec-alt .more {
+  background: var(--paper);
+  box-shadow: none;
+}
+.feat summary,
+.more summary {
+  list-style: none;
+  cursor: pointer;
+  position: relative;
+  padding-right: 26px;
+}
+.feat summary::-webkit-details-marker,
+.more summary::-webkit-details-marker,
+.upd-more summary::-webkit-details-marker,
+.ai-price summary::-webkit-details-marker {
+  display: none;
+}
+.feat summary::after,
+.more summary::after {
+  content: "+";
+  position: absolute;
+  right: 0;
+  top: 0;
+  font: 400 22px / 1 var(--display);
+  color: var(--muted);
+}
+.feat[open] summary::after,
+.more[open] summary::after {
+  content: "−";
+}
+.feat summary b {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.feat summary span {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.feat p {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--body);
+}
+.feat p a,
+.ai-price a {
+  color: var(--brand-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+/* 接上 AI */
+.ai {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 56px;
+  align-items: center;
+}
+.ai-opts {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ai-opt {
+  display: block;
+  height: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+.ai-opt:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--glow), var(--shadow-hover);
+}
+.ai-opt b {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ai-opt.own b::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+  margin-right: 8px;
+  vertical-align: 2px;
+}
+.ai-opt span {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.ai-price {
+  margin-top: 18px;
+  font-size: 14px;
+}
+.ai-price summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+.ai-price summary::after {
+  content: " +";
+}
+.ai-price[open] summary::after {
+  content: " −";
+}
+.ai-price p {
+  margin-top: 8px;
+  color: var(--body);
+  line-height: 1.65;
+}
+.ai-shot .frame-img {
+  aspect-ratio: 1408 / 952;
+}
+
+/* 上网与浏览器 */
+.web-sub {
+  max-width: 46em;
+}
+
+/* 本地优先：三种用法、别处收费、匿名记录都收进点开 */
+.more-rows {
+  margin-top: 36px;
+  display: grid;
+  gap: 10px;
+}
+.more summary {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.more-sub {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.more .modes {
+  margin-top: 16px;
+  gap: 12px;
+}
+.more .mode {
+  display: block;
+  background: var(--paper);
+  box-shadow: none;
+  padding: 18px;
+}
+.more .modes-grow {
+  margin-top: 14px;
+}
+.more .cmp {
+  margin-top: 14px;
+}
+.more .fine {
+  margin-top: 10px;
+}
+
+/* 底座：官方更新时间线点开 */
+.upd-more summary {
+  list-style: none;
+  cursor: pointer;
+}
+.upd-more summary h3 {
+  display: inline;
+}
+.upd-more summary::after {
+  content: "+";
+  margin-left: 10px;
+  font: 400 20px / 1 var(--display);
+  color: var(--term-muted);
+}
+.upd-more[open] summary::after {
+  content: "−";
+}
+.upd-n {
+  font: 600 12px / 20px var(--display);
+  padding: 0 7px;
+  margin-left: 4px;
+  border-radius: 7px;
+  background: rgba(118, 251, 145, 0.14);
+  color: var(--term-accent);
+  vertical-align: 2px;
+}
+.upd-more .tl {
+  margin-top: 18px;
+}
+
+/* 公开地做：一排三条，横着滑看更多 */
+.logs {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 40px) / 3);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 4px 2px 14px;
+  margin-top: 36px;
+}
+.logs > li {
+  scroll-snap-align: start;
+}
+
+/* 常见问题：两列、默认全收 */
+.faq-2 {
+  max-width: 1040px;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  margin-top: 32px;
+}
+
+@media (max-width: 900px) {
+  section.sec {
+    padding: 56px 0;
+  }
+  section.why {
+    padding-bottom: 56px;
+  }
+  .slider-tabs {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -20px 16px;
+    padding: 4px 20px;
+  }
+  .slider-tab {
+    flex: none;
+  }
+  .slide figcaption {
+    text-align: left;
+    font-size: 14px;
+  }
+  .feats,
+  .faq-2 {
+    grid-template-columns: 1fr;
+  }
+  .feat-tabs {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -20px 14px;
+    padding: 0 20px;
+  }
+  .feat-tab {
+    flex: none;
+  }
+  .ai {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .ai-opts {
+    grid-template-columns: 1fr;
+  }
+  /* 出卡审批的三张示意卡、四级台阶、更新日志：手机上横着滑 */
+  .deck,
+  .logs {
+    display: grid;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 86%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+    text-align: left;
+    padding-bottom: 12px;
+  }
+  .deck > * {
+    scroll-snap-align: start;
+  }
+  .stairs {
+    display: flex;
+    gap: 14px;
+    padding: 0 0 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+  .stairs::before,
+  .stair::before {
+    display: none;
+  }
+  .stair,
+  .stair:nth-child(n),
+  .why .stair:nth-child(n) {
+    flex: 0 0 86%;
+    margin-top: 0;
+    padding-bottom: 0;
+    scroll-snap-align: start;
+  }
+  .more .modes {
+    grid-template-columns: 1fr;
+  }
+  /* 手机上：岗位墙只留名字（详情在岗位页），本地优先四张卡两列 */
+  .roles .role p {
+    display: none;
+  }
+  .roles .role .role-ic {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 6px;
+  }
+  .promises {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .promise {
+    padding: 14px;
+  }
+  .promise .role-ic {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 8px;
+  }
+  .promise h3 {
+    font-size: 15px;
+  }
+  .promise p {
+    font-size: 13px;
+  }
+}

@@ -107,6 +107,8 @@ describe('撞车选择题卡（40 §3.1）', () => {
     await waitFor(() => {
       expect(createTodo).toHaveBeenLastCalledWith({
         title: '把昨天的退款单核对一下',
+        // WP469：没写日子的进「本周」
+        horizon: 'week',
         collision: 'join',
         collision_target: 'td_a',
       })
@@ -130,6 +132,8 @@ describe('撞车选择题卡（40 §3.1）', () => {
     await waitFor(() => {
       expect(createTodo).toHaveBeenLastCalledWith({
         title: '把昨天的退款单核对一下',
+        // WP469：没写日子的进「本周」
+        horizon: 'week',
         collision: 'force',
         collision_target: 'td_a',
         distinct_reason: '另一家店的同号订单',

@@ -21,28 +21,21 @@ import {
   Pin,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { StatusPill, type Tone } from '@/components/design'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { TitleMenu, TopBarTitle } from '@/components/shell/top-bar-slots'
 import { useApp } from '@/lib/app-context'
 import type { MatterState } from './matter-model'
 
-const STATE_DOT: Record<MatterState, string> = {
-  running: 'bg-ws-brand animate-pulse motion-reduce:animate-none',
-  doing: 'bg-ws-brand',
-  awaiting: 'bg-ws-warn',
-  connect: 'bg-ws-warn',
-  setup: 'bg-ws-warn',
-  blocked: 'bg-ws-bad',
-  done: 'bg-ws-good',
-}
-const STATE_FG: Record<MatterState, string> = {
-  running: 'text-ws-brand-ink dark:text-ws-brand',
-  doing: 'text-ws-brand-ink dark:text-ws-brand',
-  awaiting: 'text-ws-warn',
-  connect: 'text-ws-warn',
-  setup: 'text-ws-warn',
-  blocked: 'text-ws-bad',
-  done: 'text-ws-good',
+/** WP456-T3：状态药丸的颜色——在做 = 提示（蓝）、等你 = 要留意（黄）、卡住 = 出错（红）、做完 = 好（绿）。 */
+const STATE_TONE: Record<MatterState, Tone> = {
+  running: 'info',
+  doing: 'info',
+  awaiting: 'warn',
+  connect: 'warn',
+  setup: 'warn',
+  blocked: 'bad',
+  done: 'good',
 }
 
 export interface DutyOption {
@@ -123,14 +116,10 @@ function TitleEditor({
           onDone()
         }
       }}
-      className="h-7 w-[min(32em,50vw)] rounded-md border border-ws-brand/60 bg-transparent px-1.5 text-[13.5px] font-medium text-foreground outline-none"
+      className="h-7 w-[min(32em,50vw)] rounded-md border border-ws-brand/60 bg-transparent px-1.5 text-[13px] font-medium text-foreground outline-none"
     />
   )
 }
-
-const Dot = (): ReactNode => (
-  <i aria-hidden className="size-[3px] rounded-full bg-current opacity-60" />
-)
 
 export function MatterHeader({
   title,
@@ -276,7 +265,7 @@ export function MatterHeader({
           <p className="mb-1 text-xs text-ws-muted-fg">{t('matter.pinned')}</p>
           <ul className="flex flex-col gap-1">
             {pinned.map((p) => (
-              <li key={p.key} className="flex items-center gap-1.5 text-[12.5px] text-ws-body">
+              <li key={p.key} className="flex items-center gap-1.5 text-[13px] text-ws-body">
                 <Pin aria-hidden className="size-3 text-ws-muted-fg" />
                 {p.label}
               </li>
@@ -349,130 +338,110 @@ export function MatterHeader({
           />
         )}
       </TopBarTitle>
+      {/*
+        WP456-T3（§3.3「状态那一行有 5 种样式」）：一行四样、各一种写法——状态药丸 → 职责标签（可点、能换）→
+        「N 个待办」灰链接 → 最右一行灰色时间。原来那个「王 AI」头像去掉（参与者只在多于一个人时出）。
+      */}
       <header
         data-testid="matter-header"
         data-state={state}
-        className="sticky top-0 z-20 -mx-1 border-b border-ws-line bg-ws-paper px-1 pt-1 pb-3"
+        className="sticky top-0 z-20 -mx-1 bg-ws-paper px-1 pt-1 pb-3"
       >
-        <div className="flex items-start gap-2.5">
-          <div className="min-w-0 flex-1">
-            <div
-              className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ws-muted-fg"
-              data-testid="matter-meta"
-            >
-              {ask ? null : (
-                <div ref={picker.box} className="relative">
-                  <button
-                    type="button"
-                    data-testid="matter-reroute"
-                    data-role={roleId ?? ''}
-                    title={t('matter.duty.tip')}
-                    aria-haspopup="menu"
-                    aria-expanded={picker.open}
-                    disabled={switchable.length === 0}
-                    onClick={() => {
-                      picker.setOpen((v) => !v)
-                    }}
-                    className="-ml-1 inline-flex h-[22px] items-center gap-1.5 rounded-md px-1.5 hover:text-ws-ink hover:shadow-[inset_0_0_0_1px_var(--ws-line)] disabled:hover:shadow-none"
-                  >
-                    {roleId === undefined ? null : <DutyIcon role_id={roleId} size={14} />}
-                    <span>{roleName ?? t('matter.duty.none')}</span>
-                    {switchable.length === 0 ? null : (
-                      <ArrowLeftRight aria-hidden className="size-3 text-ws-muted-fg" />
-                    )}
-                  </button>
-                  {picker.open ? (
-                    <div
-                      role="menu"
-                      data-testid="reroute-options"
-                      className="absolute top-7 left-0 z-30 flex w-56 flex-col gap-0.5 rounded-xl border border-ws-line bg-ws-card p-1 shadow-ws"
+        <div
+          className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ws-muted-fg"
+          data-testid="matter-meta"
+        >
+          {ask ? null : (
+            <StatusPill tone={STATE_TONE[state]} data-testid="matter-state" data-state={state}>
+              {t(`matter.state.${state}`)}
+            </StatusPill>
+          )}
+          {ask ? null : (
+            <div ref={picker.box} className="relative">
+              <button
+                type="button"
+                data-testid="matter-reroute"
+                data-role={roleId ?? ''}
+                title={t('matter.duty.tip')}
+                aria-haspopup="menu"
+                aria-expanded={picker.open}
+                disabled={switchable.length === 0}
+                onClick={() => {
+                  picker.setOpen((v) => !v)
+                }}
+                className="ws-tag ws-tag-outline cursor-pointer gap-1 hover:bg-ws-hover disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                {roleId === undefined ? null : <DutyIcon role_id={roleId} size={14} />}
+                <span>{roleName ?? t('matter.duty.none')}</span>
+                {switchable.length === 0 ? null : (
+                  <ChevronDown aria-hidden className="size-3.5 text-ws-faint" />
+                )}
+              </button>
+              {picker.open ? (
+                <div
+                  role="menu"
+                  data-testid="reroute-options"
+                  className="absolute top-7 left-0 z-30 flex w-56 flex-col gap-0.5 rounded-xl bg-ws-pop p-1 shadow-ws-pop"
+                >
+                  {duties.map((d) => (
+                    <button
+                      key={d.role_id}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={d.role_id === roleId}
+                      disabled={!d.mine || rerouting || d.role_id === roleId}
+                      onClick={() => {
+                        picker.setOpen(false)
+                        onReroute(d.role_id)
+                      }}
+                      className={cn(
+                        'flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ws-body hover:bg-ws-hover disabled:text-ws-muted-fg disabled:hover:bg-transparent',
+                        d.role_id === roleId && 'font-medium text-ws-ink',
+                      )}
                     >
-                      {duties.map((d) => (
-                        <button
-                          key={d.role_id}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={d.role_id === roleId}
-                          disabled={!d.mine || rerouting || d.role_id === roleId}
-                          onClick={() => {
-                            picker.setOpen(false)
-                            onReroute(d.role_id)
-                          }}
-                          className={cn(
-                            'flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ws-body hover:bg-muted disabled:text-ws-muted-fg disabled:hover:bg-transparent',
-                            d.role_id === roleId && 'font-medium text-ws-ink',
-                          )}
-                        >
-                          <DutyIcon role_id={d.role_id} size={14} />
-                          {d.role_name}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                      <DutyIcon role_id={d.role_id} size={14} />
+                      {d.role_name}
+                    </button>
+                  ))}
                 </div>
-              )}
-              {ask ? null : (
-                <>
-                  <Dot />
-                  <span
-                    className={cn('inline-flex items-center gap-1.5 font-medium', STATE_FG[state])}
-                    data-testid="matter-state"
-                  >
-                    <i aria-hidden className={cn('size-[7px] rounded-full', STATE_DOT[state])} />
-                    {t(`matter.state.${state}`)}
-                  </span>
-                  <Dot />
-                </>
-              )}
-              <span className="inline-flex items-center" title={t('matter.people')}>
-                {people.slice(0, 3).map((p, i) => (
-                  <span
-                    key={p.person_id}
-                    data-testid="matter-participant"
-                    data-person={p.person_id}
-                    title={p.label}
-                    className={cn(
-                      'inline-flex size-[18px] items-center justify-center rounded-full bg-ws-warn-bg text-xs font-semibold text-ws-warn shadow-[0_0_0_2px_var(--ws-paper)]',
-                      i > 0 && '-ml-1',
-                    )}
-                  >
-                    {Array.from(p.label)[0] ?? '?'}
-                  </span>
-                ))}
+              ) : null}
+            </div>
+          )}
+          {/* 参与者：只在多于一个人时出（一个人的事项头像没有意思） */}
+          {people.length < 2 ? null : (
+            <span className="inline-flex items-center" title={t('matter.people')}>
+              {people.slice(0, 3).map((p, i) => (
                 <span
-                  aria-hidden
+                  key={p.person_id}
+                  data-testid="matter-participant"
+                  data-person={p.person_id}
+                  title={p.label}
                   className={cn(
-                    'inline-flex size-[18px] items-center justify-center rounded-full bg-ws-tint text-ws-tiny font-semibold text-ws-brand-ink shadow-[0_0_0_2px_var(--ws-paper)] dark:text-ws-brand',
-                    people.length > 0 && '-ml-1',
+                    'inline-flex size-[18px] items-center justify-center rounded-full bg-ws-secondary text-xs font-semibold text-ws-body shadow-[0_0_0_2px_var(--ws-paper)]',
+                    i > 0 && '-ml-1',
                   )}
                 >
-                  AI
+                  {Array.from(p.label)[0] ?? '?'}
                 </span>
-              </span>
-              <Dot />
-              <span>{t('matter.recent', { at: lastActivity })}</span>
-              {openTodos.length === 0 ? null : (
-                <>
-                  <Dot />
-                  <button
-                    type="button"
-                    data-testid="matter-todos-chip"
-                    aria-expanded={todosOpen}
-                    onClick={() => {
-                      setTodosOpen((v) => !v)
-                    }}
-                    className="inline-flex h-[22px] items-center gap-1 rounded-full bg-ws-info-bg px-2 font-medium text-ws-info"
-                  >
-                    {t('matter.todos.count', { count: openTodos.length })}
-                    <ChevronDown
-                      aria-hidden
-                      className={cn('size-3 transition-transform', todosOpen && 'rotate-180')}
-                    />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
+              ))}
+            </span>
+          )}
+          {openTodos.length === 0 ? null : (
+            <button
+              type="button"
+              data-testid="matter-todos-chip"
+              aria-expanded={todosOpen}
+              onClick={() => {
+                setTodosOpen((v) => !v)
+              }}
+              className="ws-link-muted text-xs"
+            >
+              {t('matter.todos.count', { count: openTodos.length })}
+            </button>
+          )}
+          <span className="ws-num ml-auto text-ws-faint" data-testid="matter-recent">
+            {t('matter.recent', { at: lastActivity })}
+          </span>
         </div>
         {todosOpen && openTodos.length > 0 ? (
           <ul

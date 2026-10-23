@@ -268,3 +268,23 @@ describe('WP356 ⌘K 搜设置项', () => {
     })
   })
 })
+
+describe('WP456-T6：设置弹窗的样子走共用件', () => {
+  it('左栏分组名是共用的分组名（12/600 灰字）、每行 30 高；页头标题 16、说明 13；节里的小标题是节标题', async () => {
+    renderWithProviders(<Harness />, '/settings/channels')
+    const nav = await screen.findByTestId('settings-nav')
+    const labels = nav.querySelectorAll('.ws-group-label')
+    expect(labels.length).toBeGreaterThanOrEqual(3)
+    const row = within(nav).getByTestId('settings-nav-general')
+    expect(row.className).toContain('h-[30px]')
+    expect(row.className).toContain('text-ws-ui')
+    const head = pane().querySelector('header[data-slot="page-header"]') as HTMLElement
+    expect(head.querySelector('h2')?.className).toContain('text-ws-title')
+    // 不再有 12.5 这种半档
+    expect(pane().innerHTML).not.toContain('text-[12.5px]')
+    // 「消息渠道」那几项自己没标题，上面画的是共用的节标题
+    await waitFor(() => {
+      expect(pane().querySelectorAll('.ws-sec-title').length).toBeGreaterThan(0)
+    })
+  })
+})

@@ -266,6 +266,10 @@ describe('WP276 ② 团队页（平级同事，不是发起人）', () => {
     expect(screen.queryByTestId('owner-card')).toBeNull()
     // 家务：删岗位、分岗位、上级——一个都不出
     const card = cards[0] as HTMLElement
+    // WP456-T6：删掉在「⋯」里、上级在点开的详情里——都打开了再看
+    await user.click(within(card).getByTestId('position-open'))
+    await user.click(within(card).getByTestId('position-menu'))
+    expect(within(card).getByTestId('position-edit')).toBeTruthy()
     expect(within(card).queryByTestId('position-delete')).toBeNull()
     expect(within(card).queryByTestId('position-assign')).toBeNull()
     expect(within(card).queryByTestId('position-supervisor')).toBeNull()

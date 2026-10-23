@@ -1,0 +1,279 @@
+/*
+ * 红人面板（三个平台页面上那一块，活在 shadow root 里）的样式。
+ *
+ * 令牌不在这里：`tokens.css` 由 `scripts/gen-extension-tokens.mjs` 从工作台 `index.css` 生成（WP456-T7），
+ * 浅 / 深两套都挂在 `:host` 上——插件和工作台在用户眼里是同一个产品，而不是同一套 class 名。
+ * 为什么不直接 import 工作台那份 `index.css`：那一份是 Tailwind v4 的 `@theme`，带着一整套 shadcn 的层，
+ * 装进注入到 YouTube 页面里的 shadow root 里既太沉、也会把 Tailwind 的 preflight 一起带进去。
+ *
+ * 全部挂在 `:host` 上：页面的样式进不来，这里的样式也出不去。YouTube 换一次皮肤，这张卡不会跟着花。
+ * 数字只用档位：字号 16 / 14 / 13 / 12（11 只给数字）、圆角 6 / 8 / 12 / 16（WP456 §2）。
+ */
+
+:host {
+  all: initial;
+  font-family: var(--font-stack-sans);
+  color: var(--ws-ink);
+  line-height: 1.55;
+}
+
+.ws-root {
+  position: fixed;
+  top: 88px;
+  right: 24px;
+  z-index: 2147483000;
+  width: 340px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  background: var(--ws-card);
+  border-radius: var(--ws-radius-card);
+  box-shadow: var(--ws-shadow-hover);
+  padding: 16px;
+  font-size: 13px;
+  color: var(--ws-body);
+}
+
+.ws-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ws-mark {
+  width: 20px;
+  height: 20px;
+  color: var(--ws-brand);
+  flex: none;
+}
+
+.ws-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ws-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ws-ink);
+  flex: 1;
+}
+
+.ws-close {
+  border: 0;
+  background: transparent;
+  color: var(--ws-muted-fg);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+/* 「收进哪儿」那一行。**这是披露文案的落点**：登录态时它明说会共享到公共库。 */
+.ws-destination {
+  font-size: 12px;
+  color: var(--ws-muted-fg);
+  margin-bottom: 12px;
+}
+
+.ws-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ws-ink);
+  margin: 0 0 2px;
+  word-break: break-word;
+}
+
+.ws-handle {
+  font-size: 12px;
+  color: var(--ws-muted-fg);
+  margin: 0 0 12px;
+}
+
+.ws-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ws-stat {
+  background: var(--ws-paper);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.ws-stat-label {
+  font-size: 12px;
+  color: var(--ws-muted-fg);
+}
+
+.ws-stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ws-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-verdict {
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.ws-verdict--excellent,
+.ws-verdict--viral,
+.ws-verdict--good {
+  background: var(--ws-good-bg);
+  color: var(--ws-good);
+}
+
+.ws-verdict--normal {
+  background: var(--ws-info-bg);
+  color: var(--ws-info);
+}
+
+.ws-verdict--weak,
+.ws-verdict--below {
+  background: var(--ws-warn-bg);
+  color: var(--ws-warn);
+}
+
+.ws-verdict--suspicious {
+  background: var(--ws-bad-bg);
+  color: var(--ws-bad);
+}
+
+.ws-verdict--unknown {
+  background: var(--ws-paper);
+  color: var(--ws-muted-fg);
+}
+
+.ws-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+}
+
+.ws-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ws-btn--primary {
+  background: var(--ws-brand);
+  color: var(--ws-brand-fg);
+}
+
+.ws-btn--ghost {
+  background: var(--ws-secondary);
+  color: var(--ws-ink);
+}
+
+.ws-note {
+  font-size: 12px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--ws-tint);
+  color: var(--ws-brand-ink);
+}
+
+.ws-note--warn {
+  background: var(--ws-warn-bg);
+  color: var(--ws-warn);
+}
+
+.ws-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.ws-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--ws-line);
+}
+
+.ws-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-row-name {
+  font-size: 12px;
+  color: var(--ws-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-row-meta {
+  font-size: 12px;
+  color: var(--ws-muted-fg);
+}
+
+.ws-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ws-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ws-label {
+  font-size: 12px;
+  color: var(--ws-muted-fg);
+}
+
+.ws-input {
+  border: 1px solid var(--ws-line-strong);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--ws-ink);
+  background: var(--ws-card);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ws-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 2147483000;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: var(--ws-brand);
+  color: var(--ws-brand-fg);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  box-shadow: var(--ws-shadow-hover);
+  cursor: pointer;
+}

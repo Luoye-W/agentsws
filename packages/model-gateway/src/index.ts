@@ -1,3 +1,5 @@
+// WP473：用量按功能拆、缓存分组键（只发哈希）
+export { featureOf, promptCacheKeyOf } from './feature.js'
 export type {
   ExternalUsage,
   ModelGatewayApi,
@@ -79,6 +81,7 @@ export {
   refreshPriceCatalog,
 } from './pricing/refresh.js'
 export {
+  CACHE_WRITE_MULTIPLIER,
   costOf,
   DEFAULT_CHARS_PER_TOKEN,
   DEFAULT_EXPECTED_OUTPUT_TOKENS,

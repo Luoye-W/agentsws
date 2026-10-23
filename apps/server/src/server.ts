@@ -22,6 +22,7 @@ import type {
   AdsActor,
   AskPort,
   ChatPort,
+  ClientErrorPort,
   ConnectionDirectoryPort,
   FreeChatPort,
   PositionEntryPort,
@@ -161,7 +162,6 @@ import {
   socialChannelSpec,
 } from '@agentsws/contracts'
 import {
-  EXTERNAL_FENCE,
   evaluateGuardrail,
   extractFigures,
   isInstructionRuleCard,
@@ -209,7 +209,9 @@ import {
   createRoleStore,
   ENTRY_CLASSIFY_MAX_OUTPUT,
   hasApprovalFlow,
+  loadBundledPositions,
   loadBundledRole,
+  loadBundledRoles,
   type PersonaBrandContext,
   personaTextIn,
   type RangeExpanded,
@@ -526,6 +528,12 @@ import {
   isFaqBatchCard,
   isFaqImportCard,
 } from './faq-import.js'
+import {
+  clientErrorRingLine,
+  createFeedbackService,
+  type ErrorRing,
+  processErrorRing,
+} from './feedback.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
 import { createGenuiImageHosts } from './genui-image-hosts.js'
@@ -963,6 +971,7 @@ import {
   type TunnelFetch,
   type TunnelSocketFactory,
 } from './team-tunnel.js'
+import { createTelemetry, type Telemetry, type TelemetryFetch } from './telemetry.js'
 import { createThemeToolExecutor } from './theme-tools.js'
 import { createUpdatePause } from './update-pause.js'
 import {
@@ -986,10 +995,12 @@ import { createWeeklyReviewService } from './weekly-review.js'
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
 import {
+  archiveRerankUser,
   createArchiveStateStore,
   createWorkArchive,
   type WorkArchiveAssembly,
 } from './work-archive.js'
+import { createWorkHoursStore } from './work-hours.js'
 import { createWorkshopHelpTool, searchWorkshopHelp } from './workshop-help-tool.js'
 import {
   createWorkshopServiceTools,
@@ -1287,6 +1298,8 @@ export interface ServerOptions {
    * quiet 时不写（`/v1/client-errors` 照收照答 logged=false）。
    */
   clientErrorLog?: (line: string) => void
+  /** WP475：最近的错误日志放哪（测试注入；不给用进程那一份 `processErrorRing`）。 */
+  feedbackErrors?: ErrorRing
   /**
    * WP398（docs/106 §13 A8）：词库读 Amazon 搜索框联想词用的那一块。不给 = 有桌面壳的内置浏览器时用它读
    * （`Agent/AgentsWorkshop` 标识、固定间隔、算进每小时额度、被拦就停），没有就照实说「读不了」。demo / 测试注入替身。
@@ -1552,6 +1565,11 @@ export interface ServerOptions {
    */
   cloudFetch?: CloudFetch & CloudEntryFetch
   /**
+   * WP476：匿名使用数据出门用的 fetch（问 `<地址>/config`、发 `<地址>/batch/`）。生产不传（走全局 fetch，
+   * 且只有 `AGENTSWS_TELEMETRY_HOST` 配了才会用）；测试一律塞替身——测试进程里不塞就整套不发。
+   */
+  telemetryFetch?: TelemetryFetch
+  /**
    * WP228：本机只读浏览器（Reddit「浏览器只读」那一路）。**给了才装**：生产入口（`index.ts`）给 `{}`，
    * 每个品牌各一份、要用时才起无头浏览器；测试塞替身会话 / 假的「文件在不在」。
    * 不给（或 `false`）= 不装，这一路照实「没配」——测试、模拟、演示里 stub 运行时命中 Reddit 的
@@ -1790,6 +1808,8 @@ export interface Server {
   autoMemory: AutoMemory
   /** WP429：站内通知（测试直接发 / 读；界面走 `/v1/notifications*`）。 */
   notifications: NotificationsService
+  /** WP476：匿名使用数据（开关、运行收尾 / 卡片定了这两类服务端事件；测试直接 flush）。 */
+  telemetry: Telemetry
   models: ModelGatewayApi
   txn: Txn
   /** WP323：发出记录与记录去处（测试直接看它；界面走 `/v1/outbound/*`）。 */
@@ -2094,6 +2114,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const notifications =
     options.notifications ??
     createNotifications({ clock, random, dbPath: file('notifications.db') })
+  // WP475：最近的错误日志（反馈的诊断信息用）；测试注入自己的一份
+  const feedbackErrors = options.feedbackErrors ?? processErrorRing
+
+  /*
+   * WP476（决策 1590）：匿名使用数据。上报地址只认 `AGENTSWS_TELEMETRY_HOST`（桌面安装包的壳给），项目 key 由
+   * 云上 `/config` 给——缺一样整套不发（开发 / 测试 / 自建默认都是这一档）。服务端只记它才知道的两类：
+   * 一次运行收尾、一张卡被人定了；页面访问 / 按钮 / 前端报错由工作台记。下面几个口子都是现取（装配顺序在后）。
+   */
+  let bundledRoleSet: ReadonlySet<string> | undefined
+  let bundledPositionSet: ReadonlySet<string> | undefined
+  const telemetry = createTelemetry({
+    env,
+    now: () => clock.now(),
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+    ...(options.telemetryFetch === undefined ? {} : { fetch: options.telemetryFetch }),
+    ...(env.AGENTSWS_VERSION === undefined ? {} : { appVersion: env.AGENTSWS_VERSION }),
+    accountId: () =>
+      identity
+        .listOrganizations()
+        .find((o) => identity.brandsOf(o.id).some((w) => w.id === workspace.id))?.cloud_org_id,
+    placeOf: (assignment_id) => {
+      const a = roles.assignments.get(assignment_id)
+      if (a === undefined) return undefined
+      const position_id = cloudPositionOf(a.workspace_id, a.role_id, a.id)
+      return { role_id: a.role_id, ...(position_id === undefined ? {} : { position_id }) }
+    },
+    bundledRoleIds: () => {
+      bundledRoleSet ??= new Set(loadBundledRoles().map((r) => r.id))
+      return bundledRoleSet
+    },
+    bundledPositionIds: () => {
+      bundledPositionSet ??= new Set(loadBundledPositions().map((p) => p.id))
+      return bundledPositionSet
+    },
+  })
 
   // 21 §1：所有模块的事件都进同一条日志；请求内的 trace_id 覆盖模块自造的那个。
   const appendEvent = (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void => {
@@ -2108,6 +2163,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     // WP429：该告诉谁一声的事进站内通知（不抛、不等）
     notifications.onEvent(e)
+    // WP476：运行收尾记一条匿名使用数据（没配置就是空操作；不抛、不等）
+    telemetry.onEvent(e)
     // WP206：名册变了（加人 / 删人 / 岗位 / 分配 / 刚关联上）→ 各品牌攒一下再把名册推上云
     if (isRosterEvent(e.type))
       for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
@@ -3458,14 +3515,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return officialContent === undefined ? inner : officialContent.wrap(inner)
   }
 
-  const approvals = seoDecided(
-    // WP181：最外一层——`scheduled_task` 卡批了就让那条自动化任务开始、拒了就取消
-    automation.wrap(
-      officialPlugins.wrap(
-        contentWrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
+  const approvals = telemetryDecided(
+    seoDecided(
+      // WP181：最外一层——`scheduled_task` 卡批了就让那条自动化任务开始、拒了就取消
+      automation.wrap(
+        officialPlugins.wrap(
+          contentWrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
+        ),
       ),
+      seoDecidedHook,
     ),
-    seoDecidedHook,
+    telemetry,
   )
   approvalsForContent = approvals
   /*
@@ -5633,9 +5693,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const models = effectiveModels()
         const ref = models.configured() ? models.defaultRef() : undefined
         if (ref === undefined || ref.provider === 'stub') return undefined
-        return modelReplyDrafter(async (prompt) => {
+        return modelReplyDrafter(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的规矩在系统提示，这一条的渠道 / 作者 / 原话在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: actor.assignment_id as never,
@@ -5672,9 +5736,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 .listByRole(spec.role_id)
                 .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
         if (holder === undefined) return undefined
-        return modelTagReviewer(async (prompt) => {
+        return modelTagReviewer(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的六类说明在系统提示，这条帖子在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: holder.id as never,
@@ -6310,9 +6378,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const models = effectiveModels()
         const ref = models.configured() ? models.defaultRef() : undefined
         if (ref === undefined || ref.provider === 'stub') return undefined
-        return modelRedditDrafter(async (prompt) => {
+        return modelRedditDrafter(async (prompt, system) => {
           const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
+            // WP471：固定的话术 / 人设 / 规矩在系统提示，这一帖的在用户消息
+            messages: [
+              ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+              { role: 'user', content: prompt },
+            ],
             meta: {
               workspace_id: ws,
               assignment_id: actor.assignment_id as never,
@@ -7136,6 +7208,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             modelRef: () => effectiveModels().defaultRef(),
             // WP150：这次运行的模型请求会落到哪条来源（登出 DeepSeek 账号前据此认出在用账号跑的事）
             runModelRef: () => effectiveModels().purposeRef('run'),
+            // WP472：模型目录里写了上下文窗口就按它压历史、带对话原文（没写按 64K）
+            contextWindow: (ref) =>
+              effectiveModels()
+                .chatChoices()
+                .find((c) => c.id === `${ref.provider}/${ref.model}`)?.context_window,
             // WP342（决策 853）：事项自己选的 AI——还在「已接的」里面才认，否则跟品牌默认走
             modelOverride: (id) => chatModelRefOf(effectiveModels(), id),
             // WP370：事项选的思考程度这个模型还有没有
@@ -7844,13 +7921,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const seoModel = (
       actor: { assignment_id: string; role_id: string },
       run_id: string,
-    ): ((input: { prompt: string }) => Promise<{ text: string }>) | undefined => {
+    ): ((input: { prompt: string; system?: string }) => Promise<{ text: string }>) | undefined => {
       if (!effectiveModels().configured()) return undefined
       const ref = effectiveModels().purposeRef('run')
       if (ref.provider === 'stub') return undefined
-      return async ({ prompt }) => {
+      return async ({ prompt, system }) => {
         const completion = await gatewayProxy.complete({
-          messages: [{ role: 'user', content: prompt }],
+          // WP471：给了 `system` 就放最前面（同品牌固定不变的说明，命中缓存）；不给照旧一条用户消息
+          messages: [
+            ...(system === undefined ? [] : [{ role: 'system' as const, content: system }]),
+            { role: 'user', content: prompt },
+          ],
           meta: {
             workspace_id: ws,
             assignment_id: actor.assignment_id as never,
@@ -9030,6 +9111,37 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }
         })
       },
+      // WP459（决策 1498）：改判「AI 猜的」→ 撤掉原岗位还没批、指着这条会话 / 这几件事项的卡
+      withdrawCards: async ({ thread_id, matter_ids, reason, person_id }) => {
+        if (approvals.expireNow === undefined) return 0
+        const matters = new Set(matter_ids)
+        // 原岗位的卡发给做那个岗位的人（个人模式就是本人）；本人与第一个持岗位的人两条队列都看
+        const people = [
+          ...new Set([person_id, firstPositionOf(ws)?.person_id ?? person.id]),
+        ] as PersonId[]
+        const byId = new Map<string, ApprovalItem>()
+        for (const who of people)
+          for (const item of (await approvals.queue({
+            workspace_id: ws,
+            person_id: who,
+            lane: 'mine',
+            state: [...QUEUE_STATES],
+          })) as ApprovalItem[])
+            byId.set(item.id, item)
+        let n = 0
+        for (const item of byId.values()) {
+          const object = item.subject.object
+          const thread =
+            object.type === 'thread'
+              ? object.id
+              : item.evidence.provenance?.seen?.find((r) => r.type === 'thread')?.id
+          const matter = item.subject.matter_id ?? item.subject.work_item_id
+          if (thread !== thread_id && (matter === undefined || !matters.has(matter))) continue
+          const out = await approvals.expireNow(item.id, reason).catch(() => undefined)
+          if (out !== undefined) n += 1
+        }
+        return n
+      },
       // WP441 / WP442：今天的简报到点、分拣时抽「对方说哪天答复」都按品牌时区算；列表 / 会话上挂回信跟进、来信撤卡
       tzOffsetMinutes: () => workData.tz_offset_minutes,
       followUp: () => followUpRef,
@@ -9816,10 +9928,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               const holder = redditHolder()
               if (ref === undefined || ref.provider === 'stub' || holder === undefined)
                 return undefined
-              return async (prompt: string) =>
+              return async (prompt: string, system?: string) =>
                 (
                   await gatewayProxy.complete({
-                    messages: [{ role: 'user', content: prompt }],
+                    // WP471：固定判断说明在系统提示，话题清单与待判内容在用户消息
+                    messages: [
+                      ...(system === undefined
+                        ? []
+                        : [{ role: 'system' as const, content: system }]),
+                      { role: 'user', content: prompt },
+                    ],
                     meta: {
                       workspace_id: ws,
                       assignment_id: holder.id as never,
@@ -13316,6 +13434,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     appendEvent,
   }
+  /*
+   * WP475（决策 1591、1592）：左下角「反馈」——先存本机、再发工坊云（不要求登录：匿名 + 设备号）；
+   * 云不通就留在队列里联网后补发；发出去之后定时问进度，有回复 / 修好了进铃铛一条。
+   * 联系方式默认用关联的工坊账号邮箱。
+   */
+  const feedbackService = createFeedbackService({
+    clock,
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+    cloudBase: () => cloudBaseUrl(env),
+    ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+    serverVersion: env.AGENTSWS_VERSION ?? '0.1.0',
+    contactOf: async (actor) => {
+      const view = await cloudAccount.port.status(actor.workspace_id)
+      return view.linked ? view.email : undefined
+    },
+    notify: (input) => {
+      notifications.notify(input)
+    },
+    errors: feedbackErrors,
+  })
+  if (options.quiet !== true) feedbackService.start()
   let ownerEmailQueue: Promise<unknown> = Promise.resolve()
   cloudLinkedSink = () => {
     ownerEmailQueue = ownerEmailQueue
@@ -13697,9 +13836,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const cached = workPorts.get(ws)
     if (cached !== undefined) return cached
     const brand = await brandModules.forWorkspace(ws)
+    const hoursDir = brandDirOf(dbDir, ws, workspace.id)
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP474（决策 1530）：「我的作息」——品牌目录下 work-hours.json，每人一份
+      workHours: createWorkHoursStore(
+        hoursDir === undefined ? undefined : join(hoursDir, 'work-hours.json'),
+      ),
       // WP447：事项里附上的投放报表直接入库
       ...(brand.adsExportIntake === undefined ? {} : { fileIntake: brand.adsExportIntake }),
       // WP388：手动「周复盘」也取上一周（目标市场时区）
@@ -14218,6 +14362,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       store,
       assistant,
+      // WP470：每轮末尾那句「现在时间」按公司时区写（与岗位运行同一份，按小时取整）
+      timeZone: async () => (await identity.getWorkspace(ws))?.tz,
       // WP357（决策 902）：助理记进知识库的口径，知识库与岗位第三栏里能改能删
       notes: { edit: assistantNotes.edit, remove: assistantNotes.retire },
       // WP352：一条长对话——每一轮拼进了多少、段收起 / 压缩，记进事件日志（不带正文）
@@ -14607,10 +14753,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const ref = models.defaultRef()
     if (ref.provider === 'stub') return undefined
     const gateway = await brandModules.gateway(ws)
-    const lines = pool.map(
-      (c) =>
-        `${c.id} | ${c.last_activity.slice(0, 10)} | ${c.title.replace(/\s+/g, ' ')} | ${c.summary.replace(/\s+/g, ' ').slice(0, 160)}`,
-    )
     const out = await gateway.complete({
       model: ref,
       messages: [
@@ -14622,7 +14764,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         },
         {
           role: 'user',
-          content: `用户的描述：${query}\n今天：${clock.now().slice(0, 10)}\n\n${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(lines.join('\n'), 8000)}\n${EXTERNAL_FENCE.close}`,
+          // WP471（决策 1549）：归档清单在前（按 id 排），用户的描述与「今天」在后
+          content: archiveRerankUser(pool, query, clock.now().slice(0, 10)),
         },
       ],
       meta: {
@@ -16251,6 +16394,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     // WP429：站内通知（铃铛）与「设置 → 通知」开关
     notifications: notifications.port,
+    // WP475：左下角「反馈」
+    feedback: feedbackService.port,
+    // WP476：设置 → 数据与隐私 →「帮助改进工坊（匿名使用数据）」
+    telemetry: {
+      get: () => telemetry.view(),
+      set: (patch) => telemetry.update(patch),
+      // 工作台（posthog-js）经本机转发：再过一遍白名单才出门
+      ingest: (input) => telemetry.ingest(input),
+    },
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
@@ -16463,11 +16615,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }
     })(),
     // WP298：前端报错（错误边界 / onerror / 没人接的拒绝）写进服务日志
-    ...(options.clientErrorLog !== undefined
-      ? { clientErrors: stderrClientErrors(options.clientErrorLog) }
-      : options.quiet === true
-        ? {}
-        : { clientErrors: stderrClientErrors() }),
+    // WP475：同时记一份进「最近的错误日志」（反馈里附诊断信息时用）
+    ...((): { clientErrors?: ClientErrorPort } => {
+      const log =
+        options.clientErrorLog !== undefined
+          ? stderrClientErrors(options.clientErrorLog)
+          : options.quiet === true
+            ? undefined
+            : stderrClientErrors()
+      if (log === undefined) return {}
+      return {
+        clientErrors: {
+          record: (entry) => {
+            feedbackErrors.push(clientErrorRingLine(entry))
+            return log.record(entry)
+          },
+        },
+      }
+    })(),
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',
@@ -16714,6 +16879,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     learning,
     autoMemory,
     notifications,
+    telemetry,
     models,
     txn,
     outbound: outboundLog,
@@ -16889,6 +17055,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     async close() {
       if (closed) return
       closed = true
+      // WP476：手上没发出去的那一小批发一下就收（没配置是空操作）
+      telemetry.close()
       for (const t of contentTimers) clearTimeout(t)
       if (teamTimer !== undefined) clearInterval(teamTimer)
       await teamRef?.close()
@@ -16943,6 +17111,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await subscription.close()
       await deepseekAccount.close()
       outboundLog.close()
+      feedbackService.stop()
       // WP429：注入的那一份由测试自己关
       if (options.notifications === undefined) notifications.close()
       helpLibrary.stop()
@@ -16957,6 +17126,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   }
   return server
+}
+
+/**
+ * WP476：每张卡被人定了 → 记一条匿名使用数据（只有卡的类型与通过 / 改了再过 / 驳回，没有卡里的任何一个字）。
+ * 与 `seoDecided` 同一个 Proxy 做法；记不记得下都不影响这一次决定本身。
+ */
+function telemetryDecided(bus: ApprovalBus, telemetry: Telemetry): ApprovalBus {
+  return new Proxy(bus, {
+    get(target, prop, receiver) {
+      if (prop !== 'decide') {
+        const value = Reflect.get(target, prop, receiver)
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+      return async (...args: Parameters<ApprovalBus['decide']>): Promise<ApprovalItem> => {
+        const out = await target.decide(...args)
+        telemetry.onCardDecided(out)
+        return out
+      }
+    },
+  })
 }
 
 /**

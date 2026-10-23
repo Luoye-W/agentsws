@@ -15,8 +15,7 @@
 
 import { AlertTriangle, Link2Off, Plug, RefreshCw } from 'lucide-react'
 import { BrandIcon } from '@/components/brand-icons'
-import { StatusIcons, type StatusState } from '@/components/design'
-import { Badge } from '@/components/ui/badge'
+import { StatusIcons, StatusPill, type StatusState } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Switch } from '@/components/ui/switch'
@@ -62,19 +61,25 @@ export function ConnectedRow({
       data-testid="connection-row"
       data-service={connection.service}
       data-status={connection.status}
-      className="flex flex-col gap-2 rounded-lg border p-3"
+      // WP456-T6（§3.8）：列表组里的一行（原来是一张带边框的卡）
+      className="ws-row flex-col items-stretch gap-2 py-2.5"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <BrandIcon provider={connection.service} />
+      <div className="flex min-h-9 flex-wrap items-center gap-3">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-ws-surface">
+          <BrandIcon provider={connection.service} size={18} />
+        </span>
         <div className="flex min-w-0 flex-col">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-sm font-medium" data-testid="connection-title">
+            <span
+              className="truncate text-ws-read font-medium text-ws-ink"
+              data-testid="connection-title"
+            >
               {title}
             </span>
             <Hint text={meta} testId="connection-meta" />
           </span>
           {title === connection.service_label ? null : (
-            <span className="text-xs text-muted-foreground" data-testid="connection-kind">
+            <span className="text-xs text-ws-muted-fg" data-testid="connection-kind">
               {connection.service_label}
             </span>
           )}
@@ -102,14 +107,12 @@ export function ConnectedRow({
           ]}
         />
         {connection.status === 'active' ? null : (
-          <Badge data-slot="badge" variant="destructive">
-            {t(`connections.status.${connection.status}`)}
-          </Badge>
+          <StatusPill tone="bad">{t(`connections.status.${connection.status}`)}</StatusPill>
         )}
         <div className="ml-auto flex items-center gap-1">
           {onPersonal === undefined || connection.mine !== true || reconnect ? null : (
             <span
-              className="mr-1 flex items-center gap-1 text-xs text-muted-foreground"
+              className="mr-1 flex items-center gap-1 text-xs text-ws-muted-fg"
               data-testid="connection-personal"
             >
               <Switch
@@ -127,14 +130,16 @@ export function ConnectedRow({
           )}
           {/* WP252：「请重新连接」那一行没有可测的东西，「断开」也只是收起提醒 */}
           {reconnect ? null : (
-            <Button size="xs" variant="outline" onClick={onTest} disabled={busy !== undefined}>
+            <Button size="sm" variant="secondary" onClick={onTest} disabled={busy !== undefined}>
               <RefreshCw aria-hidden />
               {busy === 'test' ? t('connections.testing') : t('connections.test')}
             </Button>
           )}
+          {/* 断开是危险操作：红字弱按钮（点了要确认）；「请重新连接」那一行只是收起提醒，次按钮 */}
           <Button
-            size="xs"
-            variant={reconnect ? 'outline' : 'destructive'}
+            size="sm"
+            variant={reconnect ? 'secondary' : 'ghost'}
+            className={reconnect ? undefined : 'text-ws-bad hover:text-ws-bad'}
             onClick={onDisconnect}
             disabled={busy !== undefined}
           >
@@ -145,13 +150,15 @@ export function ConnectedRow({
       </div>
       {connection.legacy === undefined ? null : (
         <p
-          className="flex items-start gap-1.5 rounded-md border border-ws-warn/40 bg-ws-warn-bg px-2 py-1.5 text-xs text-ws-warn"
+          className="ws-notice items-start text-xs"
+          data-wrap="true"
+          data-tone="warn"
           data-testid="connection-legacy"
           data-legacy-kind={connection.legacy.kind}
           data-slot="warning"
         >
-          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
-          <span>
+          <AlertTriangle className="ws-notice-icon mt-0.5" aria-hidden />
+          <span className="ws-notice-text">
             <strong className="font-medium">{t('connections.legacy')}</strong>
             <span aria-hidden>：</span>
             {connection.legacy.hint}
@@ -160,13 +167,15 @@ export function ConnectedRow({
       )}
       {connection.brand_conflict === undefined ? null : (
         <p
-          className="flex items-start gap-1.5 rounded-md border border-ws-warn/40 bg-ws-warn-bg px-2 py-1.5 text-xs text-ws-warn"
+          className="ws-notice items-start text-xs"
+          data-wrap="true"
+          data-tone="warn"
           data-testid="connection-brand-conflict"
           data-kind={connection.brand_conflict.kind}
           data-slot="warning"
         >
-          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
-          <span>
+          <AlertTriangle className="ws-notice-icon mt-0.5" aria-hidden />
+          <span className="ws-notice-text">
             <strong className="font-medium">
               {t(`connections.brand_conflict.${connection.brand_conflict.kind}`)}
             </strong>

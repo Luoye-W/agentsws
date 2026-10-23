@@ -34,6 +34,7 @@ import type {
   GenuiToolInput,
   GenuiToolOutcome,
   Matter,
+  MatterEvent,
   MatterRunBlock,
   MatterRunDigest,
   MaybePromise,
@@ -141,6 +142,7 @@ import {
   isThemeRole,
   MESSAGE_RULE_TOOL_NAMES,
   OWNER_TOOL_NAMES,
+  orderContextItems,
   PR_MONITOR_TOOL_NAMES,
   READ_SKILL_TOOL,
   READ_WEBPAGE_TOOL,
@@ -166,6 +168,7 @@ import {
 import { cardRefOf, type Work } from '@agentsws/work'
 import { type RememberItem, type RunMemoryActor, splitRememberTags } from './auto-memory.js'
 import type { ComputerUseAssembly } from './computer-use.js'
+import { historyBudgetFor, matterHistoryItem } from './matter-history.js'
 import {
   blockedByTool,
   blockedLine,
@@ -429,6 +432,11 @@ export interface RuntimeOptions {
    * 登出 DeepSeek 账号时据此认出"哪几件事正在用这个账号跑"。不给就用 {@link modelRef}。
    */
   runModelRef?: () => ModelRef
+  /**
+   * WP472（docs/116 §6 B / C）：某个模型的上下文窗口（token；模型目录里写了才有，没写回 `undefined`）。
+   * 不用浏览器那一档按它定什么时候压历史，事项对话按它定带多少原文；拿不到都按 64K 算。
+   */
+  contextWindow?: (model: ModelRef) => number | undefined
   /**
    * WP342（决策 853）：事项自己选的 AI（`Matter.model`，`provider_id/model`）→ ModelRef。
    * 回 `undefined` = 认不出 / 现在不能用（删了、断了）——这次运行退回品牌默认。
@@ -1741,6 +1749,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           return res
         }
 
+  /**
+   * WP472：这次运行实际用的那个模型的窗口——这件事自己选了 AI 就是它，否则是 purpose `run` 那条（拿不到回 `undefined`）。
+   */
+  const contextWindowFor = (pinned: ModelRef | undefined): number | undefined => {
+    const ref = pinned ?? options.runModelRef?.() ?? options.modelRef?.()
+    return ref === undefined ? undefined : options.contextWindow?.(ref)
+  }
+
   const directAdapter = (): RuntimeAdapter =>
     createDirectRuntime({
       gateway: withToolChoice({
@@ -1754,6 +1770,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       createDraft,
       // WP232：边界选择题三条运行时一致（以前 direct 这一档没接，服务端 direct 从来不问）
       createPolicyQuestion,
+      // WP472（决策 1550）：压缩线按模型窗口定（拿不到按 64K）
+      contextWindowOf: (req) =>
+        contextWindowFor(req.runtime.model_pinned === true ? req.runtime.model : undefined),
       ...(executeTool === undefined ? {} : { executeTool }),
     })
   const stubAdapter = (): RuntimeAdapter =>
@@ -1958,17 +1977,65 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   const dshAdapter = (): RuntimeAdapter | undefined =>
     dshAdapterOnce !== undefined && useDirect() ? dshAdapterOnce() : undefined
 
-  /** 事项现场 → ContextItem[]（37 §2.2b：摘要 + pinned 记录，围栏与出处照旧）。 */
+  /**
+   * 事项现场 → ContextItem[]（37 §2.2b：摘要 + pinned 记录，围栏与出处照旧）。
+   *
+   * WP472（docs/116 §6 A / C）：按 `orderContextItems` 的先后给——之前的对话原文（只往后加）→ 钉住的记录 →
+   * 事项摘要 → 岗位状态 → 这一次的话；设置快照、时间由 `buildRequest` 接在后面。三个运行时都按同一张表排，
+   * 每次都变的（摘要、岗位状态、时间）排在后面、走用户消息那一层，前面那些字节才吃得上缓存。
+   */
   const contextOf = async (
     matter: Matter,
     brief: string,
     position: { position_id?: string; person_id: PersonId },
+    historyBudget: number,
   ): Promise<ContextItem[]> => {
     const items: ContextItem[] = []
+    // WP472（决策 1551）：这件事之前的对话原文（人的话 + 岗位的回复；附件只留占位；太长一次折一大截）。
+    // 读不出时间线（没接事项库）就不带——历史是锦上添花，不拦这次运行
+    let events: MatterEvent[] = []
+    try {
+      events = work?.store.listMatterEvents(matter.id) ?? []
+    } catch {
+      events = []
+    }
+    const history = matterHistoryItem({
+      matter_id: matter.id,
+      events,
+      budgetTokens: historyBudget,
+    })
+    if (history !== undefined) items.push(history)
+    for (const ref of matter.context.pinned) {
+      // WP53：真环境的记录源可能要现去拉一张订单，回的是 Promise——等它
+      const record = await source.record?.(ref)
+      const label = source.label?.(ref)
+      const content = canonical(record ?? { ref, label })
+      items.push({
+        id: `pin_${ref.type}_${ref.id}`,
+        kind: KIND_BY_REF[ref.type] ?? 'summary',
+        source_ref: ref,
+        sensitivity: 'internal',
+        content,
+        bytes: bytesOf(content),
+      })
+    }
+    const summary = matter.context.summary.trim()
+    // WP259：「交给它」那一大段原文既是事项描述又是这次的任务文本——一样的就只给一份（下面 brief 那条）
+    if (summary !== '' && summary !== brief.trim()) {
+      const content = canonical({ title: matter.title, status: matter.status, summary })
+      items.push({
+        id: `matter_${matter.id}`,
+        kind: 'matter_summary',
+        source_ref: { type: 'matter', id: matter.id },
+        sensitivity: 'internal',
+        content,
+        bytes: bytesOf(content),
+      })
+    }
     /*
-     * WP69（54 §3）岗位层上下文，排在事项摘要**前面**：它是"这个岗位现在什么情况"，
-     * 是背景；事项摘要是"这件事到哪了"，是前景。三样都是摘要级——数字块与告警的
-     * 结论、岗位下进行中事项的标题与阶段、持有人忙不忙。
+     * WP69（54 §3）岗位层上下文："这个岗位现在什么情况"（数字块与告警的结论、岗位下进行中事项的标题与阶段）。
+     * WP472：它几乎每次运行都变（待定的卡数、进行中的事），所以排在事项摘要**后面**、时间之前（以前排第一条，
+     * 一变后面全不命中）。
      *
      * 19 §3 的过滤照旧：`layerContext` 只看**这个岗位**下的分配，别的岗位的数据
      * 一个字都进不来。
@@ -1987,33 +2054,6 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           bytes: bytesOf(content),
         })
       }
-    }
-    const summary = matter.context.summary.trim()
-    // WP259：「交给它」那一大段原文既是事项描述又是这次的任务文本——一样的就只给一份（下面 brief 那条）
-    if (summary !== '' && summary !== brief.trim()) {
-      const content = canonical({ title: matter.title, status: matter.status, summary })
-      items.push({
-        id: `matter_${matter.id}`,
-        kind: 'matter_summary',
-        source_ref: { type: 'matter', id: matter.id },
-        sensitivity: 'internal',
-        content,
-        bytes: bytesOf(content),
-      })
-    }
-    for (const ref of matter.context.pinned) {
-      // WP53：真环境的记录源可能要现去拉一张订单，回的是 Promise——等它
-      const record = await source.record?.(ref)
-      const label = source.label?.(ref)
-      const content = canonical(record ?? { ref, label })
-      items.push({
-        id: `pin_${ref.type}_${ref.id}`,
-        kind: KIND_BY_REF[ref.type] ?? 'summary',
-        source_ref: ref,
-        sensitivity: 'internal',
-        content,
-        bytes: bytesOf(content),
-      })
     }
     const brief_content = canonical({ subject: matter.title, participants: [], text: brief })
     items.push({
@@ -2308,13 +2348,20 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         role_id: config.role_id,
       },
       trigger: { event_id: input.run_id, source: 'manual' },
-      context: [
-        ...(await contextOf(input.matter, input.brief, {
-          ...(positionHit.position_id === undefined
-            ? {}
-            : { position_id: positionHit.position_id }),
-          person_id: input.person_id,
-        })),
+      // WP472：先后按 `orderContextItems`（三个运行时同一张表；请求里也照它排，事件与回放一眼看得出）
+      context: orderContextItems([
+        ...(await contextOf(
+          input.matter,
+          input.brief,
+          {
+            ...(positionHit.position_id === undefined
+              ? {}
+              : { position_id: positionHit.position_id }),
+            person_id: input.person_id,
+          },
+          // 替身档不问模型窗口（没接模型，不该去碰「这次落到哪条来源」）
+          historyBudgetFor(useDirect() ? contextWindowFor(pinnedModel) : undefined),
+        )),
         /*
          * WP180：「现在时间 + 公司时区」，每次运行写一次（排在事项材料后面：它每小时一变，
          * 放后面让前面那些字节稳定的部分多吃缓存）。为什么不挂官方 `dsh-time-context` 见 `@agentsws/core` 的
@@ -2327,7 +2374,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(options.timeZone === undefined
           ? []
           : [timeContextItem({ now: clock.now(), companyTz: await options.timeZone() })]),
-      ],
+      ]),
       // WP236：没接上的工具，grounding 提示里也不提
       grounding: config.grounding.filter((g) => offerable(g.tool, config.role_id)),
       // 16 §3：公司端 write_external 一律经执行器，运行时拿不到写口
@@ -2412,15 +2459,26 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * WP336（Luoye 10-15 扩大范围）：**所有**事项 / 线程运行都带一段精简的 ```dsh-ui 写法（回给人看的正文
            * 里可以放组件，对外内容里不用）；当场问答那次换成它自己那段完整的。三个运行时拿到同一份字节。
            */
+          /*
+           * WP472（docs/116 §2 第 7 条）：这两段二选一，在当场问答和交办之间来回切——排在技能正文前面时一切换
+           * 后面的技能正文、索引全不命中，所以挪到技能索引（90）之后（`GENUI_SECTION_ORDER`），内容不变。
+           */
           ...(input.matter.ask?.quick === true
             ? []
-            : [{ id: 'genui_display', name: '回话里的组件', order: 28, text: GENUI_DISPLAY_RULE }]),
+            : [
+                {
+                  id: 'genui_display',
+                  name: '回话里的组件',
+                  order: GENUI_SECTION_ORDER,
+                  text: GENUI_DISPLAY_RULE,
+                },
+              ]),
           ...(input.matter.ask?.quick === true
             ? [
                 {
                   id: 'quick_answer',
                   name: '当场问答',
-                  order: 28,
+                  order: GENUI_SECTION_ORDER,
                   // WP336：教 ```dsh-ui（dsh-genui 写法；决策 823 不留 ```answer 回退）
                   text: QUICK_ANSWER_RULE,
                 },
@@ -3232,12 +3290,18 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
 /**
  * 一次职责运行的 token / 工具调用上限（时间与花费另算）。
  *
- * - 缺省 15 万 token、12 次（WP423：原来 6 万）；
+ * - 缺省 30 万 token、12 次（WP423：原来 6 万；WP474 / 决策 1571：15 万 → 30 万）；
  * - WP144：批过电脑操控授权的 40 次、60 万 token；WP148 / WP179：真挂了浏览器或网页工具的 30 次、40 万 token（WP423）；
  * - 10-07 真机（Fable）：网页模板（带主题工具）一轮读主题规矩 / 目录 / 模板 / 区块就十几次调用、
  *   七万多 token，旧上限连第一页都没改到就「预算不够」停了——放到 40 万 token、60 次；
  *   WP260：再放到 80 万 token、40 回合（见下）。
  */
+/**
+ * WP472：「回话里的组件 / 当场问答」那一段的排序号——技能索引（90）、记忆（92）之后，
+ * 让会切换的段落排在不变的技能正文后面（以前是 28）。
+ */
+export const GENUI_SECTION_ORDER = 95
+
 export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; browsing: boolean }): {
   max_tokens: number
   max_tool_calls: number
@@ -3259,14 +3323,16 @@ export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; brow
    * - 查资料 / 浏览（30 次调用、约 31 步）：每步历史从提示词的 6 千左右涨到二三万（网页摘要、帖子列表），
    *   平均按 1.2 万算 ≈ 37 万——放到 **40 万**；
    * - 批过授权的电脑操控（40 次、41 步，带截图）：平均按 1.4 万算 ≈ 57 万——放到 **60 万**；
-   * - 其余（12 次调用、8 回合）：8 步 × 每步一万出头就过了 6 万（自测里普通问答 5 步就到 3 万）——放到 **15 万**。
+   * - 其余（12 次调用、8 回合）：8 步 × 每步一万出头就过了 6 万（自测里普通问答 5 步就到 3 万）——放到 **15 万**；
+   *   WP474（决策 1571）：WP472 压缩线按模型窗口定、一次压到七成之后每步送得更多（14 页的活累计 31 万，
+   *   实际只花 $0.018），15 万会半路停——放到 **30 万**。花费上限不动。
    *
    * 真正的护栏是花费（`max_cost_base`，按价目表算、命中缓存的那部分很便宜）：40 万 token 在 DeepSeek 上大半是缓存，
    * 约一两毛钱；token 上限只防「死循环把历史越滚越大」。到了也不是白停——运行时再跑一次收尾，把查到的交出来。
    */
   if (input.granted) return { max_tokens: 600_000, max_tool_calls: 40 }
   if (input.browsing) return { max_tokens: 400_000, max_tool_calls: 30 }
-  return { max_tokens: 150_000, max_tool_calls: 12 }
+  return { max_tokens: 300_000, max_tool_calls: 12 }
 }
 
 /**

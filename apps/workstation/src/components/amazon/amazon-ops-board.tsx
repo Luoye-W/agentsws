@@ -136,7 +136,7 @@ export function AmazonOpsBoard({ assignment }: { assignment: string }): ReactNod
   const { t } = useApp()
   return (
     <section className="flex flex-col gap-4" data-testid="amzops-board">
-      <h3 className="ws-display text-[17px]">{t('amzops.title')}</h3>
+      <h3 className="ws-display text-base">{t('amzops.title')}</h3>
       {AMAZON_BLOCKS.map((id) => {
         const Body = bodies.get(id)
         return (

@@ -116,9 +116,25 @@ export function clockRange(start: Date, end: Date | undefined): string {
  */
 export function eventContent(
   item: CalendarItem,
-  opts: { color: string; layerName: string },
+  opts: {
+    color: string
+    layerName: string
+    /**
+     * WP469（决策 1522 / 1524）：待办那几条——标题前一个勾选框（打勾就是做完），做完的划掉；
+     * `drag` = 整块用浏览器自己的拖放（能拖到全天、时间格、拖回左边「还没排期的」）。
+     */
+    todo?: { checkLabel: string; drag: boolean }
+  },
 ): { timeGrid: string; dateGrid: string; monthGrid: string; monthAgenda: string } {
   const bar = `<span class="ws-ev-bar" style="background:${opts.color}"></span>`
+  const todoId =
+    item.source === 'todo' && opts.todo !== undefined ? escapeHtml(item.ref.id) : undefined
+  // 只有待办「做完」才划掉（会议、社媒那几层的 status 是它们自己的状态）
+  const done = item.source === 'todo' && item.status === 'done'
+  const check =
+    opts.todo === undefined || todoId === undefined
+      ? ''
+      : `<span class="ws-ev-check" role="checkbox" tabindex="0" aria-checked="${done ? 'true' : 'false'}" aria-label="${escapeHtml(opts.todo.checkLabel)}" data-todo-check="${todoId}" data-done="${done ? 'true' : 'false'}"></span>`
   const title = escapeHtml(item.title)
   const start = new Date(item.start)
   const end = item.end === undefined ? undefined : new Date(item.end)
@@ -126,12 +142,35 @@ export function eventContent(
   const clock = item.all_day
     ? ''
     : `<span class="ws-ev-clock">${clockRange(start, undefined)}</span>`
-  const twoLines = `${bar}<div class="ws-ev-title">${title}</div><div class="ws-ev-meta">${meta}</div>`
+  const titleCls = done ? 'ws-ev-title ws-ev-done' : 'ws-ev-title'
+  const twoLines = `${bar}<div class="${titleCls}">${check}${title}</div><div class="ws-ev-meta">${meta}</div>`
+  const wrap = (html: string): string =>
+    opts.todo?.drag === true && todoId !== undefined && !done
+      ? `<div class="ws-ev-drag" draggable="true" data-todo-drag="${todoId}">${html}</div>`
+      : html
   return {
-    timeGrid: twoLines,
-    dateGrid: `${bar}<span class="ws-ev-title">${title}</span>`,
-    monthGrid: `${bar}${clock}<span class="ws-ev-title">${title}</span>`,
+    timeGrid: wrap(twoLines),
+    dateGrid: wrap(`${bar}${check}<span class="${titleCls}">${title}</span>`),
+    monthGrid: wrap(`${bar}${clock}${check}<span class="${titleCls}">${title}</span>`),
     // 议程是一条条的列表：和时间格同一种两行
     monthAgenda: twoLines,
   }
+}
+
+/** 「13:30–15:30」那一行和「采用 / 换一个」两颗钮——「帮我排进空档」的虚线候选块（WP469）。 */
+export function ghostContent(input: {
+  todo_id: string
+  title: string
+  start: string
+  end: string
+  take: string
+  swap: string
+  canSwap: boolean
+}): string {
+  const id = escapeHtml(input.todo_id)
+  const range = escapeHtml(clockRange(new Date(input.start), new Date(input.end)))
+  const swap = input.canSwap
+    ? `<button type="button" class="ws-ghost-btn" data-ghost-act="swap" data-ghost="${id}">${escapeHtml(input.swap)}</button>`
+    : ''
+  return `<div class="ws-ghost" data-ghost-id="${id}"><div class="ws-ghost-title">${escapeHtml(input.title)}</div><div class="ws-ghost-time">${range}</div><div class="ws-ghost-acts"><button type="button" class="ws-ghost-btn ws-ghost-take" data-ghost-act="take" data-ghost="${id}">${escapeHtml(input.take)}</button>${swap}</div></div>`
 }

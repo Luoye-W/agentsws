@@ -6,6 +6,7 @@ import {
   NEXT_SUGGESTION_MAX,
   SHORT_TITLE_FALLBACK,
   SHORT_TITLE_MAX,
+  shortTitlePrompt,
   splitNextSuggestion,
 } from '../src/index.js'
 
@@ -57,5 +58,16 @@ describe('WP264 下一步建议 <next>', () => {
       text: 'a',
     })
     expect(cleanNextSuggestion('一行\n两行')).toBeUndefined()
+  })
+})
+
+describe('WP471（决策 1549）：起短标题——固定说明在前、这件事的原话最后', () => {
+  it('两件事：原话之前逐字相同；原话在最后', () => {
+    const a = shortTitlePrompt('<<<\n第一件事\n>>>')
+    const b = shortTitlePrompt('<<<\n另一件事\n>>>')
+    const head = (p: string) => p.slice(0, p.indexOf('<<<'))
+    expect(head(a)).toContain('只回标题本身')
+    expect(head(b)).toBe(head(a))
+    expect(a.endsWith('>>>')).toBe(true)
   })
 })

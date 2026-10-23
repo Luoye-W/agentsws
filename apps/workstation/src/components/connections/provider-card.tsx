@@ -1,5 +1,12 @@
 /**
- * 可连接的一张卡：图标 + 名字 + 问号 + 按钮 +「看教程」（WP210 按 Luoye 09-30 再减一轮）。
+ * 可连接的一项。WP456-T6（WP456 §3.8，示意稿 6）起**不是一张卡、是列表组里的一行**：
+ * 图标 + 名字 + 一行很短的说明（`connections.sub.<service>`，「IMAP / SMTP」「访客、来源、转化」这种）
+ * + 右边一个问号（悬停是介绍，点开是教程）+「连接」次按钮。表单、等授权、试连结果、数据来源
+ * 都在这一行下面就地展开。「看教程」那个绿字链接没有了——教程就在问号里。
+ *
+ * 以下是这一项从卡片时代留下来的规矩，照旧：
+ *
+ * 原来：可连接的一张卡：图标 + 名字 + 问号 + 按钮 +「看教程」（WP210 按 Luoye 09-30 再减一轮）。
  *
  * WP210：卡面上那一句介绍（`connections.line.<service>`）也收进名字旁的问号——每张卡都重复
  * 一句话，一页二十多张就是二十多句；「点下面的按钮会打开对方网站…我们看不到」这类安全说明
@@ -24,9 +31,8 @@
 import { ChevronDown, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
-import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
+import { TutorialHint } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -43,6 +49,13 @@ import { SecureForm } from './secure-form'
 import { TestResultLine } from './test-result'
 
 export type WizardPhase = 'idle' | 'form' | 'authorizing' | 'saving'
+
+/** WP456-T6：一项的那一行很短的说明（没有词条的就不写，名字自己站着）。 */
+export function providerSub(service: string, t: (key: string) => string): string | undefined {
+  const key = `connections.sub.${service}`
+  const sub = t(key)
+  return sub === key ? undefined : sub
+}
 
 export function ProviderCard({
   provider,
@@ -61,9 +74,9 @@ export function ProviderCard({
   advancedNote,
 }: {
   provider: ProviderView
-  /** 从「去连接」跳过来时高亮这一张。 */
+  /** 从「去连接」跳过来时高亮这一行。 */
   highlighted: boolean
-  /** 这张卡用户自己连上没有（49 M2 的开关据此决定要不要多说一句）。 */
+  /** 这一项用户自己连上没有（49 M2 的开关据此决定要不要多说一句）。 */
   connected: boolean
   phase: WizardPhase
   /** `begin` 回来的字段描述；没走过 begin 就用目录里那份。 */
@@ -91,13 +104,22 @@ export function ProviderCard({
   // 老的 shpat_ 直填令牌），老的那条已经删掉——留着只会让非技术用户在两张表单之间猜。
   const guide = provider.setup_guide
   const tutorial = HELP_BY_SERVICE[provider.service]
-  /** 卡面上那一句：词条里压好的（中英都有）；认不得的退回服务端介绍的第一句。 */
+  /** 问号里那一句：词条里压好的（中英都有）；认不得的退回服务端介绍的第一句。 */
   const lineKey = `connections.line.${provider.service}`
   const line = t(lineKey) === lineKey ? firstSentence(guide.summary) : t(lineKey)
   // WP210：那一句 + 成段介绍 +「连上之后会怎样」都在名字旁这一个问号里（原话一字不少）
   const about = [line, guide.summary === line ? '' : guide.summary, provider.data_note ?? '']
     .filter((x) => x !== '')
     .join(' ')
+  const sub = providerSub(provider.service, t)
+  /**
+   * 名字后面那段括号（「任意邮箱（IMAP / SMTP）」「Gmail（Google 授权）」）和下面那一行说的是同一件事：
+   * 有那一行时名字只写括号前面（示意稿 6：「任意邮箱」+「IMAP / SMTP」）。
+   */
+  const name =
+    sub === undefined
+      ? provider.label
+      : provider.label.replace(/\s*[（(][^（）()]*[）)]\s*$/u, '').trim() || provider.label
   const capability = capabilityOf(provider.service)
   // WP220（Luoye 10-05）：Reddit 卡上也有「数据从哪里来」——接口中台 → 浏览器只读，可调顺序、可停用
   const redditRoute = provider.service === 'reddit'
@@ -112,191 +134,210 @@ export function ProviderCard({
       : provider.planned === true
         ? t('connections.directory.planned')
         : shortReason(provider.unavailable_reason)
+  const unavailableLine = (
+    <p
+      className={cn(
+        'flex min-w-0 items-center gap-1 text-xs',
+        provider.planned === true ? 'text-ws-muted-fg' : 'text-ws-warn',
+      )}
+      data-slot="status"
+      data-testid="provider-unavailable"
+    >
+      <span className="truncate">
+        {t('connections.unavailable')}
+        {reason === undefined ? '' : `：${reason}`}
+      </span>
+      {provider.unavailable_reason === undefined ||
+      provider.unavailable_reason === reason ? null : (
+        <Hint text={provider.unavailable_reason} testId="provider-unavailable-why" />
+      )}
+    </p>
+  )
+  /** 「连接 / 去授权」这颗次按钮：没有一键授权、没在填表 / 等授权时放在这一行最右边。 */
+  const startButton = (
+    <Button
+      size="sm"
+      variant="secondary"
+      className="min-w-16"
+      disabled={!provider.available || busy}
+      data-testid="provider-start"
+      onClick={() => {
+        onStart()
+      }}
+    >
+      {oauth ? t('connections.authorize') : t('connections.connect')}
+    </Button>
+  )
+  /** 填表 / 等授权 / 试连结果：在这一行下面就地展开。 */
+  const wizardBody =
+    phase === 'form' ? (
+      <SecureForm
+        service={provider.service}
+        fields={fields ?? provider.fields}
+        busy={busy}
+        safetyNote={false}
+        {...(assignment === undefined ? {} : { assignment })}
+        onCancel={onCancel}
+        onSubmit={onSubmit}
+      />
+    ) : phase === 'authorizing' ? (
+      <div className="flex flex-wrap items-center gap-3" data-testid="oauth-waiting">
+        <p className="ws-shimmer text-xs text-ws-muted-fg" data-slot="status">
+          {t('connections.oauth.opened')}
+        </p>
+        {oauthUrl === undefined ? null : (
+          <a
+            href={oauthUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="ws-link inline-flex items-center gap-1 text-xs"
+          >
+            {t('connections.oauth.manual')}
+            <ExternalLink className="size-3.5" aria-hidden />
+          </a>
+        )}
+        <Button size="xs" variant="ghost" onClick={onCancel}>
+          {t('connections.cancel')}
+        </Button>
+      </div>
+    ) : null
+  const inline = oneClick === undefined && phase === 'idle'
+  const hasSources = capability !== undefined || redditRoute
 
   return (
-    <Card
+    <div
       data-testid="provider-card"
       data-service={provider.service}
       data-highlighted={highlighted ? 'true' : 'false'}
-      className={cn(highlighted && 'ring-2 ring-primary')}
+      className={cn(
+        'ws-row flex-col items-stretch gap-2 py-2.5',
+        highlighted && 'bg-ws-brand-soft/30 ring-2 ring-ws-brand/40 ring-inset',
+      )}
     >
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          {/* WP45：卡上戴的是这家自己的标志（品牌色原样），认不出的才落通用插头 */}
-          <BrandIcon provider={provider.service} />
-          {provider.label}
-          {about === '' ? null : <Hint text={about} testId="provider-note" />}
-          {tutorial !== undefined ? (
-            <TutorialLink slug={tutorial} className="ml-auto font-normal" />
-          ) : guide.steps.length + guide.links.length === 0 ? null : (
-            <InlineGuideLink
-              title={provider.label}
-              markdown={templateGuide(guide)}
-              className="ml-auto font-normal"
-            />
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2 text-sm">
-        {provider.available || oneClick !== undefined ? null : (
-          <p
-            className="flex items-center gap-1 text-xs text-destructive"
-            data-slot="status"
-            data-testid="provider-unavailable"
-          >
-            {t('connections.unavailable')}
-            {reason === undefined ? '' : `：${reason}`}
-            {provider.unavailable_reason === undefined ||
-            provider.unavailable_reason === reason ? null : (
-              <Hint text={provider.unavailable_reason} testId="provider-unavailable-why" />
-            )}
+      <div className="flex min-h-9 items-center gap-3">
+        {/* WP45：这一行戴的是这家自己的标志（品牌色原样），认不出的才落通用插头 */}
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-ws-surface">
+          <BrandIcon provider={provider.service} size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-ws-read font-medium text-ws-ink" data-slot="title">
+            {name}
           </p>
-        )}
-
-        {oneClick}
-        {oneClick !== undefined ? (
-          <Button
-            size="xs"
-            variant="ghost"
-            className="self-start px-1 text-muted-foreground"
-            aria-expanded={advancedShown}
-            data-testid="provider-advanced-toggle"
-            onClick={() => {
-              setAdvancedOpen((v) => !v)
-            }}
-          >
-            {advancedLabel ?? t('connections.advanced')}
-            <ChevronDown
-              aria-hidden
-              className={cn('transition-transform', advancedShown && 'rotate-180')}
+          {/* 点不动的那几项：原因占说明那一行（要人知道为什么点不了）；一键授权的在「高级」里说 */}
+          {!provider.available && oneClick === undefined ? (
+            unavailableLine
+          ) : sub === undefined ? null : (
+            <p className="truncate text-xs text-ws-muted-fg" data-testid="provider-line">
+              {sub}
+            </p>
+          )}
+        </div>
+        <span className="flex shrink-0 items-center gap-2">
+          {/*
+            WP456-T6（§3.8）：一个问号——悬停是介绍（原来名字旁那颗），点开是教程（原来的「看教程」）。
+            没有教程文章的：步骤与外链在对话框里现拼；什么都没有的只是个问号。
+          */}
+          {tutorial !== undefined || guide.steps.length + guide.links.length > 0 ? (
+            <TutorialHint
+              text={about}
+              {...(tutorial !== undefined
+                ? { slug: tutorial }
+                : { guide: { title: provider.label, markdown: templateGuide(guide) } })}
             />
-          </Button>
-        ) : null}
-        {oneClick === undefined || advancedShown ? (
-          <div
-            className="flex flex-col gap-2"
-            data-testid={oneClick === undefined ? undefined : 'provider-legacy'}
-          >
-            {oneClick === undefined || advancedNote === undefined ? null : (
-              <p className="text-xs text-ws-muted-fg" data-testid="provider-advanced-note">
-                {advancedNote}
-              </p>
-            )}
-            {provider.available || oneClick === undefined ? null : (
-              <p
-                className="flex items-center gap-1 text-xs text-destructive"
-                data-slot="status"
-                data-testid="provider-unavailable"
-              >
-                {t('connections.unavailable')}
-                {reason === undefined ? '' : `：${reason}`}
-                {provider.unavailable_reason === undefined ||
-                provider.unavailable_reason === reason ? null : (
-                  <Hint text={provider.unavailable_reason} testId="provider-unavailable-why" />
-                )}
-              </p>
-            )}
-            {phase === 'form' ? (
-              <SecureForm
-                service={provider.service}
-                fields={fields ?? provider.fields}
-                busy={busy}
-                safetyNote={false}
-                {...(assignment === undefined ? {} : { assignment })}
-                onCancel={onCancel}
-                onSubmit={onSubmit}
-              />
-            ) : phase === 'authorizing' ? (
-              <div className="flex flex-col gap-1.5" data-testid="oauth-waiting">
-                <p className="text-xs text-muted-foreground" data-slot="status">
-                  {t('connections.oauth.opened')}
-                </p>
-                {oauthUrl === undefined ? null : (
-                  <a
-                    href={oauthUrl}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
-                  >
-                    {t('connections.oauth.manual')}
-                    <ExternalLink className="size-3" aria-hidden />
-                  </a>
-                )}
-                <div>
-                  <Button size="xs" variant="ghost" onClick={onCancel}>
-                    {t('connections.cancel')}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!provider.available || busy}
-                  onClick={() => {
-                    onStart()
-                  }}
-                >
-                  {oauth ? t('connections.authorize') : t('connections.connect')}
-                </Button>
-              </div>
-            )}
+          ) : about === '' ? null : (
+            <Hint text={about} testId="provider-note" className="size-7" />
+          )}
+          {inline ? startButton : null}
+        </span>
+      </div>
 
-            {result === undefined ? null : <TestResultLine result={result} />}
-          </div>
-        ) : null}
-
-        {/*
-          49 M2 / WP126：数据类卡的「用我的 / 用 Agents 工坊的」开关，红人那五张再加「数据从哪里来」
-          与自带数据接口。WP210：默认收起，点「数据来源」才展开——绝大多数人连上就完了。
-          没有第二条路的卡（你自己店里的、你自己账号里的数据）连这个按钮都不出。
-        */}
-        {capability === undefined && !redditRoute ? null : (
-          <div className="flex flex-col gap-2" data-testid="provider-sources">
-            <Button
-              size="xs"
-              variant="ghost"
-              className="self-start px-1 text-muted-foreground"
-              aria-expanded={sourcesOpen}
-              data-testid="provider-sources-toggle"
+      {inline && result === undefined && !sourcesOpen && !hasSources ? null : (
+        <div className="flex flex-col gap-2 pl-10">
+          {oneClick}
+          {oneClick !== undefined ? (
+            <button
+              type="button"
+              className="ws-link-muted inline-flex w-fit items-center gap-1 text-xs"
+              aria-expanded={advancedShown}
+              data-testid="provider-advanced-toggle"
               onClick={() => {
-                setSourcesOpen((v) => !v)
+                setAdvancedOpen((v) => !v)
               }}
             >
-              {t('connections.sources.toggle')}
+              {advancedLabel ?? t('connections.advanced')}
               <ChevronDown
                 aria-hidden
-                className={cn('transition-transform', sourcesOpen && 'rotate-180')}
+                className={cn('size-3.5 transition-transform', advancedShown && 'rotate-180')}
               />
-            </Button>
-            {sourcesOpen ? (
-              <>
-                <CapabilitySourceSwitch
-                  service={provider.service}
-                  connected={connected}
-                  {...(assignment === undefined ? {} : { assignment })}
+            </button>
+          ) : null}
+          {oneClick !== undefined && advancedShown ? (
+            <div className="flex flex-col gap-2" data-testid="provider-legacy">
+              {advancedNote === undefined ? null : (
+                <p className="text-xs text-ws-muted-fg" data-testid="provider-advanced-note">
+                  {advancedNote}
+                </p>
+              )}
+              {provider.available ? null : unavailableLine}
+              {wizardBody ?? <div>{startButton}</div>}
+            </div>
+          ) : null}
+          {oneClick === undefined ? wizardBody : null}
+          {result === undefined ? null : <TestResultLine result={result} />}
+
+          {/*
+            49 M2 / WP126：数据类的「用我的 / 用 Agents 工坊的」开关，红人那五项再加「数据从哪里来」
+            与自带数据接口。WP210：默认收起，点「数据来源」才展开——绝大多数人连上就完了。
+            没有第二条路的（你自己店里的、你自己账号里的数据）连这个按钮都不出。
+          */}
+          {!hasSources ? null : (
+            <div className="flex flex-col gap-2" data-testid="provider-sources">
+              <button
+                type="button"
+                className="ws-link-muted inline-flex w-fit items-center gap-1 text-xs"
+                aria-expanded={sourcesOpen}
+                data-testid="provider-sources-toggle"
+                onClick={() => {
+                  setSourcesOpen((v) => !v)
+                }}
+              >
+                {t('connections.sources.toggle')}
+                <ChevronDown
+                  aria-hidden
+                  className={cn('size-3.5 transition-transform', sourcesOpen && 'rotate-180')}
                 />
-                {redditRoute ? (
-                  <DataSourceRouteControl
-                    channel="reddit"
-                    assignment={assignment}
-                    routeKey={REDDIT_READ_ROUTE_KEY}
-                    levels={REDDIT_READ_LEVELS}
-                    note="data.route.reddit_note"
+              </button>
+              {sourcesOpen ? (
+                <>
+                  <CapabilitySourceSwitch
+                    service={provider.service}
+                    connected={connected}
+                    {...(assignment === undefined ? {} : { assignment })}
                   />
-                ) : null}
-                {capability?.startsWith('kol.') === true ? (
-                  <>
-                    <DataSourceRouteControl channel={capability.slice(4)} assignment={assignment} />
-                    <ByoSourceCard channel={capability.slice(4)} />
-                  </>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                  {redditRoute ? (
+                    <DataSourceRouteControl
+                      channel="reddit"
+                      assignment={assignment}
+                      routeKey={REDDIT_READ_ROUTE_KEY}
+                      levels={REDDIT_READ_LEVELS}
+                      note="data.route.reddit_note"
+                    />
+                  ) : null}
+                  {capability?.startsWith('kol.') === true ? (
+                    <>
+                      <DataSourceRouteControl
+                        channel={capability.slice(4)}
+                        assignment={assignment}
+                      />
+                      <ByoSourceCard channel={capability.slice(4)} />
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }

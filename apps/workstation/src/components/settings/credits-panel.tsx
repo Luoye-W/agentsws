@@ -116,7 +116,7 @@ export function AccountWebLink({ url }: { url: string | undefined }): React.Reac
             href={url}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 text-xs font-normal text-primary hover:underline"
+            className="ws-link inline-flex items-center gap-1 text-xs font-normal"
             data-slot="action"
             data-testid="credits-web-link"
             data-hint={tip}
@@ -597,7 +597,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
         {/* WP156：「谁看得到多少」进问号；「每项能力用谁的」是一个去处，留一行链接 */}
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           {t('credits.sources')}
-          <Link to="/connections" className="text-primary underline-offset-4 hover:underline">
+          <Link to="/connections" className="ws-link">
             {t('nav.connections')}
           </Link>
           <Hint text={t('credits.scope_note')} testId="credits-scope-hint" />
@@ -664,12 +664,12 @@ export function TierCards({
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   {lang === 'zh' ? tier.label_zh : tier.label_en}
                   {tier.recommended === true ? (
-                    <span className="rounded bg-primary/10 px-1 text-primary">
+                    <span className="rounded-sm bg-ws-tint px-1 text-ws-brand-ink">
                       {t('credits.tiers.recommended')}
                     </span>
                   ) : null}
                 </span>
-                <span className="text-lg font-semibold tabular-nums">US${num(tier.usd)}</span>
+                <span className="text-base font-semibold tabular-nums">US${num(tier.usd)}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {t('credits.tiers.credits', { n: num(tier.credits) })}
                 </span>
@@ -772,7 +772,7 @@ function MyAllowance({
         </span>
       </div>
       {limit === undefined ? null : (
-        <span className="h-1.5 w-full overflow-hidden rounded bg-muted">
+        <span className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <span
             className={`block h-full ${
               state === 'full' ? 'bg-destructive' : state === 'near' ? 'bg-ws-warn' : 'bg-primary'
@@ -826,7 +826,7 @@ function AllocationWebLink({ assignment }: { assignment: string | undefined }): 
         href={url}
         target="_blank"
         rel="noreferrer noopener"
-        className="inline-flex items-center gap-1 text-primary hover:underline"
+        className="ws-link inline-flex items-center gap-1"
         data-slot="action"
         data-testid="credits-alloc-web-link"
         title={tip}
@@ -850,7 +850,7 @@ function Figure({
   return (
     <div className="rounded-lg border p-2">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={strong ? 'text-lg font-semibold tabular-nums' : 'text-base tabular-nums'}>
+      <p className={strong ? 'text-base font-semibold tabular-nums' : 'text-base tabular-nums'}>
         {value}
       </p>
     </div>

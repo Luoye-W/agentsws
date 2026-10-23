@@ -14,6 +14,7 @@ import { isAssistantNotesPayload, isFollowUpNudgePayload } from '@agentsws/contr
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
 import { ExternalLink } from 'lucide-react'
+import { useId } from 'react'
 import { AdsChangeBody, isAdsChangePayload } from '@/components/ads/ads-change-body'
 import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
@@ -37,8 +38,6 @@ import { isModerationPayload, ModerationCardBody } from '@/components/social/mod
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
 import { isRedditWritePayload, RedditWriteBody } from '@/components/social/reddit-write-body'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { isServiceCard, ServiceCardBody } from '@/components/workshop-services/service-card-body'
 import { useApp } from '@/lib/app-context'
 import { isContentDigestPayload } from '@/lib/content-digest-api'
@@ -102,7 +101,7 @@ function Note({
   return (
     <p
       {...(testId === undefined ? {} : { 'data-testid': testId })}
-      className="rounded-[10px] bg-ws-surface p-3 text-sm leading-6 whitespace-pre-wrap text-ws-body"
+      className="rounded-lg bg-ws-surface p-3 text-sm leading-6 whitespace-pre-wrap text-ws-body"
     >
       {children}
     </p>
@@ -230,7 +229,7 @@ function CampaignGroups({ groups }: { groups: unknown[] }): React.ReactNode {
         return (
           <div
             key={`${channel}:${str(g.role_id) ?? ''}`}
-            className="rounded-[10px] bg-ws-surface p-2.5 text-[13px] leading-5"
+            className="rounded-lg bg-ws-surface p-2.5 text-[13px] leading-5"
             data-testid="deck-campaign-group"
           >
             <b>{t('deck.campaign.group', { channel, n: picks.length })}</b>
@@ -245,30 +244,33 @@ function CampaignGroups({ groups }: { groups: unknown[] }): React.ReactNode {
   )
 }
 
-/** before / after 双格（② 改动卡与 ⑪ 策略卡共用的那一块）。 */
+/**
+ * before / after 双格（② 改动卡与 ⑪ 策略卡共用的那一块）。
+ * WP456-T3（规范 §2.6 第 13 条）：走决定卡的对比块（`.ws-cmp`）——左「现在」、右「改成」（品牌浅底）。
+ */
 function BeforeAfter({ before, after }: { before: unknown; after: unknown }): React.ReactNode {
   const { t, lang } = useApp()
   const b = pairs(before, lang)
   const a = pairs(after, lang)
   if (b.length === 0 && a.length === 0) return null
   return (
-    <div className="grid grid-cols-2 gap-2.5" data-testid="deck-before-after">
-      <div className="rounded-[10px] bg-ws-surface p-2.5">
-        <div className="text-xs tracking-wider text-ws-muted-fg uppercase">{t('deck.before')}</div>
-        <div className="ws-num mt-1 space-y-0.5 text-[13px]">
+    <div className="ws-cmp mt-0" data-testid="deck-before-after">
+      <div className="ws-cmp-cell">
+        <div className="ws-cmp-label">{t('deck.before')}</div>
+        <div className="ws-num mt-0.5 space-y-0.5 text-[13px] font-medium">
           {b.map(([k, v]) => (
             <div key={`b:${k}:${v}`} className="truncate">
-              {k === '' ? v : `${k}: ${v}`}
+              {k === '' ? v : `${k} ${v}`}
             </div>
           ))}
         </div>
       </div>
-      <div className="rounded-[10px] bg-ws-good-bg p-2.5">
-        <div className="text-xs tracking-wider text-ws-good uppercase">{t('deck.after')}</div>
-        <div className="ws-num mt-1 space-y-0.5 text-[13px]">
+      <div className="ws-cmp-cell" data-after="true">
+        <div className="ws-cmp-label">{t('deck.after')}</div>
+        <div className="ws-num mt-0.5 space-y-0.5 text-[13px] font-medium">
           {a.map(([k, v]) => (
             <div key={`a:${k}:${v}`} className="truncate">
-              {k === '' ? v : `${k}: ${v}`}
+              {k === '' ? v : `${k} ${v}`}
             </div>
           ))}
         </div>
@@ -297,22 +299,44 @@ function OptionList({
   kind?: string
 }): React.ReactNode {
   const { t } = useApp()
-  const hint =
-    kind === undefined
-      ? t('card.options.hint')
-      : tOr(t, `card.options.hint.${kind}`, t('card.options.hint'))
+  const name = useId()
+  /*
+   * WP456-T3（§3.1）：选项组整行可点、选中那行品牌浅底（`.ws-opts`）。通用那句「选一个，答案会沉淀成策略」
+   * 不再写在卡上（标题下面那一句已经说了「定了以后照这个办」），只给读屏；按卡种有专门那一句的照旧写出来。
+   */
+  const special = kind === undefined ? undefined : tOr(t, `card.options.hint.${kind}`, '')
+  const hint = special === undefined || special === '' ? t('card.options.hint') : special
   return (
-    <fieldset className="rounded-[10px] bg-ws-surface p-3" data-testid="deck-card-options">
-      <legend className="px-1 text-xs text-ws-muted-fg">{hint}</legend>
-      <RadioGroup value={option} onValueChange={onOption}>
-        {options.map((o) => (
-          <Label key={o.id} className="flex items-center gap-2 font-normal">
-            <RadioGroupItem value={o.id} />
-            <span>{o.label}</span>
-          </Label>
-        ))}
-      </RadioGroup>
-    </fieldset>
+    <div className="flex flex-col gap-1.5">
+      {special === undefined || special === '' ? null : (
+        <p className="text-xs text-ws-muted-fg">{special}</p>
+      )}
+      <fieldset
+        aria-label={hint}
+        className="ws-opts mx-0 mt-0 mb-0 border-0 p-0"
+        data-testid="deck-card-options"
+      >
+        {options.map((o) => {
+          const on = o.id === option
+          return (
+            <label key={o.id} className="ws-opt" data-on={on ? 'true' : 'false'} data-option={o.id}>
+              <input
+                type="radio"
+                className="sr-only"
+                name={`deck-opt-${name}`}
+                value={o.id}
+                checked={on}
+                onChange={() => {
+                  onOption(o.id)
+                }}
+              />
+              <span aria-hidden className="ws-opt-radio" />
+              <span className="min-w-0 flex-1">{o.label}</span>
+            </label>
+          )
+        })}
+      </fieldset>
+    </div>
   )
 }
 
@@ -325,7 +349,7 @@ function OutboundBody({ card, mode }: { card: DeckCard; mode: DeckContentMode })
       <p
         data-testid="deck-content"
         data-mode={content.mode}
-        className="mt-2.5 rounded-[10px] bg-ws-surface p-3 text-sm leading-6 whitespace-pre-wrap"
+        className="mt-2.5 rounded-lg bg-ws-surface p-3 text-sm leading-6 whitespace-pre-wrap"
       >
         {content.text}
       </p>
@@ -353,7 +377,7 @@ export function DeckCardBody({
   onOpen: () => void
 }): React.ReactNode {
   const { t, lang } = useApp()
-  const { t: modeT } = useMode()
+  const usage = useMode()
   const payload = isRecord(card.detail.payload) ? card.detail.payload : {}
   const content = pickContent(card.content_variants, mode)
   const options = card.options ?? []
@@ -439,7 +463,7 @@ export function DeckCardBody({
         if (payload.form === 'theme_purchase')
           return (
             <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-layout-theme-purchase">
-              <p className="text-2xl font-semibold text-ws-ink">
+              <p className="text-[22px] font-semibold text-ws-ink">
                 {t('themes.purchase.credits', { credits: Number(payload.price_credits ?? 0) })}
               </p>
               <Note testId="deck-reason">{reasonText}</Note>
@@ -482,19 +506,28 @@ export function DeckCardBody({
             </div>
           )
         }
+        /*
+         * WP456-T3（§3.1「决定卡说了四层话」）：标题下面只留一句灰字（为什么问你），接着是对比块；
+         * 原来那个说明框、「点通过以后都这样做」、选项组的标题都去掉。
+         */
         return (
-          <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-policy">
-            <BeforeAfter before={payload.before} after={payload.after} />
-            {/* WP276（界面少字）：通知卡那句「谁改的、已生效、可撤回」下面那一行已经说了，正文框不再说一遍 */}
-            {payload.form === 'peer_change_notice' ? null : (
-              <Note testId="deck-reason">{reasonText}</Note>
+          <div className="mt-1 flex flex-col gap-3" data-testid="deck-layout-policy">
+            {/* WP276（界面少字）：通知卡那句「谁改的、已生效、可撤回」下面那一行已经说了，这一句不再说 */}
+            {payload.form === 'peer_change_notice' || reasonText === '' ? null : (
+              <p className="ws-dcard-desc mt-0" data-testid="deck-reason">
+                {reasonText}
+              </p>
             )}
-            {/* WP275：① ② 的词按模式换；② 里同事自己改了共用的规矩，这张是「已生效、可撤回」的通知 */}
-            <p className="text-xs text-ws-muted-fg">
-              {payload.form === 'peer_change_notice'
-                ? t('deck.policy.peer_notice')
-                : modeT('deck.policy.owner_only')}
-            </p>
+            <BeforeAfter before={payload.before} after={payload.after} />
+            {/*
+              WP275：② 里同事自己改了共用的规矩，这张是「已生效、可撤回」的通知。
+              WP456-T3：「点通过以后都这样做」去掉（标题下那句说了）；公司模式下「只有 owner 能批」是新信息，照旧写。
+            */}
+            {payload.form === 'peer_change_notice' ? (
+              <p className="text-xs text-ws-muted-fg">{t('deck.policy.peer_notice')}</p>
+            ) : usage.known && usage.mode === 'company' ? (
+              <p className="text-xs text-ws-muted-fg">{t('deck.policy.owner_only')}</p>
+            ) : null}
           </div>
         )
 
@@ -567,7 +600,7 @@ export function DeckCardBody({
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-money">
             <div className="flex items-end gap-3.5">
-              <span className="ws-display text-[30px] leading-none" data-testid="deck-money-amount">
+              <span className="ws-display text-[28px] leading-none" data-testid="deck-money-amount">
                 {amount}
               </span>
               <div className="flex-1">
@@ -600,7 +633,7 @@ export function DeckCardBody({
                     onClick={() => {
                       onOption(id)
                     }}
-                    className={`aspect-[4/3] overflow-hidden rounded-[10px] bg-ws-tint ${
+                    className={`aspect-[4/3] overflow-hidden rounded-lg bg-ws-tint ${
                       selected ? 'ring-2 ring-ws-brand' : ''
                     }`}
                   >
@@ -630,7 +663,7 @@ export function DeckCardBody({
         const rows = pairs(payload.facts, lang).concat(pairs(payload.after, lang))
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-aftermath">
-            <div className="rounded-[10px] bg-ws-surface p-3">
+            <div className="rounded-lg bg-ws-surface p-3">
               {rows.length === 0 ? (
                 <p className="text-[13px] text-ws-body">{content.text}</p>
               ) : (
@@ -695,7 +728,7 @@ export function DeckCardBody({
               {note === undefined ? null : (
                 <blockquote
                   data-testid="deck-quote"
-                  className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
+                  className="rounded-lg bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
                 >
                   {note}
                 </blockquote>
@@ -715,7 +748,7 @@ export function DeckCardBody({
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-handoff">
             <blockquote
               data-testid="deck-quote"
-              className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
+              className="rounded-lg bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
             >
               {quote}
             </blockquote>
@@ -743,7 +776,7 @@ export function DeckCardBody({
               type="button"
               data-testid="deck-takeover-open"
               onClick={onOpen}
-              className="inline-flex h-8 w-fit items-center rounded-[10px] bg-ws-brand px-3 text-xs font-medium text-ws-brand-fg"
+              className="inline-flex h-8 w-fit items-center rounded-md bg-ws-brand px-3 text-xs font-medium text-ws-brand-fg"
             >
               {t('deck.takeover.open')}
             </button>
@@ -794,7 +827,7 @@ export function DeckCardBody({
     <>
       {main}
       {needsOptions ? (
-        <div className="mt-2.5">
+        <div className="mt-3">
           <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />
         </div>
       ) : null}

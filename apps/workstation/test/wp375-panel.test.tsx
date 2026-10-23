@@ -146,49 +146,57 @@ beforeEach(() => {
   stubStorage()
 })
 
-describe('卡片标题行照 Claude（决策 1035）', () => {
-  it('标题 → 紧贴的箭头 → 状态点，最右靠右是摘要；没有图标', async () => {
+describe('卡头（WP456-T3，规范 §2.6 第 14 条；原决策 1035 的标题行）', () => {
+  it('卡头 = 标题 13/600 + 灰色计数 + 状态点；最右只有一颗图标钮（对话「+」、计划「›」）；标题后面不再跟箭头', async () => {
+    h.waiting = true
+    renderRail()
+    const toggle = await screen.findByTestId('rail-card-toggle-conversations')
+    await screen.findByTestId('rail-card-dot-conversations')
+    const kids = Array.from(toggle.children).map((k) => k.getAttribute('data-testid'))
+    expect(kids[0]).toBe('rail-card-title')
+    expect(kids).toContain('rail-card-count-conversations')
+    expect(screen.queryByTestId('rail-card-chevron-conversations')).toBeNull()
+    expect(within(toggle).getByTestId('rail-card-title').className).toContain('font-semibold')
+    // 对话卡头右边是「+」（新对话），计划卡头右边是「›」（第三栏开完整一格）
+    expect(screen.getByTestId('rail-card-action-conversations')).toBeTruthy()
+    expect(screen.getByTestId('rail-card-open-plans')).toBeTruthy()
+    expect(screen.queryByTestId('rail-card-open-conversations')).toBeNull()
+  })
+
+  it('产出 / 连接 / 设定 / 工坊服务合成一张清单卡：每行名字 + 右边一句状态（红点在前）+ ›', async () => {
     h.connected = false
     renderRail()
-    const toggle = await screen.findByTestId('rail-card-toggle-connections')
-    // 连接那一份取回来，点与摘要才出
-    await screen.findByTestId('rail-card-dot-connections')
-    const kids = Array.from(toggle.children)
-    expect(kids.map((k) => k.getAttribute('data-testid'))).toEqual([
-      'rail-card-title',
-      'rail-card-chevron-connections',
-      'rail-card-dot-connections',
-      'rail-card-summary-connections',
+    const list = await screen.findByTestId('rail-list-card')
+    const rows = within(list)
+      .getAllByRole('button')
+      .map((b) => b.getAttribute('data-testid'))
+    expect(rows).toEqual([
+      'rail-list-row-outputs',
+      'rail-list-row-connections',
+      'rail-list-row-settings',
+      'rail-list-row-workshop-services',
     ])
-    expect(kids[0]?.textContent).toBe('连接')
-    // 箭头紧贴标题：没有把它推到右边的 ml-auto；摘要才靠右
-    expect(kids[1]?.getAttribute('class')).not.toContain('ml-auto')
-    const summary = kids[3] as HTMLElement
     await waitFor(() => {
-      expect(summary.textContent).toBe('1 个要处理')
+      expect(screen.getByTestId('rail-card-summary-connections').textContent).toBe('1 个要处理')
     })
-    expect(summary.className).toContain('ml-auto')
-    // 不带图标：标题前面没有别的东西
-    expect(toggle.firstElementChild?.getAttribute('data-testid')).toBe('rail-card-title')
+    const row = screen.getByTestId('rail-list-row-connections')
+    const dot = within(row).getByTestId('rail-card-dot-connections')
+    const summary = within(row).getByTestId('rail-card-summary-connections')
+    // 红点在数字前面（挨着右边那一句，不挤在标题旁边）
+    expect(dot.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(row.querySelector('.lucide-chevron-right')).not.toBeNull()
+    // 清单卡的几行没有展开 / 收起
+    expect(screen.queryByTestId('rail-card-toggle-connections')).toBeNull()
   })
 
-  it('收起的箭头朝右（›），展开的朝下（⌄）', async () => {
-    renderRail()
-    const open = await screen.findByTestId('rail-card-chevron-conversations')
-    const closed = screen.getByTestId('rail-card-chevron-settings')
-    expect(open.getAttribute('class')).toContain('chevron-down')
-    expect(closed.getAttribute('class')).toContain('chevron-right')
-  })
-
-  it('拖动手柄平时透明，鼠标移到卡上才出现在最右，摘要同时让位；键盘落上来也看得见', async () => {
+  it('拖动手柄平时透明，鼠标移到卡上才出现在最右，那颗图标钮同时让位；键盘落上来也看得见', async () => {
     renderRail()
     const handle = await screen.findByTestId('rail-card-handle-plans')
     expect(handle.className).toContain('opacity-0')
     expect(handle.className).toContain('group-hover/card:opacity-100')
     expect(handle.className).toContain('focus-visible:opacity-100')
-    expect(handle.className).toContain('right-2')
     expect(screen.getByTestId('rail-card-plans').className).toContain('group/card')
-    expect(screen.getByTestId('rail-card-summary-plans').className).toContain(
+    expect(screen.getByTestId('rail-card-open-plans').className).toContain(
       'group-hover/card:opacity-0',
     )
   })
@@ -199,15 +207,14 @@ describe('默认展开「对话」「计划」（决策 1035）', () => {
     const box = stubStorage()
     box.set(
       'agentsws.rightrail.cards',
-      JSON.stringify({ 'role:dtc.support': { plans: false, settings: true } }),
+      JSON.stringify({ 'role:dtc.support': { plans: false, reports: true } }),
     )
     renderRail()
     await screen.findByTestId('rail-cards')
     const open = (id: string) => screen.getByTestId(`rail-card-${id}`).getAttribute('data-open')
     expect(open('conversations')).toBe('true')
     expect(open('plans')).toBe('false')
-    expect(open('settings')).toBe('true')
-    expect(open('reports')).toBe('false')
+    expect(open('reports')).toBe('true')
   })
 })
 
