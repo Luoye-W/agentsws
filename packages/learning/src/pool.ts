@@ -287,8 +287,14 @@ function mergeEvidence(
   b: readonly PooledLesson['evidence'][number][],
 ): PooledLesson['evidence'] {
   const out = a.map((e) => ({ ...e }))
+  // WP486：同一句话、同一时刻、但出在**不同的卡**上是两次纠正（详情里要逐条列），别并成一条
   for (const e of b) {
-    if (!out.some((x) => x.quote === e.quote && x.at === e.at)) out.push({ ...e })
+    if (
+      !out.some(
+        (x) => x.quote === e.quote && x.at === e.at && x.approval_item_id === e.approval_item_id,
+      )
+    )
+      out.push({ ...e })
   }
   return out
 }

@@ -66,7 +66,7 @@ describe('WP277 非审批卡的键盘提示与按钮一致', () => {
     const hint = await screen.findByTestId('deck-keyboard')
     expect(hint.textContent).toBe('→ 知道了')
     expect(screen.queryByTestId('deck-wait')).toBeNull()
-    expect(screen.getByTestId('deck-tag-row').textContent).not.toContain('证据')
+    expect(screen.getByTestId('deck-tag-row').textContent).not.toContain('详情')
     const deck = screen.getByTestId('deck-section')
     deck.focus()
     await user.keyboard('{ArrowLeft}{ArrowUp}{ArrowDown}')

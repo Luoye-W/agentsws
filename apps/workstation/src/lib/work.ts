@@ -17,6 +17,17 @@ export const DAY_MS = 86_400_000
  * 契约建议已写进交付报告：`DeckCard` 加 `matter_id?` / `todo_id?`。
  */
 export function matterUrl(card: DeckCard): string {
+  return matterTarget(card) ?? `/positions/${card.position_id}`
+}
+
+/**
+ * WP486：这张卡**有没有一个能进去的地方**（事项 / 站内页面）。没有就是 `undefined`——
+ * 卡右下角的 → 这时改成打开右栏「详情」，而不是退回岗位页（人本来就在岗位页上，点了等于没反应）。
+ *
+ * 事项 id 先认 payload 里的（老卡），再认卡上的 `matter_id`（投影从 `subject.matter_id` 来，
+ * 以前这里漏了它：头一行「属于：某件事」点了也回岗位页）。
+ */
+export function matterTarget(card: DeckCard): string | undefined {
   const payload = card.detail.payload as {
     matter_id?: unknown
     work_item_id?: unknown
@@ -30,8 +41,8 @@ export function matterUrl(card: DeckCard): string {
       ? payload.matter_id
       : typeof payload?.work_item_id === 'string'
         ? payload.work_item_id
-        : undefined
-  if (id === undefined) return `/positions/${card.position_id}`
+        : card.matter_id
+  if (id === undefined || id === '') return undefined
   return `/matters/${id}#card-${card.id}`
 }
 
