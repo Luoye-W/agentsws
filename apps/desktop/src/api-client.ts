@@ -171,6 +171,11 @@ export interface ApiClient {
   ): Promise<ApiResult<{ output: number; background: number; scheduled: number }>>
   /** WP337：没重启成，放开（`POST /v1/update/resume`）。 */
   resumeAfterUpdatePause(session: DesktopSession, assignment: string): Promise<ApiResult<number>>
+  /**
+   * WP480：搬数据之前让服务进程做一份备份（`POST /v1/backup/export`，与升级闸同一个 `runBackup`：
+   * 一致性快照 + 清单哈希）。回包落在哪。库大的时候要一阵子，超时给得宽。
+   */
+  exportBackup?(session: DesktopSession, assignment: string): Promise<ApiResult<string>>
 }
 
 const count = (v: unknown): number =>
@@ -488,6 +493,20 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         timeoutMs: 20_000,
       })
       return out.ok ? { ok: true, value: count(out.value.value.runs) } : out
+    },
+
+    async exportBackup(session, assignment) {
+      const out = await call<{ out?: unknown }>('/v1/backup/export', {
+        method: 'POST',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+        body: {},
+        timeoutMs: 15 * 60_000,
+      })
+      if (!out.ok) return out
+      const where = out.value.value.out
+      return typeof where === 'string' && where !== ''
+        ? { ok: true, value: where }
+        : { ok: false, reason: '响应里没有备份路径' }
     },
 
     async setBrowserEndpoint(session, assignment, endpoint) {

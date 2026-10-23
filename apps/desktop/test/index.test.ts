@@ -82,6 +82,14 @@ describe('bridge-types', () => {
       titleBarTheme: 'agentsws:title-bar-theme',
       // WP475：反馈框「附上截图」
       captureWindow: 'agentsws:capture-window',
+      // WP480：数据放在哪（选文件夹 / 搬家进度 / 删旧目录 / 打开文件夹）
+      dataLocationGet: 'agentsws:data-location-get',
+      dataLocationChoose: 'agentsws:data-location-choose',
+      dataLocationCheckDefault: 'agentsws:data-location-check-default',
+      dataLocationMove: 'agentsws:data-location-move',
+      dataLocationChanged: 'agentsws:data-location-changed',
+      dataLocationDeleteOld: 'agentsws:data-location-delete-old',
+      dataLocationReveal: 'agentsws:data-location-reveal',
     })
   })
 

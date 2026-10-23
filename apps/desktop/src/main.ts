@@ -34,6 +34,7 @@ import { type ApiClient, createApiClient, type DesktopSession } from './api-clie
 import {
   BRIDGE_CHANNELS,
   type BridgeInfo,
+  type DesktopDataLocation,
   type DesktopRestartReadiness,
   type SceneOpenOutcome,
 } from './bridge-types.js'
@@ -56,6 +57,26 @@ import {
   notImplementedLauncher,
 } from './connect-runtime.js'
 import { withCsp } from './csp.js'
+import {
+  checkDefaultTarget,
+  checkTarget,
+  currentDataDir,
+  type DataTargetCheck,
+  dataDirReachable,
+  defaultDataDir,
+  isDefaultDir,
+  latestRetired,
+  measureDir,
+  purgeRetired,
+  removeRetired,
+} from './data-location.js'
+import { driveIsNetwork } from './data-location-probe.js'
+import {
+  type DataMoveStatus,
+  holdDuringMove,
+  recoverInterruptedMove,
+  runDataMove,
+} from './data-move.js'
 import {
   type ConnectorSummary,
   collectDiagnostics,
@@ -341,7 +362,18 @@ async function bootstrap(): Promise<void> {
   const files = nodeFileStore()
   files.ensureDir(paths.userData)
   files.ensureDir(paths.logDir)
-  files.ensureDir(paths.serverDataDir)
+  /*
+   * WP480：数据目录可以由用户自己选（指针文件 `<userData>/data-location.json`）。先收拾上次没搬完的
+   * （崩了 / 断电），再清到期的旧目录，最后按指针定这次用哪个目录。自定义位置**不在这里建**——
+   * NAS 没挂上时 `/Volumes/xxx/...` 建得出来却是一个空的本地目录，工坊会以为数据全没了。
+   */
+  const moveRecovery = recoverInterruptedMove({
+    userData: paths.userData,
+    now: new Date().toISOString(),
+  })
+  const purgedOld = purgeRetired({ userData: paths.userData, now: new Date().toISOString() })
+  paths.serverDataDir = currentDataDir(paths.userData)
+  if (isDefaultDir(paths.userData, paths.serverDataDir)) files.ensureDir(paths.serverDataDir)
 
   const logger = createLogger({
     files,
@@ -363,6 +395,12 @@ async function bootstrap(): Promise<void> {
   )
   const version = app.getVersion()
   logger.info('桌面壳启动', { version, userData: paths.userData })
+  logger.info('数据目录', {
+    dir: paths.serverDataDir,
+    custom: !isDefaultDir(paths.userData, paths.serverDataDir),
+    ...(moveRecovery.action === 'none' ? {} : { recovered: moveRecovery.action }),
+    ...(purgedOld.length === 0 ? {} : { purged_old: purgedOld.map((r) => r.path) }),
+  })
   // WP319：刚由「重启并更新」装上来的——收掉「正在更新」单（那个小窗跟着关），记一行用了多久
   finishPendingUpdate({
     files,
@@ -414,6 +452,25 @@ async function bootstrap(): Promise<void> {
   const runtimeMode = resolveMode(config, process.env)
   const remote = runtimeMode.mode === 'remote'
   logger.info('运行模式', { mode: runtimeMode.mode, from: runtimeMode.from })
+
+  // WP480：数据放在移动硬盘 / NAS 上、这次打不开——说清楚在哪，等人接好再试；不拿一个空目录起服务
+  while (!remote && !dataDirReachable(paths.userData, paths.serverDataDir)) {
+    logger.warn('数据目录打不开', { dir: paths.serverDataDir })
+    const t = strings(config.language)
+    const answer = await dialog.showMessageBox({
+      type: 'warning',
+      message: t.dataDirMissingTitle,
+      detail: t.dataDirMissingBody.replace('{path}', paths.serverDataDir),
+      buttons: [t.dataDirRetry, t.dataDirQuit],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    })
+    if (answer.response !== 0) {
+      app.exit(0)
+      return
+    }
+  }
 
   const halt = createHaltControl(files, paths.haltFile)
 
@@ -606,7 +663,9 @@ async function bootstrap(): Promise<void> {
           },
         )
 
-  const server = createSidecar({
+  /** WP480：正在搬数据（这期间别处的 start / restart 一律不执行，退出也拦着）。 */
+  let dataMoving = false
+  const serverCore = createSidecar({
     name: 'server',
     spawner: nodeSpawner(),
     timers: nodeTimers(),
@@ -659,6 +718,13 @@ async function bootstrap(): Promise<void> {
       if (port !== undefined) boundPort = Number(port)
     },
   })
+  const server = holdDuringMove(
+    serverCore,
+    () => dataMoving,
+    (what) => {
+      logger.warn('正在搬数据，这次服务进程的启动请求先不办', { what })
+    },
+  )
 
   // ── OpenConnector runtime：只检测 + 加固检查，不负责拉起（08 §5）。
   //     地址只有一个出处（`AGENTSWS_CONNECT_URL`，见 apps/server/src/connect-url.ts）；
@@ -682,7 +748,8 @@ async function bootstrap(): Promise<void> {
     connectPort === undefined
       ? undefined
       : createLocalConnectLauncher({
-          dataDir: paths.serverDataDir,
+          // WP480：数据目录能搬家——每次用都现取
+          dataDir: () => paths.serverDataDir,
           port: connectPort,
           nodeExec: serverRuntime.execPath,
           electron: serverRuntime.kind === 'electron',
@@ -961,6 +1028,8 @@ async function bootstrap(): Promise<void> {
       platform: process.platform,
       version,
       ...(chrome === undefined || !isMain ? {} : { title_bar: chrome }),
+      // WP480：只有服务进程归这台电脑上的壳管（个人档）才能换数据位置
+      ...(remote || !isMain ? {} : { data_location: true }),
     }
     event.returnValue = info
   })
@@ -1885,6 +1954,14 @@ async function bootstrap(): Promise<void> {
     void searchChannel?.close()
   })
   app.on('before-quit', (event) => {
+    // WP480：搬数据搬到一半不许退（停在半路，新旧两边都不完整的那一刻最危险）
+    if (dataMoving) {
+      event.preventDefault()
+      dialog
+        .showMessageBox({ type: 'info', message: strings(config.language).dataMoveQuitBlocked })
+        .catch(() => undefined)
+      return
+    }
     if (
       !updateQuitDecided &&
       !quitting &&
@@ -2753,6 +2830,230 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle(BRIDGE_CHANNELS.launchAtLoginSet, (event, raw: unknown) => {
     if (!fromLocalWindow(event) || typeof raw !== 'boolean') return launchAtLogin.get()
     return launchAtLogin.set(raw)
+  })
+
+  /*
+   * ── WP480：数据放在哪（设置 → 数据与隐私）。选文件夹的框由壳弹，路径只在主进程里：
+   *    页面只能说「刚才选好、查过的那一个」或「默认位置」，传不进任意路径。
+   */
+  let moveStatus: DataMoveStatus = { state: 'idle' }
+  let chosenCheck: DataTargetCheck | undefined
+  let sizeCache: { dir: string; at: number; size: ReturnType<typeof measureDir> } | undefined
+  const dataSize = (): ReturnType<typeof measureDir> => {
+    const now = Date.now()
+    if (sizeCache?.dir !== paths.serverDataDir || now - sizeCache.at > 60_000)
+      sizeCache = { dir: paths.serverDataDir, at: now, size: measureDir(paths.serverDataDir) }
+    return sizeCache.size
+  }
+  /** 应用自己的目录：数据不许放进去（更新 / 卸载会清掉）。 */
+  const appDirs = (): string[] => [
+    dirname(process.execPath),
+    ...(app.isPackaged ? [process.resourcesPath] : []),
+    ...(layout === undefined ? [] : [layout.root]),
+  ]
+  const publishMove = (status: DataMoveStatus): void => {
+    moveStatus = status
+    if (window !== undefined && !window.isDestroyed())
+      window.webContents.send(BRIDGE_CHANNELS.dataLocationChanged, status)
+  }
+  const locationView = (): DesktopDataLocation => {
+    const size = dataSize()
+    const old = latestRetired(paths.userData)
+    return {
+      path: paths.serverDataDir,
+      is_default: isDefaultDir(paths.userData, paths.serverDataDir),
+      default_path: defaultDataDir(paths.userData),
+      bytes: size.bytes,
+      files: size.files,
+      ...(old === undefined ? {} : { old: { path: old.path, until: old.until } }),
+      status: moveStatus,
+    }
+  }
+  /** 新位置起来没有：服务进程健康、且没在退避里。最多等 90 秒。 */
+  const waitServerHealthy = async (): Promise<boolean> => {
+    for (let i = 0; i < 90; i += 1) {
+      await sleep(1000)
+      const state = serverCore.snapshot().state
+      if (state === 'failed') return false
+      if (state === 'backoff') continue
+      const h = await probeHealth(serverUrl(), {
+        fetchImpl: globalThis.fetch as never,
+        timeoutMs: 2500,
+        abort: nodeAbort,
+      })
+      if (h.ok) {
+        await pollHealth()
+        return true
+      }
+    }
+    return false
+  }
+  const startMove = (to: string): DataMoveStatus => {
+    const from = paths.serverDataDir
+    dataMoving = true
+    logger.info('开始搬数据', { from, to })
+    void runDataMove({
+      userData: paths.userData,
+      from,
+      to,
+      now: () => new Date().toISOString(),
+      pause: () => pauseAllForUpdate('data-move'),
+      resume: () => resumeAfterPause(),
+      backup: async () => {
+        if (health?.ok !== true) throw new Error('服务进程没在运行，做不了备份')
+        const s = await ensureSession()
+        const assignment = s === undefined ? undefined : await ensureAssignment(s)
+        if (s === undefined || assignment === undefined || api.exportBackup === undefined)
+          throw new Error('换不到会话')
+        const out = await api.exportBackup(s, assignment)
+        if (!out.ok) throw new Error(out.reason)
+        logger.info('搬之前的备份', { out: out.value })
+      },
+      stopServices: async () => {
+        serverCore.stop()
+        await connectLauncher?.stop()
+        await waitServerGone()
+        if (childAlive()) throw new Error('服务进程 15 秒内没退出')
+        forgetSession()
+      },
+      startServices: async (dir) => {
+        paths.serverDataDir = dir
+        sizeCache = undefined
+        forgetSession()
+        serverCore.start()
+        await connectLauncher?.start()
+      },
+      waitHealthy: waitServerHealthy,
+      onStatus: publishMove,
+      log: (message, fields) => {
+        logger.info(message, fields ?? {})
+      },
+    })
+      .catch((err: unknown) => {
+        logger.error('搬数据出了意外', { error: String(err) })
+        publishMove({
+          state: 'failed',
+          code: 'unknown',
+          step: moveStatus.state === 'running' ? moveStatus.step : 'copy',
+          back_to: from,
+          recovered: serverCore.snapshot().state !== 'stopped',
+          at: new Date().toISOString(),
+        })
+      })
+      .finally(() => {
+        dataMoving = false
+        chosenCheck = undefined
+        sizeCache = undefined
+        refreshTray()
+      })
+    return moveStatus
+  }
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationGet, (event) => {
+    if (!fromLocalWindow(event) || remote) return undefined
+    return locationView()
+  })
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationChoose, async (event) => {
+    if (!fromLocalWindow(event) || remote || dataMoving) return null
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const t = strings(config.language)
+    const options: Electron.OpenDialogOptions = {
+      title: t.dataLocationPick,
+      buttonLabel: config.language === 'en-US' ? 'Choose' : '选这个文件夹',
+      properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
+    }
+    const picked = await (win === null
+      ? dialog.showOpenDialog(options)
+      : dialog.showOpenDialog(win, options))
+    const chosen = picked.canceled ? undefined : picked.filePaths[0]
+    if (chosen === undefined) return null
+    const network = await driveIsNetwork(chosen, process.platform)
+    const check = checkTarget({
+      chosen,
+      current: paths.serverDataDir,
+      userData: paths.userData,
+      appDirs: appDirs(),
+      size: dataSize(),
+      network,
+    })
+    chosenCheck = check.ok ? check : undefined
+    logger.info('选了新的数据位置', {
+      chosen,
+      target: check.target,
+      ok: check.ok,
+      problems: check.problems,
+      warnings: check.warnings,
+    })
+    return check
+  })
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationCheckDefault, (event) => {
+    if (!fromLocalWindow(event) || remote) return undefined
+    return checkDefaultTarget({
+      current: paths.serverDataDir,
+      userData: paths.userData,
+      size: dataSize(),
+    })
+  })
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationMove, (event, raw: unknown) => {
+    if (!fromLocalWindow(event) || remote) return moveStatus
+    if (dataMoving) return moveStatus
+    // 开搬之前再查一遍（选完到点「开始搬」之间可能过了好一会儿：盘满了、拔了）
+    const toDefault = raw === 'default'
+    const check = toDefault
+      ? checkDefaultTarget({
+          current: paths.serverDataDir,
+          userData: paths.userData,
+          size: dataSize(),
+        })
+      : chosenCheck === undefined
+        ? undefined
+        : checkTarget({
+            chosen: chosenCheck.chosen,
+            current: paths.serverDataDir,
+            userData: paths.userData,
+            appDirs: appDirs(),
+            size: dataSize(),
+            network: chosenCheck.warnings.includes('network'),
+          })
+    if (check === undefined) return moveStatus
+    if (!check.ok) {
+      const code = check.problems.includes('no_space')
+        ? 'no_space'
+        : check.problems.includes('not_writable')
+          ? 'not_writable'
+          : 'unknown'
+      publishMove({
+        state: 'failed',
+        code,
+        step: 'pause',
+        back_to: paths.serverDataDir,
+        recovered: true,
+        at: new Date().toISOString(),
+      })
+      return moveStatus
+    }
+    // 恢复默认位置：默认位置上躺着的是一份搬走前留下的旧目录（改名没成那种）——它过期了，先清掉
+    if (toDefault) {
+      const target = defaultDataDir(paths.userData)
+      purgeRetired({ userData: paths.userData, now: new Date().toISOString(), force: false })
+      const stale = latestRetired(paths.userData)
+      if (stale !== undefined && stale.path === target)
+        removeRetired({ userData: paths.userData, entry: stale })
+    }
+    return startMove(check.target)
+  })
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationDeleteOld, (event) => {
+    if (!fromLocalWindow(event) || remote || dataMoving) return false
+    const removed = purgeRetired({
+      userData: paths.userData,
+      now: new Date().toISOString(),
+      force: true,
+    })
+    logger.info('删掉了搬走前留下的旧目录', { removed: removed.map((r) => r.path) })
+    return latestRetired(paths.userData) === undefined
+  })
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationReveal, async (event) => {
+    if (!fromLocalWindow(event) || remote) return false
+    return (await shell.openPath(paths.serverDataDir)) === ''
   })
 
   /*

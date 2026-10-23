@@ -125,6 +125,15 @@ export interface Strings {
   computerUseActive: string
   /** 那一行下面的「停止」：撤销授权 + 中断那次运行。 */
   computerUseStop: string
+  /** WP480：选文件夹那个系统框的标题。 */
+  dataLocationPick: string
+  /** WP480：数据放在别的盘 / NAS 上、这次启动打不开（`{path}`）。 */
+  dataDirMissingTitle: string
+  dataDirMissingBody: string
+  dataDirRetry: string
+  dataDirQuit: string
+  /** WP480：正在搬数据时点了退出。 */
+  dataMoveQuitBlocked: string
 }
 
 const ZH: Strings = {
@@ -217,6 +226,13 @@ const ZH: Strings = {
   wizardInvalidUrl: '地址要以 http:// 或 https:// 开头',
   computerUseActive: 'AI 正在操作电脑（到 {until}）',
   computerUseStop: '停止',
+  dataLocationPick: '选一个放工坊数据的文件夹',
+  dataDirMissingTitle: '找不到工坊的数据',
+  dataDirMissingBody:
+    '数据放在 {path}，现在打不开。如果在移动硬盘或 NAS 上，请先接好（连上网），再点「再试一次」。',
+  dataDirRetry: '再试一次',
+  dataDirQuit: '退出',
+  dataMoveQuitBlocked: '正在搬数据，搬完才能退出。进度在设置 → 数据与隐私。',
 }
 
 const EN: Strings = {
@@ -315,6 +331,14 @@ const EN: Strings = {
   wizardInvalidUrl: 'The address must start with http:// or https://',
   computerUseActive: 'AI is operating this computer (until {until})',
   computerUseStop: 'Stop',
+  dataLocationPick: 'Choose a folder for Agents Workshop data',
+  dataDirMissingTitle: 'Agents Workshop data not found',
+  dataDirMissingBody:
+    'Your data is at {path}, which cannot be opened right now. If it is on an external drive or NAS, connect it (and the network) first, then click Try again.',
+  dataDirRetry: 'Try again',
+  dataDirQuit: 'Quit',
+  dataMoveQuitBlocked:
+    'Your data is being moved. You can quit once it finishes — progress is in Settings → Data & privacy.',
 }
 
 export function strings(language: Language): Strings {
