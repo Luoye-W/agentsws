@@ -17,6 +17,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPositionOntology } from '@/lib/api'
+import { useApp } from '@/lib/app-context'
+import { tOr } from '@/lib/humanize'
+import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
 
 /** `cached:300` → "缓存 5 分钟"；其余两档直接查表。 */
@@ -34,6 +37,44 @@ function actionsOf(object: TailoredObject, actions: readonly TailoredAction[]): 
   return actions.filter((a) => a.object === object.id)
 }
 
+type T = (k: string, v?: Record<string, string | number>) => string
+
+const CJK = /[\u4e00-\u9fff]/u
+/** 像内部名：`community_member`、`approve member`、`shopify_admin.get_order` 这类（没有中文、全是小写词）。 */
+const INTERNAL = /^[a-z0-9_.\- ]+$/u
+
+/** 这一个名字能不能直接上屏：中文界面要有中文；英文界面不能长得像内部名。 */
+function readable(text: string, lang: Lang): boolean {
+  const s = text.trim()
+  if (s === '') return false
+  return lang === 'zh' ? CJK.test(s) : !INTERNAL.test(s)
+}
+
+/**
+ * WP480：对象的人话名。中文界面：登记表里的名字有中文就用它，没有再查词表（与职责页同一份
+ * `duty.domain.*`）；英文界面先查词表。都不行回 `undefined`——整行收进「其他」，
+ * 不把 `community_member` 印上屏。
+ */
+export function objectName(o: TailoredObject, t: T, lang: Lang): string | undefined {
+  const named = tOr(t, `duty.domain.${o.id}`, '')
+  if (lang === 'zh' && readable(o.label, lang)) return o.label
+  if (named !== '') return named
+  return readable(o.label, lang) ? o.label : undefined
+}
+
+/**
+ * WP480：动作的人话名。登记表里是「做什么（对象）」，取前半截；前半截是英文内部名
+ * （`approve member`）就查词表（`duty.action.*` / `org.action.*`，「批入群申请」）；
+ * 都没有回 `undefined`，算进「另 N 项」。英文界面先查词表。
+ */
+export function actionName(a: TailoredAction, t: T, lang: Lang): string | undefined {
+  const named = tOr(t, `duty.action.${a.id}`, tOr(t, `org.action.${a.id}`, ''))
+  const what = a.label.replace(/（[^（）]*）$/u, '').trim()
+  if (lang === 'zh' && readable(what, lang)) return what
+  if (named !== '') return named
+  return readable(what, lang) ? what : undefined
+}
+
 export function DataMapPanel({
   position,
   assignment,
@@ -43,6 +84,7 @@ export function DataMapPanel({
 }): React.ReactNode {
   // WP271：① 个人里不说「范围」（docs/95 §6.1 那批词）
   const { t } = useMode()
+  const { lang } = useApp()
   const map = useQuery({
     queryKey: ['ontology', position],
     queryFn: () => getPositionOntology(position, assignment),
@@ -98,26 +140,25 @@ export function DataMapPanel({
                 </tr>
               </thead>
               <tbody>
-                {map.data.objects.map((o) => {
-                  const mine = actionsOf(o, map.data.actions)
-                  return (
-                    <tr key={o.id} className="border-b last:border-0">
-                      <td className="py-1">{o.label}</td>
-                      <td className="py-1">{t(`datamap.source.${o.source_of_truth}`)}</td>
-                      <td className="py-1">{freshnessText(o.freshness, t)}</td>
-                      <td className="py-1">
-                        {o.read_range === undefined ? '—' : t(`datamap.range.${o.read_range}`)}
-                      </td>
-                      <td className="py-1">
-                        {mine.length === 0 ? (
-                          <span className="text-muted-foreground">{t('datamap.actions.none')}</span>
-                        ) : (
-                          mine.map((a) => a.label).join('、')
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
+                {rowsOf(map.data.objects, map.data.actions, t, lang).map((row) => (
+                  <tr
+                    key={row.key}
+                    className="border-b last:border-0"
+                    {...(row.other ? { 'data-testid': 'data-map-other' } : {})}
+                  >
+                    <td className="py-1">{row.name}</td>
+                    <td className="py-1">{row.source}</td>
+                    <td className="py-1">{row.freshness}</td>
+                    <td className="py-1">{row.range}</td>
+                    <td className="py-1">
+                      {row.actions === '' ? (
+                        <span className="text-muted-foreground">{t('datamap.actions.none')}</span>
+                      ) : (
+                        row.actions
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -134,4 +175,70 @@ export function DataMapPanel({
       </CardContent>
     </Card>
   )
+}
+
+interface MapRow {
+  key: string
+  name: string
+  source: string
+  freshness: string
+  range: string
+  /** 「、」连起来的动作名；空串 = 只能看。 */
+  actions: string
+  other?: true
+}
+
+/**
+ * WP480：一行一类对象；没有人话名的对象整行收进最后一行「其他（另外 N 类）」，
+ * 动作里没有人话名的记成「另 N 项」——屏幕上不出现内部名（screen-words 守卫）。
+ */
+export function rowsOf(
+  objects: readonly TailoredObject[],
+  actions: readonly TailoredAction[],
+  t: T,
+  lang: Lang,
+): MapRow[] {
+  const rows: MapRow[] = []
+  let otherKinds = 0
+  let otherActions = 0
+  const actionText = (mine: readonly TailoredAction[]): { text: string; hidden: number } => {
+    const names: string[] = []
+    let hidden = 0
+    for (const a of mine) {
+      const n = actionName(a, t, lang)
+      if (n === undefined) hidden += 1
+      else if (!names.includes(n)) names.push(n)
+    }
+    return { text: names.join(lang === 'zh' ? '、' : ', '), hidden }
+  }
+  for (const o of objects) {
+    const mine = actionsOf(o, actions)
+    const name = objectName(o, t, lang)
+    if (name === undefined) {
+      otherKinds += 1
+      otherActions += mine.length
+      continue
+    }
+    const { text, hidden } = actionText(mine)
+    const more = hidden === 0 ? '' : t('datamap.actions.other', { n: hidden })
+    rows.push({
+      key: o.id,
+      name,
+      source: t(`datamap.source.${o.source_of_truth}`),
+      freshness: freshnessText(o.freshness, t),
+      range: o.read_range === undefined ? '—' : t(`datamap.range.${o.read_range}`),
+      actions: [text, more].filter((x) => x !== '').join(lang === 'zh' ? '，' : ', '),
+    })
+  }
+  if (otherKinds > 0)
+    rows.push({
+      key: '__other',
+      name: `${t('datamap.other')}（${t('datamap.other.count', { n: otherKinds })}）`,
+      source: '—',
+      freshness: '—',
+      range: '—',
+      actions: otherActions === 0 ? '' : t('datamap.actions.other', { n: otherActions }),
+      other: true,
+    })
+  return rows
 }

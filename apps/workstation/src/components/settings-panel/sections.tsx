@@ -62,6 +62,7 @@ import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { ContentUpdatesSetting } from '@/components/settings/content-updates-setting'
 import { CreditsPanel } from '@/components/settings/credits-panel'
+import { DataLocationSetting, dataLocationBridge } from '@/components/settings/data-location'
 import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
 import { ImageHostsSetting } from '@/components/settings/image-hosts-setting'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
@@ -109,6 +110,8 @@ export interface SettingsCtx {
   desktop: boolean
   /** WP361：桌面壳的桥上有「开机自启」（旧壳没有就不出那个开关）。 */
   launchAtLogin: boolean
+  /** WP480：桌面壳（个人档）的桥上有「数据放在哪」（旧壳、远程档、网页里没有）。 */
+  dataLocation: boolean
   brandName: string | undefined
 }
 
@@ -133,6 +136,7 @@ export function useSettingsCtx(): SettingsCtx {
     holdsSiteChat,
     desktop: w?.agentsws !== undefined,
     launchAtLogin: launchAtLoginBridge() !== undefined,
+    dataLocation: dataLocationBridge() !== undefined,
     brandName: session.data?.workspace.name,
   }
 }
@@ -330,6 +334,15 @@ export const SETTINGS_SECTION_DEFS: readonly SettingSectionDef[] = [
     title: 'sp.privacy',
     icon: Shield,
     items: [
+      {
+        // WP480：数据放在哪——用户自己选文件夹，壳自动搬家（只在桌面壳的个人档里出现）
+        id: 'data-location',
+        title: 'dataloc.title',
+        desc: 'dataloc.desc',
+        keywords: '数据位置 存放位置 文件夹 搬家 移动 换盘 NAS 路径 data location folder move',
+        show: (c) => c.dataLocation,
+        render: () => <DataLocationSetting />,
+      },
       {
         id: 'data-backend',
         title: 'storage.title',

@@ -83,7 +83,11 @@ describe('数据后端（41 §2.4）', () => {
     // 加密这件事要说出来（21 §4）
     expect(current.textContent).toContain('已加密')
     expect(current.textContent).toContain('12 个对象')
-    expect(screen.getByTestId('storage-last-backup').textContent).toContain('2026-09-09')
+    // WP480：上次备份说人话（「今天 11:44」「3 天前」「9月10日」），原始时间串只进悬停提示
+    const last = screen.getByTestId('storage-last-backup')
+    expect(last.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T/)
+    expect(last.textContent).not.toBe('')
+    expect(last.getAttribute('title')).toBe('2026-09-09T22:00:00.000Z')
   })
 
   it('三个按钮在；当前那一档标着「正在用」', async () => {
@@ -163,7 +167,9 @@ describe('数据后端（41 §2.4）', () => {
     await user.click(screen.getByTestId('storage-migrate'))
     const progress = await screen.findByTestId('storage-migration')
     expect(progress.dataset.state).toBe('done')
-    expect(progress.textContent).toContain('旧后端只读保留到 2026-09-17')
+    // WP480：日期说人话，不露原始时间串
+    expect(progress.textContent).toMatch(/旧后端只读保留到 9月1[67]日/)
+    expect(progress.textContent).not.toContain('2026-09-17T')
     expect(progress.textContent).toContain('重启')
   })
 

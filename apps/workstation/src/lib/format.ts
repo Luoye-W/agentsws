@@ -69,3 +69,44 @@ export const RANGE_KEYS: Record<RangeName, string> = {
   yesterday: 'range.yesterday',
   last_7d: 'range.last_7d',
 }
+
+/** WP480：字节 → 「1.2 GB」（与连接页「数据后端」那一格同一种写法）。 */
+export function formatBytes(bytes: number | undefined): string {
+  if (bytes === undefined) return '—'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let i = 0
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024
+    i += 1
+  }
+  return `${value < 10 && i > 0 ? value.toFixed(1) : Math.round(value)} ${units[i]}`
+}
+
+/**
+ * WP480：「上次备份」这类时间说人话——今天 / 昨天给钟点（「今天 11:44」），再早给「3 天前」，
+ * 一个月以上给日期（「9 月 12 日」）。读不懂的串不原样上屏，回 `undefined`（调用方显示「—」）。
+ */
+export function formatAgo(
+  iso: string | undefined,
+  lang: Lang,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  now: Date = new Date(),
+): string | undefined {
+  if (iso === undefined) return undefined
+  const ms = Date.parse(iso)
+  if (Number.isNaN(ms)) return undefined
+  const when = new Date(ms)
+  const time = new Intl.DateTimeFormat(LOCALE[lang], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(when)
+  const startOf = (d: Date): number =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const days = Math.round((startOf(now) - startOf(when)) / 86_400_000)
+  if (days <= 0) return t('storage.ago.today', { time })
+  if (days === 1) return t('storage.ago.yesterday', { time })
+  if (days < 31) return t('storage.ago.days', { n: days })
+  return formatDate(iso, lang)
+}

@@ -39,6 +39,7 @@ import {
   testStorageBackend,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { formatAgo, formatBytes, formatDateTime } from '@/lib/format'
 
 type Choice = 'local' | 'byo_cloud' | 'managed'
 
@@ -46,20 +47,8 @@ type Choice = 'local' | 'byo_cloud' | 'managed'
 const POLL_MS = 1000
 const POLL_LIMIT = 600
 
-function formatBytes(bytes: number | undefined): string {
-  if (bytes === undefined) return '—'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let value = bytes
-  let i = 0
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024
-    i += 1
-  }
-  return `${value < 10 && i > 0 ? value.toFixed(1) : Math.round(value)} ${units[i]}`
-}
-
 export function DataBackend({ assignment }: { assignment?: string }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const openConnect = useOpenConnect()
   const client = useQueryClient()
   const prefix = useId()
@@ -224,12 +213,21 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
           </div>
           <div>
             <dt className="text-muted-foreground">{t('storage.last_backup')}</dt>
-            <dd className="mt-1 font-medium" data-testid="storage-last-backup">
-              {view.last_backup_at ?? t('storage.never_backed_up')}
+            {/* WP480：时间说人话（「今天 11:44」「3 天前」），原始时间串只进悬停提示 */}
+            <dd
+              className="mt-1 font-medium"
+              data-testid="storage-last-backup"
+              {...(view.last_backup_at === undefined ? {} : { title: view.last_backup_at })}
+            >
+              {view.last_backup_at === undefined
+                ? t('storage.never_backed_up')
+                : (formatAgo(view.last_backup_at, lang, t) ?? '—')}
             </dd>
             {view.previous_backend_readonly_until === undefined ? null : (
               <dd className="text-muted-foreground">
-                {t('storage.retire_until', { at: view.previous_backend_readonly_until })}
+                {t('storage.retire_until', {
+                  at: formatDateTime(view.previous_backend_readonly_until, lang),
+                })}
               </dd>
             )}
           </div>
@@ -445,7 +443,7 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
                 <p className="mt-1 text-muted-foreground">
                   {t('storage.migrate.done', {
                     n: migration.exported_records ?? 0,
-                    at: migration.previous_readonly_until ?? '',
+                    at: formatDateTime(migration.previous_readonly_until, lang),
                   })}
                 </p>
               ) : null}
