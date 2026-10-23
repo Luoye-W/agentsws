@@ -217,7 +217,7 @@ describe('WP141 守卫：屏幕上没有内部值', () => {
   })
 
   it('WP459 收件箱：每一行、筛选、简报都说人话', async () => {
-    const { container } = renderWithProviders(<InboxPage />, '/inbox')
+    const { container } = renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     expect(rawTokens(screenText(container))).toEqual([])
   })

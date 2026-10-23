@@ -5,7 +5,7 @@
  * - 三档（没日子 / 有日子没钟点 / 有钟点）每行右边怎么写；「记一条待办」认「周五下午」；
  * - 拖动就是换档（拖到钟点给时段、拖到全天给日子、拖回左边两样都清掉）；
  * - 「帮我排进空档」只画虚线候选：不点「采用」什么都不写；「换一个」不撞别的候选；
- * - 打开时记住上次那一面，第一次是清单（1523）；老地址 `/todos`、`/calendar` 转到对应那一面（1526）；
+ * - 打开时记住上次那一面，第一次是日历（1523；Luoye 10-23 改）；老地址 `/todos`、`/calendar` 转到对应那一面（1526）；
  * - 做完的待办在日历上划掉（1524）；首页那一行；左栏灰色数字。
  */
 import type { CalendarItem, Todo, TodoSlotResult } from '@agentsws/contracts'
@@ -320,18 +320,17 @@ afterEach(() => {
 })
 
 describe('打开哪一面（决策 1523）与老地址（决策 1526）', () => {
-  it('第一次是清单；切到日历记下来，下次打开就是日历', async () => {
+  it('第一次是日历（Luoye 10-23）；切到清单记下来，下次打开就是清单', async () => {
     const user = userEvent.setup()
     const first = app('/planner')
-    expect((await screen.findByTestId('cal-todo')).getAttribute('data-face')).toBe('list')
-    await screen.findByTestId('horizon-week')
-    await user.click(screen.getByTestId('caltodo-face-calendar'))
-    expect(screen.getByTestId('cal-todo').getAttribute('data-face')).toBe('calendar')
-    expect(store.get('agentsws.cal_todo.face')).toBe('calendar')
-    expect(screen.getByTestId('where').textContent).toContain('view=calendar')
+    expect((await screen.findByTestId('cal-todo')).getAttribute('data-face')).toBe('calendar')
+    await user.click(screen.getByTestId('caltodo-face-list'))
+    expect(screen.getByTestId('cal-todo').getAttribute('data-face')).toBe('list')
+    expect(store.get('agentsws.cal_todo.face')).toBe('list')
+    expect(screen.getByTestId('where').textContent).toContain('view=list')
     first.unmount()
     app('/planner')
-    expect((await screen.findByTestId('cal-todo')).getAttribute('data-face')).toBe('calendar')
+    expect((await screen.findByTestId('cal-todo')).getAttribute('data-face')).toBe('list')
   })
 
   it('地址上写了就听地址', async () => {

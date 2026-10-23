@@ -5,7 +5,7 @@
  * - 清单（`pages/todos.tsx`）：今天 / 本周 / 以后 / 做完的，打勾完成；
  * - 日历（`pages/calendar.tsx`）：日 / 周 / 月 / 议程，左边「还没排期的」拖去排期。
  *
- * 打开时是哪一面：地址上写了（`?view=list|calendar`）就听地址，否则记住上次那一面，第一次是清单（1523 丙）。
+ * 打开时是哪一面：地址上写了（`?view=list|calendar`）就听地址，否则记住上次那一面，第一次是日历（1523 丙；Luoye 10-23 改默认为日历）。
  * 老地址 `/todos`、`/calendar` 转到这里对应那一面，别的参数原样带上（`?tab=goals`、`?layers=`，1526 甲）。
  */
 import type { ReactNode } from 'react'

@@ -121,7 +121,7 @@ const row = (id: string): HTMLElement => {
 
 describe('收件箱：一条队列（WP459）', () => {
   it('要紧 / 今天 / 不急三组；类型标签、药丸、「AI 猜的 · 改」；简报和右栏两堆', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     expect(screen.getAllByTestId('inbox-group').map((g) => g.getAttribute('data-urgency'))).toEqual(
       ['urgent', 'today', 'later'],
@@ -153,7 +153,7 @@ describe('收件箱：一条队列（WP459）', () => {
   })
 
   it('行尾「通过」= 岗位卡片流同一条决定；批完那一行没了', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     fireEvent.click(within(row('card:ap_price')).getByTestId('inbox-row-primary'))
     await waitFor(() => {
@@ -165,7 +165,7 @@ describe('收件箱：一条队列（WP459）', () => {
   })
 
   it('信的「交给 B2B」走交给岗位那一条（不勾记住）；⋯ 里「不要」是卡的拒绝', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     fireEvent.click(within(row('mail:<t_sam@x>')).getByTestId('inbox-row-primary'))
     await waitFor(() => {
@@ -181,7 +181,7 @@ describe('收件箱：一条队列（WP459）', () => {
 
 describe('收件箱：筛选（决策 1501）', () => {
   it('等我批 / 只看信；岗位下拉带件数，筛了出「去客服岗位 →」；最后一行「还没归岗位的信」', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     expect(screen.getByTestId('inbox-filter-card').textContent).toContain('4')
     fireEvent.click(screen.getByTestId('inbox-filter-card'))
@@ -212,7 +212,7 @@ describe('收件箱：筛选（决策 1501）', () => {
   })
 
   it('筛选跟着地址走（首页岗位卡「等你 N 件」点过来就是筛好的）', async () => {
-    renderWithProviders(<InboxPage />, '/inbox?position=web-ops')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list&position=web-ops')
     await screen.findAllByTestId('inbox-row')
     expect(rows().map((r) => r.getAttribute('data-id'))).toEqual([
       'card:ap_price',
@@ -223,7 +223,7 @@ describe('收件箱：筛选（决策 1501）', () => {
 
 describe('收件箱：第三栏（决策 1502）', () => {
   it('回信卡：原信 + 草稿；「改」先直接改字，按钮变「改好了，通过」，带着改过的那一版批', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     fireEvent.click(row('card:ap_reply'))
     const pane = await screen.findByTestId('inbox-pane-inline')
@@ -255,7 +255,7 @@ describe('收件箱：第三栏（决策 1502）', () => {
   })
 
   it('「或者跟 AI 说怎么改」：常用说法一点就是「改一下」', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     fireEvent.click(within(row('card:ap_reply')).getByTestId('inbox-row-more'))
     fireEvent.click(await screen.findByTestId('inbox-menu-edit'))
@@ -271,7 +271,7 @@ describe('收件箱：第三栏（决策 1502）', () => {
   })
 
   it('别的卡（改价）：就是岗位里那张卡', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     fireEvent.click(row('card:ap_price'))
     const pane = await screen.findByTestId('inbox-pane-inline')
@@ -280,7 +280,7 @@ describe('收件箱：第三栏（决策 1502）', () => {
   })
 
   it('改判「AI 猜的」：列出交给了谁；改给公共关系，「以后都交给」默认不勾', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     fireEvent.click(within(row('card:ap_jordan')).getByTestId('inbox-row-guess'))
     const pane = await screen.findByTestId('inbox-pane-inline')
@@ -354,8 +354,14 @@ describe('收件箱：一张一张（决策 1505 丁）', () => {
     expect(screen.getByTestId('inbox-focus-card').getAttribute('data-id')).toBe('card:ap_reply')
   })
 
-  it('列表 / 一张一张是同一份数据：页头分段切换', async () => {
+  it('不写 mode 时默认是「卡片」（Luoye 10-23）', async () => {
     renderWithProviders(<InboxPage />, '/inbox')
+    expect(await screen.findByTestId('inbox-focus')).toBeDefined()
+    expect(screen.getByTestId('inbox-mode-focus').textContent).toContain('卡片')
+  })
+
+  it('列表 / 卡片是同一份数据：页头分段切换', async () => {
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     fireEvent.click(screen.getByTestId('inbox-mode-focus'))
     expect(await screen.findByTestId('inbox-focus')).toBeDefined()
@@ -367,7 +373,7 @@ describe('收件箱：一张一张（决策 1505 丁）', () => {
 describe('收件箱：清空之后', () => {
   it('灰图标 + 「今天的都处理完了」+ 一个链接；简报收成一行', async () => {
     state.view = inboxView([])
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     const empty = await screen.findByTestId('inbox-empty')
     expect(empty.textContent).toContain('今天的都处理完了')
     expect(within(empty).getByTestId('inbox-empty-link').textContent).toBe('看 AI 今天办了什么')
@@ -377,7 +383,7 @@ describe('收件箱：清空之后', () => {
 
   it('筛到一个岗位没有的：照实说这里没有', async () => {
     state.view = inboxView(inboxItems().filter((i) => i.position !== 'web-ops'))
-    renderWithProviders(<InboxPage />, '/inbox?position=web-ops')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list&position=web-ops')
     expect((await screen.findByTestId('inbox-empty')).textContent).toContain('这里没有要你处理的')
   })
 })
