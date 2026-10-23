@@ -42,7 +42,11 @@ const tourShots: Record<string, { light: ImageMetadata; dark?: ImageMetadata; ba
   inbox: { light: inboxLight, dark: inboxDark, bar: t.tour.slides[0]?.tab ?? '' },
   calendar: { light: calendarLight, bar: t.tour.slides[1]?.tab ?? '' },
   role: { light: roleSupport, bar: roles[0]?.name ?? '' },
-  answer: { light: answerLight, dark: answerDark, bar: roles.find((r) => r.id === 'store')?.name ?? '' },
+  answer: {
+    light: answerLight,
+    dark: answerDark,
+    bar: roles.find((r) => r.id === 'store')?.name ?? '',
+  },
   home: { light: homeShot, dark: darkShot, bar: t.hero.frameBar },
 }
 const guideHref = (slug: string) => p(`/docs/${slug}/`)
