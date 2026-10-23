@@ -31,6 +31,7 @@ import {
   useState,
 } from 'react'
 import { AuthedImage } from '@/components/images/authed-image'
+import { useDockReport } from '@/components/shell/composer-dock'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -178,6 +179,8 @@ export function MatterComposer({
         : running
           ? t('matter.cmp.placeholder.running')
           : t('matter.cmp.placeholder')
+  // WP478：告诉外面的底部对话框「框里有没有字 / 附件」（有就不缩成小条）和这一页的占位词（小条上写它）
+  useDockReport(has, placeholder)
 
   const submit = (): void => {
     if (!has || sending || disabled) return

@@ -88,6 +88,9 @@ export const MATTER_ZH: Record<string, string> = {
   'matter.cmp.placeholder.running': '还能接着说，会排在这一轮后面…',
   'matter.cmp.placeholder.closed': '这件事已关闭，说一句就重新打开',
   'matter.cmp.send': '发送（Enter）',
+  // WP478（决策 1619 选 A）：对话框压着内容时缩成的底部小条
+  'matter.cmp.pill': '问点什么…',
+  'matter.cmp.pill.open': '展开对话框',
   'matter.cmp.stop': '停下这一轮',
   'matter.cmp.hint': '↵ 发送 · ⇧↵ 换行',
   // WP357：「即将推出」那类占位字删了，「@」也去掉了；WP412（决策 1221）：私聊 AI 去掉，只剩「这里不收」
@@ -177,6 +180,8 @@ export const MATTER_EN: Record<string, string> = {
   'matter.cmp.placeholder.running': 'Keep talking — it queues after this round…',
   'matter.cmp.placeholder.closed': 'This matter is closed — say something to reopen it',
   'matter.cmp.send': 'Send (Enter)',
+  'matter.cmp.pill': 'Ask something…',
+  'matter.cmp.pill.open': 'Open the message box',
   'matter.cmp.stop': 'Stop this round',
   'matter.cmp.hint': '↵ send · ⇧↵ new line',
   'matter.cmp.attach': 'Attachments not accepted here',
