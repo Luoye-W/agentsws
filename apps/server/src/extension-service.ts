@@ -157,8 +157,9 @@ export interface PublicObservationRow {
    */
   public_contacts?: PublicContactLink[] | undefined
   /**
-   * WP489（决策 1707）：表格导入带来的公开资料。云端白名单现在只收 handle / 粉丝 / 互动率，这几格在
-   * 转发那一跳（`extension-contribute.ts`）照白名单裁掉；云端放开之后在那里加上就行。
+   * WP489（决策 1707）：表格导入带来的公开资料。WP495（1707b）：云端白名单放开了资料这几格，转发那一跳
+   * （`extension-contribute.ts`）过 `sanitizePublicProfile` 后送 `display_name` / `profile_url` / `categories` /
+   * `language` / `region`；认不出的那一格丢掉、别的照送。报价、备注、合作状态、日期、负责人这里就没有位置。
    */
   display_name?: string | undefined
   url?: string | undefined
@@ -1008,6 +1009,16 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
           ...(r.engagement_rate === undefined ? {} : { engagement_rate: r.engagement_rate }),
           observed_at: r.observed_at,
           ...(r.email === undefined ? {} : { contact: { value: r.email, source: 'import' } }),
+          /*
+           * WP495（1707b）：表里的邮箱照 WP487 那一格上云（`public_contacts`，云端只存哈希 + 密文）；
+           * 不像邮箱的不送。
+           */
+          ...(r.email === undefined
+            ? {}
+            : (() => {
+                const links = sanitizePublicContacts([{ kind: 'email', value: r.email }])
+                return links.length === 0 ? {} : { public_contacts: links }
+              })()),
           ...(r.display_name === undefined ? {} : { display_name: r.display_name }),
           ...(r.url === undefined || r.url === '' ? {} : { url: r.url }),
           ...(r.category === undefined ? {} : { category: r.category }),

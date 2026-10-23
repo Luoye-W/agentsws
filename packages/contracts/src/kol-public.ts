@@ -92,6 +92,13 @@ export interface PublicCreatorObservation {
    * 发出去之前先过 {@link sanitizePublicContacts}（本机那一跳就过，云端再按同一套规矩判一次）。
    */
   public_contacts?: PublicContactLink[]
+  /**
+   * WP495（1707b，只加）：展示名（频道名 / 昵称；`handle` 是账号名）。最长 {@link PUBLIC_DISPLAY_NAME_MAX} 字。
+   * 表格导入的红人带来的那一格；发出去之前先过 {@link sanitizePublicProfile}。
+   */
+  display_name?: string
+  /** WP495（1707b，只加）：这个账号的主页链接（http(s)，同 {@link sanitizePublicContacts} 那套链接规矩）。 */
+  profile_url?: string
   /** 这份资料**被看到**的时刻（不是被写进库的时刻）。 */
   observed_at: Iso8601
 }
@@ -108,8 +115,64 @@ export const PUBLIC_OBSERVATION_FIELDS = [
   'categories',
   // WP487（决策 1661 补，只加）：主页上公开的联系方式
   'public_contacts',
+  // WP495（1707b，只加）：表格导入带来的资料——名字、主页链接（类目 / 语言 / 地区本来就在上面）
+  'display_name',
+  'profile_url',
   'observed_at',
 ] as const satisfies readonly (keyof PublicCreatorObservation)[]
+
+/**
+ * WP495（1707b）：**生意数据**——报价、备注、合作状态、日期、负责人。公共库**永远不收**：
+ * 观察的白名单（{@link PUBLIC_OBSERVATION_FIELDS}）与一条联系方式的白名单（{@link PUBLIC_CONTACT_FIELDS}）
+ * 跟这张表一个键都不许重（本机与云端两边都有测试钉住）。这张表只用来钉，不是「黑名单放行其余」——
+ * 收什么只看白名单。
+ */
+export const PUBLIC_LIBRARY_BUSINESS_KEYS: readonly string[] = [
+  // 报价 / 金额
+  'price',
+  'rate',
+  'quote',
+  'quoted_price',
+  'fee',
+  'amount',
+  'cost',
+  'budget',
+  'currency',
+  'paid',
+  'payment',
+  // 备注
+  'note',
+  'notes',
+  'remark',
+  'remarks',
+  'comment',
+  'memo',
+  // 合作状态
+  'status',
+  'stage',
+  'collab_status',
+  'collaboration_status',
+  'collaboration',
+  'deal',
+  'contract',
+  'campaign',
+  'campaign_id',
+  // 日期
+  'date',
+  'agreed_at',
+  'contacted_at',
+  'paid_at',
+  'start_date',
+  'end_date',
+  'due_date',
+  'published_date',
+  // 负责人
+  'owner',
+  'owner_id',
+  'assignee',
+  'manager',
+  'person_id',
+]
 
 /**
  * WP487（决策 1661 补）：主页上公开的一条联系方式是哪一种。
@@ -257,6 +320,209 @@ export function sanitizePublicContacts(raw: unknown): PublicContactLink[] {
 
 /** 一条观察最多带几个类目。 */
 export const MAX_CATEGORIES = 8
+
+/* ── WP495（1707b）：表格导入的公开资料 → 云端收的形状 ── */
+
+/** 展示名最长多少字（与云端搬家那一格同一顶帽子）。 */
+export const PUBLIC_DISPLAY_NAME_MAX = 200
+/** 一个类目词最长多少字（云端 `MAX_CATEGORY_LENGTH`）。 */
+export const PUBLIC_CATEGORY_MAX = 40
+
+/** 表格里常见的语言写法 → BCP-47 主码。认不出的不送（不猜）。 */
+const LANGUAGE_NAMES: Record<string, string> = {
+  english: 'en',
+  英语: 'en',
+  英文: 'en',
+  chinese: 'zh',
+  中文: 'zh',
+  汉语: 'zh',
+  mandarin: 'zh',
+  spanish: 'es',
+  西班牙语: 'es',
+  french: 'fr',
+  法语: 'fr',
+  german: 'de',
+  德语: 'de',
+  japanese: 'ja',
+  日语: 'ja',
+  korean: 'ko',
+  韩语: 'ko',
+  portuguese: 'pt',
+  葡萄牙语: 'pt',
+  italian: 'it',
+  意大利语: 'it',
+  russian: 'ru',
+  俄语: 'ru',
+  arabic: 'ar',
+  阿拉伯语: 'ar',
+  hindi: 'hi',
+  indonesian: 'id',
+  印尼语: 'id',
+  thai: 'th',
+  泰语: 'th',
+  vietnamese: 'vi',
+  越南语: 'vi',
+  dutch: 'nl',
+  荷兰语: 'nl',
+  turkish: 'tr',
+  土耳其语: 'tr',
+  polish: 'pl',
+  波兰语: 'pl',
+}
+
+/** 表格里常见的国家 / 地区写法 → ISO-3166 两位码。认不出的不送。 */
+const REGION_NAMES: Record<string, string> = {
+  美国: 'US',
+  usa: 'US',
+  'united states': 'US',
+  america: 'US',
+  英国: 'GB',
+  uk: 'GB',
+  'united kingdom': 'GB',
+  'great britain': 'GB',
+  england: 'GB',
+  加拿大: 'CA',
+  canada: 'CA',
+  澳大利亚: 'AU',
+  澳洲: 'AU',
+  australia: 'AU',
+  德国: 'DE',
+  germany: 'DE',
+  法国: 'FR',
+  france: 'FR',
+  日本: 'JP',
+  japan: 'JP',
+  韩国: 'KR',
+  korea: 'KR',
+  'south korea': 'KR',
+  中国: 'CN',
+  china: 'CN',
+  西班牙: 'ES',
+  spain: 'ES',
+  意大利: 'IT',
+  italy: 'IT',
+  墨西哥: 'MX',
+  mexico: 'MX',
+  巴西: 'BR',
+  brazil: 'BR',
+  印度: 'IN',
+  india: 'IN',
+  新加坡: 'SG',
+  singapore: 'SG',
+  马来西亚: 'MY',
+  malaysia: 'MY',
+  印尼: 'ID',
+  印度尼西亚: 'ID',
+  indonesia: 'ID',
+  泰国: 'TH',
+  thailand: 'TH',
+  越南: 'VN',
+  vietnam: 'VN',
+  菲律宾: 'PH',
+  philippines: 'PH',
+  荷兰: 'NL',
+  netherlands: 'NL',
+  新西兰: 'NZ',
+  'new zealand': 'NZ',
+  阿联酋: 'AE',
+  uae: 'AE',
+  沙特: 'SA',
+  'saudi arabia': 'SA',
+}
+
+const BCP47_RE = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 就是要挡掉控制字符
+const CONTROL_RE = /[\u0000-\u001f\u007f]/g
+
+/** 展示名：收空白、去控制字符、截到 {@link PUBLIC_DISPLAY_NAME_MAX} 字；空了就没有。 */
+export function publicDisplayNameOf(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const text = Array.from(raw.replace(CONTROL_RE, ' ').replace(/\s+/g, ' ').trim())
+    .slice(0, PUBLIC_DISPLAY_NAME_MAX)
+    .join('')
+    .trim()
+  return text === '' ? undefined : text
+}
+
+/** 主页链接：同 {@link sanitizePublicContacts} 的链接规矩（只要 http(s)、不带凭据、不通私信页，去跟踪参数）。 */
+export function publicProfileUrlOf(raw: unknown): string | undefined {
+  return typeof raw === 'string' && raw.trim() !== '' ? publicUrlOf(raw) : undefined
+}
+
+/** 语言：BCP-47 的形状就用（`en` / `zh-CN`），常见写法（English / 英语）换成主码；别的不送。 */
+export function publicLanguageOf(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const text = raw.trim()
+  if (text === '') return undefined
+  const named = LANGUAGE_NAMES[text.toLowerCase()]
+  if (named !== undefined) return named
+  if (text.length > 20 || !BCP47_RE.test(text)) return undefined
+  const [primary, ...rest] = text.split('-')
+  return [primary?.toLowerCase(), ...rest.map((p) => (p.length === 2 ? p.toUpperCase() : p))].join(
+    '-',
+  )
+}
+
+/** 地区：两位码就用（大写；`UK` → `GB`），常见写法（美国 / United States）换成两位码；别的不送。 */
+export function publicRegionOf(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const text = raw.trim()
+  const named = REGION_NAMES[text.toLowerCase()]
+  if (named !== undefined) return named
+  return /^[A-Za-z]{2}$/.test(text) ? text.toUpperCase() : undefined
+}
+
+/** 类目：按 `, ， / 、 ; ； |` 拆开，小写、去重，每个不超过 {@link PUBLIC_CATEGORY_MAX} 字，最多 {@link MAX_CATEGORIES} 个。 */
+export function publicCategoriesOf(raw: unknown): string[] | undefined {
+  const parts = Array.isArray(raw)
+    ? raw.filter((x): x is string => typeof x === 'string')
+    : typeof raw === 'string'
+      ? raw.split(/[,，/、;；|]/)
+      : []
+  const out: string[] = []
+  for (const part of parts) {
+    const word = part.replace(/\s+/g, ' ').trim().toLowerCase()
+    if (word === '' || word.length > PUBLIC_CATEGORY_MAX || out.includes(word)) continue
+    out.push(word)
+    if (out.length >= MAX_CATEGORIES) break
+  }
+  return out.length === 0 ? undefined : out
+}
+
+/** 一条导入红人的资料（本机红人库里那几格的原样）。 */
+export interface PublicProfileInput {
+  display_name?: string | undefined
+  url?: string | undefined
+  category?: string | undefined
+  language?: string | undefined
+  region?: string | undefined
+}
+
+/** 能上云的资料那几格（{@link PUBLIC_OBSERVATION_FIELDS} 里的键）。 */
+export type PublicProfileFields = Pick<
+  PublicCreatorObservation,
+  'display_name' | 'profile_url' | 'categories' | 'language' | 'region'
+>
+
+/**
+ * WP495（1707b）：表格导入带来的资料 → 公共库收的那几格。**只看这五格的入参**，生意数据（报价、备注、
+ * 合作状态、日期、负责人）在入参里就没有位置。每一格各自规整，认不出的那一格丢掉、别的照送
+ * （云端「拒而不改」：一格不合格整批拒，所以本机这边先筛干净）。
+ */
+export function sanitizePublicProfile(input: PublicProfileInput): PublicProfileFields {
+  const display_name = publicDisplayNameOf(input.display_name)
+  const profile_url = publicProfileUrlOf(input.url)
+  const categories = publicCategoriesOf(input.category)
+  const language = publicLanguageOf(input.language)
+  const region = publicRegionOf(input.region)
+  return {
+    ...(display_name === undefined ? {} : { display_name }),
+    ...(profile_url === undefined ? {} : { profile_url }),
+    ...(categories === undefined ? {} : { categories }),
+    ...(language === undefined ? {} : { language }),
+    ...(region === undefined ? {} : { region }),
+  }
+}
 
 /** 一次最多上报多少条观察。 */
 export const MAX_OBSERVATIONS_PER_BATCH = 100

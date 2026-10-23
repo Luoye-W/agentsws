@@ -14,6 +14,7 @@
  */
 
 import type { Iso8601, KolChannel } from '@agentsws/contracts'
+import { sanitizePublicProfile } from '@agentsws/contracts'
 import { cloudBaseUrl } from './cloud.js'
 import { CLOUD_TOKEN_SECRET_ID } from './cloud-account.js'
 import { currentCloudHeaders } from './cloud-attribution.js'
@@ -138,6 +139,18 @@ export function createExtensionContributor(
                     ...(c.label === undefined ? {} : { label: c.label }),
                   })),
                 }),
+            /*
+             * WP495（1707b）：表格导入带来的资料——名字、主页链接、类目、语言、地区（云端白名单放开了）。
+             * 只把这五格交给 `sanitizePublicProfile`，各自规整成云端收的形状，认不出的那一格丢掉；
+             * 报价、备注、合作状态、日期、负责人在这一行里**没有位置**（本机与云端两边都有测试钉住）。
+             */
+            ...sanitizePublicProfile({
+              display_name: row.display_name,
+              url: row.url,
+              category: row.category,
+              language: row.language,
+              region: row.region,
+            }),
             observed_at: row.observed_at as Iso8601,
           },
         ],
