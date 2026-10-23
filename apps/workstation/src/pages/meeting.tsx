@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Mic, Square, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { BlobUnavailableNotice, blobUnavailableLocation } from '@/components/blob-unavailable'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -441,7 +442,18 @@ export function MeetingPage(): React.ReactNode {
             >
               {t('meeting.paste.submit')}
             </Button>
-            {addRecord.error === null ? null : (
+            {addRecord.error === null ? null : blobUnavailableLocation(addRecord.error) !==
+              undefined ? (
+              // WP482：录音放在外置硬盘 / NAS 上、这次连不上——说在哪，「再试一次」把刚才那段再交一遍
+              <BlobUnavailableNotice
+                location={blobUnavailableLocation(addRecord.error) ?? ''}
+                retrying={addRecord.isPending}
+                testId="meeting-blob-unavailable"
+                onRetry={() => {
+                  if (addRecord.variables !== undefined) addRecord.mutate(addRecord.variables)
+                }}
+              />
+            ) : (
               <span role="alert" className="text-xs text-destructive">
                 {addRecord.error.message}
               </span>

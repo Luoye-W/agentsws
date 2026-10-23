@@ -127,6 +127,8 @@ export interface Strings {
   computerUseStop: string
   /** WP480：选文件夹那个系统框的标题。 */
   dataLocationPick: string
+  /** WP482：给大文件选位置时那个系统框的标题。 */
+  blobLocationPick: string
   /** WP480：数据放在别的盘 / NAS 上、这次启动打不开（`{path}`）。 */
   dataDirMissingTitle: string
   dataDirMissingBody: string
@@ -227,6 +229,7 @@ const ZH: Strings = {
   computerUseActive: 'AI 正在操作电脑（到 {until}）',
   computerUseStop: '停止',
   dataLocationPick: '选一个放工坊数据的文件夹',
+  blobLocationPick: '选一个放附件、录音这些大文件的文件夹',
   dataDirMissingTitle: '找不到工坊的数据',
   dataDirMissingBody:
     '数据放在 {path}，现在打不开。如果在移动硬盘或 NAS 上，请先接好（连上网），再点「再试一次」。',
@@ -332,6 +335,7 @@ const EN: Strings = {
   computerUseActive: 'AI is operating this computer (until {until})',
   computerUseStop: 'Stop',
   dataLocationPick: 'Choose a folder for Agents Workshop data',
+  blobLocationPick: 'Choose a folder for large files (attachments, recordings)',
   dataDirMissingTitle: 'Agents Workshop data not found',
   dataDirMissingBody:
     'Your data is at {path}, which cannot be opened right now. If it is on an external drive or NAS, connect it (and the network) first, then click Try again.',

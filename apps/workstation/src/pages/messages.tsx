@@ -60,6 +60,7 @@ import {
 } from 'lucide-react'
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { blobUnavailableLocation } from '@/components/blob-unavailable'
 import { PageHeader, Segmented, StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { EmailAutoReplyMark } from '@/components/messages/auto-reply-mark'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
@@ -144,6 +145,8 @@ interface Notice {
   tone: 'ok' | 'warn' | 'error'
   text: string
   undo?: (() => void) | undefined
+  /** WP482：大文件位置连不上时的「再试一次」（不自动消失）。 */
+  retry?: (() => void) | undefined
 }
 
 /** 「显示图片」只对这一封、这一次生效：代取回来的正文按信 id 记在这一页里，不写回库。 */
@@ -269,7 +272,7 @@ export function MessagesPage(): ReactNode {
   }, [query])
 
   useEffect(() => {
-    if (notice === undefined || notice.tone === 'error') return
+    if (notice === undefined || notice.tone === 'error' || notice.retry !== undefined) return
     const timer = setTimeout(
       () => {
         setNotice(undefined)
@@ -461,7 +464,21 @@ export function MessagesPage(): ReactNode {
   const download = useMutation({
     mutationFn: (input: { id: string; attachment: string; name: string }) =>
       downloadMessageAttachment(input.id, input.attachment, input.name),
-    onError: fail,
+    onError: (e, input) => {
+      // WP482：附件放在外置硬盘 / NAS 上、这次连不上——说在哪，给「再试一次」
+      const where = blobUnavailableLocation(e)
+      if (where === undefined) {
+        fail(e)
+        return
+      }
+      setNotice({
+        tone: 'warn',
+        text: t('blobloc.unreachable', { path: where }),
+        retry: () => {
+          download.mutate(input)
+        },
+      })
+    },
   })
 
   /** 打开一条会话就把最后一封标成已读（回写 IMAP 由服务端做；影子模式下只在本机标）。 */
@@ -597,6 +614,20 @@ export function MessagesPage(): ReactNode {
         >
           {notice.text}
         </span>
+        {notice.retry === undefined ? null : (
+          <button
+            type="button"
+            data-testid="messages-retry"
+            className="shrink-0 font-medium text-ws-brand hover:underline"
+            onClick={() => {
+              const retry = notice.retry
+              setNotice(undefined)
+              retry?.()
+            }}
+          >
+            {t('blobloc.retry')}
+          </button>
+        )}
         {notice.undo === undefined ? null : (
           <button
             type="button"

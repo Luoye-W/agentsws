@@ -27,6 +27,7 @@ import type { RawCipher } from '@agentsws/core'
 import { isSealed, seal, open as unseal } from './envelope.js'
 import {
   assertKey,
+  BLOB_LOCATION_UNREACHABLE,
   BlobError,
   type BlobMeta,
   type BlobRef,
@@ -36,11 +37,17 @@ import {
 } from './types.js'
 
 export interface LocalBlobStoreOptions {
-  /** 根目录；不存在就建。 */
+  /** 根目录；不存在就建（`requireRoot` 时不建）。 */
   root: string
   clock: Clock
   /** 给了就加密（有 `subject_ref` 的对象）；不给就一律明文。 */
   cipher?: RawCipher
+  /**
+   * WP482：根目录是用户自己选的（外置硬盘、NAS）。这时**不替它建**——硬盘没插时建出来的是一个空的本地目录，
+   * 附件会像是全没了；每次读写前先看一眼根目录在不在，不在就抛「连不上」（`provider_unavailable`），
+   * 接好之后下一次读写自然就通了（不用重启）。
+   */
+  requireRoot?: boolean
 }
 
 interface Sidecar {
@@ -59,17 +66,36 @@ export class LocalBlobStore implements BlobStore {
   readonly #root: string
   readonly #clock: Clock
   readonly #cipher: RawCipher | undefined
+  readonly #requireRoot: boolean
 
   private constructor(options: LocalBlobStoreOptions) {
     this.#root = resolve(options.root)
     this.#clock = options.clock
     this.#cipher = options.cipher
+    this.#requireRoot = options.requireRoot === true
   }
 
   static async open(options: LocalBlobStoreOptions): Promise<LocalBlobStore> {
     const store = new LocalBlobStore(options)
-    await mkdir(resolve(options.root), { recursive: true })
+    if (options.requireRoot !== true) await mkdir(resolve(options.root), { recursive: true })
     return store
+  }
+
+  /** WP482：根目录在不在（只看一眼，不遍历）。 */
+  async reachable(): Promise<boolean> {
+    try {
+      return (await stat(this.#root)).isDirectory()
+    } catch {
+      return false
+    }
+  }
+
+  /** WP482：用户自选的根目录连不上就抛「连不上」——不能当成「对象不存在」（那会被说成内容已擦除）。 */
+  async #ensureRoot(): Promise<void> {
+    if (!this.#requireRoot || (await this.reachable())) return
+    throw new BlobError('provider_unavailable', `大文件存放的位置现在连不上：${this.#root}`, {
+      details: { reason: BLOB_LOCATION_UNREACHABLE, location: this.#root },
+    })
   }
 
   describe(): { kind: 'local'; display: string; encrypted: boolean } {
@@ -87,6 +113,7 @@ export class LocalBlobStore implements BlobStore {
   }
 
   async put(key: string, body: Uint8Array, meta: BlobMeta = {}): Promise<BlobRef> {
+    await this.#ensureRoot()
     const path = this.#path(key)
     const subject = meta.subject_ref
     const encrypt = this.#cipher !== undefined && subject !== undefined && subject.length > 0
@@ -151,6 +178,7 @@ export class LocalBlobStore implements BlobStore {
   }
 
   async head(key: string): Promise<BlobStat | undefined> {
+    await this.#ensureRoot()
     const path = this.#path(key)
     if (!existsSync(path)) return undefined
     const sidecar = await this.#sidecar(path)
@@ -158,6 +186,7 @@ export class LocalBlobStore implements BlobStore {
   }
 
   async get(key: string): Promise<{ bytes?: Uint8Array; stat: BlobStat } | undefined> {
+    await this.#ensureRoot()
     const path = this.#path(key)
     if (!existsSync(path)) return undefined
     const sidecar = await this.#sidecar(path)
@@ -173,12 +202,14 @@ export class LocalBlobStore implements BlobStore {
   }
 
   async delete(key: string): Promise<void> {
+    await this.#ensureRoot()
     const path = this.#path(key)
     await rm(path, { force: true })
     await rm(`${path}.meta.json`, { force: true })
   }
 
   async list(prefix = ''): Promise<BlobStat[]> {
+    await this.#ensureRoot()
     const out: BlobStat[] = []
     for (const key of await this.#walk('')) {
       if (!key.startsWith(prefix)) continue
@@ -189,6 +220,7 @@ export class LocalBlobStore implements BlobStore {
   }
 
   async usage(prefix = ''): Promise<{ objects: number; bytes: number }> {
+    await this.#ensureRoot()
     let objects = 0
     let bytes = 0
     for (const key of await this.#walk('')) {

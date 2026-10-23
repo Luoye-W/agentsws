@@ -53,6 +53,11 @@ export interface StorageBackendView {
   objects?: number
   /** 大文件这一档是不是加密的（21 §4 的每对象密钥）。 */
   encrypted?: boolean
+  /**
+   * WP482：现在连不连得上（大文件放在外置硬盘 / NAS 上，硬盘没插、断网时是 `false`）。
+   * 只有问得出来才出这一格。
+   */
+  reachable?: boolean
 }
 
 export interface StorageView {

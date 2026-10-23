@@ -39,8 +39,15 @@ export const DATA_SUBDIR = 'agentsws-data'
 export const RETIRE_DAYS = 7
 /** 剩余空间至少是数据大小的几倍。 */
 export const SPACE_FACTOR = 1.2
+/** WP482：大文件默认放在数据目录下的这个子文件夹（服务进程 `join(dbDir, 'blobs')` 同一个）。 */
+export const BLOBS_SUBDIR = 'blobs'
+
+/** WP482：数据库那一格 / 大文件那一格。 */
+export type DataLocationKind = 'database' | 'blobs'
 
 export interface RetiredDir {
+  /** WP482：哪一格搬走后留下的（没有 = 数据库那一格，WP480 的老条目）。 */
+  kind?: DataLocationKind
   /** 改名之后的旧目录（改名没成就是原路径）。 */
   path: string
   /** 搬之前它叫什么（界面上说「原来在哪」）。 */
@@ -54,6 +61,12 @@ export interface DataLocationPointer {
   /** 自定义位置；没有 = 默认位置。 */
   dir?: string
   set_at?: string
+  /**
+   * WP482：大文件单独放的位置（外置硬盘、NAS）；没有 = 跟着数据库，在数据目录的 `blobs` 里。
+   * 服务进程经 `AGENTSWS_BLOB_DIR` 拿到它。
+   */
+  blob_dir?: string
+  blob_set_at?: string
   retired: RetiredDir[]
 }
 
@@ -75,20 +88,33 @@ export function readPointer(userData: string): DataLocationPointer {
   }
   const value = raw as Partial<DataLocationPointer> | null
   const dir = typeof value?.dir === 'string' && value.dir.trim() !== '' ? value.dir : undefined
+  const blobDir =
+    typeof value?.blob_dir === 'string' && value.blob_dir.trim() !== '' ? value.blob_dir : undefined
   const retired = Array.isArray(value?.retired)
-    ? value.retired.filter(
-        (r): r is RetiredDir =>
-          typeof r === 'object' &&
-          r !== null &&
-          typeof r.path === 'string' &&
-          typeof r.from === 'string' &&
-          typeof r.until === 'string',
-      )
+    ? value.retired
+        .filter(
+          (r): r is RetiredDir =>
+            typeof r === 'object' &&
+            r !== null &&
+            typeof r.path === 'string' &&
+            typeof r.from === 'string' &&
+            typeof r.until === 'string',
+        )
+        .map(
+          (r): RetiredDir => ({
+            ...(r.kind === 'blobs' ? { kind: 'blobs' as const } : {}),
+            path: r.path,
+            from: r.from,
+            until: r.until,
+          }),
+        )
     : []
   return {
     version: 1,
     ...(dir === undefined ? {} : { dir }),
     ...(typeof value?.set_at === 'string' ? { set_at: value.set_at } : {}),
+    ...(blobDir === undefined ? {} : { blob_dir: blobDir }),
+    ...(typeof value?.blob_set_at === 'string' ? { blob_set_at: value.blob_set_at } : {}),
     retired,
   }
 }
@@ -109,6 +135,24 @@ export function currentDataDir(userData: string, pointer = readPointer(userData)
 
 export function isDefaultDir(userData: string, dir: string): boolean {
   return samePath(dir, defaultDataDir(userData))
+}
+
+/** WP482：大文件的默认位置——跟着数据库，在数据目录的 `blobs` 里。 */
+export function defaultBlobDir(dataDir: string): string {
+  return join(dataDir, BLOBS_SUBDIR)
+}
+
+/** WP482：现在大文件放在哪（指针里单独记了就用它，否则跟着数据库）。 */
+export function currentBlobDir(userData: string, pointer = readPointer(userData)): string {
+  return pointer.blob_dir ?? defaultBlobDir(currentDataDir(userData, pointer))
+}
+
+/** WP482：大文件是不是单独放了（要经 `AGENTSWS_BLOB_DIR` 告诉服务进程）。 */
+export function customBlobDir(
+  userData: string,
+  pointer = readPointer(userData),
+): string | undefined {
+  return pointer.blob_dir
 }
 
 // ── 路径比较 ─────────────────────────────────────────────────────────
@@ -161,6 +205,8 @@ export type TargetProblem =
   | 'no_space'
   /** 那里已经有一份东西（`agentsws-data` 子文件夹已存在且不空）。 */
   | 'target_has_data'
+  /** WP482：现在放大文件的地方连不上（硬盘没插、NAS 断网）——接好之前搬不了。 */
+  | 'source_missing'
 
 export type TargetWarning =
   /** 网盘同步文件夹（OneDrive、iCloud、Dropbox、百度网盘……）：同步时可能把库文件弄坏。 */
@@ -183,6 +229,10 @@ export interface DataTargetCheck {
   estimate_seconds: number
   problems: TargetProblem[]
   warnings: TargetWarning[]
+  /** WP482：哪一格（没有 = 数据库）。 */
+  kind?: DataLocationKind
+  /** WP482：搬数据库时大文件还跟着它放（默认位置），会一起搬过去。 */
+  includes_blobs?: boolean
 }
 
 export interface DirSize {
@@ -190,11 +240,15 @@ export interface DirSize {
   files: number
 }
 
-/** 数一遍目录有多大（符号链接不跟进去）。目录不在就是 0。 */
-export function measureDir(dir: string): DirSize {
+/**
+ * 数一遍目录有多大（符号链接不跟进去）。目录不在就是 0。
+ * `skip`：不数的子目录（WP482：数据库那一格不算跟着它放的大文件、不算搬走后留着的旧目录）。
+ */
+export function measureDir(dir: string, skip: readonly string[] = []): DirSize {
   let bytes = 0
   let files = 0
   const walk = (d: string): void => {
+    if (skip.some((x) => samePath(x, d))) return
     let names: string[]
     try {
       names = readdirSync(d)
@@ -358,6 +412,16 @@ export interface CheckTargetInput {
   /** 测试注入：剩余空间。 */
   free?: (dir: string) => number | undefined
   writable?: (dir: string) => boolean
+  /**
+   * WP482：哪一格（不给 = 数据库）。大文件那一格不提示网盘同步（同步软件不会弄坏单个附件），
+   * 网络盘的提示也换成「断网时附件打不开」（界面按 `kind` 换话）。
+   */
+  kind?: DataLocationKind
+  /**
+   * WP482：另一格现在在哪——两格不许互相套（大文件放进数据库目录里，搬数据库时会被一起抄走；
+   * 数据库放进大文件目录里同理）。
+   */
+  other?: string
 }
 
 /** 把一个选好的文件夹从头到尾查一遍。`ok` 为真才允许开搬。 */
@@ -385,6 +449,13 @@ export function checkTarget(input: CheckTargetInput): DataTargetCheck {
     problems.push('inside_app')
   if (input.appDirs?.some((d) => samePath(target, d) || isInside(target, d)) === true)
     problems.push('inside_app')
+  if (
+    input.other !== undefined &&
+    (samePath(target, input.other) ||
+      isInside(target, input.other) ||
+      isInside(input.other, target))
+  )
+    problems.push('inside_current')
 
   const sys = input.systemDirs ?? systemDirs(process.platform, process.env)
   if (sys.some((d) => samePath(chosen, d) || isInside(chosen, d))) problems.push('system_dir')
@@ -399,7 +470,7 @@ export function checkTarget(input: CheckTargetInput): DataTargetCheck {
   if (free !== undefined && free < size.bytes * SPACE_FACTOR && !problems.includes('not_found'))
     problems.push('no_space')
 
-  if (looksCloudSynced(chosen)) warnings.push('cloud_sync')
+  if (input.kind !== 'blobs' && looksCloudSynced(chosen)) warnings.push('cloud_sync')
   if (network) warnings.push('network')
 
   return {
@@ -412,6 +483,7 @@ export function checkTarget(input: CheckTargetInput): DataTargetCheck {
     estimate_seconds: estimateSeconds(size, network),
     problems: [...new Set(problems)],
     warnings,
+    ...(input.kind === undefined ? {} : { kind: input.kind }),
   }
 }
 
@@ -444,6 +516,53 @@ export function checkDefaultTarget(input: Omit<CheckTargetInput, 'chosen'>): Dat
   }
 }
 
+/**
+ * WP482：大文件「恢复默认位置」的那一份检查：目标固定是数据目录下的 `blobs`。
+ * 那里躺着一份我们留下的旧目录（改名没成那种）不算「已有数据」。
+ */
+export function checkDefaultBlobTarget(input: {
+  userData: string
+  /** 现在的大文件目录。 */
+  current: string
+  dataDir: string
+  size?: DirSize
+  free?: (dir: string) => number | undefined
+  writable?: (dir: string) => boolean
+}): DataTargetCheck {
+  const target = defaultBlobDir(input.dataDir)
+  const size = input.size ?? measureDir(input.current)
+  const problems: TargetProblem[] = []
+  if (samePath(target, input.current)) problems.push('same_place')
+  const staleRetired = readPointer(input.userData).retired.some((r) => samePath(r.path, target))
+  if (existsSync(target) && dirNotEmpty(target) && !staleRetired) problems.push('target_has_data')
+  if (!dirReachable(input.current)) problems.push('source_missing')
+  const writable = existsSync(input.dataDir) && (input.writable ?? probeWritable)(input.dataDir)
+  if (!writable) problems.push('not_writable')
+  const free = (input.free ?? freeBytes)(input.dataDir)
+  if (free !== undefined && free < size.bytes * SPACE_FACTOR) problems.push('no_space')
+  return {
+    ok: problems.length === 0,
+    chosen: target,
+    target,
+    bytes: size.bytes,
+    files: size.files,
+    ...(free === undefined ? {} : { free_bytes: free }),
+    estimate_seconds: estimateSeconds(size, false),
+    problems,
+    warnings: [],
+    kind: 'blobs',
+  }
+}
+
+/** 一个目录现在打不打得开（只看一眼）。 */
+export function dirReachable(dir: string): boolean {
+  try {
+    return lstatSync(dir).isDirectory()
+  } catch {
+    return false
+  }
+}
+
 // ── 旧目录：改名留 7 天 ──────────────────────────────────────────────
 
 function stamp(iso: string): string {
@@ -463,6 +582,8 @@ export function retireOldDir(input: {
   dir: string
   now: string
   days?: number
+  /** WP482：哪一格（不给 = 数据库）。 */
+  kind?: DataLocationKind
 }): RetiredDir {
   const until = new Date(
     Date.parse(input.now) + (input.days ?? RETIRE_DAYS) * 86_400_000,
@@ -485,7 +606,12 @@ export function retireOldDir(input: {
   } catch {
     // 纸条写不进去：这个目录到期时不会被自动删（宁可留着，不误删）
   }
-  const entry: RetiredDir = { path, from: input.dir, until }
+  const entry: RetiredDir = {
+    ...(input.kind === 'blobs' ? { kind: 'blobs' as const } : {}),
+    path,
+    from: input.dir,
+    until,
+  }
   const pointer = readPointer(input.userData)
   writePointer(input.userData, {
     ...pointer,
@@ -500,9 +626,13 @@ export function retireOldDir(input: {
  */
 export function removeRetired(input: { userData: string; entry: RetiredDir }): boolean {
   const { entry } = input
-  const current = currentDataDir(input.userData)
+  const pointer = readPointer(input.userData)
+  const current = currentDataDir(input.userData, pointer)
+  const blobs = currentBlobDir(input.userData, pointer)
   if (!existsSync(entry.path)) return true
   if (samePath(entry.path, current) || isInside(current, entry.path)) return false
+  // WP482：大文件现在放的地方也永远不删
+  if (samePath(entry.path, blobs) || isInside(blobs, entry.path)) return false
   if (samePath(entry.path, input.userData) || isInside(input.userData, entry.path)) return false
   if (!existsSync(join(entry.path, RETIRED_MARK))) return false
   try {
@@ -521,6 +651,8 @@ export function purgeRetired(input: {
   userData: string
   now: string
   force?: boolean
+  /** WP482：「现在就删」只删这一格的（不给 = 两格都算）。 */
+  kind?: DataLocationKind
 }): RetiredDir[] {
   const pointer = readPointer(input.userData)
   if (pointer.retired.length === 0) return []
@@ -528,7 +660,8 @@ export function purgeRetired(input: {
   const removed: RetiredDir[] = []
   const keep: RetiredDir[] = []
   for (const entry of pointer.retired) {
-    const due = input.force === true || Date.parse(entry.until) <= nowMs
+    const mine = input.kind === undefined || (entry.kind ?? 'database') === input.kind
+    const due = (input.force === true && mine) || Date.parse(entry.until) <= nowMs
     if (!existsSync(entry.path)) continue
     if (due && removeRetired({ userData: input.userData, entry })) removed.push(entry)
     else keep.push(entry)
@@ -538,9 +671,24 @@ export function purgeRetired(input: {
 }
 
 /** 界面上那一句「旧位置的数据留到 X」用的：还留着的那一份（最近搬走的那个）。 */
-export function latestRetired(userData: string): RetiredDir | undefined {
-  const list = readPointer(userData).retired.filter((r) => existsSync(r.path))
+export function latestRetired(
+  userData: string,
+  kind: DataLocationKind = 'database',
+): RetiredDir | undefined {
+  const list = readPointer(userData).retired.filter(
+    (r) => (r.kind ?? 'database') === kind && existsSync(r.path),
+  )
   return list.at(-1)
+}
+
+/**
+ * WP482：搬走后留着、但还在这个目录里面的旧目录（大文件默认放在数据目录里，搬走后旧的 `blobs`
+ * 改名留在数据目录里）。搬数据库时不抄它们、不算它们的大小——它们到期会被删。
+ */
+export function retiredInside(userData: string, dir: string): string[] {
+  return readPointer(userData)
+    .retired.map((r) => r.path)
+    .filter((p) => isInside(p, dir) && existsSync(p))
 }
 
 /** 记下新位置（默认位置就把 `dir` 拿掉）。 */
@@ -552,6 +700,20 @@ export function commitDataDir(input: { userData: string; dir: string; now: strin
     isDefaultDir(input.userData, input.dir)
       ? { ...rest, set_at: input.now }
       : { ...rest, dir: input.dir, set_at: input.now },
+  )
+}
+
+/**
+ * WP482：记下大文件的新位置（就是默认位置——数据目录下的 `blobs`——就把 `blob_dir` 拿掉）。
+ */
+export function commitBlobDir(input: { userData: string; dir: string; now: string }): void {
+  const pointer = readPointer(input.userData)
+  const { blob_dir: _old, ...rest } = pointer
+  writePointer(
+    input.userData,
+    samePath(input.dir, defaultBlobDir(currentDataDir(input.userData, pointer)))
+      ? { ...rest, blob_set_at: input.now }
+      : { ...rest, blob_dir: input.dir, blob_set_at: input.now },
   )
 }
 

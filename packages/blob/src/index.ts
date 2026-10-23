@@ -26,6 +26,7 @@ export {
 } from './sigv4.js'
 export {
   assertKey,
+  BLOB_LOCATION_UNREACHABLE,
   BlobError,
   type BlobMeta,
   type BlobRef,
@@ -43,6 +44,11 @@ export const BLOB_ACCESS_KEY_ENV = 'AGENTSWS_BLOB_ACCESS_KEY_ID'
 export const BLOB_SECRET_ENV = 'AGENTSWS_BLOB_SECRET_ACCESS_KEY'
 export const BLOB_SESSION_TOKEN_ENV = 'AGENTSWS_BLOB_SESSION_TOKEN'
 export const DATA_DIR_ENV = 'AGENTSWS_DATA_DIR'
+/**
+ * WP482：大文件单独放的本地目录（桌面壳在用户把大文件搬到外置硬盘 / NAS 后给）。
+ * 比 `defaultRoot` 优先、比 `AGENTSWS_BLOB_URL` 靠后；这个目录**不替它建**，连不上时读写抛「连不上」。
+ */
+export const BLOB_DIR_ENV = 'AGENTSWS_BLOB_DIR'
 
 export interface OpenBlobStoreOptions {
   clock: Clock
@@ -61,8 +67,11 @@ export async function openBlobStore(options: OpenBlobStoreOptions): Promise<Blob
   const url = options.url ?? env[BLOB_URL_ENV]
 
   if (url === undefined || url === '' || url.startsWith('file:') || url.startsWith('/')) {
-    const root =
-      url === undefined || url === ''
+    const blobDir = env[BLOB_DIR_ENV]
+    const own = (url === undefined || url === '') && blobDir !== undefined && blobDir !== ''
+    const root = own
+      ? (blobDir as string)
+      : url === undefined || url === ''
         ? (options.defaultRoot ?? join(env[DATA_DIR_ENV] ?? process.cwd(), 'blobs'))
         : url.startsWith('file:')
           ? new URL(url).pathname
@@ -71,6 +80,7 @@ export async function openBlobStore(options: OpenBlobStoreOptions): Promise<Blob
       root,
       clock: options.clock,
       ...(options.cipher === undefined ? {} : { cipher: options.cipher }),
+      ...(own ? { requireRoot: true } : {}),
     })
   }
 

@@ -104,7 +104,28 @@ export interface DesktopDataLocation {
   old?: { path: string; until: string }
   /** 这台电脑在搬吗 / 上次搬的结果（页面重开时接上进度）。 */
   status: DesktopDataMoveStatus
+  /**
+   * WP482：大文件那一格（附件、录音、图片……可以单独放外置硬盘 / NAS）。旧壳没有这一项。
+   * 有这一项时上面的 `bytes` / `files` 不再含跟着数据库放的大文件。
+   */
+  blobs?: DesktopBlobLocation
 }
+
+/** WP482：大文件现在放在哪。 */
+export interface DesktopBlobLocation {
+  path: string
+  /** 是不是默认位置（跟着数据库，在数据目录的 `blobs` 里）。 */
+  is_default: boolean
+  default_path: string
+  bytes?: number
+  files?: number
+  old?: { path: string; until: string }
+  /** 现在连不连得上（硬盘没插、NAS 断网时是 `false`；数据库照常、工坊照常开）。 */
+  reachable: boolean
+}
+
+/** WP482：哪一格。 */
+export type DesktopDataLocationKind = 'database' | 'blobs'
 
 /** WP480：选好一个文件夹之后的检查结果（确认框照它说「要搬多少、大约多久」）。 */
 export interface DesktopDataTargetCheck {
@@ -125,8 +146,14 @@ export interface DesktopDataTargetCheck {
     | 'not_writable'
     | 'no_space'
     | 'target_has_data'
+    /** WP482：现在放大文件的地方连不上，接好之前搬不了。 */
+    | 'source_missing'
   )[]
   warnings: ('cloud_sync' | 'network')[]
+  /** WP482：哪一格（没有 = 数据库）。 */
+  kind?: DesktopDataLocationKind
+  /** WP482：搬数据库时大文件还跟着它放（默认位置），会一起搬过去。 */
+  includes_blobs?: boolean
 }
 
 export type DesktopDataMoveStep =
@@ -153,6 +180,8 @@ export type DesktopDataMoveStatus =
   | { state: 'idle' }
   | {
       state: 'running'
+      /** WP482：搬的是哪一格（没有 = 数据库）。 */
+      which?: DesktopDataLocationKind
       step: DesktopDataMoveStep
       to: string
       copied_bytes: number
@@ -161,9 +190,17 @@ export type DesktopDataMoveStatus =
       files_total: number
       started_at: string
     }
-  | { state: 'done'; to: string; from: string; old?: { path: string; until: string }; at: string }
+  | {
+      state: 'done'
+      which?: DesktopDataLocationKind
+      to: string
+      from: string
+      old?: { path: string; until: string }
+      at: string
+    }
   | {
       state: 'failed'
+      which?: DesktopDataLocationKind
       code: DesktopDataMoveFailure
       step: DesktopDataMoveStep
       back_to: string
@@ -171,20 +208,24 @@ export type DesktopDataMoveStatus =
       at: string
     }
 
+/**
+ * WP482：每个方法多一个可选的 `which`（不给 = 数据库，WP480 原样）——数据库与大文件各自「更改位置…」
+ * 「恢复默认位置」「现在就删」「打开文件夹」。同一时间只搬一格。
+ */
 export interface DesktopDataLocationBridge {
   get(): Promise<DesktopDataLocation>
   /** 弹系统选文件夹框 → 查一遍；点了取消回 `null`。 */
-  choose(): Promise<DesktopDataTargetCheck | null>
+  choose(which?: DesktopDataLocationKind): Promise<DesktopDataTargetCheck | null>
   /** 恢复默认位置之前查一遍（目标固定是默认位置）。 */
-  checkDefault(): Promise<DesktopDataTargetCheck>
+  checkDefault(which?: DesktopDataLocationKind): Promise<DesktopDataTargetCheck>
   /** 开搬：`chosen` = 刚才 `choose()` 查过的那一个；`default` = 恢复默认位置。立刻回第一步的状态，之后看 `onChange`。 */
-  move(to: 'chosen' | 'default'): Promise<DesktopDataMoveStatus>
+  move(to: 'chosen' | 'default', which?: DesktopDataLocationKind): Promise<DesktopDataMoveStatus>
   /** 进度 / 结果一变就回调；返回取消订阅。 */
   onChange(listener: (status: DesktopDataMoveStatus) => void): () => void
   /** 「现在就删」旧目录；回删没删成。 */
-  deleteOld(): Promise<boolean>
-  /** 在访达 / 资源管理器里打开现在的数据目录。 */
-  reveal(): Promise<boolean>
+  deleteOld(which?: DesktopDataLocationKind): Promise<boolean>
+  /** 在访达 / 资源管理器里打开现在的数据目录（WP482：或大文件目录）。 */
+  reveal(which?: DesktopDataLocationKind): Promise<boolean>
 }
 
 /** WP475：截到的那一张。 */

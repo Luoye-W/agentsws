@@ -58,17 +58,24 @@ import {
 } from './connect-runtime.js'
 import { withCsp } from './csp.js'
 import {
+  checkDefaultBlobTarget,
   checkDefaultTarget,
   checkTarget,
   currentDataDir,
+  customBlobDir,
+  type DataLocationKind,
   type DataTargetCheck,
   dataDirReachable,
+  defaultBlobDir,
   defaultDataDir,
+  dirReachable,
   isDefaultDir,
   latestRetired,
   measureDir,
   purgeRetired,
   removeRetired,
+  retiredInside,
+  samePath,
 } from './data-location.js'
 import { driveIsNetwork } from './data-location-probe.js'
 import {
@@ -375,6 +382,11 @@ async function bootstrap(): Promise<void> {
   const purgedOld = purgeRetired({ userData: paths.userData, now: new Date().toISOString() })
   paths.serverDataDir = currentDataDir(paths.userData)
   if (isDefaultDir(paths.userData, paths.serverDataDir)) files.ensureDir(paths.serverDataDir)
+  /*
+   * WP482：大文件可以单独放（外置硬盘、NAS）。只有单独放了才告诉服务进程（`AGENTSWS_BLOB_DIR`）；
+   * 那个位置这次连不上**不拦**——工坊照常开，只有用到附件 / 录音的地方说「连不上」。
+   */
+  let serverBlobDir = customBlobDir(paths.userData)
 
   const logger = createLogger({
     files,
@@ -401,7 +413,14 @@ async function bootstrap(): Promise<void> {
     custom: !isDefaultDir(paths.userData, paths.serverDataDir),
     ...(moveRecovery.action === 'none' ? {} : { recovered: moveRecovery.action }),
     ...(purgedOld.length === 0 ? {} : { purged_old: purgedOld.map((r) => r.path) }),
+    ...(serverBlobDir === undefined
+      ? {}
+      : { blob_dir: serverBlobDir, blob_reachable: dirReachable(serverBlobDir) }),
   })
+  if (serverBlobDir !== undefined && !dirReachable(serverBlobDir))
+    logger.warn('大文件的位置这次连不上（工坊照常开，用到附件 / 录音时再提示）', {
+      dir: serverBlobDir,
+    })
   // WP319：刚由「重启并更新」装上来的——收掉「正在更新」单（那个小窗跟着关），记一行用了多久
   finishPendingUpdate({
     files,
@@ -682,6 +701,8 @@ async function bootstrap(): Promise<void> {
         entry: serverEntry,
         port: config.port,
         dataDir: paths.serverDataDir,
+        // WP482：大文件单独放了才给（不给 = 跟着数据库）
+        ...(serverBlobDir === undefined ? {} : { blobDir: serverBlobDir }),
         // 13 §5：急停的真源是这个文件，两边共用。服务进程启动读它、每次改写回它，
         // 所以托盘按下的暂停不必再靠重启 sidecar 生效。
         haltFile: paths.haltFile,
@@ -2855,13 +2876,42 @@ async function bootstrap(): Promise<void> {
    *    页面只能说「刚才选好、查过的那一个」或「默认位置」，传不进任意路径。
    */
   let moveStatus: DataMoveStatus = { state: 'idle' }
-  let chosenCheck: DataTargetCheck | undefined
-  let sizeCache: { dir: string; at: number; size: ReturnType<typeof measureDir> } | undefined
-  const dataSize = (): ReturnType<typeof measureDir> => {
+  /** 刚才 `choose()` 查过、能用的那一个（数据库 / 大文件各一份）。 */
+  const chosenChecks: Partial<Record<DataLocationKind, DataTargetCheck>> = {}
+  /** WP482：一页里两格的大小（数据库那一格不含跟着它放的大文件、不含搬走后留着的旧目录）。 */
+  interface Sizes {
+    db: ReturnType<typeof measureDir>
+    blobs?: ReturnType<typeof measureDir>
+  }
+  let sizeCache: { key: string; at: number; sizes: Sizes } | undefined
+  const blobDirNow = (): string => serverBlobDir ?? defaultBlobDir(paths.serverDataDir)
+  /** 大文件跟着数据库放（默认位置）：搬数据库时一起搬。 */
+  const blobsFollowDb = (): boolean => serverBlobDir === undefined
+  const sizes = (): Sizes => {
     const now = Date.now()
-    if (sizeCache?.dir !== paths.serverDataDir || now - sizeCache.at > 60_000)
-      sizeCache = { dir: paths.serverDataDir, at: now, size: measureDir(paths.serverDataDir) }
-    return sizeCache.size
+    const key = `${paths.serverDataDir}\n${blobDirNow()}`
+    if (sizeCache?.key !== key || now - sizeCache.at > 60_000) {
+      const blobDir = blobDirNow()
+      const skip = [...retiredInside(paths.userData, paths.serverDataDir), blobDir]
+      sizeCache = {
+        key,
+        at: now,
+        sizes: {
+          db: measureDir(paths.serverDataDir, skip),
+          ...(dirReachable(blobDir) ? { blobs: measureDir(blobDir) } : {}),
+        },
+      }
+    }
+    return sizeCache.sizes
+  }
+  /** 搬这一格要抄多少（数据库那一格：大文件跟着它放时连大文件一起）。 */
+  const moveSize = (which: DataLocationKind): ReturnType<typeof measureDir> => {
+    const s = sizes()
+    const blobs = s.blobs ?? { bytes: 0, files: 0 }
+    if (which === 'blobs') return blobs
+    return blobsFollowDb()
+      ? { bytes: s.db.bytes + blobs.bytes, files: s.db.files + blobs.files }
+      : s.db
   }
   /** 应用自己的目录：数据不许放进去（更新 / 卸载会清掉）。 */
   const appDirs = (): string[] => [
@@ -2875,16 +2925,26 @@ async function bootstrap(): Promise<void> {
       window.webContents.send(BRIDGE_CHANNELS.dataLocationChanged, status)
   }
   const locationView = (): DesktopDataLocation => {
-    const size = dataSize()
+    const s = sizes()
     const old = latestRetired(paths.userData)
+    const blobDir = blobDirNow()
+    const oldBlobs = latestRetired(paths.userData, 'blobs')
     return {
       path: paths.serverDataDir,
       is_default: isDefaultDir(paths.userData, paths.serverDataDir),
       default_path: defaultDataDir(paths.userData),
-      bytes: size.bytes,
-      files: size.files,
+      bytes: s.db.bytes,
+      files: s.db.files,
       ...(old === undefined ? {} : { old: { path: old.path, until: old.until } }),
       status: moveStatus,
+      blobs: {
+        path: blobDir,
+        is_default: blobsFollowDb(),
+        default_path: defaultBlobDir(paths.serverDataDir),
+        ...(s.blobs === undefined ? {} : { bytes: s.blobs.bytes, files: s.blobs.files }),
+        ...(oldBlobs === undefined ? {} : { old: { path: oldBlobs.path, until: oldBlobs.until } }),
+        reachable: dirReachable(blobDir),
+      },
     }
   }
   /** 新位置起来没有：服务进程健康、且没在退避里。最多等 90 秒。 */
@@ -2906,27 +2966,35 @@ async function bootstrap(): Promise<void> {
     }
     return false
   }
-  const startMove = (to: string): DataMoveStatus => {
-    const from = paths.serverDataDir
+  const startMove = (to: string, which: DataLocationKind): DataMoveStatus => {
+    const from = which === 'blobs' ? blobDirNow() : paths.serverDataDir
+    // WP482：大文件还从没存过（默认位置的 `blobs` 还没建）——先建一个空的，照常搬
+    if (which === 'blobs' && blobsFollowDb()) files.ensureDir(from)
     dataMoving = true
-    logger.info('开始搬数据', { from, to })
+    logger.info(which === 'blobs' ? '开始搬大文件' : '开始搬数据', { from, to })
     void runDataMove({
       userData: paths.userData,
+      ...(which === 'blobs' ? { kind: 'blobs' as const } : {}),
       from,
       to,
       now: () => new Date().toISOString(),
       pause: () => pauseAllForUpdate('data-move'),
       resume: () => resumeAfterPause(),
-      backup: async () => {
-        if (health?.ok !== true) throw new Error('服务进程没在运行，做不了备份')
-        const s = await ensureSession()
-        const assignment = s === undefined ? undefined : await ensureAssignment(s)
-        if (s === undefined || assignment === undefined || api.exportBackup === undefined)
-          throw new Error('换不到会话')
-        const out = await api.exportBackup(s, assignment)
-        if (!out.ok) throw new Error(out.reason)
-        logger.info('搬之前的备份', { out: out.value })
-      },
+      // WP482：只搬大文件时不做备份（备份包里本来就只有库）
+      ...(which === 'blobs'
+        ? {}
+        : {
+            backup: async () => {
+              if (health?.ok !== true) throw new Error('服务进程没在运行，做不了备份')
+              const s = await ensureSession()
+              const assignment = s === undefined ? undefined : await ensureAssignment(s)
+              if (s === undefined || assignment === undefined || api.exportBackup === undefined)
+                throw new Error('换不到会话')
+              const out = await api.exportBackup(s, assignment)
+              if (!out.ok) throw new Error(out.reason)
+              logger.info('搬之前的备份', { out: out.value })
+            },
+          }),
       stopServices: async () => {
         serverCore.stop()
         await connectLauncher?.stop()
@@ -2935,7 +3003,9 @@ async function bootstrap(): Promise<void> {
         forgetSession()
       },
       startServices: async (dir) => {
-        paths.serverDataDir = dir
+        if (which === 'blobs')
+          serverBlobDir = samePath(dir, defaultBlobDir(paths.serverDataDir)) ? undefined : dir
+        else paths.serverDataDir = dir
         sizeCache = undefined
         forgetSession()
         serverCore.start()
@@ -2944,13 +3014,16 @@ async function bootstrap(): Promise<void> {
       waitHealthy: waitServerHealthy,
       onStatus: publishMove,
       log: (message, fields) => {
-        logger.info(message, fields ?? {})
+        logger.info(message, { ...(fields ?? {}), which })
       },
+      // 搬走后还没删的旧目录（比如上次搬大文件留在数据目录里的 `blobs-moved-…`）不跟着搬
+      copyOptions: { skip: retiredInside(paths.userData, from) },
     })
       .catch((err: unknown) => {
-        logger.error('搬数据出了意外', { error: String(err) })
+        logger.error('搬数据出了意外', { error: String(err), which })
         publishMove({
           state: 'failed',
+          ...(which === 'blobs' ? { which } : {}),
           code: 'unknown',
           step: moveStatus.state === 'running' ? moveStatus.step : 'copy',
           back_to: from,
@@ -2960,22 +3033,69 @@ async function bootstrap(): Promise<void> {
       })
       .finally(() => {
         dataMoving = false
-        chosenCheck = undefined
+        delete chosenChecks.database
+        delete chosenChecks.blobs
         sizeCache = undefined
         refreshTray()
       })
     return moveStatus
   }
+  /** 桥上传来的「哪一格」：只认 'blobs'，其余一律当数据库。 */
+  const kindOf = (raw: unknown): DataLocationKind => (raw === 'blobs' ? 'blobs' : 'database')
+  /** 把选好的文件夹查一遍（数据库 / 大文件各有各的现在位置与「另一格」）。 */
+  const checkChosen = (chosen: string, which: DataLocationKind, network: boolean) => {
+    if (which === 'blobs') {
+      const current = blobDirNow()
+      const check = checkTarget({
+        chosen,
+        current,
+        userData: paths.userData,
+        appDirs: appDirs(),
+        size: moveSize('blobs'),
+        network,
+        kind: 'blobs',
+        other: paths.serverDataDir,
+      })
+      if (dirReachable(current)) return check
+      return { ...check, ok: false, problems: [...check.problems, 'source_missing' as const] }
+    }
+    const check = checkTarget({
+      chosen,
+      current: paths.serverDataDir,
+      userData: paths.userData,
+      appDirs: appDirs(),
+      size: moveSize('database'),
+      network,
+      ...(serverBlobDir === undefined ? {} : { other: serverBlobDir }),
+    })
+    return blobsFollowDb() ? { ...check, includes_blobs: true } : check
+  }
+  const checkDefaultFor = (which: DataLocationKind): DataTargetCheck => {
+    if (which === 'blobs')
+      return checkDefaultBlobTarget({
+        userData: paths.userData,
+        current: blobDirNow(),
+        dataDir: paths.serverDataDir,
+        size: moveSize('blobs'),
+      })
+    const check = checkDefaultTarget({
+      current: paths.serverDataDir,
+      userData: paths.userData,
+      size: moveSize('database'),
+    })
+    return blobsFollowDb() ? { ...check, includes_blobs: true } : check
+  }
   ipcMain.handle(BRIDGE_CHANNELS.dataLocationGet, (event) => {
     if (!fromLocalWindow(event) || remote) return undefined
     return locationView()
   })
-  ipcMain.handle(BRIDGE_CHANNELS.dataLocationChoose, async (event) => {
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationChoose, async (event, rawWhich: unknown) => {
     if (!fromLocalWindow(event) || remote || dataMoving) return null
+    const which = kindOf(rawWhich)
     const win = BrowserWindow.fromWebContents(event.sender)
     const t = strings(config.language)
     const options: Electron.OpenDialogOptions = {
-      title: t.dataLocationPick,
+      title: which === 'blobs' ? t.blobLocationPick : t.dataLocationPick,
       buttonLabel: config.language === 'en-US' ? 'Choose' : '选这个文件夹',
       properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
     }
@@ -2985,16 +3105,10 @@ async function bootstrap(): Promise<void> {
     const chosen = picked.canceled ? undefined : picked.filePaths[0]
     if (chosen === undefined) return null
     const network = await driveIsNetwork(chosen, process.platform)
-    const check = checkTarget({
-      chosen,
-      current: paths.serverDataDir,
-      userData: paths.userData,
-      appDirs: appDirs(),
-      size: dataSize(),
-      network,
-    })
-    chosenCheck = check.ok ? check : undefined
-    logger.info('选了新的数据位置', {
+    const check = checkChosen(chosen, which, network)
+    if (check.ok) chosenChecks[which] = check
+    else delete chosenChecks[which]
+    logger.info(which === 'blobs' ? '选了新的大文件位置' : '选了新的数据位置', {
       chosen,
       target: check.target,
       ok: check.ok,
@@ -3003,47 +3117,37 @@ async function bootstrap(): Promise<void> {
     })
     return check
   })
-  ipcMain.handle(BRIDGE_CHANNELS.dataLocationCheckDefault, (event) => {
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationCheckDefault, (event, rawWhich: unknown) => {
     if (!fromLocalWindow(event) || remote) return undefined
-    return checkDefaultTarget({
-      current: paths.serverDataDir,
-      userData: paths.userData,
-      size: dataSize(),
-    })
+    return checkDefaultFor(kindOf(rawWhich))
   })
-  ipcMain.handle(BRIDGE_CHANNELS.dataLocationMove, (event, raw: unknown) => {
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationMove, (event, raw: unknown, rawWhich: unknown) => {
     if (!fromLocalWindow(event) || remote) return moveStatus
     if (dataMoving) return moveStatus
+    const which = kindOf(rawWhich)
     // 开搬之前再查一遍（选完到点「开始搬」之间可能过了好一会儿：盘满了、拔了）
     const toDefault = raw === 'default'
+    const chosenCheck = chosenChecks[which]
     const check = toDefault
-      ? checkDefaultTarget({
-          current: paths.serverDataDir,
-          userData: paths.userData,
-          size: dataSize(),
-        })
+      ? checkDefaultFor(which)
       : chosenCheck === undefined
         ? undefined
-        : checkTarget({
-            chosen: chosenCheck.chosen,
-            current: paths.serverDataDir,
-            userData: paths.userData,
-            appDirs: appDirs(),
-            size: dataSize(),
-            network: chosenCheck.warnings.includes('network'),
-          })
+        : checkChosen(chosenCheck.chosen, which, chosenCheck.warnings.includes('network'))
     if (check === undefined) return moveStatus
     if (!check.ok) {
       const code = check.problems.includes('no_space')
         ? 'no_space'
         : check.problems.includes('not_writable')
           ? 'not_writable'
-          : 'unknown'
+          : check.problems.includes('source_missing')
+            ? 'copy_failed'
+            : 'unknown'
       publishMove({
         state: 'failed',
+        ...(which === 'blobs' ? { which } : {}),
         code,
         step: 'pause',
-        back_to: paths.serverDataDir,
+        back_to: which === 'blobs' ? blobDirNow() : paths.serverDataDir,
         recovered: true,
         at: new Date().toISOString(),
       })
@@ -3051,27 +3155,32 @@ async function bootstrap(): Promise<void> {
     }
     // 恢复默认位置：默认位置上躺着的是一份搬走前留下的旧目录（改名没成那种）——它过期了，先清掉
     if (toDefault) {
-      const target = defaultDataDir(paths.userData)
+      const target =
+        which === 'blobs' ? defaultBlobDir(paths.serverDataDir) : defaultDataDir(paths.userData)
       purgeRetired({ userData: paths.userData, now: new Date().toISOString(), force: false })
-      const stale = latestRetired(paths.userData)
-      if (stale !== undefined && stale.path === target)
+      const stale = latestRetired(paths.userData, which)
+      if (stale !== undefined && samePath(stale.path, target))
         removeRetired({ userData: paths.userData, entry: stale })
     }
-    return startMove(check.target)
+    return startMove(check.target, which)
   })
-  ipcMain.handle(BRIDGE_CHANNELS.dataLocationDeleteOld, (event) => {
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationDeleteOld, (event, rawWhich: unknown) => {
     if (!fromLocalWindow(event) || remote || dataMoving) return false
+    const which = kindOf(rawWhich)
     const removed = purgeRetired({
       userData: paths.userData,
       now: new Date().toISOString(),
       force: true,
+      kind: which,
     })
-    logger.info('删掉了搬走前留下的旧目录', { removed: removed.map((r) => r.path) })
-    return latestRetired(paths.userData) === undefined
+    sizeCache = undefined
+    logger.info('删掉了搬走前留下的旧目录', { removed: removed.map((r) => r.path), which })
+    return latestRetired(paths.userData, which) === undefined
   })
-  ipcMain.handle(BRIDGE_CHANNELS.dataLocationReveal, async (event) => {
+  ipcMain.handle(BRIDGE_CHANNELS.dataLocationReveal, async (event, rawWhich: unknown) => {
     if (!fromLocalWindow(event) || remote) return false
-    return (await shell.openPath(paths.serverDataDir)) === ''
+    const dir = kindOf(rawWhich) === 'blobs' ? blobDirNow() : paths.serverDataDir
+    return (await shell.openPath(dir)) === ''
   })
 
   /*

@@ -43,9 +43,12 @@ import { join } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import {
+  commitBlobDir,
   commitDataDir,
+  currentBlobDir,
   currentDataDir,
   DATA_MOVE_JOURNAL,
+  type DataLocationKind,
   readPointer,
   retireOldDir,
   samePath,
@@ -59,13 +62,15 @@ interface Entry {
   size: number
 }
 
-async function listTree(root: string): Promise<Entry[]> {
+async function listTree(root: string, skip: readonly string[] = []): Promise<Entry[]> {
   const out: Entry[] = []
   const walk = async (rel: string): Promise<void> => {
     const names = await readdir(rel === '' ? root : join(root, rel))
     names.sort()
     for (const name of names) {
       const r = rel === '' ? name : join(rel, name)
+      // WP482：不抄的子目录（搬走后留着的旧目录、单独搬走的大文件那一份）
+      if (skip.some((x) => samePath(x, join(root, r)))) continue
       const st = await lstat(join(root, r))
       if (st.isSymbolicLink()) out.push({ rel: r, kind: 'link', size: 0 })
       else if (st.isDirectory()) {
@@ -118,6 +123,8 @@ export interface CopyTreeOptions {
   beforeFile?: (rel: string) => void | Promise<void>
   /** 测试注入：抄完、核对之前叫一下（可以去改坏新文件，看核对拦不拦得住）。 */
   beforeVerify?: (to: string) => void | Promise<void>
+  /** WP482：不抄的子目录（绝对路径；搬走后还没删的旧目录不跟着搬）。 */
+  skip?: readonly string[]
 }
 
 export interface CopyReport {
@@ -137,7 +144,7 @@ export async function copyTree(
   options: CopyTreeOptions = {},
 ): Promise<CopyReport> {
   try {
-    const entries = await listTree(from)
+    const entries = await listTree(from, options.skip)
     const files = entries.filter((e) => e.kind === 'file')
     const total = files.reduce((n, e) => n + e.size, 0)
     const progress: CopyProgress = {
@@ -253,6 +260,8 @@ export type DataMoveStatus =
   | { state: 'idle' }
   | {
       state: 'running'
+      /** WP482：搬的是哪一格（没有 = 数据库）。 */
+      which?: DataLocationKind
       step: DataMoveStep
       to: string
       copied_bytes: number
@@ -263,6 +272,7 @@ export type DataMoveStatus =
     }
   | {
       state: 'done'
+      which?: DataLocationKind
       to: string
       from: string
       /** 旧目录改名后在哪、留到什么时候。 */
@@ -271,6 +281,7 @@ export type DataMoveStatus =
     }
   | {
       state: 'failed'
+      which?: DataLocationKind
       code: DataMoveFailure
       step: DataMoveStep
       /** 回到了哪（总是原来的位置）。 */
@@ -283,6 +294,8 @@ export type DataMoveStatus =
 // ── 搬家单（崩了下次启动收拾） ───────────────────────────────────────
 
 export interface MoveJournal {
+  /** WP482：哪一格（没有 = 数据库，WP480 的老单子）。 */
+  kind?: DataLocationKind
   from: string
   to: string
   /** `to` 是不是这次新建的（是才会在失败时整个删掉）。 */
@@ -300,6 +313,7 @@ export function readJournal(userData: string): MoveJournal | undefined {
     const raw = JSON.parse(readFileSync(journalPath(userData), 'utf8')) as Partial<MoveJournal>
     if (typeof raw.from !== 'string' || typeof raw.to !== 'string') return undefined
     return {
+      ...(raw.kind === 'blobs' ? { kind: 'blobs' as const } : {}),
       from: raw.from,
       to: raw.to,
       created_target: raw.created_target === true,
@@ -340,13 +354,15 @@ export function recoverInterruptedMove(input: { userData: string; now: string })
     clearJournal(input.userData)
     return { action: 'none' }
   }
-  const current = currentDataDir(input.userData)
+  const kind = journal.kind ?? 'database'
+  const current = kind === 'blobs' ? currentBlobDir(input.userData) : currentDataDir(input.userData)
   if (samePath(current, journal.to) && !samePath(journal.from, journal.to)) {
     if (existsSync(journal.from)) {
       const already = readPointer(input.userData).retired.some((r) =>
         samePath(r.from, journal.from),
       )
-      if (!already) retireOldDir({ userData: input.userData, dir: journal.from, now: input.now })
+      if (!already)
+        retireOldDir({ userData: input.userData, dir: journal.from, now: input.now, kind })
     }
     clearJournal(input.userData)
     return { action: 'kept_new_retired_old', journal }
@@ -361,6 +377,11 @@ export function recoverInterruptedMove(input: { userData: string; now: string })
 
 export interface DataMoveDeps {
   userData: string
+  /**
+   * WP482：搬哪一格（不给 = 数据库，WP480 原样）。`blobs` = 只搬大文件：不做备份（备份包里本来就只有库），
+   * 停服务 → 抄 + 核对 → 用新的大文件位置起服务 → 记进指针的 `blob_dir` → 旧的留 7 天。
+   */
+  kind?: DataLocationKind
   from: string
   to: string
   now: () => string
@@ -368,11 +389,13 @@ export interface DataMoveDeps {
   pause: () => Promise<void>
   /** 搬不成、服务一直没停时把暂停放开。 */
   resume: () => Promise<void>
-  /** 做一份升级闸同款备份；做不成就扔。 */
-  backup: () => Promise<void>
+  /** 做一份升级闸同款备份；做不成就扔。WP482：只搬大文件时不给（不做这一步）。 */
+  backup?: () => Promise<void>
   /** 停服务进程与本机连接器，等它们真的退出。 */
   stopServices: () => Promise<void>
-  /** 用这个目录起服务（壳把 `AGENTSWS_DB_DIR` 换成它再起）。 */
+  /**
+   * 用这个目录起服务（壳把 `AGENTSWS_DB_DIR` 换成它再起；WP482 搬大文件时换的是 `AGENTSWS_BLOB_DIR`）。
+   */
   startServices: (dir: string) => Promise<void>
   /** 等服务健康；回是否健康。 */
   waitHealthy: () => Promise<boolean>
@@ -388,9 +411,12 @@ export interface DataMoveDeps {
  */
 export async function runDataMove(deps: DataMoveDeps): Promise<DataMoveStatus> {
   const log = deps.log ?? (() => undefined)
+  const kind: DataLocationKind = deps.kind ?? 'database'
+  const which = deps.kind === undefined ? {} : { which: deps.kind }
   const started_at = deps.now()
   const running = {
     state: 'running' as const,
+    ...which,
     to: deps.to,
     copied_bytes: 0,
     total_bytes: 0,
@@ -407,6 +433,7 @@ export async function runDataMove(deps: DataMoveDeps): Promise<DataMoveStatus> {
   const fail = (code: DataMoveFailure, recovered: boolean): DataMoveStatus => {
     const status: DataMoveStatus = {
       state: 'failed',
+      ...which,
       code,
       step,
       back_to: deps.from,
@@ -434,14 +461,16 @@ export async function runDataMove(deps: DataMoveDeps): Promise<DataMoveStatus> {
     log('暂停没成（照样往下搬：服务进程停下来之前没有写入的风险更大）', { error: String(err) })
   })
 
-  // ② 备份——这时服务还开着；不成就什么都不动
-  report('backup')
-  try {
-    await deps.backup()
-  } catch (err) {
-    log('搬之前的备份没做成，不搬了', { error: String(err) })
-    await deps.resume().catch(() => undefined)
-    return fail('backup_failed', true)
+  // ② 备份——这时服务还开着；不成就什么都不动（WP482：只搬大文件时没有这一步）
+  if (deps.backup !== undefined) {
+    report('backup')
+    try {
+      await deps.backup()
+    } catch (err) {
+      log('搬之前的备份没做成，不搬了', { error: String(err) })
+      await deps.resume().catch(() => undefined)
+      return fail('backup_failed', true)
+    }
   }
 
   // ③ 停服务（从这里起到搬完，没有任何写入）
@@ -456,6 +485,7 @@ export async function runDataMove(deps: DataMoveDeps): Promise<DataMoveStatus> {
 
   const created_target = !existsSync(deps.to)
   const journal: MoveJournal = {
+    ...(deps.kind === undefined ? {} : { kind: deps.kind }),
     from: deps.from,
     to: deps.to,
     created_target,
@@ -515,13 +545,19 @@ export async function runDataMove(deps: DataMoveDeps): Promise<DataMoveStatus> {
 
   // ⑥ 记下新位置（最后一步才写：之前任何时候崩了，下次启动都还是旧位置）
   report('finish')
-  commitDataDir({ userData: deps.userData, dir: deps.to, now: deps.now() })
+  if (kind === 'blobs') commitBlobDir({ userData: deps.userData, dir: deps.to, now: deps.now() })
+  else commitDataDir({ userData: deps.userData, dir: deps.to, now: deps.now() })
   await writeJournal(deps.userData, { ...journal, step: 'finish' })
 
   // ⑦ 旧目录改名留 7 天
   let old: { path: string; until: string } | undefined
   try {
-    const entry = retireOldDir({ userData: deps.userData, dir: deps.from, now: deps.now() })
+    const entry = retireOldDir({
+      userData: deps.userData,
+      dir: deps.from,
+      now: deps.now(),
+      ...(kind === 'blobs' ? { kind } : {}),
+    })
     old = { path: entry.path, until: entry.until }
   } catch (err) {
     log('旧目录改名没成（数据已经在新位置，旧的原地留着）', { error: String(err) })
@@ -529,6 +565,7 @@ export async function runDataMove(deps: DataMoveDeps): Promise<DataMoveStatus> {
   clearJournal(deps.userData)
   const done: DataMoveStatus = {
     state: 'done',
+    ...which,
     from: deps.from,
     to: deps.to,
     ...(old === undefined ? {} : { old }),
