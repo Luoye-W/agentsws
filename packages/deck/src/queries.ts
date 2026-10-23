@@ -2290,7 +2290,8 @@ const QUERY_LIST: QueryDef[] = [
           // 名次是件数，不是钱（不写 format 的数字列表格按金额画）
           { key: 'rank', label: '#', align: 'right' as const, format: 'count' as const },
           { key: 'what', label: '信号 · 查询' },
-          { key: 'evidence', label: '证据' },
+          // WP487（决策 1678）：「证据」改「依据」（放的是凭什么建议改这一页的数字；英文 Basis）
+          { key: 'evidence', label: '依据' },
           { key: 'action', label: '建议' },
           { key: 'lane', label: '谁动' },
         ],
