@@ -166,7 +166,11 @@ import {
   sceneWindowTitle,
   withoutSetCookie,
 } from './scene-window.js'
-import { newChannelToken, startSearchBrowserChannel } from './search-browser.js'
+import {
+  newChannelToken,
+  searchNavigationAllowed,
+  startSearchBrowserChannel,
+} from './search-browser.js'
 import { createElectronSearchBrowser, type SearchHandover } from './search-browser-electron.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
 import {
@@ -1021,6 +1025,12 @@ async function bootstrap(): Promise<void> {
 
   app.on('web-contents-created', (_event, contents) => {
     contents.on('will-navigate', (event, url) => {
+      // WP484：内置浏览器的页面自己跳（Bing `&rdr=1`、Reddit 校验、Google 过渡页、人点验证）就在那一页里接着走——
+      // 不拦、更不交给系统浏览器；只认 http / https
+      if (searchBrowser?.owns(contents) === true) {
+        if (!searchNavigationAllowed(url)) event.preventDefault()
+        return
+      }
       const decision = decideNavigation(url, originsFor(contents))
       if (decision.action === 'allow') return
       event.preventDefault()

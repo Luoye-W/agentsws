@@ -335,7 +335,7 @@ describe('loadPage：等到真结果页再读', () => {
     g.fail(-3)
     g.fail(-105, false)
     g.fail(-105)
-    expect(await p).toEqual({ ok: false, reason: 'failed', message: 'ERR（-105）' })
+    expect(await p).toEqual({ ok: false, reason: 'failed', message: 'ERR（-105）', code: -105 })
     expect(g.listeners()).toBe(0)
   })
 })
