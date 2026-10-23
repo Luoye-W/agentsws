@@ -49,6 +49,7 @@
     "packages/contracts/src/genui-reply.ts",
     "packages/contracts/src/genui.ts",
     "packages/contracts/src/geo-quality.ts",
+    "packages/contracts/src/help-index.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
@@ -101,6 +102,7 @@
     "packages/contracts/src/subscription.ts",
     "packages/contracts/src/task-text.ts",
     "packages/contracts/src/team-link.ts",
+    "packages/contracts/src/telemetry-testids.ts",
     "packages/contracts/src/telemetry.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
@@ -164,7 +166,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "1a2afdfa62f2a8271415e86416cf1c6f",
+  "source_digest": "22ef9506b09b8ebda9e5324211ecc5ce",
   "objects": [
     {
       "id": "ad",
