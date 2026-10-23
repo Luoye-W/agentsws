@@ -272,6 +272,8 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
       workspace_id: 'ws_1',
       port: () => port as never,
       now: () => T0,
+      // WP483：ego 读到的公开数据（这里只核回执形状；走插件同一入口那一段在 wp483-ego-kol.test.ts）
+      observe: async (_a, rows) => ({ saved: rows.length, deduped: 0, forwarded: rows.length }),
     })
 
   it('读工具回 rows + provenance；写工具回卡 id', async () => {
@@ -312,6 +314,11 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
         'create_tracked_link',
         { collaboration_id: 'cb_1', target_url: 'https://shop.example/p/charger' },
         (r) => expect((r.data as { tracked_link_id: string }).tracked_link_id).toBe('tl_1'),
+      ],
+      [
+        'record_creator_observations',
+        { observations: [{ handle: 'deskrosa', followers: 31_000 }] },
+        (r) => expect((r.data as { backed_up_to_cloud: number }).backed_up_to_cloud).toBe(1),
       ],
       [
         'add_to_campaign',

@@ -63,7 +63,18 @@ import type {
   StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { SOCIAL_CHANNELS, SOCIAL_COMPOSE_HOSTS, socialChannelSpec } from '@agentsws/contracts'
+import {
+  EGO_HUMAN_WAIT_MS,
+  EGO_MEDIA_REQUIRED,
+  EGO_READBACK_DELAYS_MS,
+  type EgoWriteResult,
+  egoPostPlatformOf,
+  egoWriteNext,
+  egoWriteSentence,
+  SOCIAL_CHANNELS,
+  SOCIAL_COMPOSE_HOSTS,
+  socialChannelSpec,
+} from '@agentsws/contracts'
 import type { CommunityRule, ModerationAction } from '@agentsws/social-core'
 import {
   ACTION_WORDS,
@@ -81,6 +92,7 @@ import {
   weekStart,
 } from '@agentsws/social-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
+import type { EgoWriteCall } from './ego-write/writer.js'
 import { createOwnSubQueue, type OwnSubQueue, type OwnSubQueueOptions } from './own-sub-queue.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
@@ -135,6 +147,16 @@ export const SOCIAL_ACTIONS = {
   // WP254：回帖 / 回私信（职责 yml 里那一条，出站卡）
   replyThread: 'reply_thread',
 } as const
+
+/** WP483：社媒发帖的 ego 那一路（服务端注入）。 */
+export interface SocialEgo {
+  available(): boolean
+  run(cfg: EgoWriteCall): Promise<EgoWriteResult>
+  /** 帖子素材 → 本机临时文件（跑完删）。取不到回 `why`（宁可退插件也不少挂一张图）。 */
+  media?(refs: readonly string[]): Promise<{ files: string[]; cleanup(): void } | { why: string }>
+  /** 发起人岗位上「发之前让我看一眼」开没开（默认关）。 */
+  reviewFirst?(who: { assignment_id?: string; role_id?: string }): boolean
+}
 
 export interface SocialServiceOptions {
   workspace_id: WorkspaceId
@@ -215,6 +237,12 @@ export interface SocialServiceOptions {
   }): { todo_id: string; owner?: string } | undefined
   /** WP419：交给人发的那一条发好了 / 不发了——把那条待办收掉。不给 = 待办留着人自己勾。 */
   closeManualTask?(todo_id: string): void
+  /**
+   * WP483（决策 1658 / 1660）：发帖走 ego 那一路。给了、能用 = 没接官方发布接口的内容渠道（FB / IG / X / LinkedIn /
+   * TikTok）出卡在工坊批，批了（到点）工坊自己在 ego 里挂图、填字、点发布、读回；ego 跑失败退插件「等你发」，
+   * 被平台拦就停下。不给 = 只有插件 / 人发那一路（老行为）。
+   */
+  ego?: SocialEgo
   /**
    * WP249（决策 81 / 89）：「自家版待处理」要的那几样（官方号浏览器、施行口）。不给 = 不装配
    * 这一块（那几个路由照实说没装配）。审批、额度、事件与库由这里注入，不另起一套。
@@ -536,7 +564,15 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
   ): Promise<SocialStagedView & { desk?: boolean }> => {
     const account = accountOr404(post.account_id)
     const recipient = await recipientFor(actor, 'scope_manager')
-    const desk = handsOff(post.channel) && recipient.person === actor.person_id
+    /*
+     * WP483（决策 1658 / 1660）：没接官方接口、ego 能用、这条渠道 ego 做得了 → 走 ego：卡在工坊批（要批的先批），
+     * 批了（到点）工坊自己在 ego 里发。ego 用不了才是插件「等你发」那一种。
+     */
+    const egoRoute =
+      handsOff(post.channel) &&
+      egoPostPlatformOf(post.channel) !== undefined &&
+      options.ego?.available() === true
+    const desk = handsOff(post.channel) && recipient.person === actor.person_id && !egoRoute
     const when =
       post.scheduled_at === undefined
         ? '没排时间：批了就发。'
@@ -556,6 +592,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         ...(post.scheduled_at === undefined ? {} : { scheduled_at: post.scheduled_at }),
         status: post.scheduled_at === undefined ? 'draft' : 'scheduled',
         ...(desk ? { desk: 'plugin' } : {}),
+        ...(egoRoute ? { route: 'ego' } : {}),
       },
       notes: [when, ...conflictLines(hits)],
       title: `发布：${account.display_name}`,
@@ -611,6 +648,8 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
   const executor = createSocialExecutor({
     ...options.executor,
     ...(options.onSent === undefined ? {} : { onSent: options.onSent }),
+    // WP483：没有回帖接口的渠道，ego 能用就工坊自己在 ego 里回
+    ...(options.ego === undefined ? {} : { ego: options.ego }),
     workspace_id,
     store,
     clock,
@@ -1407,6 +1446,213 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     }
   }
 
+  /*
+   * ── WP483（决策 1658 / 1660）：社媒发帖的 ego 那一路 ──────────────────────────────────
+   * 发出去 → `published`（`published_via: 'ego'`，读回了链接 `readback: 'link'`，没读回 `clicked`）+ 发出记录；
+   * 「发之前让我看一眼」→ 填好留在 ego 里 + 交给你（插件「等你发」/ 待办照旧能点「发好了」），之后隔一阵读回；
+   * ego 交给人 → 下一轮接着做；没登录 / 选择器对不上 / ego 用不了 → 退插件（交给你发），说一句原因；
+   * 平台拦了、或点过发布没确认 → 停下（`failed` + 原因），不绕、不换路重发。
+   */
+  const egoPublish = async (
+    post: SocialPost,
+    who: { assignment_id?: string; role_id?: string },
+    toManual: (reason: string) => boolean,
+    out: SocialPublishSweep,
+  ): Promise<void> => {
+    const ego = options.ego
+    const platform = egoPostPlatformOf(post.channel)
+    if (ego === undefined || platform === undefined) return
+    const account = store.account(post.account_id)
+    const refs = post.media_refs ?? []
+    if (refs.length === 0 && EGO_MEDIA_REQUIRED.has(platform)) {
+      toManual(egoWriteSentence({ state: 'failed', why: '这条要带图 / 视频，帖子上没挂素材' }))
+      return
+    }
+    const media =
+      refs.length === 0
+        ? { files: [] as string[], cleanup: () => undefined }
+        : ((await ego.media?.(refs).catch((e: unknown) => ({ why: String(e) }))) ?? {
+            why: '这台机器取不到帖子素材',
+          })
+    if ('why' in media) {
+      toManual(egoWriteSentence({ state: 'failed', why: `素材取不到：${media.why}` }))
+      return
+    }
+    const review = ego.reviewFirst?.(who) === true
+    const prev = post.ego
+    const resume = prev?.state === 'needs_human' ? prev.space_id : undefined
+    store.savePost({
+      ...post,
+      ego: { ...(prev ?? {}), state: 'running', tries: (prev?.tries ?? 0) + 1 },
+    })
+    let r: EgoWriteResult
+    try {
+      r = await ego
+        .run({
+          platform,
+          mode: 'write',
+          ...(post.channel === 'facebook' && account?.url !== undefined
+            ? { url: account.url }
+            : {}),
+          ...(account?.url === undefined ? {} : { readback_url: account.url }),
+          text: post.body,
+          files: media.files,
+          submit: !review,
+          ...(resume === undefined ? {} : { resume }),
+          space: `工坊 · 发帖 ${post.id}`,
+        })
+        .catch((e: unknown): EgoWriteResult => ({ state: 'unavailable', platform, why: String(e) }))
+    } finally {
+      media.cleanup()
+    }
+    const cur = store.post(post.id) ?? post
+    const progress = cur.ego ?? { state: 'running' as const, tries: 1 }
+    const note = egoWriteSentence(r)
+    const at = clock.now()
+    emit('social.post_ego', 'system' as never, {
+      post_id: post.id,
+      channel: post.channel,
+      state: r.state,
+      next: egoWriteNext(r),
+      ...(r.clicked === true ? { clicked: true } : {}),
+    })
+    switch (egoWriteNext(r)) {
+      case 'done': {
+        store.savePost({
+          ...cur,
+          status: 'published',
+          published_at: at,
+          published_via: 'ego',
+          readback: r.link === undefined ? 'clicked' : 'link',
+          ...(r.link === undefined ? {} : { post_url: r.link }),
+          ...(r.external_id === undefined ? {} : { external_id: r.external_id }),
+          ego: { ...progress, state: 'sent', note },
+        })
+        out.published += 1
+        emit('social.post_published', 'system' as never, {
+          post_id: post.id,
+          channel: post.channel,
+          via: 'ego',
+          readback: r.link === undefined ? 'clicked' : 'link',
+        })
+        recordSent({
+          source_key: `post:${post.id}`,
+          channel: post.channel,
+          action: 'post',
+          kind: 'social_post',
+          ...(account === undefined ? {} : { destination: account.display_name }),
+          content: post.body,
+          ...(r.link === undefined ? {} : { link: r.link }),
+          ...(r.external_id === undefined ? {} : { external_id: r.external_id }),
+        })
+        return
+      }
+      case 'review': {
+        toManual(note)
+        const after = store.post(post.id) ?? cur
+        store.savePost({
+          ...after,
+          ego: {
+            ...progress,
+            state: 'filled',
+            since: at,
+            checks: 0,
+            next_check_at: new Date(
+              Date.parse(at) + (EGO_READBACK_DELAYS_MS[0] ?? 120_000),
+            ).toISOString(),
+            ...(r.space_id === undefined ? {} : { space_id: r.space_id }),
+            note,
+          },
+        })
+        return
+      }
+      case 'wait_human': {
+        store.savePost({
+          ...cur,
+          ego: {
+            ...progress,
+            state: 'needs_human',
+            since: prev?.state === 'needs_human' && prev.since !== undefined ? prev.since : at,
+            ...(r.space_id === undefined ? {} : { space_id: r.space_id }),
+            note,
+          },
+        })
+        out.skipped.push({ post_id: post.id, reason: note })
+        emit('social.post_needs_human', 'system' as never, {
+          post_id: post.id,
+          channel: post.channel,
+          note,
+        })
+        return
+      }
+      case 'stop': {
+        store.savePost({
+          ...cur,
+          status: 'failed',
+          failure_reason: note,
+          ego: { ...progress, state: 'stopped', note },
+        })
+        out.failed += 1
+        emit('social.post_failed', 'system' as never, {
+          post_id: post.id,
+          channel: post.channel,
+          reason: r.clicked === true ? 'ego_unconfirmed' : 'ego_blocked',
+        })
+        return
+      }
+      case 'plugin': {
+        store.savePost({ ...cur, ego: { ...progress, state: 'fell_back', note } })
+        if (!toManual(note)) out.skipped.push({ post_id: post.id, reason: note })
+        return
+      }
+    }
+  }
+
+  /** 「发之前让我看一眼」：填好留在 ego 里的那几条，到点回去读一次（主页上有没有这一条）。 */
+  const egoReadbacks = async (): Promise<void> => {
+    const ego = options.ego
+    if (ego === undefined || !ego.available()) return
+    const nowMs = Date.parse(clock.now())
+    for (const post of store.posts({ status: 'scheduled' })) {
+      const g = post.ego
+      if (g?.state !== 'filled' || g.next_check_at === undefined) continue
+      if (Date.parse(g.next_check_at) > nowMs) continue
+      const platform = egoPostPlatformOf(post.channel)
+      const account = store.account(post.account_id)
+      if (platform === undefined || account?.url === undefined) continue
+      const r = await ego
+        .run({
+          platform,
+          mode: 'readback',
+          url: account.url,
+          text: post.body,
+          submit: false,
+          space: `工坊 · 读回 ${post.id}`,
+        })
+        .catch((): EgoWriteResult => ({ state: 'failed', platform }))
+      if (r.state === 'sent') {
+        const done = answerHandoffAs(
+          post.id,
+          { done: true, ...(r.link === undefined ? {} : { link: r.link }), by: 'system' },
+          'ego',
+        )
+        if (done !== undefined) store.savePost({ ...done, ego: { ...g, state: 'sent' } })
+        continue
+      }
+      const checks = (g.checks ?? 0) + 1
+      const wait = EGO_READBACK_DELAYS_MS[checks]
+      const { next_check_at: _drop, ...rest } = g
+      store.savePost({
+        ...post,
+        ego: {
+          ...rest,
+          checks,
+          ...(wait === undefined ? {} : { next_check_at: new Date(nowMs + wait).toISOString() }),
+        },
+      })
+    }
+  }
+
   const publishDue = async (): Promise<SocialPublishSweep> => {
     // WP254：顺手补扫批了、过了取消窗口还没施行的版务卡与回帖卡（批准那一刻排的那一次可能随进程重启丢了）
     await executor.sweep().catch(() => 0)
@@ -1422,6 +1668,8 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
           p.handoff === undefined,
       )
     const out: SocialPublishSweep = { due: due.length, published: 0, failed: 0, skipped: [] }
+    // WP483：「发之前让我看一眼」填好在 ego 里的那几条，到点回去读一次人发了没有
+    await egoReadbacks()
     if (due.length === 0) return out
 
     const changes = await ledger.list({ workspace_id, kind: 'social_post' })
@@ -1448,6 +1696,18 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         .map((ch) => (ch.after as { post_id?: string } | null)?.post_id)
         .filter((x): x is string => typeof x === 'string'),
     )
+    // WP483：批过的那张卡（谁发起的：查岗位上「发之前让我看一眼」）
+    const approvedChange = new Map(
+      changes
+        .filter(
+          (ch) =>
+            ch.status === 'approved' || ch.status === 'auto_approved' || ch.status === 'applied',
+        )
+        .flatMap((ch) => {
+          const id = (ch.after as { post_id?: string } | null)?.post_id
+          return typeof id === 'string' ? [[id, ch] as const] : []
+        }),
+    )
 
     for (const post of due) {
       const desk = !approvedPosts.has(post.id) && deskPosts.has(post.id)
@@ -1472,7 +1732,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
           reason,
         })
         store.savePost({
-          ...post,
+          ...(store.post(post.id) ?? post),
           handoff: {
             at: now,
             reason,
@@ -1501,6 +1761,40 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       if (desk) {
         if (!toManual('在插件里由你看一眼、自己点发布'))
           out.skipped.push({ post_id: post.id, reason: '这一条要在插件里由你发，但交不过去。' })
+        continue
+      }
+      /*
+       * WP483（决策 1658 / 1660）：没接官方接口（或没接上）、ego 能用、这条渠道 ego 做得了 → 工坊自己在 ego 里发。
+       * ego 交给人（权限框）的那一条到点了还在这个列表里：接着做（等太久退插件）。
+       */
+      if (
+        handsOff(post.channel) &&
+        egoPostPlatformOf(post.channel) !== undefined &&
+        options.ego?.available() === true
+      ) {
+        const prev = post.ego
+        if (
+          prev?.state === 'needs_human' &&
+          Date.parse(now) - Date.parse(prev.since ?? now) > EGO_HUMAN_WAIT_MS
+        ) {
+          store.savePost({ ...post, ego: { ...prev, state: 'fell_back' } })
+          toManual(
+            `ego 里那个框等了 ${Math.round(EGO_HUMAN_WAIT_MS / 60_000)} 分钟没人处理，改交给你发`,
+          )
+          continue
+        }
+        const change = approvedChange.get(post.id)
+        await egoPublish(
+          post,
+          {
+            ...(change?.assignment_id === undefined
+              ? {}
+              : { assignment_id: String(change.assignment_id) }),
+            ...(change?.role_id === undefined ? {} : { role_id: String(change.role_id) }),
+          },
+          toManual,
+          out,
+        )
         continue
       }
       if (adapter?.publish === undefined) {
@@ -1685,7 +1979,15 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
   const handoffs = (): SocialPost[] =>
     store.posts({ status: 'scheduled' }).filter((p) => p.handoff !== undefined)
 
-  const answerHandoff = (post_id: string, answer: SocialHandoffAnswer): SocialPost | undefined => {
+  const answerHandoff = (post_id: string, answer: SocialHandoffAnswer): SocialPost | undefined =>
+    answerHandoffAs(post_id, answer, 'extension')
+
+  /** WP483：同一条「发好了 / 不发了」，`via` = 谁认出来的（插件 / 人说的 `extension`；ego 读回 `ego`）。 */
+  function answerHandoffAs(
+    post_id: string,
+    answer: SocialHandoffAnswer,
+    via: 'extension' | 'ego',
+  ): SocialPost | undefined {
     const post = store.post(post_id)
     if (post === undefined || post.handoff === undefined || post.status !== 'scheduled')
       return undefined
@@ -1698,7 +2000,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         ...post,
         status: 'published',
         published_at: now,
-        published_via: 'extension',
+        published_via: via,
         readback: link === undefined ? 'self_report' : 'link',
         ...(link === undefined ? {} : { post_url: link }),
       }
@@ -1715,7 +2017,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       emit('social.post_published', answer.by as never, {
         post_id: post.id,
         channel: post.channel,
-        via: 'extension',
+        via,
         readback: next.readback,
       })
     } else {

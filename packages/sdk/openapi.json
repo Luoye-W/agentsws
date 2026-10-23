@@ -31873,6 +31873,225 @@
         }
       }
     },
+    "/v1/write-review": {
+      "get": {
+        "operationId": "getWriteReview",
+        "summary": "这条岗位开没开「发之前让我看一眼」（WP483）",
+        "tags": ["role"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WriteReviewSetting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "WriteReviewSetting"
+      },
+      "put": {
+        "operationId": "setWriteReview",
+        "summary": "开 / 关「发之前让我看一眼」（开了：工坊在 ego 里只填好，人自己点发送）",
+        "tags": ["role"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WriteReviewSetting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "WriteReviewSetting",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "on": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["on"]
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/outbound/records": {
       "get": {
         "operationId": "listOutboundRecords",

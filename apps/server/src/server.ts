@@ -497,6 +497,9 @@ import {
   workspaceRootOf,
 } from './dsh-scenes.js'
 import { createEconomicsService } from './economics.js'
+import { detectEgoBrowser } from './ego-browser.js'
+import { probeEgoConnection } from './ego-write/runner.js'
+import { createEgoWriter, materializeMedia } from './ego-write/writer.js'
 import { createEmailAutoReply, type EmailAutoReply } from './email-auto-reply.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExecutionFallback, resolveExecutionMode } from './execution/fallback.js'
@@ -584,7 +587,7 @@ import {
   kolSandboxIntercept,
 } from './kol-sandbox.js'
 import { CONTACT_SECRET_FIELD, contactSecretId, createKolService } from './kol-service.js'
-import { createKolToolExecutor } from './kol-tools.js'
+import { createKolToolExecutor, observeViaIngest } from './kol-tools.js'
 import {
   canEditMemory,
   canReadMemory,
@@ -1020,6 +1023,7 @@ import {
   emptyDataSource,
   type WorkstationDataSource,
 } from './workstation.js'
+import { createWriteReviewSettings, type WriteReviewSettings } from './write-review.js'
 
 /** 战报要数「今天处理掉的」，所以取队列时状态放全（等待类计数在 work 端自己过滤）。 */
 /** WP212：「交给 X ▾」里常驻的五个岗位（与消息相关；别的岗位开着才列）。 */
@@ -2508,6 +2512,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 没有数据目录（全内存档）= 装不了，那一项就一直是"还没装"。
      */
     defaultBskPath: () => (dbDir === undefined ? undefined : bskPathIn(dbDir)),
+    /*
+     * WP483：探 ego 按**这个服务进程拿到的环境**找（PATH、用户目录）——环境里没有用户目录（测试 / 精简环境）就不去
+     * 常见安装位置找，免得开发机上装着的 ego 漏进测试（WP483 起探到 ego 就默认用它）。
+     */
+    detectEgo: (saved) => {
+      const home = env.HOME ?? env.USERPROFILE
+      if (home === undefined && saved === undefined)
+        return {
+          ok: false,
+          detail: '这台电脑上没找到 ego（`ego-browser`）。装好 ego、完成首次引导后再来看看。',
+        }
+      return detectEgoBrowser({
+        env,
+        ...(home === undefined ? {} : { homedir: home }),
+        ...(saved === undefined ? {} : { savedPath: saved }),
+      })
+    },
+  })
+  /*
+   * WP483（决策 1658 / 1660）：发帖 / 回帖走 ego 的那只手（Reddit 写、社媒发帖 / 回帖共用）。
+   * 能不能用每次现问浏览器设置（选了 ego，或没选过、默认 ego）+ 探测（缓存 30 秒）。
+   */
+  const egoWriter = createEgoWriter({
+    // `AGENTSWS_EGO_WRITE=off`：开发 / 联调时整条 ego 发帖路关掉（一律插件路），免得开发机上的 ego 去碰真网站
+    egoPath: () => (env.AGENTSWS_EGO_WRITE === 'off' ? undefined : browserSettings.egoWritePath()),
   })
   /*
    * WP144（docs/80）：电脑操控——**一台机器一份**，理由与浏览器设置逐字相同（操作的是
@@ -2869,6 +2898,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       /^(dlv|exec)_\d+$/.test(id) ||
       // WP329：Reddit 写交给了插件 / 已由 Reddit 写那一份自己记过（带编号与链接）——这里不再记一行
       id.startsWith('reddit_fill_') ||
+      // WP483：Reddit 写交给了 ego（发出去之后 Reddit 写那一份自己记，带编号与链接）
+      id.startsWith('reddit_ego_') ||
       id.startsWith('reddit_direct_') ||
       // WP415：出卡时已办完 / 交给排期的那几类——真发的那一拍自己记
       id.startsWith(INLINE_EXECUTION_PREFIX)
@@ -4890,6 +4921,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       `web search: ${webSearchChannel === undefined ? '没有内置浏览器（没有桌面壳）' : '工坊内置浏览器'}\n`,
     )
 
+  /** WP483（决策 1660）：每个品牌一份「发之前让我看一眼」（按岗位记，默认关）。 */
+  const writeReviews = new Map<string, WriteReviewSettings>()
+  const writeReviewOf = (ws: WorkspaceId): WriteReviewSettings => {
+    let got = writeReviews.get(ws)
+    if (got === undefined) {
+      const dir = brandDirOf(dbDir, ws, workspace.id)
+      got = createWriteReviewSettings(dir === undefined ? {} : { dir })
+      writeReviews.set(ws, got)
+    }
+    return got
+  }
+  /** WP483：这条写的发起人岗位开没开「发之前让我看一眼」。 */
+  const reviewFirstFor = (
+    ws: WorkspaceId,
+    who: { assignment_id?: string; role_id?: string },
+  ): boolean => {
+    const role =
+      who.role_id ??
+      (who.assignment_id === undefined
+        ? undefined
+        : roles.assignments.get(who.assignment_id)?.role_id)
+    if (role === undefined) return false
+    const position = cloudPositionOf(ws, role, who.assignment_id) ?? role
+    return writeReviewOf(ws).get(position).review_before_send
+  }
+
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -5638,6 +5695,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const nextReplyDraft = (): string => `${Date.parse(clock.now()).toString(36)}_${++replyDrafts}`
     const socialService = createSocialService({
       workspace_id: ws,
+      // WP483（决策 1658 / 1660）：没接官方接口的内容渠道，ego 能用就工坊自己在 ego 里发；跑失败退插件
+      ego: {
+        available: () => egoWriter.available(),
+        run: (cfg) => egoWriter.run(cfg),
+        media: (refs) =>
+          materializeMedia(refs, {
+            readBlob: async (key) => {
+              const got = await blobs?.get(key)
+              return got?.bytes === undefined
+                ? undefined
+                : {
+                    bytes: got.bytes,
+                    ...(got.stat.content_type === undefined
+                      ? {}
+                      : { content_type: got.stat.content_type }),
+                  }
+            },
+          }),
+        reviewFirst: (who) => reviewFirstFor(ws, who),
+      },
       // WP323：回帖 / 到点发帖 / 群发发出去了 → 记进发出记录
       onSent: (input) => {
         outboundLog.record(ws, input)
@@ -6553,6 +6630,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const item = txn.runtime.store.getApproval(approval_item_id)
         if (item !== undefined) learning.observeEdit(item, { before, after, at: at as never })
       },
+      // WP483（决策 1658 / 1660）：ego 能用就走 ego（批了工坊自己在 ego 里发）；跑失败退插件
+      ego: {
+        available: () => egoWriter.available(),
+        run: (cfg) => egoWriter.run(cfg),
+        reviewFirst: (who) => reviewFirstFor(ws, who),
+      },
     })
     const redditWritesSweep = setInterval(
       () => void redditWrites?.sweep().catch(() => undefined),
@@ -7273,6 +7356,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               // WP428（决策 1244 改）：这条岗位开了全自动，AI 才能把合作推进到「谈成 / 已寄样」
               autopilot: (actor) =>
                 autopilot.isOn(actor.workspace_id, actor.assignment_id, KOL_AUTOPILOT_SCOPE),
+              /*
+               * WP483（决策 1661）：ego 里读到的红人公开数据——和插件同一个入口（本机红人库 + 云端备份），
+               * 「谁采的」照插件那样记在这个人头上。
+               */
+              observe: observeViaIngest(async (session, input) =>
+                extensionPortOf.ingest(session as never, input),
+              ),
             }),
             /*
              * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
@@ -7579,13 +7669,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP181：官方「自动化任务」的四个工具（装了那个官方插件才挂；执行器是进程那一份）
             automation,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
-            // WP463：ego 只在 ① 个人用法里接（docs/111 §0 第 4 条）——② 同事互联、③ 公司集体不给
-            browser: () => {
-              const b = browserSettings.forRun()
-              if (b?.mode === 'ego' && (modeOfWorkspaceSync?.(ws) ?? 'company') !== 'solo')
-                return undefined
-              return b
-            },
+            // WP463 → WP483（决策 1659 改 1477）：ego 在个人 / 同事互联 / 公司三种用法里都给（还是要本机档）
+            browser: () => browserSettings.forRun(),
+            // WP483（决策 1652）：个人用法（本机档）下浏览器的填写、点击放行 + 留痕；同事互联 / 公司照旧拦
+            personalBrowserWrites: () =>
+              runtimeMode() === 'local' && modeOfWorkspaceSync?.(ws) === 'solo',
             // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
             computerUse,
             /*
@@ -16069,7 +16157,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       },
       // WP463：ego 装没装、能不能跑（现探一次 `ego-browser skill`）
-      egoStatus: () => browserSettings.egoStatus(),
+      egoStatus: async () => {
+        const st = browserSettings.egoStatus()
+        if (!st.installed || st.ego_path === undefined) return st
+        // WP483：装好了再真连一次（认得出管理员身份、ego 没打开 / 首次引导没做完）
+        const c = await probeEgoConnection(st.ego_path).catch(() => undefined)
+        return c === undefined
+          ? st
+          : {
+              ...st,
+              connected: c.connected,
+              ...(c.detail === undefined ? {} : { connect_detail: c.detail }),
+              ...(c.admin === true ? { admin: true } : {}),
+            }
+      },
       /*
        * WP95（36 §11）：第三栏「运行中的浏览器」读的那一份。
        * 纯投影——把这次运行的事件折成"哪种执行器、当前域、最近一次导航 / 拒绝、
@@ -16452,6 +16553,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           on,
           by: actor.person_id,
         }),
+    },
+    // WP483（决策 1660）：岗位上的「发之前让我看一眼」（按这条分配所在的岗位记；认不出岗位就按职责 id 记）
+    writeReview: {
+      get: (actor) => {
+        const position =
+          cloudPositionOf(actor.workspace_id, actor.role_id, actor.assignment_id) ?? actor.role_id
+        return writeReviewOf(actor.workspace_id).get(position)
+      },
+      set: (actor, on) => {
+        const position =
+          cloudPositionOf(actor.workspace_id, actor.role_id, actor.assignment_id) ?? actor.role_id
+        appendEvent({
+          schema_version: 1,
+          workspace_id: actor.workspace_id,
+          type: on ? 'write_review.turned_on' : 'write_review.turned_off',
+          actor: { kind: 'person', id: actor.person_id },
+          correlation: { trace_id: `tr_write_review_${clock.now()}` },
+          payload: { position_id: position, assignment_id: actor.assignment_id },
+        })
+        return writeReviewOf(actor.workspace_id).set(position, on)
+      },
     },
     // WP323：发出记录与记录去处（按请求人所在品牌）
     outbound: createOutboundPort(outboundLog),

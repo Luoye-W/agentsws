@@ -16,7 +16,7 @@
  * 3. **失败说人话**：拦下来、没接上、缺 id，都回一句中文，不回 `undefined`
  *    （66 断点 #6 的「界面把错误吞了」就是从这里开始的）。
  */
-import type { KolActor, KolPort } from '@agentsws/api'
+import type { ExtensionObservation, KolActor, KolPort } from '@agentsws/api'
 import type {
   CollaborationStage,
   DeliverableKind,
@@ -46,6 +46,57 @@ export interface KolToolsOptions {
    * 「谈成 / 已寄样」；花钱的（报价、寄样成本、付款）照旧出卡、受额度管。不给 = 没开。
    */
   autopilot?(actor: KolActor): boolean
+  /**
+   * WP483（决策 1661）：浏览器（ego）里读到的红人公开主页数据——和浏览器插件采集的走同一条路
+   * （`ExtensionService.ingest`：存进本机红人库 + 登录了云账号就转发到工坊云端的公共红人库）。不给 = 这个工具用不了。
+   */
+  observe?(
+    actor: KolActor,
+    observations: ExtensionObservation[],
+  ): Promise<{ saved: number; deduped: number; forwarded: number; pending?: number }>
+}
+
+/** WP483：一次最多记几个。 */
+export const OBSERVE_MAX = 50
+
+/**
+ * WP483（决策 1661）：把 ego 读到的观测交给**插件那一条同样的入口**（`ExtensionPort.ingest`：存本机红人库 +
+ * 登录了云账号就转发到工坊云端）。「谁采的」照插件那样记在这个人头上（`person_id`），令牌那一格写 `ego`。
+ */
+export function observeViaIngest(
+  ingest: (
+    session: {
+      token_id: string
+      workspace_id: WorkspaceId
+      person_id: string
+      extension_id: string
+      scopes: string[]
+    },
+    input: { observations: ExtensionObservation[] },
+  ) => Promise<{
+    rows: readonly { status: string }[]
+    forwarded_to_public_library: number
+    public_library_pending?: number
+  }>,
+): NonNullable<KolToolsOptions['observe']> {
+  return async (actor, observations) => {
+    const res = await ingest(
+      {
+        token_id: 'ego',
+        workspace_id: actor.workspace_id,
+        person_id: actor.person_id,
+        extension_id: 'ego',
+        scopes: ['kol.observe'],
+      },
+      { observations },
+    )
+    return {
+      saved: res.rows.filter((r) => r.status === 'ok').length,
+      deduped: res.rows.filter((r) => r.status === 'deduped').length,
+      forwarded: res.forwarded_to_public_library,
+      ...(res.public_library_pending === undefined ? {} : { pending: res.public_library_pending }),
+    }
+  }
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined)
@@ -284,6 +335,65 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
               has_contact: detail.contacts.length > 0,
             },
             provenance: [{ type: 'creator', id: detail.creator.id }],
+          }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+        }
+      }
+
+      /*
+       * WP483（决策 1661）：浏览器（ego）里读到的公开主页数据 → 和插件同一条路（本机 + 云端备份）。
+       * 只收白名单那几格；私信、联系方式、账号凭据一格都没有。
+       */
+      case 'record_creator_observations': {
+        if (options.observe === undefined)
+          return { status: 'error', reason: '这个进程没接红人采集那一条路，记不了。' }
+        const raw = Array.isArray(input.observations) ? input.observations : []
+        const at = options.now()
+        const observations: ExtensionObservation[] = []
+        for (const one of raw.slice(0, OBSERVE_MAX)) {
+          const r = one !== null && typeof one === 'object' ? (one as Record<string, unknown>) : {}
+          const handle = str(r.handle)?.trim()
+          if (handle === undefined || handle === '') continue
+          const count = (v: unknown): number | undefined => {
+            const n = num(v)
+            return n === undefined || n < 0 ? undefined : Math.round(n)
+          }
+          const followers = count(r.followers)
+          const videos = count(r.video_count)
+          const views = count(r.avg_views)
+          const url = str(r.url)
+          observations.push({
+            channel,
+            handle: channel === 'youtube' ? handle : handle.replace(/^@/u, ''),
+            ...(str(r.display_name) === undefined
+              ? {}
+              : { display_name: str(r.display_name)?.slice(0, 200) }),
+            ...(url === undefined || !/^https:\/\//iu.test(url) ? {} : { url, page_url: url }),
+            ...(followers === undefined ? {} : { followers }),
+            ...(videos === undefined ? {} : { video_count: videos }),
+            ...(views === undefined ? {} : { avg_views: views }),
+            ...(str(r.country) === undefined ? {} : { country: str(r.country)?.slice(0, 60) }),
+            ...(str(r.bio) === undefined ? {} : { bio: str(r.bio)?.slice(0, 1000) }),
+            observed_at: at,
+            source: 'channel_page',
+          })
+        }
+        if (observations.length === 0) return missing('observations（至少一个 handle）')
+        try {
+          const res = await options.observe(actor, observations)
+          return {
+            status: 'ok',
+            data: {
+              rows: observations.length,
+              saved: res.saved,
+              deduped: res.deduped,
+              backed_up_to_cloud: res.forwarded,
+              ...(res.pending === undefined ? {} : { cloud_pending: res.pending }),
+              ...(raw.length > OBSERVE_MAX
+                ? { note: `一次最多 ${OBSERVE_MAX} 个，后面的没记` }
+                : {}),
+            },
           }
         } catch (e) {
           return { status: 'error', reason: e instanceof Error ? e.message : String(e) }

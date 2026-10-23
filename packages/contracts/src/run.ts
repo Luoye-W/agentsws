@@ -290,6 +290,17 @@ export interface EgoBrowserStatus {
   version?: string
   /** 没装 / 跑不起来 / 这一档不允许时说给人听的那一句。 */
   detail?: string
+  /**
+   * WP483：装好了之后再真连一次（跑一段只列 Space 数的脚本）。`false` = 装了但连不上
+   * （ego 没打开、首次引导没做完、工坊被「以管理员身份运行」……），`connect_detail` 说下一步。
+   * 老服务端不带这一格。
+   */
+  connected?: boolean
+  connect_detail?: string
+  /** WP483：连不上是因为工坊以管理员身份在跑（Windows：ego 不接受管理员身份的调用方）。 */
+  admin?: boolean
+  /** WP483（决策 1658）：用户还没在设置里选过浏览器、探到 ego 就默认用它——这次是不是按这个默认。 */
+  default_ego?: boolean
 }
 
 /**
@@ -357,6 +368,11 @@ export interface BrowserSettingsView extends BrowserSettings {
   ego_allowed?: boolean
   /** 不允许时说给人听的那一句。 */
   ego_blocked_reason?: string
+  /**
+   * WP483（决策 1658）：用户还没在设置里选过浏览器、这台机器上探到了 ego——`mode` 按 ego 算（默认用 ego）。
+   * 用户点过「保存」之后就按他存的（选插件 / 别的浏览器都行）。
+   */
+  ego_default?: boolean
 }
 
 /** 探一次 CDP 地址（`GET /json/version`）的结果。 */
@@ -429,7 +445,16 @@ export interface RunRequest {
   }
   context: ContextItem[]
   grounding: GroundingRule[]
-  tools: { allow: string[]; connect_token: string; side_effect_policy: 'personal' | 'executor' }
+  tools: {
+    allow: string[]
+    connect_token: string
+    side_effect_policy: 'personal' | 'executor'
+    /**
+     * WP483（决策 1652）：个人用法下，工作 Chrome / BrowserSkill 的填写、点击放行并留痕（与 ego 对齐）；
+     * 只管浏览器那一类工具，别的对外写照旧按 `side_effect_policy`。公司用法不给这一格（照旧拦）。
+     */
+    browser_write?: 'personal'
+  }
   skills: SkillRef[]
   persona: { sections: PromptSection[] }
   budget: {

@@ -700,7 +700,17 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     }
 
     const effect = classifySideEffect(exec.name, options.sideEffects, args, mcpReadTools)
-    if (effect === 'write_external' && request.tools.side_effect_policy === 'executor') {
+    /*
+     * WP483（决策 1652）：个人用法下工作 Chrome / BrowserSkill 的填写、点击放行（下面照样留一条 `browser_write` 痕迹），
+     * 与 ego 对齐；只管浏览器那一类，别的对外写照旧拦。公司用法不带 `browser_write`，照旧拦。
+     */
+    const personalBrowserWrite =
+      request.tools.browser_write === 'personal' && anyBrowserToolName(exec.name) !== undefined
+    if (
+      effect === 'write_external' &&
+      request.tools.side_effect_policy === 'executor' &&
+      !personalBrowserWrite
+    ) {
       return deny(`write_external_requires_executor: ${exec.name}`)
     }
     // WP387：受保护页面上的点击 / 输入要先有卡（个人档也一样；打开页面本身只是去看，不拦）
@@ -917,7 +927,11 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       ? [
           browserBrief({
             allowedHosts: request.allowed_hosts,
-            policy: request.tools.side_effect_policy,
+            // WP483（决策 1652）：个人用法下浏览器能点能填，说明按 personal 那一档写
+            policy:
+              request.tools.browser_write === 'personal'
+                ? 'personal'
+                : request.tools.side_effect_policy,
             ...(request.browser === undefined ? {} : { mode: request.browser.mode }),
           }),
         ]
