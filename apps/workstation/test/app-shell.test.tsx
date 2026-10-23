@@ -171,9 +171,14 @@ describe('WP271 三种模式：左栏与账号块', () => {
     expect(screen.getByTestId('nav-settings').textContent).toContain('设置')
     expect(screen.queryByTestId('nav-org')).toBeNull()
     expect(screen.queryByTestId('nav-secretary')).toBeNull()
-    const account = screen.getByTestId('account-block').textContent ?? ''
-    expect(account).toContain('Nordvolt')
-    expect(account).not.toContain('所有者')
+    // WP481（决策 1634）：名字下面不再写工作区名（个人用户看到的是「default」），只写名字
+    expect(screen.queryByTestId('account-subtitle')).toBeNull()
+    expect(screen.getByTestId('account-name').textContent).toBe('王岚')
+    expect(screen.getByTestId('account-toggle').textContent).not.toContain('所有者')
+    // 「反馈」不在左下角单独一颗，在个人菜单里
+    expect(screen.queryByTestId('feedback-button')).toBeNull()
+    expect(screen.getByTestId('account-feedback').textContent).toBe('反馈')
+    expect(screen.getByTestId('account-feedback-mine').textContent).toBe('我的反馈')
   })
 
   it('③ 公司集体：照旧「公司」、账号块「所有者 · 品牌」；「我的代理」并进「我的助理」不再占左栏', async () => {
@@ -190,7 +195,7 @@ describe('WP271 三种模式：左栏与账号块', () => {
       </AppShell>,
     )
     await waitFor(() => {
-      expect(screen.getByTestId('account-block').textContent).toContain('所有者 · Nordvolt')
+      expect(screen.getByTestId('account-subtitle').textContent).toBe('所有者 · Nordvolt')
     })
     // WP343：「我的代理」并进「我的助理」（右上角「替我答同事」，见 wp343-assistant.test.tsx）
     expect(screen.queryByTestId('nav-secretary')).toBeNull()
