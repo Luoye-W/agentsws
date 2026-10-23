@@ -9997,7 +9997,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       mail: () => ({
         store: messages.store,
-        addresses: () => kolMailBox.current?.addresses() ?? [],
+        // 连着的邮箱（连接页那几只 + 发信那一路认的；去重）
+        addresses: () => [
+          ...new Set([
+            ...connections.mailAccounts().map((a) => a.address),
+            ...(kolMailBox.current?.addresses() ?? []),
+          ]),
+        ],
         floor: (address) => messages.sync.backfillFloor(address),
         backfill: (address, days) => messages.sync.backfill(address, days),
       }),
