@@ -22,6 +22,9 @@
  *
  * 真 provider 在本机真 Chrome 上的手工验证步骤见 `scripts/dev-browser.md`。
  */
+import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, dirname } from 'node:path'
 import { Provenance } from '@agentsws/core'
 import { Context } from '@deepseek-ai/cordis'
 import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
@@ -179,6 +182,25 @@ describe('(a) 真 provider：挂得上，工具名与我们那张表逐条相同
     } finally {
       await harness.dispose()
     }
+  }, 60_000)
+
+  it('WP484：会话 cwd 是这次运行自己的临时目录（快照不落服务进程的工作目录），dispose 后删掉', async () => {
+    const req = makeRequest({ ...KOL })
+    const { harness } = await harnessOf(req)
+    let cwd = ''
+    try {
+      cwd = String((harness.session as unknown as { header: { cwd?: string } }).header.cwd)
+      expect(basename(cwd)).toMatch(/^agentsws-run-browser-/)
+      expect(dirname(cwd)).toBe(tmpdir())
+      expect(cwd).not.toBe(process.cwd())
+      expect(existsSync(cwd)).toBe(true)
+      // 模型看到的「当前目录」也是它（Playwright MCP 子进程的 cwd 从这里取）
+      const sections = await harness.contextSections()
+      expect(sections.some((s) => s.text.includes(cwd))).toBe(true)
+    } finally {
+      await harness.dispose()
+    }
+    expect(existsSync(cwd)).toBe(false)
   }, 60_000)
 
   it('不给 RunRequest.browser → 整层浏览器都不存在（没有服务、没有工具、不起子进程）', async () => {

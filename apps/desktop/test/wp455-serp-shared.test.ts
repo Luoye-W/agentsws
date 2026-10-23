@@ -24,6 +24,8 @@ function inPage(file: string, url: string, engine: 'google' | 'bing'): SerpExtra
 const CASES: [string, string, 'google' | 'bing'][] = [
   ['google-serp.html', 'https://www.google.com.hk/search?q=site%3Areddit.com', 'google'],
   ['google-serp-variants.html', 'https://www.google.com.hk/search?q=portable+monitor', 'google'],
+  // WP484：10-23 真实存下的结果页（链接只剩 `/goto?url=…` 跳转地址）
+  ['google-goto.html', 'https://www.google.com.hk/search?q=best+standing+desk+2026', 'google'],
   ['google-interstitial.html', 'https://www.google.com.hk/search?q=smart+glasses', 'google'],
   ['google-sorry.html', 'https://www.google.com/sorry/index?continue=x', 'google'],
   ['google-noresults.html', 'https://www.google.com/search?q=zzqx', 'google'],

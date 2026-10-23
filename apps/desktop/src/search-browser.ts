@@ -286,6 +286,16 @@ export function validateReveal(body: unknown): RevealRequest | string {
   return { workspace_id: b.workspace_id, url: b.url, reason: b.reason, message }
 }
 
+/**
+ * WP484：内置浏览器里**页面自己发起**的导航（Bing 结果页过一会儿自己跳 `&rdr=1`、Reddit 的 `?solution=` 校验、
+ * Google 过渡页带 `sei=` 再请求一次、人在第三栏点验证）放不放行。壳对所有页面统一装了「外链交系统浏览器」那一道
+ * （`main.ts` 的 `will-navigate`）——对内置浏览器不对：会把这些跳转拦下、在用户的系统浏览器里打开。
+ * 内置浏览器里只认 http / https（就在这一页里接着走），别的协议一律不跳、也不交给系统。
+ */
+export function searchNavigationAllowed(url: string): boolean {
+  return isWebUrl(url)
+}
+
 /** 一次随机口令（通道用）。 */
 export function newChannelToken(): string {
   return randomBytes(24).toString('hex')

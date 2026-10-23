@@ -9,8 +9,16 @@
  * - **要人介入**（Google 人机验证、网站要登录）时，另开一个同 partition 的「交给人」视图打开那一页，
  *   告诉工作台（第三栏「浏览器」亮出来）；人在那页上自己点。离开验证页就算过了，记下时刻、收起视图。
  *   AI 自己的那个视图照常干活，不碰这一页。
+ *
+ * WP484（WP464 §8 实测的三个毛病）：AI 读页 / 搜索用的不再是一个一直开着、反复换页的视图，而是
+ * **每开一页现开一个不显示的离屏窗口**（`show: false` + `offscreen`，同一个品牌 partition），读完就关：
+ * - 上一页的脚本（Bing 结果页过一会儿自己跳 `&rdr=1`）顶掉下一页的导航、把上一页当成这一页读回去（串页）——没有上一页了；
+ * - 一页卡住（`executeJavaScript*` 要等整页停止加载才执行，重的站几十秒不停），后面排队的几页跟着「连不上」——
+ *   读之前先停下加载；整次另有总上限（{@link OPEN_DEADLINE_EXTRA_MS}），到点关掉这一页、交回超时，后面照常；
+ * - 不挂界面的视图在页面看来是「隐藏、0×0」，YouTube 这类页面不画列表——离屏窗口在页面看来是可见的 1280×900。
+ *   离屏窗口从不显示、不进任务栏、不抢焦点；只渲染到内存里（每秒 {@link READER_FRAME_RATE} 帧，没人取画面）。
  */
-import { type BrowserWindow, session as electronSession, WebContentsView } from 'electron'
+import { BrowserWindow, session as electronSession, net, WebContentsView } from 'electron'
 import { setAmazonDeliveryZip } from './amazon-delivery.js'
 import {
   AMAZON_URL_PATTERNS,
@@ -31,13 +39,36 @@ import {
   extractReadable,
   extractSerp,
   pageScript,
+  type ReadableExtract,
+  type SerpExtract,
   type SerpProbe,
   serpState,
 } from './search-extract.js'
-import { type LoadableContents, loadPage } from './search-load.js'
+import {
+  isTransientLoadFailure,
+  type LoadableContents,
+  loadPage,
+  settleText,
+  withDeadline,
+} from './search-load.js'
+import { resolveSerpRedirects } from './search-redirect.js'
 
 /** WP454：搜索结果页 `dom-ready` 之后最多再等多久（等过渡页自己跳到真结果页）。 */
 export const SERP_READY_WAIT_MS = 8_000
+
+/** WP484：读正文前最多等多久让字数稳住（从 `dom-ready` 算）。 */
+export const PAGE_SETTLE_MAX_MS = 8_000
+/** WP484：数据原文 / Amazon HTML 读之前最多再等多久让页面自己停止加载（过了就停下来读）。 */
+export const IDLE_WAIT_MAX_MS = 6_000
+/** WP484：一次开页的总上限 = 请求的 `timeout_ms` + 这么多（通道那边等 `timeout_ms` + 30 秒，先到我们这边）。 */
+export const OPEN_DEADLINE_EXTRA_MS = 25_000
+/** WP484：Google 结果跳转地址换目标网址，一条最多等多久。 */
+export const REDIRECT_HOP_TIMEOUT_MS = 5_000
+/** WP484：连接断了一下（-100 这种）隔多久重开。 */
+export const TRANSIENT_RETRY_DELAY_MS = 1_000
+/** WP484：离屏窗口每秒画几帧（够页面的动画帧回调跑起来就行，没人取画面）。 */
+export const READER_FRAME_RATE = 10
+const READER_SIZE = { width: 1280, height: 900 }
 
 /** 交给人的那一页（第三栏亮出来的）。WP454：`consent` = Google 的 cookie 同意页。 */
 export interface SearchHandover {
@@ -54,6 +85,11 @@ export interface ElectronSearchBrowser extends SearchBrowserDriver {
   place(rect: { x: number; y: number; width: number; height: number } | null): void
   /** 人说「先不管了」：收起那一页（不算验证过）。 */
   dismiss(): void
+  /**
+   * WP484：这个页面是不是内置浏览器的（AI 读页的离屏窗口、交给人的那一页）——壳的「外链交系统浏览器」那一道
+   * 要跳过它们（见 `searchNavigationAllowed`）。
+   */
+  owns(contents: Electron.WebContents): boolean
   close(): void
 }
 
@@ -61,7 +97,6 @@ export interface ElectronSearchBrowser extends SearchBrowserDriver {
 const WORLD_ID = 1053
 
 interface Slot {
-  view: WebContentsView
   queue: Promise<unknown>
 }
 
@@ -104,6 +139,7 @@ export function createElectronSearchBrowser(deps: {
     return ses
   }
 
+  /** 交给人的那一页（第三栏）：挂到主窗口上的视图。 */
   const newView = (workspace_id: string): WebContentsView => {
     const view = new WebContentsView({
       webPreferences: {
@@ -122,16 +158,51 @@ export function createElectronSearchBrowser(deps: {
     return view
   }
 
+  /** WP484：AI 读一页用的离屏窗口（每开一页现开一个，读完就关；见文件头）。 */
+  const readers = new Set<BrowserWindow>()
+  const newReader = (workspace_id: string): BrowserWindow => {
+    const win = new BrowserWindow({
+      show: false,
+      ...READER_SIZE,
+      skipTaskbar: true,
+      focusable: false,
+      webPreferences: {
+        session: sessionOf(workspace_id),
+        offscreen: true,
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        webviewTag: false,
+        spellcheck: false,
+        backgroundThrottling: false,
+      },
+    })
+    readers.add(win)
+    win.once('closed', () => readers.delete(win))
+    win.webContents.setFrameRate(READER_FRAME_RATE)
+    win.webContents.setAudioMuted(true)
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    return win
+  }
+  const dropReader = (win: BrowserWindow): void => {
+    readers.delete(win)
+    try {
+      if (!win.isDestroyed()) win.destroy()
+    } catch {
+      // 已经关了
+    }
+  }
+
   const slotOf = (workspace_id: string): Slot => {
     let slot = slots.get(workspace_id)
     if (slot === undefined) {
-      slot = { view: newView(workspace_id), queue: Promise.resolve() }
+      slot = { queue: Promise.resolve() }
       slots.set(workspace_id, slot)
     }
     return slot
   }
 
-  /** WP454：核实一次就够（视图不挂窗口时页面看到的可见性 / 视口），记进日志。 */
+  /** WP454：核实一次就够（页面看到的可见性 / 视口），记进日志。 */
   let probeLogged = false
 
   /** 打开一页（WP454 起拎到 `search-load.ts`；搜索结果页会等到真结果页再交回）。 */
@@ -139,24 +210,66 @@ export function createElectronSearchBrowser(deps: {
     wc: Electron.WebContents,
     url: string,
     timeoutMs: number,
-    userAgent?: string,
+    opts: { userAgent?: string; partial_on_timeout?: boolean } = {},
   ): ReturnType<typeof loadPage> =>
-    loadPage(wc as unknown as LoadableContents, url, timeoutMs, {
-      ...(userAgent === undefined ? {} : { userAgent }),
-    })
+    loadPage(wc as unknown as LoadableContents, url, timeoutMs, opts)
 
-  async function openOnce(req: OpenRequest): Promise<OpenResult> {
-    const wc = slotOf(req.workspace_id).view.webContents
+  /** WP484：页面还在加载就最多再等 `ms`，还没停就停下来（`executeJavaScript*` 要等停止加载才执行）。 */
+  const untilIdle = async (wc: Electron.WebContents, ms: number): Promise<void> => {
+    if (wc.isLoadingMainFrame() && ms > 0)
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(done, ms)
+        function done(): void {
+          clearTimeout(timer)
+          wc.removeListener('did-stop-loading', done)
+          resolve()
+        }
+        wc.once('did-stop-loading', done)
+      })
+    if (wc.isLoadingMainFrame()) wc.stop()
+  }
+
+  /** WP484：Google 结果跳转地址 → 302 的 `Location`（同一个品牌 partition；不跟过去）。 */
+  const hop =
+    (ses: Electron.Session) =>
+    (url: string): Promise<string | undefined> =>
+      new Promise((resolve) => {
+        let req: Electron.ClientRequest
+        const finish = (v: string | undefined): void => {
+          clearTimeout(timer)
+          try {
+            req.abort()
+          } catch {
+            // 已经完了
+          }
+          resolve(v)
+        }
+        const timer = setTimeout(() => finish(undefined), REDIRECT_HOP_TIMEOUT_MS)
+        try {
+          req = net.request({ url, session: ses, redirect: 'manual', useSessionCookies: true })
+        } catch {
+          finish(undefined)
+          return
+        }
+        req.on('redirect', (_status, _method, location) => finish(location))
+        req.on('response', (res) => {
+          const loc = res.headers.location
+          finish(Array.isArray(loc) ? loc[0] : loc)
+        })
+        req.on('error', () => finish(undefined))
+        req.end()
+      })
+
+  async function readOnce(wc: Electron.WebContents, req: OpenRequest): Promise<OpenResult> {
     // WP402（不伪装 UA）：读数据地址原文那一次导航自报 Agent 身份
     const serp = req.kind === 'google' || req.kind === 'bing' ? req.kind : undefined
     const got =
       serp === undefined
-        ? await load(
-            wc,
-            req.url,
-            req.timeout_ms,
-            req.kind === 'data' ? dataUserAgent(wc.session.getUserAgent()) : undefined,
-          )
+        ? await load(wc, req.url, req.timeout_ms, {
+            ...(req.kind === 'data' ? { userAgent: dataUserAgent(wc.session.getUserAgent()) } : {}),
+            // WP484：普通网页到时间还没 `dom-ready`、但已经显示出来了——读到多少算多少
+            ...(req.kind === 'page' ? { partial_on_timeout: true } : {}),
+          })
         : // WP454：搜索结果页等到真结果页（过渡页的二次导航接着等），等到了就读、不再另等
           await loadPage(wc as unknown as LoadableContents, req.url, req.timeout_ms, {
             ready: {
@@ -194,7 +307,28 @@ export function createElectronSearchBrowser(deps: {
         waited_ms: got.waited_ms,
         renavigations: got.renavigations,
       })
-    } else if (req.settle_ms > 0) await new Promise((r) => setTimeout(r, req.settle_ms))
+    } else if (req.kind === 'page') {
+      // WP484：等字数稳住（列表、评论这些 `dom-ready` 之后才画出来），再停下加载读
+      const settled = await settleText({
+        min_ms: req.settle_ms,
+        max_ms: Math.max(req.settle_ms, PAGE_SETTLE_MAX_MS),
+        interval_ms: 500,
+        probe: () =>
+          wc.mainFrame.executeJavaScript(
+            '(document.body && document.body.innerText || "").length',
+          ) as Promise<number>,
+      })
+      deps.log('搜索浏览器：正文等稳', {
+        waited_ms: settled.waited_ms,
+        chars: settled.chars,
+        stable: settled.stable,
+        ...(got.partial === true ? { partial: true } : {}),
+      })
+      if (wc.isLoadingMainFrame()) wc.stop()
+    } else {
+      if (req.settle_ms > 0) await new Promise((r) => setTimeout(r, req.settle_ms))
+      await untilIdle(wc, IDLE_WAIT_MAX_MS)
+    }
     const script =
       req.kind === 'page'
         ? pageScript(extractReadable, { maxChars: req.max_chars })
@@ -202,20 +336,56 @@ export function createElectronSearchBrowser(deps: {
           ? pageScript(extractData, { maxChars: req.max_chars })
           : req.kind === 'html'
             ? pageScript(extractHtml, { maxChars: req.max_chars })
-            : pageScript(extractSerp, { engine: req.kind, limit: 10 })
+            : pageScript(extractSerp, { engine: req.kind, limit: 10, redirects: true })
+    let data: unknown
     try {
-      const data = await wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [{ code: script }])
-      return {
-        ok: true,
-        status: got.status,
-        final_url: wc.getURL(),
-        ...(req.kind === 'page' || req.kind === 'data' || req.kind === 'html'
-          ? { page: data }
-          : { serp: data }),
-      }
+      data = await wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [{ code: script }])
     } catch (err) {
       return { ok: false, reason: 'failed', message: `读不出这一页：${String(err)}` }
     }
+    const final_url = wc.getURL()
+    if (req.kind === 'page' || req.kind === 'data' || req.kind === 'html')
+      return { ok: true, status: got.status, final_url, page: data as ReadableExtract }
+    const extract = data as SerpExtract
+    if (extract.items.some((i) => i.redirect === true)) {
+      // WP484：Google 结果链接只有跳转地址——换成目标网址（换不出来的那条不要）
+      const r = await resolveSerpRedirects(extract.items, hop(wc.session))
+      deps.log('搜索浏览器：结果跳转地址换目标网址', { resolved: r.resolved, dropped: r.dropped })
+      return { ok: true, status: got.status, final_url, serp: { ...extract, items: r.items } }
+    }
+    return { ok: true, status: got.status, final_url, serp: extract }
+  }
+
+  /** WP484：现开一个离屏窗口读这一页；总上限到了就关掉它、交回超时（后面排队的照常）。 */
+  async function openFresh(req: OpenRequest): Promise<OpenResult & { code?: number }> {
+    const win = newReader(req.workspace_id)
+    try {
+      return await withDeadline(
+        readOnce(win.webContents, req),
+        req.timeout_ms + OPEN_DEADLINE_EXTRA_MS,
+        (): OpenResult => {
+          deps.log('搜索浏览器：这一页超过总上限，关掉', { kind: req.kind })
+          return {
+            ok: false,
+            reason: 'timeout',
+            message: `${Math.round((req.timeout_ms + OPEN_DEADLINE_EXTRA_MS) / 1000)} 秒内没读完这一页`,
+          }
+        },
+      )
+    } catch (err) {
+      return { ok: false, reason: 'failed', message: `读不出这一页：${String(err)}` }
+    } finally {
+      dropReader(win)
+    }
+  }
+
+  /** WP484：连接层抖一下（{@link isTransientLoadFailure}）就隔一秒换个窗口重开一次。 */
+  async function openOnce(req: OpenRequest): Promise<OpenResult> {
+    const first = await openFresh(req)
+    if (!isTransientLoadFailure(first)) return first
+    deps.log('搜索浏览器：连接断了一下，重开一次', { kind: req.kind, code: first.code })
+    await new Promise((r) => setTimeout(r, TRANSIENT_RETRY_DELAY_MS))
+    return openFresh(req)
   }
 
   const detach = (): void => {
@@ -262,15 +432,13 @@ export function createElectronSearchBrowser(deps: {
   }
 
   /** WP394：开站点首页 → 在页面里走 Amazon 自己的改地址接口交邮编（一页额度）。 */
-  async function deliveryOnce(req: {
-    workspace_id: string
-    url: string
-    zip: string
-    timeout_ms: number
-  }): Promise<AmazonDeliveryResult> {
-    const wc = slotOf(req.workspace_id).view.webContents
+  async function setZip(
+    wc: Electron.WebContents,
+    req: { url: string; zip: string; timeout_ms: number },
+  ): Promise<AmazonDeliveryResult> {
     const got = await load(wc, `${req.url}/`, req.timeout_ms)
     if (!got.ok) return got
+    await untilIdle(wc, IDLE_WAIT_MAX_MS)
     const first = (await wc
       .executeJavaScriptInIsolatedWorld(WORLD_ID, [
         { code: pageScript(extractHtml, { maxChars: 400_000 }) },
@@ -288,6 +456,31 @@ export function createElectronSearchBrowser(deps: {
     if (!r.ok) return { ok: false, reason: 'failed', message: r.message ?? '没设上' }
     // 不再开一次首页确认：下一页商品页页头那一行就是「配送到」，服务进程在那里核对（省一页额度）
     return { ok: true }
+  }
+
+  /** WP484：同 {@link openOnce}——现开一个离屏窗口、有总上限、用完就关（邮编记在 partition 的 cookie 里）。 */
+  async function deliveryOnce(req: {
+    workspace_id: string
+    url: string
+    zip: string
+    timeout_ms: number
+  }): Promise<AmazonDeliveryResult> {
+    const win = newReader(req.workspace_id)
+    try {
+      return await withDeadline(
+        setZip(win.webContents, req),
+        req.timeout_ms + OPEN_DEADLINE_EXTRA_MS,
+        (): AmazonDeliveryResult => ({
+          ok: false,
+          reason: 'timeout',
+          message: '设配送地址超时',
+        }),
+      )
+    } catch (err) {
+      return { ok: false, reason: 'failed', message: String(err) }
+    } finally {
+      dropReader(win)
+    }
   }
 
   return {
@@ -361,15 +554,12 @@ export function createElectronSearchBrowser(deps: {
       })
     },
     dismiss: () => closeHandover(false),
+    owns: (contents) =>
+      handover?.view.webContents === contents ||
+      [...readers].some((w) => !w.isDestroyed() && w.webContents === contents),
     close() {
       closeHandover(false)
-      for (const slot of slots.values()) {
-        try {
-          slot.view.webContents.close()
-        } catch {
-          // 已经关了
-        }
-      }
+      for (const win of [...readers]) dropReader(win)
       slots.clear()
     },
   }

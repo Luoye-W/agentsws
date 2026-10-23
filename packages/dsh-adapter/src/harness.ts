@@ -420,8 +420,16 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     (browser !== undefined && !ego) || cuGranted
       ? mkdtempSync(join(tmpdir(), 'agentsws-run-images-'))
       : undefined
+  /*
+   * WP484（WP464 §8 第 6 条）：官方 Playwright 那一种、又没有终端时，会话 cwd 原来是**服务进程的工作目录**——
+   * Playwright MCP 按 AI 给的文件名把快照写在 cwd 下（WP464 实测落进了仓库根）。改成这次运行自己的临时目录
+   * （下面挂工作目录那里建）：Playwright 自己只许写进 cwd 与它的输出目录（`cwd/.playwright-mcp`），
+   * 于是写出去的都在这里面；运行结束与截图目录同一处删掉（模型没有读文件的工具，留着也没人用）。
+   */
+  let browserHome: string | undefined
   const dropImages = (): void => {
     if (imageHome !== undefined) rmSync(imageHome, { recursive: true, force: true })
+    if (browserHome !== undefined) rmSync(browserHome, { recursive: true, force: true })
   }
   if (imageHome !== undefined) {
     root.plugin(LocalAttachmentStore, { dshHome: imageHome } as never)
@@ -496,12 +504,15 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * - `dsh-fs-local` → `ctx.fs`：`working-directory` 只拿它 `resolve` / `stat` 目录（上游 README：解析默认值，不是边界；
    *   我们不挂任何文件工具，模型面一个工具都不多）；
    * - `dsh-working-directory` → `ctx.workingDirectory`：取的是会话的 cwd（`agents.create` 的 `meta.cwd`），
-   *   与以前两边直接读 `session.header.cwd` 是同一个目录——终端仍是主题副本目录（沙箱可写边界不变），浏览器仍是进程 cwd。
+   *   与以前两边直接读 `session.header.cwd` 是同一个目录——终端仍是主题副本目录（沙箱可写边界不变），浏览器是这次运行
+   *   自己的临时目录（WP484；以前是进程 cwd）。
    *   **多出来的一样**：它往模型的用户上下文里放一句 `Current working directory: "<目录>".`（官方的必选上下文段）。
    * 别的运行照旧不挂（不用的东西不挂），提示词与工具面字节不变。
    */
+  if (shell === undefined && browser !== undefined && !browserSkill && !ego)
+    browserHome = mkdtempSync(join(tmpdir(), 'agentsws-run-browser-'))
   if (shell !== undefined || (browser !== undefined && !browserSkill && !ego)) {
-    const cwd = shell?.workspace_root ?? process.cwd()
+    const cwd = shell?.workspace_root ?? browserHome ?? process.cwd()
     root.plugin(LocalFileSystem, { cwd } as never)
     root.plugin(WorkingDirectoryService, { defaultDirectory: cwd } as never)
   }
@@ -667,9 +678,9 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
       /*
        * WP89：会话的 `cwd` **就是沙箱的可写边界**（`sandbox-policy` 按它解析
        * `workspace-write`，见上面挂那一摞时的注释）。没有终端的运行照旧用进程 cwd
-       * ——那时候没人读它。
+       * ——那时候没人读它；官方 Playwright 那一种用这次运行自己的临时目录（WP484，见 `browserHome`）。
        */
-      meta: { cwd: shell?.workspace_root ?? process.cwd() },
+      meta: { cwd: shell?.workspace_root ?? browserHome ?? process.cwd() },
       agentOptions: { provider: subscription ?? GATEWAY_PROVIDER, model: input.model },
       setup: async (agentCtx: Context, agent: Agent) => {
         /*

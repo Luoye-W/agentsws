@@ -22,6 +22,8 @@ const stopOnBlock = process.env.WP353_STOP_ON_BLOCK === '1'
 const noFetch = process.env.WP353_NO_FETCH === '1'
 app.setPath('userData', process.env.WP353_USER_DATA)
 app.disableHardwareAcceleration()
+// WP484：读页用的离屏窗口读完就关——没有别的窗口时 Electron 默认「窗口全关 = 退出」，这里像桌面壳一样不退
+app.on('window-all-closed', () => {})
 
 const imp = (p) => import(pathToFileURL(join(ROOT, p)).href)
 
