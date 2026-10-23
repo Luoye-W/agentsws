@@ -324,7 +324,7 @@ describe('WP433：岗位 / 职责 / 事项页卡片列一直在（Luoye 10-20 �
     expect(within(menu).getByTestId('rail-menu-changes')).toBeDefined()
   })
 
-  it('窗口窄于 900：第三栏（浏览器……）盖在主区上，点遮罩收起', async () => {
+  it('窗口窄于 900：第三栏（浏览器……）盖在主区上，点主区空白处收起（WP485：没有遮罩）', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({
       matches: q.includes('899px') || q.includes('1199px'),
       addEventListener: () => {},
@@ -334,7 +334,10 @@ describe('WP433：岗位 / 职责 / 事项页卡片列一直在（Luoye 10-20 �
     fireEvent.click(screen.getByTestId('rail-overflow'))
     fireEvent.click(await screen.findByTestId('rail-menu-browser'))
     expect(screen.getByTestId('rail-panel-frame').getAttribute('data-layout')).toBe('overlay')
-    fireEvent.click(screen.getByTestId('rail-scrim'))
-    expect(panelOpen()).toBe(false)
+    expect(screen.queryByTestId('rail-scrim')).toBeNull()
+    fireEvent.click(document.body)
+    await waitFor(() => {
+      expect(panelOpen()).toBe(false)
+    })
   })
 })

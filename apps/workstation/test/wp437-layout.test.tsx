@@ -279,12 +279,12 @@ describe('看板自动隐藏 + 「看一眼」', () => {
     expect(screen.queryByTestId('rail-board-peek')).toBeNull()
   })
 
-  it('并排后核心区保不住：第三栏盖在中栏上（带遮罩），看板按没有第三栏算', async () => {
+  it('并排后核心区保不住：第三栏盖在中栏上（WP485：不再有遮罩挡住中栏），看板按没有第三栏算', async () => {
     renderAt({ body: 860, viewport: 1100 })
     fireEvent.click(await screen.findByTestId('open-browser'))
     const frame = await screen.findByTestId('rail-panel-frame')
     expect(frame.getAttribute('data-layout')).toBe('overlay')
-    expect(screen.getByTestId('rail-scrim')).toBeDefined()
+    expect(screen.queryByTestId('rail-scrim')).toBeNull()
   })
 
   it('首页没有看板，也就没有「看一眼」', async () => {

@@ -2517,7 +2517,6 @@ export const TELEMETRY_TESTIDS: readonly string[] = [
   'rail-schedule-time',
   'rail-schedules',
   'rail-schedules-empty',
-  'rail-scrim',
   'rail-skill',
   'rail-skill-exclude',
   'rail-skill-promote',
