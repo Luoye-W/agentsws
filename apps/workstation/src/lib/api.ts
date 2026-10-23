@@ -2599,6 +2599,8 @@ export interface EgoBrowserStatus {
   /** WP483：连不上是因为工坊以管理员身份在跑（Windows）。 */
   admin?: boolean
   default_ego?: boolean
+  /** WP496（决策 1729 A）：ego 自己说有新版本（老服务端没有）。 */
+  update_available?: boolean
 }
 
 /** 现探一次 ego（服务端跑一次 `ego-browser skill`，零点几秒）。 */
@@ -7571,6 +7573,12 @@ export interface ExtensionNeedsView {
   snoozed: boolean
   /** WP416：「要你处理」里还开着的装插件连接卡（有就不在岗位页顶上再出一张）。 */
   connect_card_id?: string
+  /** WP493：这几样 ego 能做（`uses` / `steps` 里已去掉）。 */
+  ego_covers?: BrowserExtensionUseView[]
+  /** WP493：要插件做的几样 ego 全能做——插件只是备用（不催装、连接卡上显示「备用」）。 */
+  plugin_backup?: boolean
+  /** WP496（决策 1729 A）：ego 说有新版本——连接卡上 ego 那一行提一句（老服务没有）。 */
+  ego_update?: boolean
 }
 
 export const getExtensionNeeds = (

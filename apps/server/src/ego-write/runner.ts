@@ -110,6 +110,23 @@ export interface EgoConnectProbe {
   connected: boolean
   admin?: boolean
   detail?: string
+  /**
+   * WP496（决策 1729 A）：ego 自己在输出里说「有新版本」（`[ego-browser:notice] Ego Lite update is available (current x)`）。
+   * 只是告诉人；工坊不替人跑 `ego-browser upgrade`。
+   */
+  update_available?: boolean
+  /** 那一句里写的当前版本。 */
+  update_current?: string
+}
+
+const UPDATE_NOTICE =
+  /\[ego-browser:notice\][^\n]*update is available(?:\s*\(current\s+([^)\s]+)\))?/iu
+
+/** 从 ego 的输出里认「有新版本」那一句（认不出回 `undefined`）。 */
+export function egoUpdateNotice(output: string): { current?: string } | undefined {
+  const m = UPDATE_NOTICE.exec(output)
+  if (m === null) return undefined
+  return m[1] === undefined ? {} : { current: m[1] }
 }
 
 /**
@@ -126,8 +143,19 @@ export async function probeEgoConnection(
     stdin: 'const s = await listTaskSpaces();\nconsole.log("@@OK " + s.length);\n',
     timeoutMs: 20_000,
   })
-  if (`${proc.stdout}\n${proc.stderr}`.includes('@@OK ')) return { connected: true }
   const all = `${proc.stdout}\n${proc.stderr}`
+  if (all.includes('@@OK ')) {
+    const update = egoUpdateNotice(all)
+    return {
+      connected: true,
+      ...(update === undefined
+        ? {}
+        : {
+            update_available: true,
+            ...(update.current === undefined ? {} : { update_current: update.current }),
+          }),
+    }
+  }
   if (ADMIN.test(all)) return { connected: false, admin: true, detail: EGO_ADMIN_SENTENCE }
   if (proc.spawn_error !== undefined)
     return { connected: false, detail: `ego 起不来：${proc.spawn_error}` }

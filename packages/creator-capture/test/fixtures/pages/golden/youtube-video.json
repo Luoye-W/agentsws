@@ -1,0 +1,67 @@
+{
+  "page": "youtube-video",
+  "capture": {
+    "content": {
+      "platform": "youtube",
+      "contentId": "dfVid000001",
+      "contentType": "video",
+      "title": "The ultimate desk setup guide",
+      "url": "https://www.youtube.com/watch?v=dfVid000001",
+      "thumbnailUrl": "https://i.ytimg.com/vi/dfVid000001/mqdefault.jpg",
+      "views": 39421,
+      "viewsText": "39421",
+      "likes": 2345,
+      "publishedAt": "2026-10-21T08:00:00-07:00",
+      "publishedText": "2 days ago",
+      "durationText": "12:05",
+      "orientation": null,
+      "durationSeconds": 725,
+      "author": {
+        "externalId": "@deskfixture",
+        "handle": "@deskfixture",
+        "name": "Desk Fixture",
+        "followers": 123000,
+        "followersText": "123K subscribers",
+        "profileUrl": "https://www.youtube.com/@deskfixture"
+      },
+      "pageUrl": "https://www.youtube.com/watch?v=dfVid000001",
+      "paidPromotion": true
+    },
+    "list": {
+      "target": {
+        "platform": "youtube",
+        "pageType": "watch_related",
+        "sourceQuery": "https://www.youtube.com/watch?v=dfVid000001",
+        "videoId": "dfVid000001"
+      },
+      "candidates": []
+    }
+  },
+  "observation_batches": [],
+  "content_observations": [
+    {
+      "channel": "youtube",
+      "content_external_id": "dfVid000001",
+      "content_type": "video",
+      "title": "The ultimate desk setup guide",
+      "url": "https://www.youtube.com/watch?v=dfVid000001",
+      "thumbnail_url": "https://i.ytimg.com/vi/dfVid000001/mqdefault.jpg",
+      "published_at": "2026-10-21T08:00:00-07:00",
+      "stats": {
+        "views": 39421,
+        "likes": 2345
+      },
+      "author": {
+        "external_id": "@deskfixture",
+        "handle": "@deskfixture",
+        "name": "Desk Fixture",
+        "followers": 123000
+      },
+      "duration_seconds": 725,
+      "paid_promotion": true,
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/watch?v=dfVid000001"
+    }
+  ],
+  "bio_link_observations": []
+}

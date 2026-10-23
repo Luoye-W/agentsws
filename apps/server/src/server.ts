@@ -502,6 +502,17 @@ import {
 } from './dsh-scenes.js'
 import { createEconomicsService } from './economics.js'
 import { detectEgoBrowser } from './ego-browser.js'
+import {
+  createEgoCreatorCapture,
+  createEgoPageReader,
+  createEgoReadiness,
+  createEgoRedditPump,
+  createEgoSheetReader,
+  createPageReadChain,
+  type EgoCapturePort,
+  type EgoRedditPump,
+  egoRedditRead,
+} from './ego-read/index.js'
 import { probeEgoConnection } from './ego-write/runner.js'
 import { createEgoWriter, type EgoWriter, materializeMedia } from './ego-write/writer.js'
 import { createEmailAutoReply, type EmailAutoReply } from './email-auto-reply.js'
@@ -2589,6 +2600,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const egoWanted = (): boolean =>
     options.egoWriter?.wanted?.() ??
     (env.AGENTSWS_EGO_WRITE !== 'off' && browserSettings.egoWanted())
+  /*
+   * WP493（决策 1718）：ego 只读那一路（读页 / 读 Reddit / 读在线表格）——一台机器一份（ego 只有一个、一次只跑一趟）。
+   * `AGENTSWS_EGO_READ=off` 整条关掉（开发 / 联调时免得开发机上的 ego 去读真网站）。
+   */
+  const egoReadPath = (): string | undefined =>
+    env.AGENTSWS_EGO_READ === 'off' ? undefined : browserSettings.egoReadPath()
+  const egoReader = createEgoPageReader({ egoPath: egoReadPath })
+  /** ego 真连得上（不只是装着）：替插件读 Reddit、岗位页不催装插件都看它。 */
+  const egoReadiness = createEgoReadiness({
+    path: egoReadPath,
+    probe: (path) => probeEgoConnection(path),
+  })
+  const egoSheetReader = createEgoSheetReader({ ego: egoReader })
+  /**
+   * WP496：ego 路采集红人——插件同一套采集器 + 插件同一个入口（`extensionPortOf` 按会话里的品牌分派；
+   * 那一份在后面才建，这里取值函数只在真调工具时才取）。
+   */
+  const egoCreatorCapture = createEgoCreatorCapture({
+    reader: egoReader,
+    port: () => extensionPortOfLate.current,
+    now: () => new Date().toISOString(),
+  })
+  const extensionPortOfLate: { current: EgoCapturePort | undefined } = { current: undefined }
+  /** WP493：ego 能做哪几样插件的活（读 + 写 Reddit、社媒发帖）。 */
+  const egoCovers = (): ('reddit' | 'social' | 'kol')[] => {
+    if (!egoReadiness.ready()) return []
+    const write = egoWriter.available()
+    // WP496（决策 1738 / 1741）：收红人只要读——ego 连得上就由 ego 用插件同一套采集器做，插件对它只是备用
+    return write ? ['reddit', 'social', 'kol'] : ['kol']
+  }
   /*
    * WP144（docs/80）：电脑操控——**一台机器一份**，理由与浏览器设置逐字相同（操作的是
    * 这台电脑本身，与卖哪个品牌无关）。驱动装在数据目录下（不进 PATH）；只有本机档给。
@@ -5049,6 +5090,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
     const redditWatchLate: { current: RedditWatchAssembly | undefined } = { current: undefined }
+    /** WP493：ego 替插件领 Reddit 活的那一个（巡查建好之后才有）。 */
+    const egoPumpLate: { current: EgoRedditPump | undefined } = { current: undefined }
     // 同一个加密库、同一把密钥，key 名按品牌加前缀（bootstrap 前缀为空）
     const brandSecrets = namespaceSecrets(secrets, secretsPrefixOf(ws, workspace.id))
     // WP128：托管实例——接托管的那个品牌种上托管令牌与转发器配对、默认模型换成云
@@ -7493,6 +7536,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               observe: observeViaIngest(async (session, input) =>
                 extensionPortOf.ingest(session as never, input),
               ),
+              /*
+               * WP496（决策 1738 / 1739 A）：ego 打开红人页面 → 插件同一套采集器读数 → 插件同一个入口记下。
+               * ego 只有一个，读页都排在 `egoReader` 那一条队里（一次只跑一趟）。
+               */
+              egoCapture: egoCreatorCapture,
             }),
             /*
              * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
@@ -7501,6 +7549,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             researchTools: chainResearchTools(
               createResearchToolExecutor({
+                // WP493（决策 1718）：ego 连得上 → 先在 ego 里读（readOnce 这时由 ego 来领），没读到再走前两路
+                egoFirst: () => egoReadiness.ready(),
                 // WP419：前两路都不行 → 借用户 Chrome 里的插件现读一次（巡查那一份的 readOnce；不入巡查库）
                 pluginRead: async (reads) => {
                   const rw = redditWatchLate.current
@@ -10011,6 +10061,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     ownChromeLate.reader = ownBrowserReader
     /*
+     * WP493：读页选路（ego → 插件 → 内置浏览器）。WP489 的在线表读页走它（int/1035 接上；所以挪到 kolImport 前面）；
+     * 选了 ego 时插件只要装着就是备用那一条（没选 ego 时与原来一样：设置是插件才有插件那一条）。
+     */
+    const pageRead =
+      hostedBoot !== undefined
+        ? undefined
+        : createPageReadChain({
+            ego: () => egoReader,
+            plugin: () => {
+              const own = ownBrowserReader()
+              if (own !== undefined) return own
+              if (egoReadPath() === undefined) return undefined
+              const path = browserSettings.bskInstalledPath()
+              if (path === undefined) return undefined
+              if (ownBrowserMemo?.path !== path)
+                ownBrowserMemo = { path, reader: createOwnBrowserReader({ bsk: bskJsonOf(path) }) }
+              return ownBrowserMemo.reader
+            },
+            ...(webSearchChannel === undefined
+              ? {}
+              : {
+                  builtin: async (url: string) => {
+                    const r = await webSearchThrottle.run(() =>
+                      webSearchChannel.open({
+                        workspace_id: ws,
+                        url,
+                        kind: 'page',
+                        timeout_ms: 30_000,
+                        settle_ms: 2_500,
+                      }),
+                    )
+                    if (r === undefined) return { ok: false, message: '内置浏览器在忙' }
+                    if (!r.ok) return { ok: false, message: r.message }
+                    return {
+                      ok: true,
+                      final_url: r.final_url,
+                      ...(r.page === undefined
+                        ? {}
+                        : { text: r.page.text, password_inputs: r.page.signals.passwordInputs }),
+                    }
+                  },
+                }),
+          })
+    /*
      * WP489（决策 1683–1686）：红人表格 / 在线表导入、读过往邮件判合作阶段。
      * - 认列 / 认状态词 / 判阶段先按规则，认不出的才问这个品牌的默认模型（`extraction` 档、不思考、封住输出；
      *   只有 stub 就只按规则）；用量走同一个网关（上限照算）。
@@ -10069,10 +10163,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return b.cap_base > 0 ? Math.max(b.cap_base - b.used_base, 0) : undefined
       },
       /*
-       * 决策 1708：读在线表的浏览器按优先级排。WP493 给 ego 接上通用读页口之后，把它放在最前面
-       * （`{ id: 'ego', read }`）；现在是：设成「插件里的浏览器」走它，然后内置浏览器（同一条节流队）。
+       * 决策 1708 + WP493（int/1035 接上）：在线表先问 ego 的表格读取口（Google 导出 CSV / 飞书截住复制 / 导出 Excel）；
+       * 读到就用，ego 里没登录 / 没权限照实说，别的（ego 用不了 / 读不出 / 没跑完）再走下面的读页。
+       */
+      ...(hostedBoot !== undefined
+        ? {}
+        : {
+            readSheet: async (url: string) =>
+              egoSheetReader.available() ? await egoSheetReader.read(url) : undefined,
+          }),
+      /*
+       * 读页：本机档走 WP493 的选路链（ego → 插件 → 内置浏览器，一只读页口）；托管实例没有链，照原来的两只排
+       * （设成「插件里的浏览器」走它，然后内置浏览器，同一条节流队）。
        */
       readers: () => {
+        if (pageRead !== undefined) return [{ id: 'chain', read: pageRead.readPage }]
         const list: { id: string; read: KolPageReader }[] = []
         const own =
           browserSettings.forRun()?.mode === 'browserskill' ? ownBrowserReader() : undefined
@@ -10298,6 +10403,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
             tzOffsetMinutes: () => workData.tz_offset_minutes,
             brandName: () => brandNameOfWorkspace(ws),
+            // WP493（决策 1718）：ego 连得上就由 ego 替插件读（插件只是备用）；排进新活 ego 马上来领
+            egoReady: () => egoReadiness.ready(),
+            onQueued: () => {
+              void egoPumpLate.current?.kick()
+            },
             search: async ({ query, time_window, limit }) => {
               const got = await redditSearch.read({
                 capability: 'social.reddit.search',
@@ -10607,6 +10717,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         reader: () => amazonFront,
       })
     redditWatchLate.current = redditWatch
+    /*
+     * WP493（决策 1718）：ego 能用时由 ego 替插件领 Reddit 只读活（巡查 / 读整串 / `read_reddit` 现读）、读完交回——
+     * 读法与插件同一份（`runRedditRead`）；ego 那一趟跑不起来就先当 ego 连不上，活回到插件那边。
+     */
+    egoPumpLate.current =
+      redditWatch === undefined
+        ? undefined
+        : createEgoRedditPump({
+            watch: () => redditWatch,
+            ready: () => egoReadiness.ready(),
+            run: async (job) => {
+              const res = await egoRedditRead(job, { reader: egoReader })
+              if (res.outcome === 'failed' && res.parts.length === 0) egoReadiness.markDown()
+              return res
+            },
+          })
+    void egoPumpLate.current?.kick()
     /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
@@ -11088,6 +11215,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ).text
       },
       ...(redditWatch === undefined ? {} : { redditWatch }),
+      ...(pageRead === undefined ? {} : { pageRead }),
+      ...(hostedBoot !== undefined ? {} : { onlineSheet: egoSheetReader }),
       ...(competitorWatch === undefined ? {} : { competitorWatch }),
       ...(competitorStore === undefined ? {} : { competitorStore }),
       ...(amazonCompetitor === undefined ? {} : { amazonCompetitor }),
@@ -15829,6 +15958,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
   const extensionOnboarding = createExtensionOnboarding({
     role: (id) => roles.roles.get(id as never),
+    // WP493（决策 1718）：ego 连得上就不为 Reddit / 社媒发帖催装插件（插件只是备用）
+    egoCovers: () => egoCovers(),
+    // WP496（决策 1729 A）：ego 说有新版本——连接卡上 ego 那一行提一句
+    egoUpdate: () => egoReadiness.update() !== undefined,
     heldRoleIds: (ws, person) =>
       roles.assignments
         .listByPerson(person as never, { workspace_id: ws as WorkspaceId })
@@ -15965,6 +16098,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }
     },
   })
+  extensionPortOfLate.current = extensionPortOf
   /** WP73（56 §6）：社媒库 `/v1/social/*`（一个品牌一张库、一段加密库）。 */
   const socialPortOf = brandSocialPort(
     brandModules,
@@ -16788,6 +16922,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               connected: c.connected,
               ...(c.detail === undefined ? {} : { connect_detail: c.detail }),
               ...(c.admin === true ? { admin: true } : {}),
+              // WP496（决策 1729 A）：ego 说有新版本——设置页那一行提一句，不替人升级
+              ...(c.update_available === true ? { update_available: true } : {}),
             }
       },
       /*

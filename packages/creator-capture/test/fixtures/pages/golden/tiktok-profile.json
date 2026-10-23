@@ -1,0 +1,97 @@
+{
+  "page": "tiktok-profile",
+  "capture": {
+    "creator": {
+      "platform": "tiktok",
+      "externalId": "7000000000000000101",
+      "handle": "lunchfixture",
+      "name": "Lunch Fixture",
+      "avatarUrl": "https://p16.example/avatar-lunchfixture.png",
+      "followersText": "256K",
+      "followers": 256000,
+      "videoCount": 412,
+      "avgViews": 45967,
+      "country": "US",
+      "links": [
+        {
+          "url": "https://lunch.example/recipes"
+        }
+      ],
+      "recentItems": [
+        {
+          "title": "Lunch idea 1",
+          "viewsText": "48.2K",
+          "views": 48200,
+          "thumbnailUrl": "https://p16.example/t1.png"
+        },
+        {
+          "title": "Lunch idea 2",
+          "viewsText": "51.0K",
+          "views": 51000,
+          "thumbnailUrl": "https://p16.example/t2.png"
+        },
+        {
+          "title": "Lunch idea 3",
+          "viewsText": "39.7K",
+          "views": 39700,
+          "thumbnailUrl": "https://p16.example/t3.png"
+        },
+        {
+          "title": "Lunch idea 4",
+          "viewsText": "62.3K",
+          "views": 62300,
+          "thumbnailUrl": "https://p16.example/t4.png"
+        },
+        {
+          "title": "Lunch idea 5",
+          "viewsText": "44.1K",
+          "views": 44100,
+          "thumbnailUrl": "https://p16.example/t5.png"
+        },
+        {
+          "title": "Lunch idea 6",
+          "viewsText": "30.5K",
+          "views": 30500,
+          "thumbnailUrl": "https://p16.example/t6.png"
+        }
+      ],
+      "regularity": {
+        "status": "unknown",
+        "note": "Recent videos carry no dates, so cadence is unknown"
+      },
+      "pageUrl": "https://www.tiktok.com/@lunchfixture",
+      "bio": "Ten-minute lunches every day. Collabs: lunch@fixture.example",
+      "businessEmail": "lunch@fixture.example"
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "tiktok",
+        "handle": "lunchfixture",
+        "external_id": "7000000000000000101",
+        "display_name": "Lunch Fixture",
+        "avatar_url": "https://p16.example/avatar-lunchfixture.png",
+        "followers": 256000,
+        "avg_views": 45967,
+        "video_count": 412,
+        "bio": "Ten-minute lunches every day. Collabs: lunch@fixture.example",
+        "public_contacts": [
+          {
+            "kind": "email",
+            "value": "lunch@fixture.example"
+          },
+          {
+            "kind": "website",
+            "value": "https://lunch.example/recipes"
+          }
+        ],
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "page_url": "https://www.tiktok.com/@lunchfixture",
+        "source": "channel_page"
+      }
+    ]
+  ],
+  "content_observations": [],
+  "bio_link_observations": []
+}

@@ -109,6 +109,10 @@ export const PANEL_ZH: Record<string, string> = {
   'extconn.meta_ads': 'Meta 广告后台（插件里连上）',
   'extconn.reddit': 'Reddit（插件里连上）',
   'extconn.pair': '去配对',
+  // WP493：ego 能做时插件只是备用
+  'extconn.ego': 'ego 浏览器',
+  'extconn.backup': '备用',
+  'extconn.backup.hint': 'ego 用不了时才用插件',
 
   'settings.row.model': '用的 AI',
 }
@@ -217,6 +221,9 @@ export const PANEL_EN: Record<string, string> = {
   'extconn.meta_ads': 'Meta Ads (connected in the helper)',
   'extconn.reddit': 'Reddit (connected in the helper)',
   'extconn.pair': 'Pair',
+  'extconn.ego': 'ego browser',
+  'extconn.backup': 'Backup',
+  'extconn.backup.hint': 'The extension is used only when ego is unavailable',
 
   'settings.row.model': 'AI',
 }

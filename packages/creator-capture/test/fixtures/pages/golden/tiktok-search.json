@@ -1,0 +1,207 @@
+{
+  "page": "tiktok-search",
+  "capture": {
+    "list": {
+      "target": {
+        "platform": "tiktok",
+        "pageType": "search",
+        "sourceQuery": "https://www.tiktok.com/search?q=meal%20prep"
+      },
+      "candidates": [
+        {
+          "key": "mealprepmama",
+          "externalId": "mealprepmama",
+          "handle": "mealprepmama",
+          "url": "https://www.tiktok.com/@mealprepmama",
+          "source": "video_attribution",
+          "displayName": "Meal Prep Mama",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-mealprepmama.jpeg",
+          "videos": [
+            {
+              "contentId": "7411111111111111111",
+              "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111111",
+              "title": "5 lunches for $20 #mealprep",
+              "viewsText": "36.1K"
+            },
+            {
+              "contentId": "7411111111111111112",
+              "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111112",
+              "title": "Sunday prep, zero stress",
+              "viewsText": "102K"
+            }
+          ]
+        },
+        {
+          "key": "gymchef",
+          "externalId": "gymchef",
+          "handle": "gymchef",
+          "url": "https://www.tiktok.com/@gymchef",
+          "source": "video_attribution",
+          "displayName": "Gym Chef",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-gymchef.jpeg",
+          "videos": [
+            {
+              "contentId": "7422222222222222221",
+              "url": "https://www.tiktok.com/@gymchef/video/7422222222222222221",
+              "title": "High-protein bento in 10 min",
+              "viewsText": "1.2M"
+            }
+          ]
+        },
+        {
+          "key": "bentobox.lab",
+          "externalId": "bentobox.lab",
+          "handle": "bentobox.lab",
+          "url": "https://www.tiktok.com/@bentobox.lab",
+          "source": "video_attribution",
+          "displayName": "Bento Box Lab",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-bentobox.lab.jpeg",
+          "videos": [
+            {
+              "contentId": "7433333333333333331",
+              "url": "https://www.tiktok.com/@bentobox.lab/photo/7433333333333333331",
+              "viewsText": "8,904",
+              "contentType": "post"
+            }
+          ]
+        },
+        {
+          "key": "prepwithpri",
+          "externalId": "prepwithpri",
+          "handle": "prepwithpri",
+          "url": "https://www.tiktok.com/@prepwithpri",
+          "source": "channel_result",
+          "subscriberCountText": "48.2K",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-prepwithpri.jpeg"
+        }
+      ]
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "tiktok",
+        "handle": "mealprepmama",
+        "external_id": "mealprepmama",
+        "display_name": "Meal Prep Mama",
+        "page_url": "https://www.tiktok.com/@mealprepmama",
+        "avatar_url": "https://p16-sign.tiktokcdn.com/fixture-avatar-mealprepmama.jpeg",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.tiktok.com/@mealprepmama",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "https://www.tiktok.com/search?q=meal%20prep"
+      },
+      {
+        "channel": "tiktok",
+        "handle": "gymchef",
+        "external_id": "gymchef",
+        "display_name": "Gym Chef",
+        "page_url": "https://www.tiktok.com/@gymchef",
+        "avatar_url": "https://p16-sign.tiktokcdn.com/fixture-avatar-gymchef.jpeg",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.tiktok.com/@gymchef",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "https://www.tiktok.com/search?q=meal%20prep"
+      },
+      {
+        "channel": "tiktok",
+        "handle": "bentobox.lab",
+        "external_id": "bentobox.lab",
+        "display_name": "Bento Box Lab",
+        "page_url": "https://www.tiktok.com/@bentobox.lab",
+        "avatar_url": "https://p16-sign.tiktokcdn.com/fixture-avatar-bentobox.lab.jpeg",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.tiktok.com/@bentobox.lab",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "https://www.tiktok.com/search?q=meal%20prep"
+      },
+      {
+        "channel": "tiktok",
+        "handle": "prepwithpri",
+        "external_id": "prepwithpri",
+        "page_url": "https://www.tiktok.com/@prepwithpri",
+        "avatar_url": "https://p16-sign.tiktokcdn.com/fixture-avatar-prepwithpri.jpeg",
+        "followers_text": "48.2K",
+        "followers": 48200,
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.tiktok.com/@prepwithpri",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "https://www.tiktok.com/search?q=meal%20prep"
+      }
+    ]
+  ],
+  "content_observations": [
+    {
+      "channel": "tiktok",
+      "content_external_id": "7411111111111111111",
+      "content_type": "video",
+      "title": "5 lunches for $20 #mealprep",
+      "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111111",
+      "stats": {
+        "views": 36100
+      },
+      "author": {
+        "external_id": "mealprepmama",
+        "handle": "mealprepmama",
+        "name": "Meal Prep Mama"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/search?q=meal%20prep"
+    },
+    {
+      "channel": "tiktok",
+      "content_external_id": "7411111111111111112",
+      "content_type": "video",
+      "title": "Sunday prep, zero stress",
+      "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111112",
+      "stats": {
+        "views": 102000
+      },
+      "author": {
+        "external_id": "mealprepmama",
+        "handle": "mealprepmama",
+        "name": "Meal Prep Mama"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/search?q=meal%20prep"
+    },
+    {
+      "channel": "tiktok",
+      "content_external_id": "7422222222222222221",
+      "content_type": "video",
+      "title": "High-protein bento in 10 min",
+      "url": "https://www.tiktok.com/@gymchef/video/7422222222222222221",
+      "stats": {
+        "views": 1200000
+      },
+      "author": {
+        "external_id": "gymchef",
+        "handle": "gymchef",
+        "name": "Gym Chef"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/search?q=meal%20prep"
+    },
+    {
+      "channel": "tiktok",
+      "content_external_id": "7433333333333333331",
+      "content_type": "post",
+      "url": "https://www.tiktok.com/@bentobox.lab/photo/7433333333333333331",
+      "stats": {
+        "views": 8904
+      },
+      "author": {
+        "external_id": "bentobox.lab",
+        "handle": "bentobox.lab",
+        "name": "Bento Box Lab"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/search?q=meal%20prep"
+    }
+  ],
+  "bio_link_observations": []
+}

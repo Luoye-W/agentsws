@@ -29,7 +29,7 @@ const payload: KnowledgeLearnedPayload = {
     {
       card_id: 'fc_1',
       question: 'How do refunds work?',
-      answer: 'Back to the card in 5 days.',
+      answer: 'Refunded to the card within 5 days.',
       stage: 'postsales',
       basis: '4 段往来',
       hold: true,
@@ -69,7 +69,8 @@ describe('WP488 学到 N 条', () => {
     renderWithProviders(<KnowledgeLearnedBody card={card(payload)} payload={payload} />)
     const box = screen.getByTestId('deck-knowledge-learned')
     expect(box.textContent).toContain('依据：4 段往来')
-    expect(box.textContent).toContain('含承诺')
+    // WP495（1701）：只有真写了承诺的那一条挂小图标（悬停出「含承诺，细看一眼」）
+    expect(screen.getAllByTestId('kl-commitment')).toHaveLength(1)
     expect(screen.getByTestId('kl-card-confirm').textContent).toBe('采纳 3 条')
     const selects = screen.getAllByTestId('kl-card-stage') as HTMLSelectElement[]
     expect(selects.map((s) => s.value)).toEqual(['postsales', 'presales', 'both'])

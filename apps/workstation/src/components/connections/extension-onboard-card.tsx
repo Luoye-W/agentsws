@@ -86,6 +86,11 @@ export function onboardPhase(
 ): 'hidden' | 'install' | 'steps' | 'plan' | 'paired' {
   if (v === undefined || !v.needed) return 'hidden'
   if (mode === 'position' && v.snoozed) return 'hidden'
+  // WP493（决策 1718）：ego 能做这个岗位要插件做的全部——插件只是备用，不催装；方案卡（巡查设置）照样提醒
+  if (v.plugin_backup === true)
+    return mode === 'position' && v.plans.some((p) => !p.satisfied && !planSent.includes(p.target))
+      ? 'plan'
+      : 'hidden'
   // WP416（自查 kol U3）：「要你处理」里已经有那张装插件连接卡——顶上这张不再重复出（配对只留一处）
   if (mode === 'position' && !v.paired && v.connect_card_id !== undefined) return 'hidden'
   if (!v.paired) return 'install'
@@ -246,7 +251,11 @@ export function ExtensionOnboardCard(props: {
     >
       <div className="flex items-center gap-2 text-sm font-medium">
         <Puzzle className="size-4 text-ws-brand" aria-hidden />
-        {phase === 'install' ? t('extonboard.title') : t('extonboard.next.title')}
+        {phase === 'install'
+          ? t('extonboard.title')
+          : v.plugin_backup === true
+            ? t('extonboard.next.title.ego')
+            : t('extonboard.next.title')}
         {laterButton}
       </div>
       {phase === 'install' ? (
@@ -260,7 +269,7 @@ export function ExtensionOnboardCard(props: {
           ) : null}
         </>
       ) : null}
-      {phase === 'steps' || phase === 'plan' ? (
+      {(phase === 'steps' || phase === 'plan') && v.plugin_backup !== true ? (
         <ExtensionPairedLine withWhom={v.paired_with} />
       ) : null}
       {phase === 'steps' ? (

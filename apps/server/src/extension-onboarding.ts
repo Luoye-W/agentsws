@@ -59,6 +59,13 @@ export interface ExtensionOnboardingOptions {
   }): Promise<{ card_id: string; reused: boolean } | undefined>
   /** WP416：「要你处理」里还开着的那张装插件连接卡（没有回 `undefined`）。不给 = 不查。 */
   openConnectCard?(workspace_id: string): Promise<string | undefined>
+  /**
+   * WP493（决策 1718）：ego 这会儿能做的那几样（ego 能用时 `['reddit', 'social']`；不能用 / 不给 = 空）。
+   * 这几样不再催装插件，插件对它们只是备用。
+   */
+  egoCovers?(workspace_id: string): readonly BrowserExtensionUse[]
+  /** WP496（决策 1729 A）：ego 上一次真连时说了「有新版本」。不给 = 不提。 */
+  egoUpdate?(): boolean
   /** 事项时间线上说一句（不在乎成没成）。 */
   note(workspace_id: string, matter_id: string, text: string): void | Promise<void>
   /** 记一笔「主动带过」（只有 id）。 */
@@ -109,7 +116,17 @@ export function createExtensionOnboarding(
     const defs = defsOf(role_ids ?? options.heldRoleIds(ws, actor.person_id))
     const pairedWith = options.paired(ws) ? options.pairedWith?.(ws) : undefined
     const withWhom = pairedWith === undefined ? {} : { paired_with: pairedWith }
-    const need = extensionNeedOf(defs)
+    const full = extensionNeedOf(defs)
+    // WP493：ego 能做的那几样拿掉（插件对它们只是备用）
+    const egoCan = full === undefined ? [] : coveredByEgo(ws, full.uses)
+    const need =
+      full === undefined
+        ? undefined
+        : { ...full, uses: full.uses.filter((u) => !egoCan.includes(u)) }
+    const ego =
+      egoCan.length === 0
+        ? {}
+        : { ego_covers: egoCan, ...(options.egoUpdate?.() === true ? { ego_update: true } : {}) }
     if (need === undefined)
       return {
         needed: false,
@@ -122,19 +139,23 @@ export function createExtensionOnboarding(
         snoozed: false,
       }
     const follow = extensionFollowOf(need.uses)
+    // 方案卡（Reddit 巡查设置这类）不随插件走：ego 做的那几样照样要
+    const plans0 = full === undefined ? [] : extensionFollowOf(full.uses).plans
     const steps: ExtensionNeedsView['steps'] = []
     for (const step of follow.steps) {
       const done = await options.stepDone(ws, step).catch(() => undefined)
       steps.push(done === undefined ? { step } : { step, done })
     }
     const plans: ExtensionNeedsView['plans'] = []
-    for (const target of follow.plans) {
+    for (const target of plans0) {
       const t = await options.planTarget(ws, target).catch(() => undefined)
       if (t !== undefined) plans.push({ target, name: t.name, satisfied: t.satisfied })
     }
-    const open = options.paired(ws)
-      ? undefined
-      : await options.openConnectCard?.(ws).catch(() => undefined)
+    const backup = need.uses.length === 0
+    const open =
+      options.paired(ws) || backup
+        ? undefined
+        : await options.openConnectCard?.(ws).catch(() => undefined)
     return {
       ...(open === undefined ? {} : { connect_card_id: open }),
       needed: true,
@@ -147,7 +168,21 @@ export function createExtensionOnboarding(
       steps,
       plans,
       snoozed: options.snoozedToday(ws),
+      ...ego,
+      ...(backup ? { plugin_backup: true } : {}),
     }
+  }
+  const coveredByEgo = (
+    ws: string,
+    uses: readonly BrowserExtensionUse[],
+  ): BrowserExtensionUse[] => {
+    let can: readonly BrowserExtensionUse[] = []
+    try {
+      can = options.egoCovers?.(ws) ?? []
+    } catch {
+      can = []
+    }
+    return uses.filter((u) => can.includes(u))
   }
 
   return {
@@ -175,8 +210,13 @@ export function createExtensionOnboarding(
        * 以前按整个岗位判，写新闻稿时第一屏先是「先装好 Chrome 插件、读 Reddit」的大卡，跟这件事毫无关系。
        */
       if (extensionNeedOf(defsOf([actor.role_id])) === undefined) return false
-      const need = extensionNeedOf(defsOf(role_ids ?? [actor.role_id]))
-      if (need === undefined || options.paired(ws)) return false
+      const full = extensionNeedOf(defsOf(role_ids ?? [actor.role_id]))
+      // WP493：ego 能做的那几样不催（全都能做 = 不带卡）
+      const need =
+        full === undefined
+          ? undefined
+          : { ...full, uses: full.uses.filter((u) => !coveredByEgo(ws, full.uses).includes(u)) }
+      if (need === undefined || need.uses.length === 0 || options.paired(ws)) return false
       // 今天点过「稍后」就不在对话里再提（下一次说话、过了今天再带）；同一条分配只主动带一次
       if (options.snoozedToday(ws) || options.prompted(ws, actor.assignment_id)) return false
       const why = extensionWhy(need.uses)

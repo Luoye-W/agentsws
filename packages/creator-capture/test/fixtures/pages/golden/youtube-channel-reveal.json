@@ -1,0 +1,79 @@
+{
+  "page": "youtube-channel-reveal",
+  "capture": {
+    "creator": {
+      "platform": "youtube",
+      "externalId": "UCcableFIXTURE000000002",
+      "handle": "@cablefixture",
+      "name": "Cable Fixture",
+      "avatarUrl": "https://yt3.example/avatar-cablefixture.png",
+      "followersText": "8.4K subscribers",
+      "followers": 8400,
+      "videoCount": 57,
+      "avgViews": 1200,
+      "links": [],
+      "recentItems": [
+        {
+          "title": "Under-desk tray install",
+          "viewsText": "1.2K views",
+          "views": 1200,
+          "publishedText": "5 days ago",
+          "publishedAt": "2026-10-18T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "Velcro vs zip ties",
+          "viewsText": "900 views",
+          "views": 900,
+          "publishedText": "12 days ago",
+          "publishedAt": "2026-10-11T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "Hiding a power strip",
+          "viewsText": "1.5K views",
+          "views": 1500,
+          "publishedText": "19 days ago",
+          "publishedAt": "2026-10-04T08:00:00.000Z",
+          "publishedPrecision": "day"
+        }
+      ],
+      "regularity": {
+        "status": "regular",
+        "avgIntervalDays": 7,
+        "note": "Fairly regular · about every 7 days"
+      },
+      "pageUrl": "https://www.youtube.com/@cablefixture",
+      "bio": "Cable management, one desk at a time.",
+      "joinedDate": "Jan 9, 2023",
+      "totalViews": 98765,
+      "businessEmail": "hello@cablefixture.example"
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "youtube",
+        "handle": "@cablefixture",
+        "external_id": "UCcableFIXTURE000000002",
+        "display_name": "Cable Fixture",
+        "avatar_url": "https://yt3.example/avatar-cablefixture.png",
+        "followers": 8400,
+        "avg_views": 1200,
+        "video_count": 57,
+        "bio": "Cable management, one desk at a time.",
+        "public_contacts": [
+          {
+            "kind": "business",
+            "value": "hello@cablefixture.example"
+          }
+        ],
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "page_url": "https://www.youtube.com/@cablefixture",
+        "source": "channel_page"
+      }
+    ]
+  ],
+  "content_observations": [],
+  "bio_link_observations": []
+}

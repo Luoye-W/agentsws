@@ -50,6 +50,9 @@
       "path": "../../packages/core"
     },
     {
+      "path": "../../packages/creator-capture"
+    },
+    {
       "path": "../../packages/credentials-openconnector"
     },
     {

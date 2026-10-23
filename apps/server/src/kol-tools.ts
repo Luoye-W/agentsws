@@ -58,6 +58,18 @@ export interface KolToolsOptions {
     actor: KolActor,
     observations: ExtensionObservation[],
   ): Promise<{ saved: number; deduped: number; forwarded: number; pending?: number }>
+  /**
+   * WP496（决策 1738 / 1739 A）：在 ego 里用插件**同一套**采集器读红人页面、走插件同一个入口记下
+   * （`ego-read/capture.ts`）。不给 / ego 用不了 = 这个工具回「用不了」，AI 改用 `record_creator_observations`。
+   */
+  egoCapture?: {
+    available(): boolean
+    capture(
+      actor: KolActor,
+      urls: readonly string[],
+      options: { record: boolean },
+    ): Promise<readonly { ok: boolean }[]>
+  }
 }
 
 /** WP483：一次最多记几个。 */
@@ -369,6 +381,41 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
        * WP483（决策 1661）：浏览器（ego）里读到的公开主页数据 → 和插件同一条路（本机 + 云端备份）。
        * 只收白名单那几格；私信、账号凭据一格都没有。WP487：加上主页上公开的联系方式（过 `sanitizePublicContacts`）。
        */
+      /*
+       * WP496（决策 1738 / 1739 A）：ego 打开页面、插件同一套采集器读数、插件同一个入口记下。
+       * AI 只给地址；数字一个都不经 AI 的手。
+       */
+      case 'capture_creator_pages': {
+        const cap = options.egoCapture
+        if (cap === undefined || !cap.available())
+          return {
+            status: 'error',
+            reason:
+              'ego 浏览器这会儿用不了（没装好、没打开或没选用）：读不了页面。要记就用 record_creator_observations 手记，或请人在装了插件的浏览器里打开主页。',
+          }
+        const raw = Array.isArray(input.urls) ? input.urls : []
+        const urls = raw
+          .map((u) => (typeof u === 'string' ? u.trim() : ''))
+          .filter((u) => /^https:\/\//iu.test(u))
+        if (urls.length === 0) return missing('urls（https:// 开头的页面地址）')
+        try {
+          const pages = await cap.capture(actor, urls.slice(0, 10), {
+            record: input.record !== false,
+          })
+          return {
+            status: 'ok',
+            data: {
+              rows: pages.length,
+              read: pages.filter((p) => p.ok).length,
+              pages,
+              ...(urls.length > 10 ? { note: '一次最多 10 页，后面的没读' } : {}),
+            },
+          }
+        } catch (e) {
+          return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+        }
+      }
+
       case 'record_creator_observations': {
         if (options.observe === undefined)
           return { status: 'error', reason: '这个进程没接红人采集那一条路，记不了。' }

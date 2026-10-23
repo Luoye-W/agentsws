@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { RailScope } from '@/components/rail/rail-scope'
+import { EGO_DOWNLOAD_URL } from '@/components/settings/ego-recommend'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { getExtensionNeeds } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -26,6 +27,10 @@ const EXTENSION_NEEDS_KEY = 'extension-needs'
 export interface ExtensionRow {
   key: string
   ok: boolean
+  /** WP493：备用（ego 能做全部时插件那一行）——不亮红、不算要处理。 */
+  backup?: boolean
+  /** WP496（决策 1729 A）：ego 那一行——ego 说有新版本（提一句 + 下载页，不算要处理）。 */
+  update?: boolean
 }
 
 /** 这一层要插件的话：几行、哪几行没好。不要插件回 `undefined`。 */
@@ -43,10 +48,26 @@ export function useScopeExtension(scope: RailScope | undefined): ExtensionRow[] 
 
 /** 纯函数：needs → 行（测试直接测它）。 */
 export function extensionRowsOf(
-  v: { needed: boolean; paired: boolean; steps: { step: string; done?: boolean }[] } | undefined,
+  v:
+    | {
+        needed: boolean
+        paired: boolean
+        steps: { step: string; done?: boolean }[]
+        ego_covers?: string[]
+        plugin_backup?: boolean
+        ego_update?: boolean
+      }
+    | undefined,
 ): ExtensionRow[] | undefined {
   if (v === undefined || !v.needed) return undefined
+  // WP493（决策 1718）：ego 能做的那几样由 ego 做——先列 ego；全能做时插件那一行降成「备用」
+  const ego: ExtensionRow[] =
+    (v.ego_covers?.length ?? 0) > 0
+      ? [{ key: 'ego', ok: true, ...(v.ego_update === true ? { update: true } : {}) }]
+      : []
+  if (v.plugin_backup === true) return [...ego, { key: 'paired', ok: true, backup: true }]
   return [
+    ...ego,
     { key: 'paired', ok: v.paired },
     // 配对之后还要在插件里连上的那几家（查不了的不列，不瞎说连上了）
     ...v.steps
@@ -67,9 +88,30 @@ export function ExtensionRows({ rows }: { rows: ExtensionRow[] }): ReactNode {
           data-testid="connection-row"
           data-kind={`extension:${r.key}`}
           data-todo={r.ok ? undefined : 'true'}
+          data-backup={r.backup === true ? 'true' : undefined}
         >
           <span className="min-w-0 truncate">{t(`extconn.${r.key}`)}</span>
-          {r.ok ? (
+          {r.update === true ? (
+            <a
+              href={EGO_DOWNLOAD_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 rounded-md bg-ws-tint px-2 py-0.5 text-[12px] text-ws-muted-fg hover:underline"
+              title={t('ego.update.hint')}
+              data-testid="connection-ego-update"
+            >
+              {t('ego.update')}
+            </a>
+          ) : null}
+          {r.backup === true ? (
+            <span
+              className="ml-auto shrink-0 rounded-md bg-ws-tint px-2 py-0.5 text-[12px] text-ws-muted-fg"
+              title={t('extconn.backup.hint')}
+              data-testid="connection-backup"
+            >
+              {t('extconn.backup')}
+            </span>
+          ) : r.ok ? (
             <CheckCircle2
               className="ml-auto size-3.5 shrink-0 text-ws-good"
               aria-label={t('conncard.connected')}

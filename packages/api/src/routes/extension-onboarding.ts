@@ -46,6 +46,14 @@ export interface ExtensionNeedsView {
    * 配对说明与「生成配对码」只留一处。没有 / 老服务没有这一格。
    */
   connect_card_id?: string
+  /**
+   * WP493（决策 1718）：这几样 ego 能做（ego 能用时才有）——`uses` / `steps` 里已经去掉它们，不再为它们催装插件。
+   */
+  ego_covers?: BrowserExtensionUse[]
+  /** WP493：要插件做的几样 ego 全都能做——插件只是备用（岗位页不催装，连接卡上显示「备用」）。 */
+  plugin_backup?: boolean
+  /** WP496（决策 1729 A）：ego 说有新版本（只在有 `ego_covers` 时带）——连接卡上 ego 那一行提一句。 */
+  ego_update?: boolean
 }
 
 export interface ExtensionNeedsActor {

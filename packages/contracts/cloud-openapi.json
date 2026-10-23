@@ -15122,6 +15122,14 @@
             },
             "description": "WP487（决策 1661 补）：红人**主页上公开写着的**联系方式——公开邮箱、网站、其它平台主页、 商务合作入口、经纪 / 代理联系。只收 {@link PublicContactLink} 那三格，最多 {@link MAX_PUBLIC_CONTACTS} 条；私信内容、账号凭据、用户自己的数据没有一格能落进来。 发出去之前先过 {@link sanitizePublicContacts}（本机那一跳就过，云端再按同一套规矩判一次）。"
           },
+          "display_name": {
+            "type": "string",
+            "description": "WP495（1707b，只加）：展示名（频道名 / 昵称；`handle` 是账号名）。最长 {@link PUBLIC_DISPLAY_NAME_MAX} 字。 表格导入的红人带来的那一格；发出去之前先过 {@link sanitizePublicProfile}。"
+          },
+          "profile_url": {
+            "type": "string",
+            "description": "WP495（1707b，只加）：这个账号的主页链接（http(s)，同 {@link sanitizePublicContacts} 那套链接规矩）。"
+          },
           "observed_at": {
             "type": "string",
             "description": "这份资料**被看到**的时刻（不是被写进库的时刻）。"

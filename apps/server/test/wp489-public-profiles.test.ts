@@ -1,7 +1,7 @@
 /**
  * WP489（决策 1707）：表格导入的红人把公开资料送去公共红人库——走插件同一条转发路
  * （`extension-service` 的 `forward`：登录了才送、失败退避重试），同样的筛法，不落本机。
- * 送云那一跳（`extension-contribute`）照云端白名单只送 handle / 粉丝 / 互动率，名字、主页这几格裁掉。
+ * 送云那一跳（`extension-contribute`）：WP495（1707b）云端白名单放开了资料那几格，名字、主页、类目规整后照送。
  */
 import type { ExtensionProfileRow, ExtensionSession } from '@agentsws/api'
 import type { Clock, PersonId, WorkspaceId } from '@agentsws/contracts'
@@ -81,6 +81,8 @@ describe('WP489 决策 1707：导入的公开资料 → 公共红人库', () => 
       handle: 'kaisetuplab',
       followers: 48_000,
       contact: { value: 'kai@kaisetup.example', source: 'import' },
+      // WP495（1707b）：邮箱照 WP487 那一格上云
+      public_contacts: [{ kind: 'email', value: 'kai@kaisetup.example' }],
     })
     expect(kol.creators()).toHaveLength(0)
 
@@ -88,7 +90,7 @@ describe('WP489 决策 1707：导入的公开资料 → 公共红人库', () => 
     expect(await off.port.contributeProfiles?.(session, [row({})])).toEqual({ queued: 0 })
   })
 
-  it('送云那一跳照白名单裁：名字、主页、类目、邮箱不出现在请求体里', async () => {
+  it('WP495（1707b）：送云那一跳不再裁资料——名字、主页、类目规整后在请求体里', async () => {
     const store = secrets()
     store.put(CLOUD_TOKEN_SECRET_ID, { token: 'tok_test' })
     const bodies: string[] = []
@@ -114,6 +116,13 @@ describe('WP489 决策 1707：导入的公开资料 → 公共红人库', () => 
     expect(bodies).toHaveLength(1)
     const body = bodies[0] as string
     expect(body).toContain('"followers":48000')
-    for (const no of ['Kai Setup', 'youtube.com/@', '桌搭']) expect(body).not.toContain(no)
+    const obs = (JSON.parse(body) as { observations: Record<string, unknown>[] }).observations[0]
+    expect(obs).toMatchObject({
+      display_name: 'Kai Setup',
+      profile_url: 'https://youtube.com/@kaisetuplab',
+      categories: ['桌搭'],
+    })
+    expect(obs).not.toHaveProperty('url')
+    expect(obs).not.toHaveProperty('category')
   })
 })

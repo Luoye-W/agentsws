@@ -13,7 +13,8 @@ import {
 describe('sanitizePublicContacts', () => {
   it('白名单只加了 public_contacts 一格；单条只有 kind / value / label', () => {
     expect(PUBLIC_OBSERVATION_FIELDS).toContain('public_contacts')
-    expect(PUBLIC_OBSERVATION_FIELDS).toHaveLength(10)
+    // WP495（1707b）又只加了 display_name / profile_url 两格
+    expect(PUBLIC_OBSERVATION_FIELDS).toHaveLength(12)
     expect([...PUBLIC_CONTACT_FIELDS]).toEqual(['kind', 'value', 'label'])
   })
 

@@ -1945,6 +1945,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       DEEPSEEK_API_KEY: '',
       // WP216：Shopify 官方 Dev MCP 默认开、首次使用才下载——demo 不去网上拉包
       AGENTSWS_SHOPIFY_DEVMCP: '0',
+      /*
+       * WP493：demo 的数据是演示的——不拿这台机器上真的 ego 去读真网站（Reddit 巡查 / 现读会替插件领活）。
+       * 要在 demo 里看 ego 那一路，显式给 `AGENTSWS_EGO_READ=on` 并把浏览器设置指到假的 ego（见 `scripts/e2e-wp493-shots.mjs`）。
+       */
+      AGENTSWS_EGO_READ: process.env.AGENTSWS_EGO_READ ?? 'off',
       AGENTSWS_PORT: String(options.port ?? 4317),
       // WP140：云地址一律是替身那个（覆盖外面环境变量里的，demo 不连任何真云）
       AGENTSWS_CLOUD_BASE_URL: CLOUD_STAND_IN_BASE_URL,

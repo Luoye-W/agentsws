@@ -41,6 +41,7 @@ import type {
 import {
   DEFAULT_EMAIL_LOOKBACK_MONTHS,
   EMAIL_LOOKBACK_MONTHS_MAX,
+  hasCommitment,
   isKnowledgeLearnedPayload,
   isKnowledgeStage,
   isKnowledgeStalePayload,
@@ -385,6 +386,8 @@ export function createKnowledgeLearner(deps: KnowledgeLearnDeps): KnowledgeLearn
         stage: card.stage ?? 'both',
         basis: l.basis,
         ...(l.candidate.hold_reasons.length === 0 ? {} : { hold: true }),
+        // WP495（1701）：只有答案里真写了承诺的才挂小图标（规则判，不问模型）
+        ...(hasCommitment(l.candidate.statement) ? { commitment: true } : {}),
       })
     }
     job.learned = card_ids.length

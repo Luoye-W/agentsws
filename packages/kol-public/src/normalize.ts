@@ -20,6 +20,8 @@ import {
   MAX_CATEGORIES,
   PUBLIC_CONTENT_OBSERVATION_FIELDS,
   PUBLIC_OBSERVATION_FIELDS,
+  publicDisplayNameOf,
+  publicProfileUrlOf,
 } from '@agentsws/contracts'
 import { KolError } from './types.js'
 
@@ -150,6 +152,25 @@ export function parseObservation(
     throw new KolError('invalid_input', 'region 要是两位的 ISO-3166 地区码。')
 
   const categories = categoriesOf(input.categories)
+
+  /*
+   * WP495（1707b，只加）：表格导入带来的名字 / 主页链接。白名单放开了这两格，这里照「拒而不改」判形状
+   * （与 `sanitizePublicProfile` 规整完不一样就拒）。开源这一份库没有存它们的地方（云端那一份存进卡上的
+   * `name` / `extra.profile_url`），判过就不往下带。
+   */
+  if (
+    input.display_name !== undefined &&
+    publicDisplayNameOf(input.display_name) !== input.display_name
+  )
+    throw new KolError('invalid_input', 'display_name 要是一段不超过 200 字、收过空白的名字。')
+  if (
+    input.profile_url !== undefined &&
+    publicProfileUrlOf(input.profile_url) !== input.profile_url
+  )
+    throw new KolError(
+      'invalid_input',
+      'profile_url 要是一条 http(s) 主页链接（不带账号密码 / 凭据参数，不通私信页，去掉跟踪参数）。',
+    )
 
   return {
     channel,

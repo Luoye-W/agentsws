@@ -1,0 +1,109 @@
+{
+  "page": "instagram-profile",
+  "capture": {
+    "creator": {
+      "platform": "instagram",
+      "externalId": "clayfixture",
+      "handle": "clayfixture",
+      "name": "Clay Fixture",
+      "avatarUrl": "https://cdn.example/avatar-clayfixture.png",
+      "followersText": "48.2K",
+      "followers": 48200,
+      "videoCount": 128,
+      "avgViews": 5850,
+      "links": [
+        {
+          "title": "shop.example/clay",
+          "url": "https://shop.example/clay"
+        }
+      ],
+      "recentItems": [
+        {
+          "title": "CFixtureP01",
+          "publishedAt": "2026-09-02T16:00:00.000Z",
+          "publishedText": "September 3, 2026",
+          "publishedPrecision": "day",
+          "thumbnailUrl": "https://cdn.example/tile-1.png"
+        },
+        {
+          "title": "CFixtureP02",
+          "publishedAt": "2026-09-05T16:00:00.000Z",
+          "publishedText": "September 6, 2026",
+          "publishedPrecision": "day",
+          "thumbnailUrl": "https://cdn.example/tile-2.png"
+        },
+        {
+          "title": "CFixtureR03",
+          "viewsText": "3.9K",
+          "views": 3900,
+          "publishedAt": "2026-09-08T16:00:00.000Z",
+          "publishedText": "September 9, 2026",
+          "publishedPrecision": "day",
+          "thumbnailUrl": "https://cdn.example/tile-3.png"
+        },
+        {
+          "title": "CFixtureP04",
+          "publishedAt": "2026-09-11T16:00:00.000Z",
+          "publishedText": "September 12, 2026",
+          "publishedPrecision": "day",
+          "thumbnailUrl": "https://cdn.example/tile-4.png"
+        },
+        {
+          "title": "CFixtureP05",
+          "publishedAt": "2026-09-14T16:00:00.000Z",
+          "publishedText": "September 15, 2026",
+          "publishedPrecision": "day",
+          "thumbnailUrl": "https://cdn.example/tile-5.png"
+        },
+        {
+          "title": "CFixtureR06",
+          "viewsText": "7.8K",
+          "views": 7800,
+          "publishedAt": "2026-09-17T16:00:00.000Z",
+          "publishedText": "September 18, 2026",
+          "publishedPrecision": "day",
+          "thumbnailUrl": "https://cdn.example/tile-6.png"
+        }
+      ],
+      "regularity": {
+        "status": "regular",
+        "avgIntervalDays": 3,
+        "note": "Fairly regular · about every 3 days"
+      },
+      "pageUrl": "https://www.instagram.com/clayfixture/",
+      "bio": "Handmade ceramics · new pieces weekly · studio@clayfixture.example",
+      "businessEmail": "studio@clayfixture.example"
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "instagram",
+        "handle": "clayfixture",
+        "external_id": "clayfixture",
+        "display_name": "Clay Fixture",
+        "avatar_url": "https://cdn.example/avatar-clayfixture.png",
+        "followers": 48200,
+        "avg_views": 5850,
+        "video_count": 128,
+        "bio": "Handmade ceramics · new pieces weekly · studio@clayfixture.example",
+        "public_contacts": [
+          {
+            "kind": "email",
+            "value": "studio@clayfixture.example"
+          },
+          {
+            "kind": "website",
+            "value": "https://shop.example/clay",
+            "label": "shop.example/clay"
+          }
+        ],
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "page_url": "https://www.instagram.com/clayfixture/",
+        "source": "channel_page"
+      }
+    ]
+  ],
+  "content_observations": [],
+  "bio_link_observations": []
+}
