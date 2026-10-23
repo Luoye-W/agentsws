@@ -138,8 +138,9 @@ async function main() {
         if (theme === 'light') {
           check(true, '首页点关键数字：第三栏拉出那份报表')
           check(
-            (await page.getByTestId('rail-panel-frame').getAttribute('data-layout')) === 'docked',
-            '首页、1440 宽：第三栏和中栏并排（不盖中栏；WP437 宿主，报表 ≥ 1400 并排）',
+            // WP481（决策 1632）：浏览器里第三栏一律浮层（不挤中栏）；桌面壳能加宽窗口时才并排
+            (await page.getByTestId('rail-panel-frame').getAttribute('data-layout')) === 'overlay',
+            '首页、浏览器里：报表从右边盖上来（WP481 浮层，不挤中栏）',
           )
         }
         if (want('home-report')) await shot(page, '2-home-report', theme)
@@ -183,13 +184,13 @@ async function main() {
             (await page.getByTestId('report-missing').count()) >= 1,
             '整份报表：缺数据源的块原位占位',
           )
-          // int/1024：统一口径（决策 1343）——报表 ≥ 1400 并排，放不下看板时看板让位（顶栏「看一眼」）
+          // WP481（决策 1632）：浏览器里报表是浮层，看板不让位、不出「看一眼」
           const frame = page.getByTestId('rail-panel-frame')
           check(
-            (await frame.getAttribute('data-layout')) === 'docked' &&
-              (await frame.getAttribute('data-board')) === 'hidden' &&
-              (await page.getByTestId('board-peek').count()) === 1,
-            '有看板的页、1440 宽：报表并排、看板让位（顶栏出「看一眼」）',
+            (await frame.getAttribute('data-layout')) === 'overlay' &&
+              (await frame.getAttribute('data-board')) === 'shown' &&
+              (await page.getByTestId('board-peek').count()) === 0,
+            '有看板的页、浏览器里：报表盖上来、看板不让位（不出「看一眼」）',
           )
         }
         if (want('business-report')) {
@@ -288,8 +289,9 @@ async function main() {
         if (theme === 'light')
           check(
             (await page.getByTestId('rail-panel-frame').getAttribute('data-layout')) ===
-              'overlay' && (await page.getByTestId('rail-scrim').count()) === 1,
-            '窄窗（< 1400）：报表盖在中栏上、带遮罩',
+              'overlay' && (await page.getByTestId('rail-scrim').count()) === 0,
+            // WP485：浮层不再拿遮罩挡住中栏
+            '窄窗（< 1400）：报表盖在中栏上、中栏不被遮罩挡住',
           )
         await shot(page, '12-narrow', theme)
         await context.close()
