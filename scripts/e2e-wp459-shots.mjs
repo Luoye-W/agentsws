@@ -142,19 +142,54 @@ async function main() {
       // ② 点开一张带草稿的卡（第三栏）
       const draftRow = page.locator('[data-testid="inbox-row"][data-type="card"]')
       let opened = false
+      /** WP485（决策 1672）：浏览器里第三栏是浮层，开着时点下一行一次就换成那一件（不用先收起）。 */
+      let switched = 0
+      let switchedOk = true
       for (let i = 0; i < (await draftRow.count()); i += 1) {
-        // WP481（决策 1632）：浏览器里第三栏是浮层，先收起上一件再点下一行
-        if ((await page.getByTestId('rail-scrim').count()) > 0) {
-          await page.keyboard.press('Escape')
-          await page.getByTestId('rail-scrim').waitFor({ state: 'detached', timeout: 10_000 })
-        }
+        const overlayOpen = (await page.getByTestId('rail-panel-frame').count()) > 0
+        const id = await draftRow.nth(i).getAttribute('data-id')
         await draftRow.nth(i).click()
-        await page.getByTestId('inbox-pane').waitFor({ timeout: 10_000 })
+        const ok = await page
+          .locator(`[data-testid="inbox-pane"][data-id="${id}"]`)
+          .waitFor({ timeout: 10_000 })
+          .then(() => true)
+          .catch(() => false)
+        if (overlayOpen) {
+          switched += 1
+          if (!ok) switchedOk = false
+        }
         if ((await page.getByTestId('inbox-draft').count()) > 0) {
           opened = true
           break
         }
       }
+      if (switched === 0) {
+        // 第一行就是带草稿的：再点一行、再点回来，验一次「一次就换」
+        const rows = page.getByTestId('inbox-row')
+        if ((await rows.count()) > 1) {
+          const current = await page.getByTestId('inbox-pane').getAttribute('data-id')
+          for (let i = 0; i < (await rows.count()); i += 1) {
+            const id = await rows.nth(i).getAttribute('data-id')
+            if (id === current) continue
+            await rows.nth(i).click()
+            switched += 1
+            switchedOk = await page
+              .locator(`[data-testid="inbox-pane"][data-id="${id}"]`)
+              .waitFor({ timeout: 10_000 })
+              .then(() => true)
+              .catch(() => false)
+            await page.locator(`[data-testid="inbox-row"][data-id="${current}"]`).click()
+            await page
+              .locator(`[data-testid="inbox-pane"][data-id="${current}"]`)
+              .waitFor({ timeout: 10_000 })
+            break
+          }
+        }
+      }
+      check(
+        switched > 0 && switchedOk,
+        `浮层开着时点下一行：一次就换成那一件（点了 ${switched} 次）`,
+      )
       check(opened, '第三栏：回信卡是原信 + 草稿')
       check((await page.getByTestId('rail-panel-frame').count()) === 1, '第三栏开在外壳那一栏里')
       await shot(page, theme, '2-open')
@@ -171,6 +206,61 @@ async function main() {
         )
         await shot(page, theme, '3-open-edit')
         await page.getByTestId('inbox-draft-edit').click()
+      }
+      // WP485：浮层开着时点中栏里不开第三栏的普通按钮（按岗位筛的下拉）：照常生效，浮层不收
+      {
+        const trigger = page.getByTestId('inbox-filter-position')
+        const free = await page.evaluate(() => {
+          const b = document.querySelector('[data-testid="inbox-filter-position"]')
+          const f = document.querySelector('[data-testid="rail-panel-frame"]')
+          if (b === null || f === null) return false
+          return b.getBoundingClientRect().right < f.getBoundingClientRect().left
+        })
+        if (free) {
+          await trigger.click()
+          const menuOpen = await page
+            .getByTestId('inbox-position-menu')
+            .waitFor({ timeout: 5_000 })
+            .then(() => true)
+            .catch(() => false)
+          await page.waitForTimeout(300)
+          check(
+            menuOpen && (await page.getByTestId('rail-panel-frame').count()) === 1,
+            '浮层开着时点普通按钮：按钮照常生效、浮层不收',
+          )
+          await trigger.click()
+          await page.waitForTimeout(300)
+        } else console.log('  ·（筛选按钮被浮层盖着，跳过普通按钮那一项）')
+      }
+      // WP485：点中栏空白处收起浮层
+      {
+        const spot = await page.evaluate(() => {
+          const main = document.querySelector('main')
+          const frame = document.querySelector('[data-testid="rail-panel-frame"]')
+          if (main === null) return null
+          const box = main.getBoundingClientRect()
+          const right =
+            frame === null ? box.right : Math.min(box.right, frame.getBoundingClientRect().left)
+          const hit =
+            'a[href], button, input, select, textarea, label, summary, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], [role="checkbox"], [role="switch"], [contenteditable="true"], .cursor-pointer'
+          for (let y = box.top + 24; y < Math.min(box.bottom, innerHeight) - 8; y += 24) {
+            for (let x = box.left + 16; x < right - 8; x += 24) {
+              const el = document.elementFromPoint(x, y)
+              if (el === null || !main.contains(el)) continue
+              if (el.closest(hit) !== null || getComputedStyle(el).cursor === 'pointer') continue
+              return { x, y }
+            }
+          }
+          return null
+        })
+        if (spot !== null) {
+          await page.mouse.click(spot.x, spot.y)
+          await page.waitForTimeout(500)
+        }
+        check(
+          spot !== null && (await page.getByTestId('rail-panel-frame').count()) === 0,
+          '点中栏空白处：浮层收起',
+        )
       }
       await page.keyboard.press('Escape')
       await page.goto(`${BASE}/inbox?mode=list`, { waitUntil: 'load' })

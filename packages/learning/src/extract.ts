@@ -20,22 +20,24 @@
  * | 工具反复失败 | medium | 一条反例 |
  * | 运行后反思 | weak | 一条规则候选（量大，靠置信度门槛拦） |
  */
-import type {
-  AssignmentId,
-  Iso8601,
-  Lesson,
-  RunEvent,
-  RunId,
-  WorkspaceId,
+import {
+  type AssignmentId,
+  type Iso8601,
+  type Lesson,
+  NOT_WIRED_ACK_REASON,
+  type RunEvent,
+  type RunId,
+  type WorkspaceId,
 } from '@agentsws/contracts'
 import { semanticKey } from './semantic.js'
-import type {
-  AppliesTo,
-  ExtractedLesson,
-  LessonEvidence,
-  LessonKind,
-  LessonSignal,
-  LessonStrength,
+import {
+  type AppliesTo,
+  EVIDENCE_TEXT_MAX,
+  type ExtractedLesson,
+  type LessonEvidence,
+  type LessonKind,
+  type LessonSignal,
+  type LessonStrength,
 } from './types.js'
 
 /** 24 §3：信号强度 → 初始置信度。与 `@agentsws/skills` 的 `STRENGTH_CONFIDENCE` 同表。 */
@@ -98,9 +100,71 @@ const clean = (s: string): string => s.replace(/\s+/g, ' ').trim()
 /** 一句话规则的长度上限：卡片上要读得完，overlay 里也不该塞一整封信。 */
 export const RULE_MAX_CHARS = 240
 
+/** 证据里留的原文 / 改后：截到 {@link EVIDENCE_TEXT_MAX} 字。 */
+function clip(s: string): string {
+  const t = s.trim()
+  return t.length <= EVIDENCE_TEXT_MAX ? t : `${t.slice(0, EVIDENCE_TEXT_MAX - 1)}…`
+}
+
 function ruleText(s: string): string {
   const t = clean(s)
   return t.length <= RULE_MAX_CHARS ? t : `${t.slice(0, RULE_MAX_CHARS - 1)}…`
+}
+
+/**
+ * WP486（Luoye 10-23 真机：「昨天学到的：给「不写的东西」加一条 不要」）：
+ * **只是按钮名、或没写理由时系统代填的那一句**——不是人的原话，不能当纠正学。
+ *
+ * 来历：WP414 起「不要」不强制写理由，没写时服务端在决定上记 `REJECT_NO_REASON`（就是「不要」两个字，
+ * 见 `@agentsws/deck` 的 `decide.ts`）；「不接」「先不连」「先不设」「还没接通，我自己去做」
+ * 「我自己去邮箱回复」同理。学习回路以前把这一句当驳回原因收进池，两次光点「不要」就攒出一条
+ * 规矩文本是「不要」的提案卡。这张表与那几处常量对齐（deck 不是这个包的依赖，所以抄一份；
+ * 服务端测试里有一条对齐检查）。
+ */
+export const BUTTON_ONLY_REASONS: readonly string[] = [
+  '不要',
+  '不接',
+  '先不连',
+  '先不设',
+  '稍后',
+  '都不要',
+  '不采纳',
+  '知道了',
+  NOT_WIRED_ACK_REASON,
+  'Not connected yet; I will do it myself',
+  '我自己去邮箱回复',
+  'I will reply from the mailbox myself',
+  'reject',
+  'no',
+  'decline',
+  'dismiss',
+  'skip',
+  'not now',
+  'later',
+]
+
+const norm = (s: string): string =>
+  s.replace(/[\s。．.!！?？,，、;；:："“”'‘’「」]/g, '').toLowerCase()
+
+const BUTTON_ONLY = new Set(BUTTON_ONLY_REASONS.map(norm))
+
+/** 这句话只是按钮名 / 系统代填的占位（不是人写的理由）。空的也算。 */
+export function isButtonOnlyText(text: string | undefined): boolean {
+  if (text === undefined) return true
+  const n = norm(text)
+  return n === '' || BUTTON_ONLY.has(n)
+}
+
+/**
+ * WP486：一条规矩至少几个字。≤ 4 个字（「不要」「别这样」「太长了」）读不出是一条什么规矩——
+ * 写进技能里，下次 AI 看到的也只是这几个字。按字（码点）数，不按字节。
+ */
+export const RULE_MIN_CHARS = 5
+
+/** 能写成一条规矩的话：不是按钮名、去掉空白后至少 {@link RULE_MIN_CHARS} 个字。 */
+export function isReadableRule(text: string): boolean {
+  const t = clean(text)
+  return !isButtonOnlyText(t) && Array.from(t).length >= RULE_MIN_CHARS
 }
 
 /** 驳回原因里出现这些词，说明人在说"别这么干" → 反例而不是规则。 */
@@ -181,22 +245,29 @@ export function extractLessons(input: ExtractInput): ExtractedLesson[] {
   const out: ExtractedLesson[] = []
 
   for (const d of input.decisions ?? []) {
-    const ev = (quote: string): LessonEvidence => ({
+    const ev = (
+      quote: string,
+      signal: LessonSignal,
+      extra: Pick<LessonEvidence, 'before' | 'after'> = {},
+    ): LessonEvidence => ({
       quote,
       at: d.at,
       run_id: input.run_id,
       approval_item_id: d.approval_item_id,
+      signal,
+      ...extra,
     })
 
-    // ① 驳回原因：最强信号
-    if (d.action === 'reject' && d.reason !== undefined && clean(d.reason) !== '') {
+    // ① 驳回原因：最强信号。WP486：光点「不要」（理由是按钮名 / 系统代填的占位）不算——
+    //    那一下只说了「这张不要」，没说「为什么」，攒不出一条规矩
+    if (d.action === 'reject' && d.reason !== undefined && !isButtonOnlyText(d.reason)) {
       out.push(
         build(input, {
           text: d.reason,
           kind: kindOfReason(d.reason),
           signal: 'reject',
           strength: 'strong',
-          evidence: ev(d.reason),
+          evidence: ev(d.reason, 'reject'),
         }),
       )
     }
@@ -210,21 +281,28 @@ export function extractLessons(input: ExtractInput): ExtractedLesson[] {
             kind: 'example',
             signal: 'edit_diff',
             strength: 'strong',
-            evidence: ev(added),
+            evidence: ev(added, 'edit_diff', {
+              ...(d.edit_diff.before === undefined ? {} : { before: clip(d.edit_diff.before) }),
+              after: clip(d.edit_diff.after ?? ''),
+            }),
           }),
         )
       }
     }
     // ③ 指导（similar_cases）→ 规则。single_reply 只管这一条，不进学习回路；
     //    global_rule 走 05 的策略层，学习回路更不该碰（24 §3「策略层永不进学习回路」）
-    if (d.instruction !== undefined && d.instruction.scope === 'similar_cases') {
+    if (
+      d.instruction !== undefined &&
+      d.instruction.scope === 'similar_cases' &&
+      !isButtonOnlyText(d.instruction.text)
+    ) {
       out.push(
         build(input, {
           text: d.instruction.text,
           kind: kindOfReason(d.instruction.text),
           signal: 'redirect',
           strength: 'strong',
-          evidence: ev(d.instruction.text),
+          evidence: ev(d.instruction.text, 'redirect'),
         }),
       )
     }
@@ -236,7 +314,7 @@ export function extractLessons(input: ExtractInput): ExtractedLesson[] {
           kind: 'boundary',
           signal: 'redirect',
           strength: 'strong',
-          evidence: ev(d.boundary.answer),
+          evidence: ev(d.boundary.answer, 'redirect'),
         }),
       )
     }

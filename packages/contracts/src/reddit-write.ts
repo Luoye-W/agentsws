@@ -9,6 +9,7 @@
  * - 私信（`t4_`）不在这里回：主动发私信永远不做（docs/102 §3.5）。
  */
 import type { Iso8601 } from './common.js'
+import type { WriteRoute } from './ego-write.js'
 
 /** 卡上 `payload.form` 的记号。 */
 export const REDDIT_WRITE_FORM = 'reddit_write'
@@ -201,6 +202,11 @@ export interface RedditWritePayload {
    * 老卡没有这一格：按收件规则认（落在本人身上的就是插件里那一种）。
    */
   desk?: 'plugin' | 'workshop'
+  /**
+   * WP483（决策 1658 / 1660）：出卡那一刻定的路。`ego` = 装了 ego、能连上：卡在工坊里批（`desk: 'workshop'`），
+   * 批了工坊自己在 ego 里填好、点发送、读回；ego 跑失败就退插件「等你发」。没有这一格 = 插件路（老卡也是）。
+   */
+  route?: WriteRoute
 }
 
 /**
@@ -283,6 +289,10 @@ export interface RedditWriteView {
   edited?: boolean
   /** WP432：在页面上没认出框（新版改版了），是人自己粘贴发的。 */
   pasted?: boolean
+  /** WP483：这一条走的哪条路（`ego` = 工坊在 ego 里发；没有 = 插件）。 */
+  route?: WriteRoute
+  /** WP483：ego 没发成、退回插件 / 被平台拦停下时那一句（事项里照实说）。 */
+  route_note?: string
 }
 
 /** `GET /v1/social/reddit/writes` 的回包。 */

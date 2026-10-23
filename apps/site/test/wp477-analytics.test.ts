@@ -150,7 +150,7 @@ describe('WP477 横幅、页脚、CSP、隐私政策', () => {
     for (const s of [
       'Google Analytics',
       'PostHog',
-      '允许统计',
+      '「允许 / 不允许」',
       '180 天',
       '#consent',
       '帮助改进工坊',

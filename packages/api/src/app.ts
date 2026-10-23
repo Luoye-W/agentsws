@@ -114,6 +114,7 @@ import { workRoutes } from './routes/work.js'
 import { workArchiveRoutes } from './routes/work-archive.js'
 import { workshopServicesRoutes } from './routes/workshop-services.js'
 import { workstationRoutes } from './routes/workstation.js'
+import { writeReviewRoutes } from './routes/write-review.js'
 import { wsRoutes } from './routes/ws.js'
 import type { GatewayDeps } from './types.js'
 
@@ -211,6 +212,8 @@ export function collectRoutes(): Route[] {
     // WP284（决策 275）：职责规矩里那几句「以后都这样」
     ...roleRuleRoutes(),
     ...autopilotRoutes(),
+    // WP483（决策 1660）：岗位上的「发之前让我看一眼」
+    ...writeReviewRoutes(),
     // WP323（docs/102 §5）：发出记录与记录去处
     ...outboundRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。

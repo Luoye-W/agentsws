@@ -952,6 +952,12 @@ export {
   workshopServicesRoutes,
 } from './routes/workshop-services.js'
 export { fromDeckError, workstationRoutes } from './routes/workstation.js'
+// WP483（决策 1660）：岗位上的「发之前让我看一眼」
+export {
+  type WriteReviewActor,
+  type WriteReviewPort,
+  writeReviewRoutes,
+} from './routes/write-review.js'
 export {
   classify,
   HALT_ONLY_EVENT,

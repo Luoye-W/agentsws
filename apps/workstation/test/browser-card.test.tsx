@@ -243,23 +243,56 @@ describe('WP463：ego 那一项', () => {
     renderWithProviders(<BrowserCard assignment="asg_1" />)
     const row = await screen.findByTestId('browser-mode-ego')
     expect((await screen.findByTestId('browser-ego-status')).textContent).toContain('没装')
+    // WP483：官网下载页（自己认 Mac / Windows），仍不给安装包直链
     expect(screen.getByTestId('browser-ego-site').getAttribute('href')).toBe(
-      'https://lite.ego.app/',
+      'https://lite.ego.app/download',
     )
     expect((row.querySelector('input') as HTMLInputElement).disabled).toBe(true)
+    // WP483（决策 1658）：「推荐装 ego」卡：去下载 + 装好了再看一次
+    expect(screen.getByTestId('ego-recommend')).toBeTruthy()
+    expect(screen.getByTestId('ego-download').getAttribute('href')).toBe(
+      'https://lite.ego.app/download',
+    )
+    expect(screen.getByTestId('ego-recheck')).toBeTruthy()
+    expect(screen.getByTestId('browser-mode-ego-recommended').textContent).toBe('推荐')
   })
 
-  it('同事互联、公司集体：这一项根本不出现，也不去探', async () => {
+  it('WP483（决策 1659 改 1477）：同事互联、公司集体也出现、也推荐（服务在你电脑上就行）', async () => {
     for (const mode of ['peers', 'company'] as const) {
       state.view = EGO_LOCAL
       state.orgMode = mode
       state.egoChecks = 0
       const { unmount } = renderWithProviders(<BrowserCard assignment="asg_1" />)
-      await screen.findByTestId('browser-mode-browserskill')
-      expect(screen.queryByTestId('browser-mode-ego'), mode).toBeNull()
-      expect(state.egoChecks, mode).toBe(0)
+      await screen.findByTestId('browser-mode-ego')
+      expect(await screen.findByTestId('ego-recommend'), mode).toBeTruthy()
+      expect(state.egoChecks, mode).toBeGreaterThan(0)
       unmount()
     }
+  })
+
+  it('WP483：装了但连不上（工坊以管理员身份运行）——说下一步、给「再看一次」；就绪时一行', async () => {
+    state.view = EGO_LOCAL
+    state.ego = {
+      allowed: true,
+      installed: true,
+      version: '2.1.0',
+      ego_path: '/x/ego-browser',
+      connected: false,
+      admin: true,
+      connect_detail: '工坊现在是「以管理员身份运行」的',
+    } as never
+    const a = renderWithProviders(<BrowserCard assignment="asg_1" />)
+    expect((await screen.findByTestId('ego-connect-detail')).textContent).toContain('管理员')
+    a.unmount()
+    state.ego = {
+      allowed: true,
+      installed: true,
+      version: '2.1.0',
+      ego_path: '/x/ego-browser',
+      connected: true,
+    } as never
+    renderWithProviders(<BrowserCard assignment="asg_1" />)
+    expect((await screen.findByTestId('ego-ready')).textContent).toContain('2.1.0')
   })
 
   it('WP468：选 ego 时顶上那句换成「ego 不按网站名单拦，只留记录」；已存成 ego 的打开就是这一句', async () => {

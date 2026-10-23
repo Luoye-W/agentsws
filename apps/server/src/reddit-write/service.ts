@@ -41,6 +41,7 @@ import {
   type RedditWrite,
   redditCommentIdOf,
   redditPostIdOf,
+  redditThing,
   redditWritePlan,
   SOFT_MISS_LABEL,
 } from '@agentsws/browser-action'
@@ -48,6 +49,8 @@ import type {
   ApprovalBus,
   ApprovalItem,
   Clock,
+  EgoWriteProgress,
+  EgoWriteResult,
   ObjectRef,
   OutboundRecord,
   OutboundRecordInput,
@@ -66,8 +69,15 @@ import type {
   RedditWriteTarget,
   RedditWriteView,
   WorkspaceId,
+  WriteRoute,
 } from '@agentsws/contracts'
-import { REDDIT_WRITE_FORM } from '@agentsws/contracts'
+import {
+  EGO_HUMAN_WAIT_MS,
+  EGO_READBACK_DELAYS_MS,
+  egoWriteNext,
+  egoWriteSentence,
+  REDDIT_WRITE_FORM,
+} from '@agentsws/contracts'
 import {
   checkOutbound,
   redditPlainText,
@@ -78,6 +88,7 @@ import {
 } from '@agentsws/social-core'
 import { finalPayload } from '@agentsws/txn'
 import type { AdsActionEvent, AdsActionsService } from '../ads-actions/service.js'
+import type { EgoWriteScriptConfig } from '../ego-write/script.js'
 import { replyBlockedReason } from '../social-reply-draft.js'
 import {
   conflictNote,
@@ -104,8 +115,16 @@ export interface RedditWriteResult {
 
 /** 一条批过的写（本地进度）。 */
 export interface RedditWriteEntry extends RedditWriteView {
-  /** 老进度里可能还有 `direct`（WP445 删了那条路，只读不新写）。 */
-  via: 'extension' | 'direct'
+  /**
+   * 老进度里可能还有 `direct`（WP445 删了那条路，只读不新写）。
+   * WP483：`ego` = 工坊在 ego 里填好、点发送（ego 跑失败退插件时改回 `extension`）。
+   */
+  via: 'extension' | 'direct' | 'ego'
+  /** WP483：ego 那一路的进度（交给人 / 只填好等人点 / 读回）。 */
+  ego?: EgoWriteProgress
+  /** WP483：发起这条写的分配（查岗位上「发之前让我看一眼」）。 */
+  assignment_id?: string
+  role_id?: string
   source?: RedditWriteSource
   /** 发出去那一条的编号（`t1_…` / `t3_…`）。 */
   fullname?: string
@@ -194,6 +213,21 @@ export interface RedditWriteServiceOptions {
    * 进学习回路（与卡上「改了再批」同一条路）。
    */
   onEdited?(input: { approval_item_id: string; before: string; after: string; at: string }): void
+  /**
+   * WP483（决策 1658 / 1660）：ego 那一路。给了、`available()` 为真 = 出卡时走 ego（卡在工坊批，批了工坊自己在 ego 里
+   * 填好、点发送、读回）；跑失败自动退插件「等你发」，被平台拦就停下。不给 = 只有插件路（老行为）。
+   */
+  ego?: RedditEgo
+}
+
+/** WP483：Reddit 写的 ego 那一路（服务端注入：探测、跑脚本、岗位开关）。 */
+export interface RedditEgo {
+  /** ego 这会儿能不能用（个人运行档 + 浏览器选了 ego / 默认 ego + 探得到）。 */
+  available(): boolean
+  /** 跑一次（写 / 读回）。Space 名、ego 路径由注入方补。 */
+  run(cfg: Omit<EgoWriteScriptConfig, 'space'> & { space?: string }): Promise<EgoWriteResult>
+  /** 发起人岗位上「发之前让我看一眼」开没开（默认关）。 */
+  reviewFirst?(who: { assignment_id?: string; role_id?: string }): boolean
 }
 
 /** 一次写交进来要的（卡、社媒回帖、公关外部帖三条路都汇到这里）。 */
@@ -206,6 +240,14 @@ export interface RedditSendInput {
   record: OutboundRecordInput
   source?: RedditWriteSource
   label?: string
+  /**
+   * WP483：出卡时定的路（`ego` 且这会儿 ego 能用才走 ego，用不了退插件并说一句）；
+   * `auto` = 别的路批过的卡（社媒回帖卡、公关外部帖卡）：ego 能用就走 ego，不能用悄悄走插件。
+   */
+  route?: WriteRoute | 'auto'
+  /** WP483：发起人（查「发之前让我看一眼」）。 */
+  assignment_id?: string
+  role_id?: string
 }
 
 export interface RedditWriteService {
@@ -273,8 +315,13 @@ export interface RedditWriteService {
   extensionReady(): boolean
   /** 卡被决定了（批了 → 过了取消窗口施行）。不是 Reddit 写卡什么都不做。 */
   onDecided(item: ApprovalItem): Promise<void>
-  /** 补扫：批了、过了取消窗口、还没施行的那几张。回施行了几张。 */
+  /**
+   * 补扫：批了、过了取消窗口、还没施行的那几张。回施行了几张。
+   * WP483：顺手推进 ego 那几条（交给人的接着做 / 等太久退插件；只填好的到点读回一次）。
+   */
   sweep(): Promise<number>
+  /** WP483：后台还在跑的 ego 那几趟都跑完（测试与关机用）。 */
+  idle(): Promise<void>
   close(): void
 }
 
@@ -364,7 +411,7 @@ export const PASTE_YOURSELF = SOFT_MISS_LABEL
 
 /** WP332：能不能「再填一次」：走插件的、记着草稿的（直发那条路不再填：761 默认关）。 */
 const canRefill = (e: RedditWriteEntry): boolean =>
-  e.via === 'extension' && e.write !== undefined && e.text !== undefined
+  (e.via === 'extension' || e.via === 'ego') && e.write !== undefined && e.text !== undefined
 
 /** 插件不在线时进度里那一句。 */
 export const PLUGIN_OFFLINE = '插件不在线，等你打开 Chrome（24 小时内来领都行）。'
@@ -383,6 +430,24 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
   })()
   const entries: RedditWriteEntry[] = [...(loaded?.entries ?? [])]
   let seq = loaded?.seq ?? 0
+  /*
+   * WP483：上次进程停的时候还在 ego 里跑的那几条——不知道点没点过发送，**不重跑、不退插件**（可能已经发出去了），
+   * 照实标「没确认」，人去页面上看一眼；没发出去的可以「再填一次」交给插件。
+   */
+  for (const e of entries)
+    if (
+      e.via === 'ego' &&
+      e.ego?.state === 'running' &&
+      e.state !== 'sent' &&
+      e.state !== 'failed'
+    ) {
+      e.state = 'failed'
+      e.outcome = 'interrupted'
+      e.message =
+        '工坊在 ego 里发的时候中途重启了，没确认发没发出去——去 Reddit 上看一眼；没发出去的话点「再填一次」'
+      e.finished_at = e.queued_at
+      e.ego = { ...e.ego, state: 'stopped' }
+    }
   /** 起草时查到的知识卡（出卡时按 id 带上那句话；只在内存里留最近的）。 */
   const factCache = new Map<string, RedditDraftFact>()
 
@@ -535,6 +600,276 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     })
   }
 
+  /*
+   * ── WP483（决策 1658 / 1660）：ego 那一路 ──────────────────────────────────────────────
+   * 批了 → 工坊自己在 ego 里打开页面、填字、点发送、读回 → 已发 · 已记录。
+   * 「发之前让我看一眼」开着 → 只填好，留页面给人点；之后隔一阵读回一次「发了没有」。
+   * ego 交给人（权限框）→ 人在 ego 里点掉后下一轮接着做；等太久退插件。
+   * 没登录 / 选择器对不上 / ego 用不了 → 退插件「等你发」，事项里说一句原因。
+   * 平台拦了（验证码 / 风控）、或点过发送却没确认 → 停下、记原因、提醒人，不绕、不换路重发。
+   */
+  const pending = new Set<Promise<void>>()
+  const track = (p: Promise<void>): void => {
+    pending.add(p)
+    void p.finally(() => pending.delete(p))
+  }
+  const egoBusy = new Set<RedditWriteEntry>()
+
+  const egoUrl = (w: RedditWrite, readback: boolean): string => {
+    const o = (options.origin ?? REDDIT_WRITE_ORIGIN_NEW).replace(/\/+$/u, '')
+    switch (w.kind) {
+      case 'reply':
+        return redditLink(w.permalink)?.replace('https://www.reddit.com', o) ?? `${o}${w.permalink}`
+      case 'comment':
+        return w.permalink === undefined
+          ? `${o}/comments/${bareRedditId(w.post, 't3')}/`
+          : (redditLink(w.permalink)?.replace('https://www.reddit.com', o) ?? `${o}${w.permalink}`)
+      case 'submit':
+        return readback
+          ? `${o}/r/${subOf(w.subreddit)}/new/`
+          : `${o}/r/${subOf(w.subreddit)}/submit/?type=TEXT`
+    }
+  }
+  const egoCfg = (
+    entry: RedditWriteEntry,
+    mode: 'write' | 'readback',
+    submit: boolean,
+  ): Omit<EgoWriteScriptConfig, 'space'> | undefined => {
+    const w = entry.write
+    if (w === undefined || entry.text === undefined) return undefined
+    return {
+      platform:
+        w.kind === 'reply'
+          ? 'reddit-reply'
+          : w.kind === 'comment'
+            ? 'reddit-comment'
+            : 'reddit-post',
+      mode,
+      url: egoUrl(w, mode === 'readback'),
+      ...(w.kind === 'reply' ? { parent: redditThing('t1', w.parent) } : {}),
+      ...(w.kind === 'submit' ? { title: w.title } : {}),
+      text: entry.text,
+      submit,
+      ...(mode === 'write' && entry.ego?.state === 'needs_human' && entry.ego.space_id !== undefined
+        ? { resume: entry.ego.space_id }
+        : {}),
+    }
+  }
+
+  /** ego 没发成：退插件「等你发」（新的一件活），事项里那一句记在 `route_note`。 */
+  const egoFallBack = async (entry: RedditWriteEntry, note: string): Promise<void> => {
+    entry.route_note = note
+    entry.ego = { ...(entry.ego ?? { tries: 0 }), state: 'fell_back', note }
+    const queued =
+      entry.write === undefined || entry.text === undefined
+        ? ({ ok: false, why: '这一条没记下草稿。' } as const)
+        : await toPlugin({
+            write: entry.write,
+            text: entry.text,
+            approval_item_id: entry.approval_item_id,
+            ...(entry.label === undefined ? {} : { label: entry.label }),
+          })
+    if (!queued.ok) {
+      markFailed(entry, `${note}；也没交到插件：${queued.why}`, 'ego_failed')
+      return
+    }
+    entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
+    entry.job_id = queued.job.id
+    entry.via = 'extension'
+    entry.state = 'awaiting'
+    entry.plan_v = WRITE_PLAN_VERSION
+    entry.message = note
+    save()
+    options.emit('reddit.write_route', 'system', {
+      approval_item_id: entry.approval_item_id,
+      job_id: entry.job_id,
+      kind: entry.kind,
+      route: 'plugin',
+      note,
+    })
+    awaiting(entry)
+  }
+
+  const onEgoResult = async (entry: RedditWriteEntry, r: EgoWriteResult): Promise<void> => {
+    const at = now()
+    const prev = entry.ego ?? { state: 'running' as const, tries: 0 }
+    const next = egoWriteNext(r)
+    const note = egoWriteSentence(r)
+    options.emit('reddit.write_ego', 'system', {
+      approval_item_id: entry.approval_item_id,
+      job_id: entry.job_id,
+      state: r.state,
+      next,
+      ...(r.clicked === true ? { clicked: true } : {}),
+      ...(r.why === undefined ? {} : { why: r.why.slice(0, 200) }),
+    })
+    switch (next) {
+      case 'done':
+        entry.ego = { ...prev, state: 'sent', note }
+        markSent(entry, r.external_id, r.link, {
+          ...(r.sent_text === undefined ? {} : { sent_text: r.sent_text }),
+        })
+        return
+      case 'review':
+        entry.state = 'filling'
+        entry.message = note
+        entry.ego = {
+          ...prev,
+          state: 'filled',
+          since: at,
+          checks: 0,
+          next_check_at: new Date(
+            Date.parse(at) + (EGO_READBACK_DELAYS_MS[0] ?? 120_000),
+          ).toISOString(),
+          ...(r.space_id === undefined ? {} : { space_id: r.space_id }),
+          note,
+        }
+        save()
+        return
+      case 'wait_human':
+        entry.state = 'queued'
+        entry.message = note
+        entry.ego = {
+          ...prev,
+          state: 'needs_human',
+          since: prev.state === 'needs_human' && prev.since !== undefined ? prev.since : at,
+          ...(r.space_id === undefined ? {} : { space_id: r.space_id }),
+          note,
+        }
+        save()
+        options.emit('reddit.write_needs_human', 'system', {
+          approval_item_id: entry.approval_item_id,
+          job_id: entry.job_id,
+          kind: entry.kind,
+          note,
+          ...(entry.label === undefined ? {} : { label: entry.label }),
+        })
+        return
+      case 'stop':
+        entry.ego = { ...prev, state: 'stopped', note }
+        entry.route_note = note
+        markFailed(entry, note, r.clicked === true ? 'ego_unconfirmed' : 'blocked')
+        // 提醒人（铃铛）：平台拦了 / 点过发送没确认
+        options.emit('reddit.write_ego_stopped', 'system', {
+          approval_item_id: entry.approval_item_id,
+          job_id: entry.job_id,
+          kind: entry.kind,
+          note,
+          ...(entry.label === undefined ? {} : { label: entry.label }),
+        })
+        return
+      case 'plugin':
+        await egoFallBack(entry, note)
+        return
+    }
+  }
+
+  /** 跑一趟 ego 写（后台；同一条不并发）。 */
+  const egoWrite = (entry: RedditWriteEntry): void => {
+    if (egoBusy.has(entry)) return
+    const ego = options.ego
+    const review =
+      ego?.reviewFirst?.({
+        ...(entry.assignment_id === undefined ? {} : { assignment_id: entry.assignment_id }),
+        ...(entry.role_id === undefined ? {} : { role_id: entry.role_id }),
+      }) === true
+    const cfg = egoCfg(entry, 'write', !review)
+    if (ego === undefined || cfg === undefined) {
+      track(egoFallBack(entry, egoWriteSentence({ state: 'unavailable' })))
+      return
+    }
+    egoBusy.add(entry)
+    entry.ego = {
+      ...(entry.ego ?? {}),
+      state: 'running',
+      tries: (entry.ego?.tries ?? 0) + 1,
+    } as EgoWriteProgress
+    save()
+    track(
+      ego
+        .run({ ...cfg, space: `工坊 · Reddit ${entry.job_id}` })
+        .catch(
+          (err): EgoWriteResult => ({
+            state: 'unavailable',
+            platform: cfg.platform,
+            why: err instanceof Error ? err.message : String(err),
+          }),
+        )
+        .then((r) => onEgoResult(entry, r))
+        .finally(() => egoBusy.delete(entry)),
+    )
+  }
+
+  /** 「发之前让我看一眼」：到点回去读一次人发了没有。 */
+  const egoReadback = (entry: RedditWriteEntry): void => {
+    const ego = options.ego
+    const cfg = egoCfg(entry, 'readback', false)
+    if (ego === undefined || cfg === undefined || egoBusy.has(entry)) return
+    egoBusy.add(entry)
+    const progress = entry.ego ?? { state: 'filled' as const, tries: 1 }
+    track(
+      ego
+        .run({ ...cfg, space: `工坊 · 读回 ${entry.job_id}` })
+        .catch((): EgoWriteResult => ({ state: 'failed', platform: cfg.platform }))
+        .then((r) => {
+          if (r.state === 'sent') {
+            entry.ego = { ...progress, state: 'sent' }
+            entry.recorded_via = 'seen'
+            markSent(entry, r.external_id, r.link, {
+              ...(r.sent_text === undefined ? {} : { sent_text: r.sent_text }),
+            })
+            return
+          }
+          const checks = (progress.checks ?? 0) + 1
+          const wait = EGO_READBACK_DELAYS_MS[checks]
+          const { next_check_at: _drop, ...rest } = progress
+          entry.ego = {
+            ...rest,
+            checks,
+            ...(wait === undefined
+              ? {}
+              : { next_check_at: new Date(Date.parse(now()) + wait).toISOString() }),
+          }
+          if (wait === undefined) {
+            entry.message =
+              '已在 ego 里填好，但还没看到发出去的那一条：发了的话在插件里点「我发了，帮我记一下」'
+          }
+          save()
+        })
+        .finally(() => egoBusy.delete(entry)),
+    )
+  }
+
+  /** sweep 里推进 ego 那几条。 */
+  const egoSweep = (): void => {
+    if (options.ego === undefined) return
+    const nowMs = Date.parse(now())
+    for (const e of entries) {
+      if (e.via !== 'ego' || e.state === 'sent' || e.state === 'failed') continue
+      const g = e.ego
+      if (g?.state === 'needs_human') {
+        const since = Date.parse(g.since ?? e.queued_at)
+        if (nowMs - since > EGO_HUMAN_WAIT_MS) {
+          track(
+            egoFallBack(
+              e,
+              `ego 里那个框等了 ${Math.round(EGO_HUMAN_WAIT_MS / 60_000)} 分钟没人处理，这一次改交给插件`,
+            ),
+          )
+          continue
+        }
+        if (options.ego.available()) egoWrite(e)
+        continue
+      }
+      if (
+        g?.state === 'filled' &&
+        g.next_check_at !== undefined &&
+        Date.parse(g.next_check_at) <= nowMs
+      )
+        egoReadback(e)
+    }
+  }
+
   const send = async (input: RedditSendInput): Promise<RedditWriteResult> => {
     const plan = (() => {
       try {
@@ -553,7 +888,44 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       ...(input.source === undefined ? {} : { source: input.source }),
       record: input.record,
     }
-    // 决策 1324：Reddit 的写只有插件 + 人点发送这一条路（程序直发删了）
+    /*
+     * WP483（决策 1658 / 1660）：出卡时定了走 ego、这会儿 ego 也能用 → 工坊自己在 ego 里发（后台跑，结局回写这一条）。
+     * 出卡时定了 ego、这会儿用不了 → 退插件，说一句原因。
+     */
+    if (input.route === 'ego' || input.route === 'auto') {
+      if (options.ego?.available() === true) {
+        const entry: RedditWriteEntry = {
+          ...base,
+          job_id: nextId('rde'),
+          state: 'queued',
+          via: 'ego',
+          route: 'ego',
+          message: '工坊正在 ego 里发',
+          write: input.write,
+          text: input.text,
+          ...(input.title === undefined ? {} : { title: input.title }),
+          ...(input.label === undefined ? {} : { label: input.label }),
+          ...(input.assignment_id === undefined ? {} : { assignment_id: input.assignment_id }),
+          ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
+          plan_v: WRITE_PLAN_VERSION,
+        }
+        entries.push(entry)
+        save()
+        options.emit('reddit.write_queued', 'system', {
+          approval_item_id: input.approval_item_id,
+          job_id: entry.job_id,
+          kind: input.write.kind,
+          route: 'ego',
+        })
+        egoWrite(entry)
+        return {
+          status: 'ok',
+          execution_id: `reddit_ego_${entry.job_id}`,
+          outcome_ref: { type: 'reddit_ego', id: entry.job_id },
+        }
+      }
+    }
+    // 决策 1324 → WP483：插件这一条路（没装 ego / ego 用不了 / 用户选了插件）
     const queued = await toPlugin(input)
     if (!queued.ok) return failed(queued.why)
     const job = queued.job
@@ -569,6 +941,12 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       ...(input.title === undefined ? {} : { title: input.title }),
       ...(input.label === undefined ? {} : { label: input.label }),
       plan_v: WRITE_PLAN_VERSION,
+      ...(input.route === 'ego'
+        ? {
+            route_note: egoWriteSentence({ state: 'unavailable' }),
+            message: egoWriteSentence({ state: 'unavailable' }),
+          }
+        : {}),
     }
     entries.push(entry)
     save()
@@ -625,7 +1003,12 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       timers.add(t)
     },
 
+    async idle() {
+      while (pending.size > 0) await Promise.allSettled([...pending])
+    },
+
     async sweep() {
+      egoSweep()
       const nowMs = Date.parse(now())
       let applied = 0
       for (const item of options.approvedItems?.() ?? []) {
@@ -784,6 +1167,15 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       const reviewer = asked !== undefined && asked.person !== actor.person_id ? asked : undefined
       const supervised = reviewer !== undefined
       payload.desk = supervised ? 'workshop' : 'plugin'
+      /*
+       * WP483（决策 1658 / 1660）：ego 能用 → 走 ego：卡在工坊里批（要批的先批），批了工坊自己在 ego 里发。
+       * 主管先批的那一种照旧（批完进发起人的插件）。
+       */
+      const egoRoute = !supervised && options.ego?.available() === true
+      if (egoRoute) {
+        payload.desk = 'workshop'
+        payload.route = 'ego'
+      }
       const item = await options.approvals.create({
         workspace_id: ws,
         schema_version: 1,
@@ -850,7 +1242,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         ...(target.source === undefined ? {} : { source: target.source.type }),
       })
       // WP445：进了插件「等你发」——插件图标数字、系统通知、铃铛「等你发」都从这一条来（工坊不出卡）
-      if (!supervised)
+      if (!supervised && !egoRoute)
         options.emit('reddit.write_awaiting', 'system', {
           approval_item_id: item.id,
           kind: target.kind,
@@ -976,6 +1368,11 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         record,
         ...(target.source === undefined ? {} : { source: target.source }),
         label: item.title,
+        ...(p.route === 'ego' ? { route: 'ego' as const } : {}),
+        ...(item.proposer.assignment_id === undefined
+          ? {}
+          : { assignment_id: String(item.proposer.assignment_id) }),
+        role_id: String(item.role_id),
       })
     },
 
@@ -1054,6 +1451,8 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
       entry.job_id = queued.job.id
       entry.plan_v = WRITE_PLAN_VERSION
+      // WP483：ego 那一路没发成的，再填一次交给插件
+      entry.via = 'extension'
       // WP432：再填一次也是「等你在插件里打开」
       entry.state = 'awaiting'
       entry.queued_at = now()
@@ -1302,7 +1701,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         const job = running.get(e.job_id)
         const st = job?.status
         const state =
-          e.state === 'queued' && (st === 'running' || st === 'waiting_confirm')
+          e.via !== 'ego' && e.state === 'queued' && (st === 'running' || st === 'waiting_confirm')
             ? 'filling'
             : e.state
         // WP432：新版页面对不上、在等人自己粘贴——照实说
@@ -1329,6 +1728,8 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
           ...(e.sent_text === undefined ? {} : { sent_text: e.sent_text }),
           ...(e.edited === true ? { edited: true } : {}),
           ...(e.pasted === true ? { pasted: true } : {}),
+          ...(e.via === 'ego' || e.route === 'ego' ? { route: 'ego' as const } : {}),
+          ...(e.route_note === undefined ? {} : { route_note: e.route_note }),
           queued_at: e.queued_at,
           ...(e.finished_at === undefined ? {} : { finished_at: e.finished_at }),
         }

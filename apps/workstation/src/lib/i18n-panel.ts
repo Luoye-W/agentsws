@@ -73,7 +73,7 @@ export const PANEL_ZH: Record<string, string> = {
   'outputs.dot.broken': '{n} 条发出记录没写进去',
   'outputs.tab.records': '记录',
   'outputs.tab.outbound': '发出记录',
-  'outputs.tab.evidence': '证据',
+  'outputs.tab.evidence': '详情',
 
   'plans.next': '下次 {when}',
   'plans.empty': '还没有计划',
@@ -183,7 +183,7 @@ export const PANEL_EN: Record<string, string> = {
   'outputs.dot.broken': '{n} sent records failed to save',
   'outputs.tab.records': 'Records',
   'outputs.tab.outbound': 'Sent',
-  'outputs.tab.evidence': 'Evidence',
+  'outputs.tab.evidence': 'Details',
 
   'plans.next': 'Next {when}',
   'plans.empty': 'No plans yet',

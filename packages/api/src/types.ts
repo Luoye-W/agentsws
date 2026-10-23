@@ -136,6 +136,7 @@ import type { UpdatePausePort } from './routes/update-pause.js'
 import type { WorkPort } from './routes/work.js'
 import type { WorkArchivePort } from './routes/work-archive.js'
 import type { WorkshopServicesApiPort } from './routes/workshop-services.js'
+import type { WriteReviewPort } from './routes/write-review.js'
 import type { WsOptions } from './routes/ws.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
@@ -979,6 +980,8 @@ export interface GatewayDeps {
    * 没装配时回 not_implemented。
    */
   autopilot?: AutopilotPort
+  /** WP483（决策 1660）：岗位上的「发之前让我看一眼」（`/v1/write-review`）。没装配时回 not_implemented。 */
+  writeReview?: WriteReviewPort
   /**
    * WP323（docs/102 §5）：发出记录与记录去处 `/v1/outbound/*`。
    * 没装配时回 not_implemented。

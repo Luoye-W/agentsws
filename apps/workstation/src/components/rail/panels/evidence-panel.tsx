@@ -1,5 +1,6 @@
 /**
  * WP100（36 §9 那张表里的第四格）：**证据——这张卡凭什么**。
+ * WP486：界面上改叫「详情」（Luoye 10-23：「证据」听着怪）；「学到」卡多一节「攒出这条的几次纠正」。
  *
  * WP71 把这一格的位置占住了（点开照实说"还没做"），WP98 又把卡面上的证据层
  * 全收进了右上角那枚「证据 N」——于是从 09-18 起，点那枚胶囊开的是一个空面板。
@@ -24,6 +25,7 @@
  */
 import type { DeckCard } from '@agentsws/deck'
 import type { ReactNode } from 'react'
+import { Link, useInRouterContext } from 'react-router-dom'
 import { FactChip, ObjectChip } from '@/components/chips'
 import { useEvidenceCard } from '@/components/deck/deck-focus'
 import { evidenceLines } from '@/components/deck/evidence-chips'
@@ -57,6 +59,127 @@ function FactStatus({ card }: { card: DeckCard }): ReactNode {
   )
 }
 
+/** WP486：「学到」卡上攒出这条的那一次纠正（服务端 `SkillLessonSource` 的前端只读面）。 */
+interface LessonSourceView {
+  at: string
+  signal: string
+  quote: string
+  approval_item_id?: string
+  card_title?: string
+  matter_id?: string
+  before?: string
+  after?: string
+}
+
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined)
+
+/** 卡上的 `payload.sources`（只有「昨天学到的」卡有；早于 WP486 的卡没有就是空）。 */
+export function lessonSourcesOf(card: DeckCard): LessonSourceView[] {
+  const p = card.detail.payload as { form?: unknown; sources?: unknown } | null | undefined
+  if (p?.form !== 'skill_lesson' || !Array.isArray(p.sources)) return []
+  const out: LessonSourceView[] = []
+  for (const raw of p.sources as unknown[]) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const r = raw as Record<string, unknown>
+    const at = str(r.at)
+    const quote = str(r.quote)
+    if (at === undefined || quote === undefined) continue
+    const opt = (k: keyof LessonSourceView): Partial<LessonSourceView> => {
+      const v = str(r[k])
+      return v === undefined ? {} : { [k]: v }
+    }
+    out.push({
+      at,
+      quote,
+      signal: str(r.signal) ?? '',
+      ...opt('approval_item_id'),
+      ...opt('card_title'),
+      ...opt('matter_id'),
+      ...opt('before'),
+      ...opt('after'),
+    })
+  }
+  return out
+}
+
+/** 那一次纠正出在哪张卡：有事项进事项并定位到卡，没有就开那张卡自己的页面（`/cards/:id`）。 */
+function sourceHref(s: LessonSourceView): string | undefined {
+  if (s.approval_item_id === undefined) return undefined
+  const card = encodeURIComponent(s.approval_item_id)
+  return s.matter_id === undefined
+    ? `/cards/${card}`
+    : `/matters/${encodeURIComponent(s.matter_id)}#card-${card}`
+}
+
+/** WP486：攒出这条「学到」的那几次纠正——时间、哪张卡、原来是什么 / 你改成了什么 / 你说的理由。 */
+function LessonSources({ sources }: { sources: readonly LessonSourceView[] }): ReactNode {
+  const { t, lang } = useApp()
+  const inRouter = useInRouterContext()
+  return (
+    <ol className="flex flex-col gap-2" data-testid="rail-evidence-sources">
+      {sources.map((s) => {
+        const href = sourceHref(s)
+        const title = s.card_title ?? t('rail.evidence.source.card')
+        return (
+          <li
+            key={`${s.approval_item_id ?? ''}:${s.at}:${s.quote}`}
+            className="flex flex-col gap-1 rounded-lg bg-ws-surface p-2 text-[12px] leading-5"
+            data-testid="rail-evidence-source"
+          >
+            <p className="flex flex-wrap items-baseline gap-x-1.5 text-muted-foreground">
+              <span className="ws-num">{formatDateTime(s.at, lang)}</span>
+              {href === undefined || !inRouter ? (
+                <span className="text-ws-body">{title}</span>
+              ) : (
+                <Link
+                  to={href}
+                  className="text-ws-body hover:underline"
+                  data-testid="rail-evidence-source-link"
+                  title={t('rail.evidence.source.open')}
+                >
+                  {title} →
+                </Link>
+              )}
+            </p>
+            {s.signal === 'edit_diff' && (s.before !== undefined || s.after !== undefined) ? (
+              <div className="flex flex-col gap-0.5">
+                <p className="text-muted-foreground">{t('rail.evidence.source.edit')}</p>
+                {s.before === undefined ? null : (
+                  <p className="whitespace-pre-wrap text-ws-body">
+                    <span className="text-muted-foreground">
+                      {t('rail.evidence.source.before')}：
+                    </span>
+                    {s.before}
+                  </p>
+                )}
+                <p className="whitespace-pre-wrap text-ws-body">
+                  <span className="text-muted-foreground">{t('rail.evidence.source.after')}：</span>
+                  {s.after ?? s.quote}
+                </p>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap text-ws-body">
+                <span className="text-muted-foreground">
+                  {t(
+                    s.signal === 'reject'
+                      ? 'rail.evidence.source.reject'
+                      : s.signal === 'redirect'
+                        ? 'rail.evidence.source.redirect'
+                        : s.signal === 'edit_diff'
+                          ? 'rail.evidence.source.after'
+                          : 'rail.evidence.source.other',
+                  )}
+                </span>
+                「{s.quote}」
+              </p>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
 export function EvidencePanel(): ReactNode {
   const { t, lang } = useApp()
   const card = useEvidenceCard()
@@ -74,12 +197,20 @@ export function EvidencePanel(): ReactNode {
   const objects = card.entity_chips.filter((c) => c.type !== 'fact_card')
   const facts = card.entity_chips.filter((c) => c.type === 'fact_card')
   const citations = card.detail.citations
+  const sources = lessonSourcesOf(card)
 
   return (
     <div className="flex flex-col gap-4" data-testid="rail-evidence">
       <p className="text-[13px] leading-5 font-medium" data-testid="rail-evidence-title">
         {card.title}
       </p>
+
+      {/* WP486：「学到」卡先说它从哪来——攒出这条的那几次纠正 */}
+      {sources.length === 0 ? null : (
+        <Section title={t('rail.evidence.sources')}>
+          <LessonSources sources={sources} />
+        </Section>
+      )}
 
       {objects.length === 0 ? null : (
         <Section title={t('rail.evidence.objects')}>

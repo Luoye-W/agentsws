@@ -22,6 +22,9 @@
  *
  * 真 provider 在本机真 Chrome 上的手工验证步骤见 `scripts/dev-browser.md`。
  */
+import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, dirname } from 'node:path'
 import { Provenance } from '@agentsws/core'
 import { Context } from '@deepseek-ai/cordis'
 import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
@@ -179,6 +182,25 @@ describe('(a) 真 provider：挂得上，工具名与我们那张表逐条相同
     } finally {
       await harness.dispose()
     }
+  }, 60_000)
+
+  it('WP484：会话 cwd 是这次运行自己的临时目录（快照不落服务进程的工作目录），dispose 后删掉', async () => {
+    const req = makeRequest({ ...KOL })
+    const { harness } = await harnessOf(req)
+    let cwd = ''
+    try {
+      cwd = String((harness.session as unknown as { header: { cwd?: string } }).header.cwd)
+      expect(basename(cwd)).toMatch(/^agentsws-run-browser-/)
+      expect(dirname(cwd)).toBe(tmpdir())
+      expect(cwd).not.toBe(process.cwd())
+      expect(existsSync(cwd)).toBe(true)
+      // 模型看到的「当前目录」也是它（Playwright MCP 子进程的 cwd 从这里取）
+      const sections = await harness.contextSections()
+      expect(sections.some((s) => s.text.includes(cwd))).toBe(true)
+    } finally {
+      await harness.dispose()
+    }
+    expect(existsSync(cwd)).toBe(false)
   }, 60_000)
 
   it('不给 RunRequest.browser → 整层浏览器都不存在（没有服务、没有工具、不起子进程）', async () => {
@@ -489,6 +511,35 @@ describe('(e) 读写分类（55 §3 第一行）', () => {
       ).toBe(true)
     } finally {
       await allowed.dispose()
+    }
+  })
+
+  it('WP483（决策 1652）：个人用法（`browser_write: personal`）下 executor 档的浏览器点击放行并留痕；别的对外写照旧拦；注 JS 照旧拦', async () => {
+    const req = makeRequest({ ...KOL, side_effect_policy: 'executor' })
+    req.tools = { ...req.tools, browser_write: 'personal' }
+    const g = await gateOnBare(req)
+    try {
+      const click = await g.gate.execute('c_1', `${PREFIX}browser_click`, { target: 'e1' })
+      expect(click.isError).toBe(false)
+      expect(
+        g.events.some(
+          (e) =>
+            e.type === 'progress' &&
+            e.step === 'browser_write' &&
+            e.note === `${PREFIX}browser_click`,
+        ),
+      ).toBe(true)
+      const typed = await g.gate.execute('c_2', `${PREFIX}browser_type`, {
+        target: 'e1',
+        text: 'x',
+      })
+      expect(typed.isError).toBe(false)
+      // 在页面里跑脚本（注 JS）不在 1652 里：照旧拦
+      const js = await g.gate.execute('c_3', `${PREFIX}browser_evaluate`, { function: '() => 1' })
+      expect(js.isError).toBe(true)
+      expect(g.gate.records.get('c_3')?.reason).toContain('browser_script_forbidden')
+    } finally {
+      await g.dispose()
     }
   })
 

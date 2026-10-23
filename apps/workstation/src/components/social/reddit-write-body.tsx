@@ -42,6 +42,8 @@ export function RedditWriteBody({
   const [text, setText] = useState(payload.body.text)
   const [title, setTitle] = useState(payload.body.subject ?? '')
   const decidable = card.available_actions.includes('approve')
+  // WP483（决策 1658 / 1660）：走 ego 的卡——批了工坊自己在 ego 里发（按钮「批准并发出」）
+  const viaEgo = payload.route === 'ego'
   const edited =
     text.trim() !== payload.body.text.trim() || title.trim() !== (payload.body.subject ?? '').trim()
   // WP414：「发送」之后同类卡只问「要一起发吗」（回包里带回来，交给牌堆顶上那一行）
@@ -90,7 +92,7 @@ export function RedditWriteBody({
     ? [
         {
           key: 'reddit-write-send',
-          label: t('redditw.send'),
+          label: t(viaEgo ? 'redditw.send.ego' : 'redditw.send'),
           primary: true,
           disabled: blank || send.isPending || send.isSuccess,
           testId: 'reddit-write-send',
@@ -191,10 +193,10 @@ export function RedditWriteBody({
       {decidable ? (
         <div className="flex items-center gap-1.5">
           {hosted ? null : <FootButtons actions={actions ?? []} />}
-          <Hint text={t('redditw.send.hint')} />
+          <Hint text={t(viaEgo ? 'redditw.send.ego.hint' : 'redditw.send.hint')} />
           {send.isSuccess ? (
             <span className="text-xs text-ws-muted-fg" data-testid="reddit-write-awaiting-note">
-              {t('redditw.sent.awaiting')}
+              {t(viaEgo ? 'redditw.sent.ego' : 'redditw.sent.awaiting')}
             </span>
           ) : null}
           {send.isError ? (

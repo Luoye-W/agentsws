@@ -73,6 +73,8 @@ export function socialRedditFill(writes: () => RedditWriteService | undefined) {
       },
       source: { type: 'community_thread', id: input.thread.id },
       label: input.item.title,
+      // WP483：ego 能用就工坊自己在 ego 里发，不能用照旧进插件
+      route: 'auto',
     })
   }
 }
@@ -168,6 +170,9 @@ export async function applyExternalPost(
     } as OutboundRecordInput,
     source: { type: 'external_post', id: post.id },
     label: `外部发帖：r/${sub}`,
+    // WP483：ego 能用就工坊自己在 ego 里发，不能用照旧进插件
+    route: 'auto',
+    role_id: String(change.role_id),
   })
 }
 

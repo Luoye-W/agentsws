@@ -11,8 +11,9 @@
  */
 import type { AssignmentId, Iso8601, RunId, WorkspaceId } from '@agentsws/contracts'
 import { POLICY_KEYWORDS } from '@agentsws/skills'
+import { isReadableRule } from './extract.js'
 import { keySimilarity, keyTokens } from './semantic.js'
-import type { PooledLesson } from './types.js'
+import type { LessonSignal, PooledLesson } from './types.js'
 
 /** 置信度门槛：单条够硬就能直接进提案。 */
 export const DEFAULT_CONFIDENCE_THRESHOLD = 0.8
@@ -42,6 +43,23 @@ export interface ProposalOption {
   body: string
 }
 
+/**
+ * WP486：攒出这条的那一次纠正（详情面板逐条列：时间、哪张卡、原来是什么、你改成了什么 / 你说的理由）。
+ * 卡名、事项这些包里不认识的东西由宿主补（服务端 `learning.ts`）。
+ */
+export interface LessonSource {
+  at: Iso8601
+  /** 哪种纠正：`reject` = 点「不要」写了理由；`edit_diff` = 改了字；`redirect` = 给了指导 / 选了边界 */
+  signal: LessonSignal
+  /** 人的原话（理由 / 指导）或改出来的那一句 */
+  quote: string
+  approval_item_id?: string
+  run_id?: RunId
+  /** 改了字的那一次：原来那一版 / 改成的那一版 */
+  before?: string
+  after?: string
+}
+
 export interface LessonProposalCard {
   workspace_id: WorkspaceId
   skill: string
@@ -56,6 +74,8 @@ export interface LessonProposalCard {
   /** 段级 diff 预览（14 §6 语义 diff：空 diff 不建项） */
   diff: { before: string | null; after: string; summary: string }
   evidence: { quotes: string[]; run_ids: RunId[]; approval_item_ids: string[] }
+  /** WP486：攒出这条的那几次纠正（按时间先后）。 */
+  sources: LessonSource[]
   hits: number
   confidence: number
   lessons: string[]
@@ -68,6 +88,8 @@ export type FilterReason =
   | 'below_threshold'
   | 'no_target_section'
   | 'empty_diff'
+  /** WP486：攒出来的话太短 / 只是按钮名（「不要」），读不出是一条什么规矩——不出卡 */
+  | 'too_short'
 
 export interface FilteredProposal {
   skill: string
@@ -91,6 +113,11 @@ export interface DraftProposalsInput {
   policySkills?: Iterable<string>
   /** 被驳回过的语义键 */
   rejectedKeys?: Iterable<string>
+  /**
+   * WP486：来源那张卡叫什么（卡片正文要说「你在哪几张卡上做了什么纠正」）。
+   * 包里不认识审批总线，由宿主查好了给；不给 / 查不到就只说几张卡。
+   */
+  sourceTitle?: (approval_item_id: string) => string | undefined
 }
 
 export interface DraftProposalsResult {
@@ -226,6 +253,16 @@ export function draftProposals(input: DraftProposalsInput): DraftProposalsResult
         if (t !== '' && !variants.includes(t)) variants.push(t)
       }
       const primary = variants[0] ?? ''
+      // WP486：太短 / 只是按钮名（「不要」）——写进技能里 AI 也读不出是什么规矩，不出卡
+      if (!isReadableRule(primary)) {
+        push(
+          cluster,
+          'too_short',
+          `攒出来的话只有「${primary}」，读不出是一条什么规矩，不出卡`,
+          target.id,
+        )
+        continue
+      }
       const appended = `${target.body}\n\n${primary}`.trim()
       // 14 §6 语义 diff：空 diff 不建项。这条已经写在段落里了就别再问一遍
       if (primary === '' || trim(target.body).includes(primary)) {
@@ -249,7 +286,7 @@ export function draftProposals(input: DraftProposalsInput): DraftProposalsResult
           body: primary,
         },
       ]
-      const alt = variants[1]
+      const alt = variants.slice(1).find((v) => isReadableRule(v))
       if (alt !== undefined) {
         options.push({
           id: 'append_alt',
@@ -262,6 +299,7 @@ export function draftProposals(input: DraftProposalsInput): DraftProposalsResult
       options.length = Math.min(options.length, maxOptions)
       options.push({ id: OPTION_NONE, label: '都不要' })
 
+      const sources = sourcesOf(cluster)
       proposals.push({
         workspace_id: input.workspace_id,
         skill,
@@ -270,7 +308,7 @@ export function draftProposals(input: DraftProposalsInput): DraftProposalsResult
         semantic_key: rep.semantic_key,
         assignment_id: rep.assignment_id,
         title: titleOf(target.heading, primary),
-        summary: `${hits} 次同类纠正攒出来的一条。采纳就写进你的个人层，不采纳以后不再提。`,
+        summary: storyOf(sources, primary, hits, input.sourceTitle),
         options,
         diff: {
           before: target.body === '' ? null : target.body,
@@ -288,6 +326,7 @@ export function draftProposals(input: DraftProposalsInput): DraftProposalsResult
             ),
           ),
         },
+        sources,
         hits,
         confidence,
         lessons: cluster.map((l) => l.id),
@@ -296,6 +335,85 @@ export function draftProposals(input: DraftProposalsInput): DraftProposalsResult
     }
   }
   return { proposals, filtered }
+}
+
+/** WP486：一簇 lesson 的全部证据 → 来源列表（同一张卡同一时刻同一句只留一条，按时间先后）。 */
+export function sourcesOf(cluster: readonly PooledLesson[]): LessonSource[] {
+  const out: LessonSource[] = []
+  const seen = new Set<string>()
+  for (const l of cluster) {
+    for (const e of l.evidence) {
+      const key = `${e.approval_item_id ?? e.run_id ?? ''}|${e.at}|${e.quote}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({
+        at: e.at,
+        signal: e.signal ?? l.signal,
+        quote: e.quote,
+        ...(e.approval_item_id === undefined ? {} : { approval_item_id: e.approval_item_id }),
+        ...(e.run_id === undefined ? {} : { run_id: e.run_id }),
+        ...(e.before === undefined ? {} : { before: e.before }),
+        ...(e.after === undefined ? {} : { after: e.after }),
+      })
+    }
+  }
+  return out.sort((a, b) => a.at.localeCompare(b.at))
+}
+
+const clip = (s: string, n: number): string => {
+  const t = trim(s)
+  return Array.from(t).length <= n
+    ? t
+    : `${Array.from(t)
+        .slice(0, n - 1)
+        .join('')}…`
+}
+
+/** 这一类纠正人话怎么说（「都」字由调用方按次数加）。 */
+function didWhat(signals: ReadonlySet<LessonSignal>, rule: string): string {
+  const quoted = `「${clip(rule, 40)}」`
+  if (signals.size === 1 && signals.has('reject')) return `点了「不要」，理由是${quoted}`
+  if (signals.size === 1 && signals.has('edit_diff')) return `把草稿改成了${quoted}`
+  if (signals.size === 1 && signals.has('redirect')) return `给了指导：${quoted}`
+  if ([...signals].every((s) => s === 'reject' || s === 'edit_diff' || s === 'redirect'))
+    return `纠正过同一件事：${quoted}`
+  return `出现过同一条：${quoted}`
+}
+
+/**
+ * WP486：卡片正文那一句——**你在哪几件事上、做了什么纠正**
+ * （「你 10-21、10-22 在「回帖：…」「回帖：…」上都点了「不要」，理由是「别写 DM us」。」），
+ * 后面接一句采纳 / 不采纳会怎样。日期按 ISO 的月-日取（UTC），详情面板上有本地时间。
+ */
+export function storyOf(
+  sources: readonly LessonSource[],
+  rule: string,
+  hits: number,
+  sourceTitle?: (approval_item_id: string) => string | undefined,
+): string {
+  const tail = '采纳就写进你的个人层，不采纳以后不再提。'
+  if (sources.length === 0) return `${hits} 次同类纠正攒出来的一条：「${clip(rule, 40)}」。${tail}`
+  const dates = uniq(sources.map((s) => s.at.slice(5, 10)))
+  const cards = uniq(
+    sources.map((s) => s.approval_item_id).filter((x): x is string => x !== undefined),
+  )
+  const titles = uniq(
+    cards
+      .map((id) => sourceTitle?.(id))
+      .filter((t): t is string => t !== undefined && trim(t) !== '')
+      .map((t) => `「${clip(t, 18)}」`),
+  )
+  const n = Math.max(cards.length, 1)
+  const where =
+    titles.length === 0
+      ? ` ${n} 张卡上`
+      : titles.length >= n
+        ? `${titles.slice(0, 3).join('')}${n > 3 ? ` 等 ${n} 张卡` : ''}上`
+        : `${titles.slice(0, 3).join('')}等 ${n} 张卡上`
+  const times = Math.max(sources.length, hits)
+  const all = times > 1 ? '都' : ''
+  const what = didWhat(new Set(sources.map((s) => s.signal)), rule)
+  return `你 ${dates.slice(0, 3).join('、')}${dates.length > 3 ? ' 等' : ''} 在${where}${all}${what}。${tail}`
 }
 
 function uniq<T>(list: readonly T[]): T[] {

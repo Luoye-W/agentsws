@@ -162,6 +162,33 @@ function Probe(): ReactNode {
       <button type="button" data-testid="close-pane" onClick={() => rail.closeRightPane()}>
         close
       </button>
+      {/* WP485：中栏里的空白、像收件箱那样整行可点的行、没写成按钮的可点区域 */}
+      <p data-testid="blank">blank</p>
+      {/* biome-ignore lint/a11y/useSemanticElements: 照收件箱的行（行里还有按钮，整行不能做成 <button>） */}
+      <div
+        role="button"
+        tabIndex={0}
+        data-testid="row-browser"
+        onClick={() => rail.openRightPane({ kind: 'browser' })}
+        onKeyDown={() => undefined}
+      >
+        row browser
+      </div>
+      {/* biome-ignore lint/a11y/useSemanticElements: 照收件箱的行（行里还有按钮，整行不能做成 <button>） */}
+      <div
+        role="button"
+        tabIndex={0}
+        data-testid="row-report"
+        onClick={() => rail.openRightPane({ kind: 'report', id: 'rep_1' })}
+        onKeyDown={() => undefined}
+      >
+        row report
+      </div>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 故意模拟没写成按钮的可点区域 */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: 同上 */}
+      <div data-testid="plain-opener" onClick={() => rail.openRightPane({ kind: 'browser' })}>
+        plain opener
+      </div>
     </>
   )
 }
@@ -209,10 +236,9 @@ describe('浏览器里：第三栏一律浮层，不挤中栏', () => {
     expect(screen.queryByTestId('board-peek')).toBeNull()
     // 浮层也能拖宽
     expect(screen.getByTestId('rail-resize')).toBeDefined()
-    // 点外面（透明的接点击的底，不压暗中栏）收起
-    const scrim = screen.getByTestId('rail-scrim')
-    expect(scrim.className).toContain('bg-transparent')
-    fireEvent.click(scrim)
+    // WP485：中栏不再被一层透明底挡住；点中栏空白处收起
+    expect(screen.queryByTestId('rail-scrim')).toBeNull()
+    fireEvent.click(screen.getByTestId('blank'))
     await waitFor(() => {
       expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
     })
@@ -317,7 +343,7 @@ describe('桌面壳：窗口向右加宽，中栏宽度不变', () => {
     await waitFor(() => {
       expect(frame.getAttribute('data-layout')).toBe('overlay')
     })
-    expect(screen.getByTestId('rail-scrim')).toBeDefined()
+    expect(screen.queryByTestId('rail-scrim')).toBeNull()
     expect(screen.getByTestId('rail-board')).toBeDefined()
   })
 
@@ -362,5 +388,100 @@ describe('换页时第三栏跟着人走（窗口不来回弹）', () => {
     fireEvent.click(screen.getByTestId('go-position'))
     await new Promise((r) => setTimeout(r, 30))
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+  })
+})
+
+/** WP485：等一拍（点空白处那一下是下一拍才收的）。 */
+async function tick(): Promise<void> {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 20))
+  })
+}
+
+describe('WP485：浮层开着时点中栏，一次就生效', () => {
+  it('点下一行：第三栏直接换成那一件，不先收起', async () => {
+    renderAt({ body: 1200, viewport: 1440 })
+    fireEvent.click(await screen.findByTestId('row-browser'))
+    const frame = await screen.findByTestId('rail-panel-frame')
+    expect(frame.getAttribute('data-layout')).toBe('overlay')
+    expect(frame.getAttribute('data-panel')).toBe('browser')
+    fireEvent.click(screen.getByTestId('row-report'))
+    await tick()
+    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('report')
+    // 再点回上一行也是一次
+    fireEvent.click(screen.getByTestId('row-browser'))
+    await tick()
+    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('browser')
+  })
+
+  it('点中栏空白处收起；Esc 收起', async () => {
+    renderAt({ body: 1200, viewport: 1440 })
+    fireEvent.click(await screen.findByTestId('row-browser'))
+    await screen.findByTestId('rail-panel-frame')
+    fireEvent.click(screen.getByTestId('blank'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+    })
+    fireEvent.click(screen.getByTestId('row-report'))
+    await screen.findByTestId('rail-panel-frame')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+    })
+  })
+
+  it('点中栏里不开第三栏的普通按钮：照常生效，浮层不收', async () => {
+    renderAt({ body: 1200, viewport: 1440 })
+    fireEvent.click(await screen.findByTestId('row-browser'))
+    await screen.findByTestId('rail-panel-frame')
+    fireEvent.click(screen.getByTestId('outside'))
+    await tick()
+    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('browser')
+  })
+
+  it('没写成按钮、但点了会开第三栏的地方：换成那一件，不收', async () => {
+    renderAt({ body: 1200, viewport: 1440 })
+    fireEvent.click(await screen.findByTestId('open-report'))
+    await screen.findByTestId('rail-panel-frame')
+    fireEvent.click(screen.getByTestId('plain-opener'))
+    await tick()
+    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('browser')
+  })
+
+  it('点浮层里面、从拖宽把手拖出来、点在弹窗里：都不收', async () => {
+    renderAt({ body: 1200, viewport: 1440 })
+    fireEvent.click(await screen.findByTestId('row-browser'))
+    const frame = await screen.findByTestId('rail-panel-frame')
+    fireEvent.click(frame)
+    await tick()
+    expect(screen.getByTestId('rail-panel-frame')).toBeDefined()
+    // 按在拖宽把手上、松在中栏空白处
+    fireEvent.pointerDown(screen.getByTestId('rail-resize'))
+    fireEvent.click(screen.getByTestId('blank'))
+    await tick()
+    expect(screen.getByTestId('rail-panel-frame')).toBeDefined()
+    // 弹窗开着：点弹窗里的空白不收
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    const inside = document.createElement('p')
+    dialog.appendChild(inside)
+    document.body.appendChild(dialog)
+    fireEvent.click(inside)
+    await tick()
+    expect(screen.getByTestId('rail-panel-frame')).toBeDefined()
+    dialog.remove()
+  })
+
+  it('桌面壳加宽（并排）时照旧：点中栏空白处不收', async () => {
+    desktopShell(() => 'widened')
+    renderAt({ body: 1200, viewport: 1440 })
+    fireEvent.click(await screen.findByTestId('row-browser'))
+    const frame = await screen.findByTestId('rail-panel-frame')
+    await waitFor(() => {
+      expect(frame.getAttribute('data-layout')).toBe('docked')
+    })
+    fireEvent.click(screen.getByTestId('blank'))
+    await tick()
+    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-layout')).toBe('docked')
   })
 })

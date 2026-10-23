@@ -44,8 +44,11 @@ import {
   extractLessons,
   type FilteredProposal,
   type HumanDecision,
+  isButtonOnlyText,
+  isReadableRule,
   type Learning,
   type LessonProposalCard,
+  type LessonSource,
   OPTION_NONE,
   type PromotionCard,
   promotionCriteria,
@@ -97,6 +100,18 @@ export interface SkillLessonPayload {
   lessons: string[]
   quotes: string[]
   run_ids: RunId[]
+  /**
+   * WP486：攒出这条的那几次纠正（时间、哪张卡、原来是什么、你改成了什么 / 你说的理由）。
+   * 详情面板逐条列、链到那张卡 / 那件事。早于 WP486 的卡没有这一格。
+   */
+  sources?: SkillLessonSource[]
+}
+
+/** WP486：一次来源纠正 + 宿主补的卡名 / 事项 / 岗位（详情面板链过去用）。 */
+export interface SkillLessonSource extends LessonSource {
+  card_title?: string
+  matter_id?: string
+  position_id?: string
 }
 
 /** WP69（54 §3）：某一层记忆里的一段（岗位页 / 职责层的"记忆"小节列的就是它们）。 */
@@ -343,6 +358,10 @@ export interface LearningOptions {
 
 export interface LearningAssembly {
   learning: Learning
+  /**
+   * WP486：清掉规矩文本只是按钮名 / 太短的 lesson 与据此出的待审卡（开机与每次出卡前各跑一次，幂等）。
+   */
+  sweepButtonOnly(): Promise<{ lessons: number; cards: number }>
   /** 每天 07:30 跑一次：池 → `skill_lesson` 卡。 */
   proposeDaily(now: Iso8601): Promise<{ created: string[]; filtered: FilteredProposal[] }>
   /**
@@ -645,7 +664,11 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
   }
 
   /** WP445：批过之后在插件里「不发 + 理由」：当一次「不要 + 理由」进池。 */
-  const observeReject = (item: ApprovalItem, reject: { reason: string; at: Iso8601 }): void => {
+  const observeReject = (
+    item: ApprovalItem,
+    reject: { reason: string; at: Iso8601 },
+    via: 'after_send' | 'late_reason' = 'after_send',
+  ): void => {
     const reason = reject.reason.trim()
     if (CARD_KINDS.has(item.kind) || reason === '') return
     const ws = item.workspace_id
@@ -674,12 +697,24 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
           signal: pooled.signal,
           hits: pooled.hits,
           confidence: pooled.confidence,
-          after_send: true,
+          ...(via === 'after_send' ? { after_send: true } : { late_reason: true }),
         },
         undefined,
         ws,
       )
     }
+  }
+
+  /**
+   * WP486：「不要」的时候没写理由（决定上记的是按钮名），事后补了一句——按一次「不要 + 理由」进池。
+   * 原来就写了理由的（补的是第二句）不再进一次：那一下已经学过了。
+   */
+  const observeLateReason = (before: ApprovalItem | undefined, after: ApprovalItem): void => {
+    if (after.decision?.action !== 'reject') return
+    if (!isButtonOnlyText(before?.decision?.reason)) return
+    const reason = after.decision.reason
+    if (reason === undefined || isButtonOnlyText(reason)) return
+    observeReject(after, { reason, at: after.decision.at }, 'late_reason')
   }
 
   /** 采纳一张 `skill_lesson` 卡：写 overlay。人没选就当"都不要"。 */
@@ -883,17 +918,84 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     priority: 'queue',
   })
 
+  /** WP486：来源卡的卡名 / 事项 / 岗位（查不到的——卡被清掉了——就不带，详情里只写时间与原话）。 */
+  const sourceCards = async (
+    lessons: readonly { evidence: readonly { approval_item_id?: string }[] }[],
+  ): Promise<Map<string, { title: string; matter_id?: string; position_id?: string }>> => {
+    const ids = new Set<string>()
+    for (const l of lessons)
+      for (const e of l.evidence) if (e.approval_item_id !== undefined) ids.add(e.approval_item_id)
+    const out = new Map<string, { title: string; matter_id?: string; position_id?: string }>()
+    for (const id of ids) {
+      const item = await options.approvals.get(id).catch(() => undefined)
+      if (item === undefined) continue
+      const matter = item.subject.matter_id ?? item.subject.work_item_id
+      out.set(id, {
+        title: item.title,
+        ...(matter === undefined ? {} : { matter_id: matter }),
+        ...(item.proposer.assignment_id === undefined
+          ? {}
+          : { position_id: item.proposer.assignment_id }),
+      })
+    }
+    return out
+  }
+
+  /**
+   * WP486（升级时自动撤掉坏卡）：规矩文本只是按钮名 / 太短的那几条——池里标成 `refuted`（不再提），
+   * 已经出了的待审「昨天学到的」卡当场记成过期（不删记录、不施行）。
+   *
+   * 来历：WP414 起光点「不要」时决定上记的理由就是「不要」两个字，学习回路把它当原话收了，
+   * 两次就攒出「给「不写的东西」加一条 不要」。抽取那一头已经不收了（`isButtonOnlyText`），
+   * 这里清掉升级前已经进池 / 出了卡的那些。幂等：清完再跑一次什么都不做。
+   */
+  const sweepButtonOnly = async (ws?: WorkspaceId): Promise<{ lessons: number; cards: number }> => {
+    const bad = learning.pool
+      .list(ws === undefined ? {} : { workspace_id: ws })
+      .filter((l) => (l.status === 'pooled' || l.status === 'proposed') && !isReadableRule(l.text))
+    if (bad.length === 0) return { lessons: 0, cards: 0 }
+    const badIds = new Set(bad.map((l) => l.id))
+    for (const l of bad) learning.pool.mark(l.id, 'refuted')
+    let swept = 0
+    for (const w of new Set(bad.map((l) => l.workspace_id))) {
+      const target = targetOf(w)
+      if (target === undefined) continue
+      const pending = await options.approvals
+        .queue({ workspace_id: w, person_id: target.owner, lane: 'mine', kind: 'skill_lesson' })
+        .catch(() => [] as ApprovalItem[])
+      for (const item of pending) {
+        const p = (item.payload ?? {}) as Partial<SkillLessonPayload>
+        const fromBad = (p.lessons ?? []).some((id) => badIds.has(id))
+        const unreadable = (p.options ?? []).some(
+          (o) => 'body' in o && typeof o.body === 'string' && !isReadableRule(o.body),
+        )
+        if (!fromBad && !unreadable) continue
+        const done = await options.approvals
+          .expireNow?.(item.id, '学到的只是按钮名「不要」，不是一条规矩（WP486 撤掉）')
+          .catch(() => undefined)
+        if (done !== undefined) swept += 1
+      }
+    }
+    emit('lesson.swept', { lessons: bad.length, cards: swept, reason: 'button_only' })
+    return { lessons: bad.length, cards: swept }
+  }
+
   const proposeDailyFor: LearningAssembly['proposeDailyFor'] = async (ws, now) => {
     // 这个品牌里找不到负责人：池子照留着，等有人了再出（绝不把卡挂到别的品牌的人头上）
     if (targetOf(ws) === undefined) return { created: [], filtered: [] }
     const workspace_id = ws
+    await sweepButtonOnly(ws)
+    const lessons = learning.pool.list({ workspace_id })
+    // WP486：来源那几张卡先查好（卡片正文要说「你在哪几张卡上做了什么纠正」，详情要链过去）
+    const origin = await sourceCards(lessons.filter((l) => l.status === 'pooled'))
     const { proposals, filtered } = draftProposals({
       workspace_id,
-      lessons: learning.pool.list({ workspace_id }),
+      lessons,
       skills: skillReaderOf(skills.registry),
       now,
       ...(options.policySkills === undefined ? {} : { policySkills: options.policySkills }),
       rejectedKeys: learning.pool.rejectedKeys(workspace_id).map((r) => r.semantic_key),
+      sourceTitle: (id) => origin.get(id)?.title,
     })
     const created: string[] = []
     for (const card of proposals) {
@@ -910,6 +1012,16 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
         lessons: card.lessons,
         quotes: card.evidence.quotes,
         run_ids: card.evidence.run_ids,
+        sources: card.sources.map((src): SkillLessonSource => {
+          const hit =
+            src.approval_item_id === undefined ? undefined : origin.get(src.approval_item_id)
+          return {
+            ...src,
+            ...(hit?.title === undefined ? {} : { card_title: hit.title }),
+            ...(hit?.matter_id === undefined ? {} : { matter_id: hit.matter_id }),
+            ...(hit?.position_id === undefined ? {} : { position_id: hit.position_id }),
+          }
+        }),
       }
       const item = await options.approvals.create({
         ...cardEnvelope('skill_lesson', workspace_id),
@@ -1702,8 +1814,17 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     return `${TIER_LABEL[target.tier]}层：${entries.length} 段（其中 ${learned} 段是学来的）`
   }
 
+  // WP486：升级前攒下的「不要」那几条（与据此出的卡）开机就清掉；没有就什么都不做（不起异步）
+  if (
+    learning.pool
+      .list({})
+      .some((l) => (l.status === 'pooled' || l.status === 'proposed') && !isReadableRule(l.text))
+  )
+    void sweepButtonOnly().catch(() => undefined)
+
   return {
     learning,
+    sweepButtonOnly: () => sweepButtonOnly(),
     proposeDaily,
     proposeDailyFor,
     weeklyConsolidate,
@@ -1739,6 +1860,19 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       // 用 Proxy 而不是展开：总线是个类实例，方法在原型上，`{...bus}` 会把它们全丢掉。
       return new Proxy(bus, {
         get(target, prop, receiver) {
+          // WP486：「不要」之后补的理由（快捷理由 chip / 一句话）——这时候才是一次带理由的纠正，进池
+          if (prop === 'annotate' && typeof target.annotate === 'function') {
+            return async (
+              id: string,
+              by: PersonId,
+              input: { reason: string },
+            ): Promise<ApprovalItem | undefined> => {
+              const before = await target.get(id).catch(() => undefined)
+              const out = await target.annotate?.(id, by, input)
+              if (out !== undefined) observeLateReason(before, out)
+              return out
+            }
+          }
           if (prop !== 'decide') {
             const value = Reflect.get(target, prop, receiver)
             return typeof value === 'function' ? value.bind(target) : value
@@ -1838,6 +1972,7 @@ function cardFrom(
       run_ids: payload.run_ids,
       approval_item_ids: [item.id],
     },
+    sources: payload.sources ?? [],
     hits: payload.hits,
     confidence: payload.confidence,
     lessons: payload.lessons,

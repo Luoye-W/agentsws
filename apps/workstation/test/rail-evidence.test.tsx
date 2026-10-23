@@ -99,7 +99,8 @@ describe('证据面板（WP100）', () => {
     // WP372：没有「证据」图标了——卡上「证据 N」与别处 `show('evidence')` 开到「产出」的「证据」标签
     await userEvent.click(screen.getByTestId('open-evidence'))
     const empty = await screen.findByTestId('rail-evidence-empty')
-    expect(empty.textContent).toContain('证据')
+    // WP486：界面上改叫「详情」
+    expect(empty.textContent).toContain('详情')
     expect(screen.queryByTestId('rail-placeholder')).toBeNull()
   })
 

@@ -13,9 +13,10 @@ import { Circle, CircleCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ExtensionOnboardCard } from '@/components/connections/extension-onboard-card'
+import { EgoRecommend } from '@/components/settings/ego-recommend'
 import { useConnectAssignment } from '@/components/setup/use-connect-flow'
 import { Button } from '@/components/ui/button'
-import { getConnectionDirectory, type OnboardingPlanView } from '@/lib/api'
+import { getConnectionDirectory, getEgoBrowserStatus, type OnboardingPlanView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 /**
@@ -169,6 +170,30 @@ function ConnectorRow({ c }: { c: ConnectorItem }): React.ReactNode {
   )
 }
 
+/**
+ * WP483（决策 1658 / 1659）：首次设置第 ④ 步最前面「推荐装 ego」（三种用法都出；服务不在这台电脑上就不出）。
+ * 可以「先不装，用插件」，不挡完成首次设置。装好了就是一行「ego 已就绪」。
+ */
+function OnboardingEgo({ assignment }: { assignment?: string }): React.ReactNode {
+  const [later, setLater] = useState(false)
+  const ego = useQuery({
+    queryKey: ['browser-ego', assignment],
+    queryFn: () => getEgoBrowserStatus(assignment),
+    retry: false,
+  })
+  if (later || ego.isError) return null
+  return (
+    <div data-testid="onboarding-plan-ego">
+      <EgoRecommend
+        status={ego.data}
+        checking={ego.isFetching}
+        onRecheck={() => void ego.refetch()}
+        onLater={() => setLater(true)}
+      />
+    </div>
+  )
+}
+
 export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNode {
   const { t } = useApp()
   const [optionalOpen, setOptionalOpen] = useState(false)
@@ -189,6 +214,7 @@ export function PlanList({ plan }: { plan: OnboardingPlanView }): React.ReactNod
         WP360（决策 947）：勾的职责里有要浏览器插件的（职责定义推出来）——「装插件 + 配对」放在最前，
         一句为什么；可以「稍后再装」，不挡完成首次设置（之后岗位页顶上那张卡接着引导）。
       */}
+      <OnboardingEgo {...(owner === undefined ? {} : { assignment: owner })} />
       {plan.extension === undefined ? null : (
         <ExtensionOnboardCard roleIds={plan.role_ids} assignment={owner} mode="onboarding" />
       )}

@@ -77,6 +77,30 @@ const mainWidth = (page) =>
     Math.round(document.querySelector('main')?.getBoundingClientRect().width ?? 0),
   )
 
+/**
+ * WP485：中栏里一块「空白处」（不是按钮、链接、输入框，鼠标不是小手，也不在第三栏里）的坐标；找不到回 `null`。
+ */
+const blankPoint = (page) =>
+  page.evaluate(() => {
+    const main = document.querySelector('main')
+    const frame = document.querySelector('[data-testid="rail-panel-frame"]')
+    if (main === null) return null
+    const box = main.getBoundingClientRect()
+    const right =
+      frame === null ? box.right : Math.min(box.right, frame.getBoundingClientRect().left)
+    const hit =
+      'a[href], button, input, select, textarea, label, summary, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], [role="checkbox"], [role="switch"], [contenteditable="true"], .cursor-pointer'
+    for (let y = box.top + 24; y < Math.min(box.bottom, innerHeight) - 8; y += 24) {
+      for (let x = box.left + 16; x < right - 8; x += 24) {
+        const el = document.elementFromPoint(x, y)
+        if (el === null || !main.contains(el)) continue
+        if (el.closest(hit) !== null || getComputedStyle(el).cursor === 'pointer') continue
+        return { x, y }
+      }
+    }
+    return null
+  })
+
 const frameLayout = (page) =>
   page.evaluate(
     () =>
@@ -223,11 +247,20 @@ async function main() {
           `[${theme}] 浏览器里开右栏：中栏 ${before} 不变、看板不让位`,
         )
         await shot(page, theme, '4-position-browser-overlay')
-        await page.getByTestId('rail-scrim').click({ position: { x: 300, y: 300 } })
-        await page.waitForTimeout(600)
+        // WP485（决策 1672）：中栏没有遮罩挡着——点中栏里的普通按钮照常生效、浮层不收；点空白处才收
+        check(
+          (await page.getByTestId('rail-scrim').count()) === 0,
+          `[${theme}] 浮层下中栏不被遮罩挡住`,
+        )
+        const plain = await blankPoint(page)
+        check(plain !== null, `[${theme}] 中栏找得到一块空白处`)
+        if (plain !== null) {
+          await page.mouse.click(plain.x, plain.y)
+          await page.waitForTimeout(600)
+        }
         check(
           (await page.getByTestId('rail-panel-frame').count()) === 0,
-          `[${theme}] 点外面浮层收起`,
+          `[${theme}] 点中栏空白处浮层收起`,
         )
         // ④ 左栏新宽度（208）+ 左下角
         const side = await page.evaluate(() =>

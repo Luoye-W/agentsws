@@ -246,7 +246,7 @@ describe('WP278 「把发起人交给你」那张卡', () => {
     expect(card.textContent).toContain('前不接就退回')
     const tags = screen.getByTestId('deck-tag-row').textContent ?? ''
     expect(tags).not.toContain('剩')
-    expect(tags).not.toContain('证据')
+    expect(tags).not.toContain('详情')
     const decide = screen.getByTestId('deck-handoff')
     expect(
       within(decide)
