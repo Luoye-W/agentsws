@@ -1,5 +1,8 @@
 /**
  * WP480（Luoye 10-23）：设置 → 数据与隐私 →「数据放在哪」。
+ * WP482（决策 1643 改 B）：拆成两格——**数据库**（小、要快，建议放本机）和**大文件**（附件、录音、图片……
+ * 可以放 NAS / 外置硬盘），各自「更改位置…」「恢复默认位置」。同一时间只搬一格。大文件那一格连不上时
+ * 只在这里与用到附件 / 录音的地方说一句，工坊照常用。
  *
  * 以前数据库与大文件的路径只是显示、改不了。现在：「更改位置…」→ 壳弹系统选文件夹框、查一遍
  * （可写、空间够、不是系统目录……）→ 确认框说清「要搬多少、大约多久、搬的时候工坊会暂停」→ 开搬，
@@ -9,7 +12,7 @@
  * 页面只能说「刚才选好的那个」或「默认位置」（见 `@agentsws/desktop/bridge` 的 `DesktopDataLocationBridge`）。
  */
 import { useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, FolderOpen, Loader2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FolderOpen, Loader2, RotateCw } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { SettingRow } from '@/components/settings-panel/setting-row'
 import { Button } from '@/components/ui/button'
@@ -21,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Hint } from '@/components/ui/hint'
 import { ProgressBar } from '@/components/ui/tremor/progress-bar'
 import { useApp } from '@/lib/app-context'
 import { formatBytes, formatDate } from '@/lib/format'
@@ -37,12 +41,20 @@ export interface DataTargetCheckLike {
   estimate_seconds: number
   problems: string[]
   warnings: string[]
+  /** WP482：哪一格（没有 = 数据库）。 */
+  kind?: DataLocationKindLike
+  /** WP482：搬数据库时大文件还跟着它放，会一起搬过去。 */
+  includes_blobs?: boolean
 }
+
+/** WP482：数据库那一格 / 大文件那一格。 */
+export type DataLocationKindLike = 'database' | 'blobs'
 
 export type DataMoveStatusLike =
   | { state: 'idle' }
   | {
       state: 'running'
+      which?: DataLocationKindLike
       step: string
       to: string
       copied_bytes: number
@@ -51,9 +63,17 @@ export type DataMoveStatusLike =
       files_total: number
       started_at: string
     }
-  | { state: 'done'; to: string; from: string; old?: { path: string; until: string }; at: string }
+  | {
+      state: 'done'
+      which?: DataLocationKindLike
+      to: string
+      from: string
+      old?: { path: string; until: string }
+      at: string
+    }
   | {
       state: 'failed'
+      which?: DataLocationKindLike
       code: string
       step: string
       back_to: string
@@ -69,16 +89,31 @@ export interface DataLocationLike {
   files?: number
   old?: { path: string; until: string }
   status: DataMoveStatusLike
+  /** WP482：大文件那一格（旧壳没有：只出一格，WP480 原样）。 */
+  blobs?: BlobLocationLike
 }
 
+/** WP482：大文件现在放在哪。 */
+export interface BlobLocationLike {
+  path: string
+  is_default: boolean
+  default_path: string
+  bytes?: number
+  files?: number
+  old?: { path: string; until: string }
+  /** 硬盘没插、NAS 断网时是 `false`。 */
+  reachable: boolean
+}
+
+/** WP482：每个方法多一个可选的 `which`（不给 = 数据库）。 */
 export interface DataLocationBridgeLike {
   get(): Promise<DataLocationLike>
-  choose(): Promise<DataTargetCheckLike | null>
-  checkDefault(): Promise<DataTargetCheckLike>
-  move(to: 'chosen' | 'default'): Promise<DataMoveStatusLike>
+  choose(which?: DataLocationKindLike): Promise<DataTargetCheckLike | null>
+  checkDefault(which?: DataLocationKindLike): Promise<DataTargetCheckLike>
+  move(to: 'chosen' | 'default', which?: DataLocationKindLike): Promise<DataMoveStatusLike>
   onChange(listener: (status: DataMoveStatusLike) => void): () => void
-  deleteOld(): Promise<boolean>
-  reveal(): Promise<boolean>
+  deleteOld(which?: DataLocationKindLike): Promise<boolean>
+  reveal(which?: DataLocationKindLike): Promise<boolean>
 }
 
 /** 旧壳、远程档、网页里没有（那就不出这一行）。 */
@@ -90,6 +125,22 @@ export function dataLocationBridge(): DataLocationBridgeLike | undefined {
 }
 
 type T = (key: string, vars?: Record<string, string | number>) => string
+
+/**
+ * WP482：同一个意思，大文件那一格有自己的说法就用（`dataloc.blobs.*`），没有就用数据库那一格的。
+ */
+export function wordFor(which: DataLocationKindLike, t: T): T {
+  if (which !== 'blobs') return t
+  return (key, vars) => {
+    const own = key.replace(/^dataloc\./, 'dataloc.blobs.')
+    const text = t(own, vars)
+    return text === own ? t(key, vars) : text
+  }
+}
+
+/** 这条进度 / 结果是不是这一格的（没有 `which` = 数据库）。 */
+const isFor = (s: DataMoveStatusLike, which: DataLocationKindLike): boolean =>
+  s.state !== 'idle' && (s.which ?? 'database') === which
 
 /** 「大约 3 分钟」。 */
 export function durationText(seconds: number, t: T): string {
@@ -135,17 +186,19 @@ function PathText({ path, testId }: { path: string; testId?: string }): ReactNod
 }
 
 export function DataLocationSetting(): ReactNode {
-  const { t, lang } = useApp()
+  const { t } = useApp()
   const client = useQueryClient()
   const [bridge] = useState(dataLocationBridge)
   const [view, setView] = useState<DataLocationLike | undefined>(undefined)
   const [status, setStatus] = useState<DataMoveStatusLike>({ state: 'idle' })
-  /** 确认框里的那一份检查（`reset` = 恢复默认位置）。 */
+  /** 确认框里的那一份检查（`default` = 恢复默认位置）。 */
   const [pending, setPending] = useState<
-    { check: DataTargetCheckLike; to: 'chosen' | 'default' } | undefined
+    | { check: DataTargetCheckLike; to: 'chosen' | 'default'; which: DataLocationKindLike }
+    | undefined
   >(undefined)
-  const [busy, setBusy] = useState(false)
-  const [oldDeleted, setOldDeleted] = useState(false)
+  const [busy, setBusy] = useState<DataLocationKindLike | undefined>(undefined)
+  const [oldDeleted, setOldDeleted] = useState<Partial<Record<DataLocationKindLike, boolean>>>({})
+  const [retrying, setRetrying] = useState(false)
 
   const refresh = useCallback(async (): Promise<void> => {
     if (bridge === undefined) return
@@ -175,169 +228,99 @@ export function DataLocationSetting(): ReactNode {
   if (bridge === undefined || view === undefined) return null
 
   const running = status.state === 'running'
+  /** 旧壳只认数据库那一格：数据库那一格调用时不带 `which`（与 WP480 一模一样）。 */
+  const arg = (which: DataLocationKindLike): [] | ['blobs'] => (which === 'blobs' ? ['blobs'] : [])
 
-  const choose = async (): Promise<void> => {
-    setBusy(true)
+  const choose = async (which: DataLocationKindLike): Promise<void> => {
+    setBusy(which)
     try {
-      const check = await bridge.choose()
-      if (check !== null) setPending({ check, to: 'chosen' })
+      const check = await bridge.choose(...arg(which))
+      if (check !== null) setPending({ check, to: 'chosen', which })
     } finally {
-      setBusy(false)
+      setBusy(undefined)
     }
   }
-  const resetDefault = async (): Promise<void> => {
-    setBusy(true)
+  const resetDefault = async (which: DataLocationKindLike): Promise<void> => {
+    setBusy(which)
     try {
-      setPending({ check: await bridge.checkDefault(), to: 'default' })
+      setPending({ check: await bridge.checkDefault(...arg(which)), to: 'default', which })
     } finally {
-      setBusy(false)
+      setBusy(undefined)
     }
   }
   const start = async (): Promise<void> => {
     if (pending === undefined) return
-    const to = pending.to
+    const { to, which } = pending
     setPending(undefined)
-    setOldDeleted(false)
-    setStatus(await bridge.move(to))
+    setOldDeleted((cur) => ({ ...cur, [which]: false }))
+    setStatus(await bridge.move(to, ...arg(which)))
+  }
+  const retry = async (): Promise<void> => {
+    setRetrying(true)
+    try {
+      await refresh()
+      void client.invalidateQueries({ queryKey: ['storage'] })
+    } finally {
+      setRetrying(false)
+    }
   }
 
-  const sizeLine =
-    view.bytes === undefined
-      ? undefined
-      : t('dataloc.size', { size: formatBytes(view.bytes), n: count(view.files ?? 0, lang) })
+  const split = view.blobs !== undefined
+  const cellProps = {
+    status,
+    running,
+    onChange: (which: DataLocationKindLike) => void choose(which),
+    onReset: (which: DataLocationKindLike) => void resetDefault(which),
+    onReveal: (which: DataLocationKindLike) => void bridge.reveal(...arg(which)),
+    onDeleteOld: (which: DataLocationKindLike) => {
+      void bridge.deleteOld(...arg(which)).then((ok) => {
+        if (ok) setOldDeleted((cur) => ({ ...cur, [which]: true }))
+        void refresh()
+      })
+    },
+  }
 
   return (
     <SettingRow
       testId="settings-data-location"
       stacked
       title={t('dataloc.title')}
-      desc={t('dataloc.desc')}
-      hint={t('dataloc.hint')}
+      desc={t(split ? 'dataloc.desc.split' : 'dataloc.desc')}
+      hint={t(split ? 'dataloc.hint.split' : 'dataloc.hint')}
       control={
-        <div className="flex flex-col gap-2">
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <PathText path={view.path} testId="data-location-path" />
-            <p className="mt-1 text-xs text-ws-muted-fg">
-              {[view.is_default ? t('dataloc.default_tag') : undefined, sizeLine]
-                .filter((x) => x !== undefined)
-                .join(' · ')}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                data-testid="data-location-change"
-                disabled={running || busy}
-                onClick={() => void choose()}
-              >
-                {busy && pending === undefined ? (
-                  <Loader2 aria-hidden className="animate-spin" />
-                ) : null}
-                {t('dataloc.change')}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                data-testid="data-location-reveal"
-                disabled={running}
-                onClick={() => void bridge.reveal()}
-              >
-                <FolderOpen aria-hidden />
-                {t('dataloc.reveal')}
-              </Button>
-              {view.is_default ? null : (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="link"
-                  className="px-0"
-                  data-testid="data-location-reset"
-                  disabled={running || busy}
-                  onClick={() => void resetDefault()}
-                >
-                  {t('dataloc.reset')}
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {status.state === 'running' ? (
-            <div
-              className="rounded-lg border bg-muted/20 p-3 text-xs"
-              data-testid="data-location-progress"
-              data-step={status.step}
-              role="status"
-            >
-              <p className="flex items-center gap-1.5 text-sm">
-                <Loader2 aria-hidden className="size-3.5 animate-spin" />
-                {stepText(status, t)}
-              </p>
-              <ProgressBar
-                className="mt-2"
-                value={
-                  status.step === 'verify'
-                    ? status.files_done
-                    : status.total_bytes === 0
-                      ? 0
-                      : status.copied_bytes
-                }
-                max={status.step === 'verify' ? status.files_total : status.total_bytes}
-              />
-              <p className="mt-2 text-ws-muted-fg">{t('dataloc.running.note')}</p>
-            </div>
-          ) : null}
-
-          {status.state === 'done' ? (
-            <p
-              className="flex items-start gap-1.5 text-xs text-ws-good"
-              data-testid="data-location-done"
-              role="status"
-            >
-              <CheckCircle2 aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-              <span className="break-all">{t('dataloc.done', { path: status.to })}</span>
-            </p>
-          ) : null}
-
-          {status.state === 'failed' ? (
-            <p
-              className="flex items-start gap-1.5 text-xs text-destructive"
-              data-testid="data-location-failed"
-              data-code={status.code}
-              role="alert"
-            >
-              <AlertTriangle aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-              <span>{failureText(status, t)}</span>
-            </p>
-          ) : null}
-
-          {view.old === undefined || running ? null : oldDeleted ? (
-            <p className="text-xs text-ws-muted-fg">{t('dataloc.old.deleted')}</p>
-          ) : (
-            <p
-              className="flex flex-wrap items-center gap-x-2 text-xs text-ws-muted-fg"
-              data-testid="data-location-old"
-            >
-              <span title={view.old.path}>
-                {t('dataloc.old', { date: formatDate(view.old.until, lang) })}
-              </span>
-              <Button
-                type="button"
-                size="xs"
-                variant="link"
-                className="h-auto px-0 text-xs"
-                data-testid="data-location-delete-old"
-                onClick={() => {
-                  void bridge.deleteOld().then((ok) => {
-                    if (ok) setOldDeleted(true)
-                    void refresh()
-                  })
-                }}
-              >
-                {t('dataloc.old.delete')}
-              </Button>
-            </p>
+        <div className="flex flex-col gap-3">
+          <LocationCell
+            {...cellProps}
+            which="database"
+            label={split ? t('dataloc.db.label') : undefined}
+            labelHint={split ? t('dataloc.db.hint') : undefined}
+            path={view.path}
+            isDefault={view.is_default}
+            bytes={view.bytes}
+            files={view.files}
+            old={view.old}
+            oldDeleted={oldDeleted.database === true}
+            busy={busy === 'database' && pending === undefined}
+            disabled={busy !== undefined}
+          />
+          {view.blobs === undefined ? null : (
+            <LocationCell
+              {...cellProps}
+              which="blobs"
+              label={t('dataloc.blobs.label')}
+              labelHint={t('dataloc.blobs.hint')}
+              path={view.blobs.path}
+              isDefault={view.blobs.is_default}
+              bytes={view.blobs.bytes}
+              files={view.blobs.files}
+              old={view.blobs.old}
+              oldDeleted={oldDeleted.blobs === true}
+              busy={busy === 'blobs' && pending === undefined}
+              disabled={busy !== undefined}
+              unreachable={
+                view.blobs.reachable ? undefined : { retrying, onRetry: () => void retry() }
+              }
+            />
           )}
 
           <MoveDialog
@@ -346,14 +329,224 @@ export function DataLocationSetting(): ReactNode {
               setPending(undefined)
             }}
             onAgain={() => {
+              const which = pending?.which ?? 'database'
               setPending(undefined)
-              void choose()
+              void choose(which)
             }}
             onStart={() => void start()}
           />
         </div>
       }
     />
+  )
+}
+
+/** 一格：路径、默认位置 / 大小、按钮；这一格在搬时的进度、结果；旧位置留到哪天。 */
+function LocationCell({
+  which,
+  label,
+  labelHint,
+  path,
+  isDefault,
+  bytes,
+  files,
+  old,
+  oldDeleted,
+  status,
+  running,
+  busy,
+  disabled,
+  unreachable,
+  onChange,
+  onReset,
+  onReveal,
+  onDeleteOld,
+}: {
+  which: DataLocationKindLike
+  label: string | undefined
+  labelHint: string | undefined
+  path: string
+  isDefault: boolean
+  bytes: number | undefined
+  files: number | undefined
+  old: { path: string; until: string } | undefined
+  oldDeleted: boolean
+  status: DataMoveStatusLike
+  running: boolean
+  busy: boolean
+  disabled: boolean
+  /** 大文件那一格连不上（硬盘没插、NAS 断网）。 */
+  unreachable?: { retrying: boolean; onRetry: () => void } | undefined
+  onChange: (which: DataLocationKindLike) => void
+  onReset: (which: DataLocationKindLike) => void
+  onReveal: (which: DataLocationKindLike) => void
+  onDeleteOld: (which: DataLocationKindLike) => void
+}): ReactNode {
+  const { t: base, lang } = useApp()
+  const t = wordFor(which, base)
+  /** 数据库那一格沿用 WP480 的 testid；大文件那一格换前缀。 */
+  const id = (name: string): string =>
+    which === 'blobs' ? `blob-location-${name}` : `data-location-${name}`
+  const mine = isFor(status, which)
+  const sizeLine =
+    bytes === undefined
+      ? undefined
+      : base('dataloc.size', { size: formatBytes(bytes), n: count(files ?? 0, lang) })
+
+  return (
+    <div className="flex flex-col gap-2" data-testid={id('cell')} data-which={which}>
+      <div className="rounded-lg border bg-muted/20 p-3">
+        {label === undefined ? null : (
+          <p className="mb-1 flex items-center gap-1 text-sm font-medium text-ws-ink">
+            {label}
+            {labelHint === undefined ? null : <Hint text={labelHint} />}
+          </p>
+        )}
+        <PathText path={path} testId={id('path')} />
+        <p className="mt-1 text-xs text-ws-muted-fg">
+          {[isDefault ? t('dataloc.default_tag') : undefined, sizeLine]
+            .filter((x) => x !== undefined)
+            .join(' · ')}
+        </p>
+        {unreachable === undefined ? null : (
+          <p
+            className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-ws-warn-bg px-2 py-1.5 text-xs text-ws-warn"
+            data-testid="blob-location-unreachable"
+            role="status"
+          >
+            <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+            <span>{base('dataloc.blobs.unreachable')}</span>
+            <Button
+              type="button"
+              size="xs"
+              variant="link"
+              className="h-auto px-0 text-xs"
+              data-testid="blob-location-retry"
+              disabled={unreachable.retrying}
+              onClick={unreachable.onRetry}
+            >
+              <RotateCw aria-hidden className={unreachable.retrying ? 'animate-spin' : undefined} />
+              {base('blobloc.retry')}
+            </Button>
+          </p>
+        )}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            data-testid={id('change')}
+            disabled={running || disabled}
+            onClick={() => {
+              onChange(which)
+            }}
+          >
+            {busy ? <Loader2 aria-hidden className="animate-spin" /> : null}
+            {t('dataloc.change')}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            data-testid={id('reveal')}
+            disabled={running || unreachable !== undefined}
+            onClick={() => {
+              onReveal(which)
+            }}
+          >
+            <FolderOpen aria-hidden />
+            {t('dataloc.reveal')}
+          </Button>
+          {isDefault ? null : (
+            <Button
+              type="button"
+              size="sm"
+              variant="link"
+              className="px-0"
+              data-testid={id('reset')}
+              disabled={running || disabled}
+              onClick={() => {
+                onReset(which)
+              }}
+            >
+              {t('dataloc.reset')}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {mine && status.state === 'running' ? (
+        <div
+          className="rounded-lg border bg-muted/20 p-3 text-xs"
+          data-testid={id('progress')}
+          data-step={status.step}
+          role="status"
+        >
+          <p className="flex items-center gap-1.5 text-sm">
+            <Loader2 aria-hidden className="size-3.5 animate-spin" />
+            {stepText(status, base)}
+          </p>
+          <ProgressBar
+            className="mt-2"
+            value={
+              status.step === 'verify'
+                ? status.files_done
+                : status.total_bytes === 0
+                  ? 0
+                  : status.copied_bytes
+            }
+            max={status.step === 'verify' ? status.files_total : status.total_bytes}
+          />
+          <p className="mt-2 text-ws-muted-fg">{base('dataloc.running.note')}</p>
+        </div>
+      ) : null}
+
+      {mine && status.state === 'done' ? (
+        <p
+          className="flex items-start gap-1.5 text-xs text-ws-good"
+          data-testid={id('done')}
+          role="status"
+        >
+          <CheckCircle2 aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+          <span className="break-all">{t('dataloc.done', { path: status.to })}</span>
+        </p>
+      ) : null}
+
+      {mine && status.state === 'failed' ? (
+        <p
+          className="flex items-start gap-1.5 text-xs text-destructive"
+          data-testid={id('failed')}
+          data-code={status.code}
+          role="alert"
+        >
+          <AlertTriangle aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+          <span>{failureText(status, base)}</span>
+        </p>
+      ) : null}
+
+      {old === undefined || running ? null : oldDeleted ? (
+        <p className="text-xs text-ws-muted-fg">{t('dataloc.old.deleted')}</p>
+      ) : (
+        <p
+          className="flex flex-wrap items-center gap-x-2 text-xs text-ws-muted-fg"
+          data-testid={id('old')}
+        >
+          <span title={old.path}>{t('dataloc.old', { date: formatDate(old.until, lang) })}</span>
+          <Button
+            type="button"
+            size="xs"
+            variant="link"
+            className="h-auto px-0 text-xs"
+            data-testid={id('delete-old')}
+            onClick={() => {
+              onDeleteOld(which)
+            }}
+          >
+            {t('dataloc.old.delete')}
+          </Button>
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -364,12 +557,16 @@ function MoveDialog({
   onAgain,
   onStart,
 }: {
-  pending: { check: DataTargetCheckLike; to: 'chosen' | 'default' } | undefined
+  pending:
+    | { check: DataTargetCheckLike; to: 'chosen' | 'default'; which: DataLocationKindLike }
+    | undefined
   onCancel: () => void
   onAgain: () => void
   onStart: () => void
 }): ReactNode {
-  const { t, lang } = useApp()
+  const { t: base, lang } = useApp()
+  const which = pending?.which ?? 'database'
+  const t = wordFor(which, base)
   const check = pending?.check
   return (
     <Dialog
@@ -378,7 +575,7 @@ function MoveDialog({
         if (!open) onCancel()
       }}
     >
-      <DialogContent className="sm:max-w-md" data-testid="data-location-dialog">
+      <DialogContent className="sm:max-w-md" data-testid="data-location-dialog" data-which={which}>
         {check === undefined ? null : check.ok ? (
           <>
             <DialogHeader>
@@ -398,7 +595,7 @@ function MoveDialog({
                 {t('dataloc.confirm.amount', {
                   size: formatBytes(check.bytes),
                   n: count(check.files, lang),
-                  time: durationText(check.estimate_seconds, t),
+                  time: durationText(check.estimate_seconds, base),
                 })}
                 {check.free_bytes === undefined ? null : (
                   <span className="ml-1 text-xs text-ws-muted-fg">
@@ -406,6 +603,11 @@ function MoveDialog({
                   </span>
                 )}
               </li>
+              {check.includes_blobs === true ? (
+                <li data-testid="data-location-dialog-includes-blobs">
+                  {base('dataloc.confirm.includes_blobs')}
+                </li>
+              ) : null}
               <li>{t('dataloc.confirm.pause')}</li>
               <li className="text-ws-muted-fg">{t('dataloc.confirm.safety')}</li>
             </ul>
@@ -424,17 +626,17 @@ function MoveDialog({
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onCancel}>
-                {t('dataloc.confirm.cancel')}
+                {base('dataloc.confirm.cancel')}
               </Button>
               <Button type="button" data-testid="data-location-start" onClick={onStart}>
-                {t('dataloc.confirm.start')}
+                {base('dataloc.confirm.start')}
               </Button>
             </DialogFooter>
           </>
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>{t('dataloc.problem.title')}</DialogTitle>
+              <DialogTitle>{base('dataloc.problem.title')}</DialogTitle>
               <DialogDescription asChild>
                 <div>
                   <PathText path={check.chosen} />
@@ -456,11 +658,11 @@ function MoveDialog({
             </ul>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onCancel}>
-                {t('dataloc.confirm.cancel')}
+                {base('dataloc.confirm.cancel')}
               </Button>
               {pending?.to === 'default' ? null : (
                 <Button type="button" data-testid="data-location-again" onClick={onAgain}>
-                  {t('dataloc.problem.again')}
+                  {base('dataloc.problem.again')}
                 </Button>
               )}
             </DialogFooter>

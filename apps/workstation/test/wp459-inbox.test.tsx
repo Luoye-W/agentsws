@@ -2,7 +2,7 @@
  * WP459（决策 1497–1505）：收件箱页。
  *
  * 钉住的是：
- * - 一条队列：要紧 / 今天 / 不急三组（1500 甲）；每行类型标签、药丸、行尾一颗次按钮 + ⋯；「AI 猜的 · 改」；
+ * - 一条队列：要紧 / 今天 / 不急三组（1500 甲）；每行类型标签、药丸、行尾一颗次按钮 + ⋯；「AI 猜的 · 修改」；
  * - 行尾「通过」走岗位卡片流同一条决定（同一张卡），批完那一行没了；信的「交给 B2B」走 confirm-route；
  * - 筛选：全部 / 等我批 / 只看信（带件数）+ 岗位下拉（带件数，最后一行「还没归岗位的信」）（1501 甲）；
  * - 第三栏：回信卡原信 + 草稿；「改」先直接改字、按钮变「改好了，通过」、带着改过的那一版批；
@@ -120,7 +120,7 @@ const row = (id: string): HTMLElement => {
 }
 
 describe('收件箱：一条队列（WP459）', () => {
-  it('要紧 / 今天 / 不急三组；类型标签、药丸、「AI 猜的 · 改」；简报和右栏两堆', async () => {
+  it('要紧 / 今天 / 不急三组；类型标签、药丸、「AI 猜的 · 修改」；简报和右栏两堆', async () => {
     renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     expect(screen.getAllByTestId('inbox-group').map((g) => g.getAttribute('data-urgency'))).toEqual(
@@ -133,7 +133,7 @@ describe('收件箱：一条队列（WP459）', () => {
     )
     expect(within(row('card:ap_reply')).getByTestId('inbox-row-pill').textContent).toContain('等了')
     expect(within(row('card:ap_jordan')).getByTestId('inbox-row-guess').textContent).toBe(
-      'AI 猜的 · 改',
+      'AI 猜的 · 修改',
     )
     // 行尾一颗次按钮：通过 / 交给 B2B / 我自己处理 / 打开
     expect(within(row('mail:<t_sam@x>')).getByTestId('inbox-row-primary').textContent).toBe(

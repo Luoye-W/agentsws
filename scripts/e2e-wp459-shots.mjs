@@ -143,6 +143,11 @@ async function main() {
       const draftRow = page.locator('[data-testid="inbox-row"][data-type="card"]')
       let opened = false
       for (let i = 0; i < (await draftRow.count()); i += 1) {
+        // WP481（决策 1632）：浏览器里第三栏是浮层，先收起上一件再点下一行
+        if ((await page.getByTestId('rail-scrim').count()) > 0) {
+          await page.keyboard.press('Escape')
+          await page.getByTestId('rail-scrim').waitFor({ state: 'detached', timeout: 10_000 })
+        }
         await draftRow.nth(i).click()
         await page.getByTestId('inbox-pane').waitFor({ timeout: 10_000 })
         if ((await page.getByTestId('inbox-draft').count()) > 0) {

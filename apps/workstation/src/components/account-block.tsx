@@ -16,6 +16,10 @@
  * WP361：「工作内容」多一项「进行中」（② ③ 才有，决策 925）；「语言」从菜单拿掉，只在设置弹窗 →
  * 个人 → 通用里改（决策 926）——深浅色、场景是一键切换的事，留在菜单。
  *
+ * WP481（决策 1634，Luoye 10-23）：名字下面那行不再写工作区名（个人用户看到的是「default」）——只写名字；
+ * 同事互联 / 公司模式下要分清是哪个品牌 / 公司时才写（公司模式照旧「所有者 · 公司」）。
+ * 「反馈」不再在名字旁边单独一颗按钮，收进这个菜单（「反馈」「我的反馈」）；⌘K 照旧搜得到。
+ *
  * 键盘：菜单开了焦点进第一项；↑↓ 在各项之间走，Esc 收起并回到账号块上。
  * 托盘「管理场景…」打开的是 `/?scenes=1`——看到这个参数先把菜单打开，场景那一行自己展开面板。
  */
@@ -27,6 +31,8 @@ import {
   Coins,
   Handshake,
   LogOut,
+  MessageSquareText,
+  MessagesSquare,
   Moon,
   Settings,
   Sun,
@@ -43,6 +49,7 @@ import { clearToken, getCloudCredits, getPositions, type Me } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { useAppVersion } from '@/lib/app-version'
 import { creditsLow } from '@/lib/credits-runway'
+import { openFeedback } from '@/lib/feedback'
 import { useMode } from '@/lib/mode'
 import { ACCOUNT_GROUPS_KEY, readFlags, writeFlags } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
@@ -130,7 +137,21 @@ export function AccountBlock({
    * （不写「成员」「所有者」，第二个人进来时界面不能像公司）。
    */
   const role = isOwner ? tm('account.role.owner') : t('account.role.member')
-  const plain = solo || (mode === 'peers' && !isOwner)
+  /*
+   * WP481（决策 1634）：个人模式只写名字（工作区名对个人用户没意义，默认叫「default」）；
+   * 同事互联照旧（决策 256：发起人「发起人 · 品牌」、别的同事只写品牌）；公司模式「角色 · 公司」。
+   * 工作区名是空的或还叫「default」时不写名字那一截。
+   */
+  const where = company === '' || company === 'default' ? '' : company
+  // 模式还没问到时先不写（问到之前默认算公司模式，个人用户会先闪一下「成员 · default」）
+  const subtitle =
+    solo || !known
+      ? ''
+      : mode === 'peers' && !isOwner
+        ? where
+        : where === ''
+          ? role
+          : `${role} · ${where}`
 
   const close = (): void => {
     setOpen(false)
@@ -241,9 +262,14 @@ export function AccountBlock({
           <span className="block truncate text-sm font-medium" data-testid="account-name">
             {name}
           </span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {plain && company !== '' ? company : company === '' ? role : `${role} · ${company}`}
-          </span>
+          {subtitle === '' ? null : (
+            <span
+              className="block truncate text-xs text-muted-foreground"
+              data-testid="account-subtitle"
+            >
+              {subtitle}
+            </span>
+          )}
         </span>
         {compact ? null : <ChevronsUpDown aria-hidden className="size-3 shrink-0 opacity-60" />}
       </button>
@@ -348,6 +374,34 @@ export function AccountBlock({
               <Moon aria-hidden className="size-4" />
             )}
             {theme === 'dark' ? t('theme.light') : t('theme.dark')}
+          </button>
+          {/* WP481（决策 1634）：「反馈」从左下角那颗按钮挪进来 */}
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="account-feedback"
+            title={t('feedback.button.hint')}
+            className={ITEM}
+            onClick={() => {
+              setOpen(false)
+              openFeedback('new')
+            }}
+          >
+            <MessageSquareText aria-hidden className="size-4" />
+            {t('feedback.button')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="account-feedback-mine"
+            className={ITEM}
+            onClick={() => {
+              setOpen(false)
+              openFeedback('mine')
+            }}
+          >
+            <MessagesSquare aria-hidden className="size-4" />
+            {t('feedback.tab.mine')}
           </button>
           <Separator className="my-1" />
           <button

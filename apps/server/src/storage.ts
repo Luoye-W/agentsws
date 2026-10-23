@@ -171,7 +171,13 @@ export function createStorage(options: StorageAssemblyOptions): StorageAssembly 
 
       const blobs = options.blobs
       const described = blobs?.describe()
-      const usage = blobs === undefined ? undefined : await blobs.usage().catch(() => undefined)
+      // WP482：大文件放在外置硬盘 / NAS 上时可能连不上——连不上就不数（数也数不出来），照实说
+      const reachable =
+        blobs?.reachable === undefined ? undefined : await blobs.reachable().catch(() => false)
+      const usage =
+        blobs === undefined || reachable === false
+          ? undefined
+          : await blobs.usage().catch(() => undefined)
       const state = await readState(stateFile)
 
       return {
@@ -185,6 +191,7 @@ export function createStorage(options: StorageAssemblyOptions): StorageAssembly 
                 display: described.display,
                 encrypted: described.encrypted,
                 ...(usage === undefined ? {} : { bytes: usage.bytes, objects: usage.objects }),
+                ...(reachable === undefined ? {} : { reachable }),
               },
         ...(lastBackupAt() === undefined ? {} : { last_backup_at: lastBackupAt() as string }),
         ...(state?.previous_readonly_until === undefined

@@ -65,6 +65,7 @@ import { paneWidth } from '@/components/rail/right-pane'
 import { TOPBAR_ICON, TOPBAR_ICON_ACTIVE, TOPBAR_ICON_IDLE } from '@/components/shell/top-bar-slots'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { type SidePaneMode, useSidePaneMode, useSidePaneSync } from '@/lib/side-pane-window'
 import { clampRailWidth } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
 
@@ -132,22 +133,33 @@ function useRailContext(instances: PositionInstanceData[] | undefined): {
 /**
  * WP437：这一页三栏怎么摆（看板放不放得下、第三栏并排还是盖上去）——顶栏（看板「临时一眼」那颗图标）和
  * 宿主（看板、第三栏）各自算，用的是同一份宽度与同一个函数（`board-fit.ts`）。
+ *
+ * WP481（决策 1632）：第三栏不挤中栏——窗口为它向右加宽了（桌面壳回 `widened`）才并排，不然一律盖上去；
+ * 刚开、等壳回话那一下（`pending`）先不画，免得先挤一下中栏再弹开。
  */
-function useColumns(): ColumnsLayout & { workPage: boolean } {
+function useColumns(): ColumnsLayout & {
+  workPage: boolean
+  /** 第三栏要多宽（收着 = `null`），宿主拿它去跟壳说。 */
+  want: number | null
+  mode: SidePaneMode
+} {
   const rail = useRailState()
   const size = useShellSize()
   const narrow = useMedia(NARROW)
+  const mode = useSidePaneMode()
   const { pathname } = useLocation()
   const openId =
     rail.open === null || rail.open === RAIL_CARDS ? undefined : resolvePanelId(rail.open).id
   const thirdOpen = openId !== undefined && panelType(openId) !== undefined
   // 报表那两格至少 560 宽（right-pane.ts），按它要的宽度算挤不挤得下
+  const want = thirdOpen ? paneWidth(openId, rail.width) : null
   const layout = columnsLayout({
     size,
-    third: thirdOpen ? paneWidth(openId, rail.width) : null,
+    third: mode === 'pending' ? null : want,
     narrow,
+    docking: mode === 'widened' ? 'widened' : 'overlay',
   })
-  return { ...layout, workPage: railPageKind(pathname) !== undefined }
+  return { ...layout, workPage: railPageKind(pathname) !== undefined, want, mode }
 }
 
 export function RightRail({ instances }: { instances?: PositionInstanceData[] }): ReactNode {
@@ -406,6 +418,8 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
   const { t } = useApp()
   const rail = useRailState()
   const cols = useColumns()
+  // WP481：第三栏要多宽告诉桌面壳（窗口向右加宽 / 缩回；不在壳里什么都不做，一律浮层）
+  useSidePaneSync(cols.want)
   // WP353：联网搜索被人机验证拦下、要人点时，自动打开「浏览器」（平时静默，不弹）
   useOpenBrowserOnHandover()
   const ctx = useRailContext(instances)
@@ -565,17 +579,53 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
    * 真正的**右栏 / 第三栏**：点了才弹出、能开能关的那一格——浏览器、变更审阅（顶栏图标开关）、卡里「显示更多」的完整列表、
    * 看一份报表……出现在看板的再右边，可以拖宽（记住）。
    * WP437：并排之后核心内容区连最小宽度都保不住（或窗口窄于 900）时，改成盖在中栏上，点遮罩 / × 收起。
+   * WP481（决策 1632）：**不挤中栏**——只有窗口为它向右加宽了才并排；不然（浏览器里、最大化 / 全屏、右边没地方）
+   * 从右侧滑出、盖在中栏右侧（带阴影，点外面 / Esc 收起），中栏不重排。等壳回话那一下先不画。
    */
   const overlay = cols.overlay
+  const pending = cols.mode === 'pending'
+  useEffect(() => {
+    if (!overlay || definition === undefined || pending) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      // 浮层里自己开着的菜单 / 弹窗先收它们（Esc 归它们）
+      const doc = globalThis.document
+      if (doc?.querySelector('[role="dialog"], [role="menu"], [role="listbox"]') != null) return
+      rail.show(null)
+    }
+    globalThis.addEventListener?.('keydown', onKey)
+    return () => {
+      globalThis.removeEventListener?.('keydown', onKey)
+    }
+  }, [overlay, definition, pending, rail])
+  const resize = (
+    <button
+      type="button"
+      aria-label={t('rail.resize')}
+      data-testid="rail-resize"
+      className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
+      onMouseDown={() => {
+        dragging.current = true
+      }}
+      onKeyDown={(e) => {
+        // 键盘也调得动：左右箭头一次 20px
+        const step = e.key === 'ArrowLeft' ? 20 : e.key === 'ArrowRight' ? -20 : 0
+        if (step === 0) return
+        e.preventDefault()
+        setWidth(clampRailWidth(plain + step), true)
+      }}
+    />
+  )
   const panel =
-    definition === undefined ? null : (
+    definition === undefined || pending ? null : (
       <>
         {overlay ? (
+          // 点外面收起：一层透明的接点击的底（不压暗中栏），顶栏照旧点得到
           <button
             type="button"
             aria-label={t('rail.close')}
             data-testid="rail-scrim"
-            className="fixed inset-x-0 top-11 bottom-0 z-40 bg-black/20"
+            className="fixed inset-x-0 top-11 bottom-0 z-40 cursor-default bg-transparent"
             onClick={() => {
               rail.show(null)
             }}
@@ -585,10 +635,10 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
           className={cn(
             'flex shrink-0 border-l border-ws-line bg-ws-paper',
             overlay
-              ? 'fixed top-11 right-0 bottom-0 z-40 max-w-[calc(100vw-1rem)] shadow-lg'
+              ? 'fixed top-11 right-0 bottom-0 z-40 shadow-2xl duration-200 animate-in slide-in-from-right motion-reduce:animate-none'
               : 'sticky top-11 z-40 h-[calc(100vh-2.75rem)]',
           )}
-          // 并排时最多占窗口的一半，窗口窄了自己收，给对话留地方
+          // 并排时最多占窗口的一半；浮层最多盖到离左边 3rem（中栏露一截，知道下面还有东西）
           style={
             overlay
               ? { width, maxWidth: 'calc(100vw - 3rem)' }
@@ -599,24 +649,7 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
           data-layout={overlay ? 'overlay' : 'docked'}
           data-board={workPage ? (cols.board ? 'shown' : 'hidden') : undefined}
         >
-          {overlay ? null : (
-            <button
-              type="button"
-              aria-label={t('rail.resize')}
-              data-testid="rail-resize"
-              className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-border"
-              onMouseDown={() => {
-                dragging.current = true
-              }}
-              onKeyDown={(e) => {
-                // 键盘也调得动：左右箭头一次 20px
-                const step = e.key === 'ArrowLeft' ? 20 : e.key === 'ArrowRight' ? -20 : 0
-                if (step === 0) return
-                e.preventDefault()
-                setWidth(clampRailWidth(plain + step), true)
-              }}
-            />
-          )}
+          {resize}
           <div className="min-w-0 flex-1">
             <RailPanel
               title={t(definition.label)}

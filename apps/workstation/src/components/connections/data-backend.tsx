@@ -209,6 +209,8 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
                 ? null
                 : ` · ${t('storage.objects', { n: view.blobs.objects })}`}
               {view.blobs.encrypted === true ? ` · ${t('storage.encrypted')}` : ''}
+              {/* WP482：大文件放在外置硬盘 / NAS 上、这次连不上 */}
+              {view.blobs.reachable === false ? ` · ${t('storage.blobs.unreachable')}` : ''}
             </dd>
           </div>
           <div>

@@ -123,6 +123,17 @@ describe('左栏：岗位可展开看职责（WP71 / 36 §10）', () => {
     vi.unstubAllGlobals()
   })
 
+  it('WP481（决策 1634）：左栏展开时 208 宽（原 240），岗位 / 职责名字悬停看全名', () => {
+    renderShell()
+    const aside = screen.getByTestId('sidebar')
+    expect(aside.className).toContain('w-52')
+    expect(aside.className).not.toContain('w-60')
+    for (const el of screen.getAllByTestId('nav-position'))
+      expect(el.getAttribute('title')).toBe(el.textContent)
+    for (const el of screen.getAllByTestId('nav-duty'))
+      expect(el.getAttribute('title')).toBe(el.textContent)
+  })
+
   it('当前岗位默认展开，列的是本人持有的那几条职责；别人那条不出现', () => {
     renderShell('asg_store')
     const rows = screen.getAllByTestId('nav-position-row')
@@ -182,11 +193,13 @@ describe('品牌 / 账号在左栏最下面（WP71）', () => {
     vi.unstubAllGlobals()
   })
 
-  it('账号块在左栏最下面那一块里，写着名字与「角色 · 公司名」', () => {
+  it('账号块在左栏最下面那一块里，写着名字（WP481：模式还没问到时名字下面不写「角色 · 公司名」）', () => {
     renderShell()
     const bottom = screen.getByTestId('rail-bottom')
     expect(within(bottom).getByTestId('account-name').textContent).toBe('李默')
-    expect(bottom.textContent).toContain('玻璃碗工作室')
+    expect(within(bottom).queryByTestId('account-subtitle')).toBeNull()
+    // WP481（决策 1634）：「反馈」不在左下角单独一颗
+    expect(within(bottom).queryByTestId('feedback-button')).toBeNull()
   })
 
   it('点开账号块：账号与积分 / 工作内容 / 设置 / 退出都在，深浅色也收在这里（语言 WP361 起只在设置弹窗）', async () => {
@@ -199,6 +212,9 @@ describe('品牌 / 账号在左栏最下面（WP71）', () => {
       'account-group-work',
       'nav-settings',
       'account-theme',
+      // WP481：「反馈」「我的反馈」收进个人菜单
+      'account-feedback',
+      'account-feedback-mine',
       'account-logout',
     ]) {
       expect(within(menu).getByTestId(id)).toBeDefined()

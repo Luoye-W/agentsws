@@ -19,7 +19,7 @@ export const FOLLOW_UP_ZH: Record<string, string> = {
   'follow_up.card.sent': '已批，马上发出',
   'follow_up.card.failed': '没发出：{message}',
   'follow_up.card.rule': '系统规则：发出 {n} 个工作日没回 → 提醒我',
-  'follow_up.card.rule.edit': '改',
+  'follow_up.card.rule.edit': '修改',
   'follow_up.verb.wait': '再等等',
   'follow_up.verb.stop': '不用跟了',
   // 规则清单「系统规则」
@@ -53,7 +53,7 @@ export const FOLLOW_UP_EN: Record<string, string> = {
   'follow_up.card.sent': 'Approved — sending shortly',
   'follow_up.card.failed': 'Not sent: {message}',
   'follow_up.card.rule': 'System rule: no reply {n} business days after sending → remind me',
-  'follow_up.card.rule.edit': 'Change',
+  'follow_up.card.rule.edit': 'Edit',
   'follow_up.verb.wait': 'Wait longer',
   'follow_up.verb.stop': 'Stop following up',
   'follow_up.rule.label': 'No reply {n} business days after sending → remind me',

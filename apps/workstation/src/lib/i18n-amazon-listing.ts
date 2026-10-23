@@ -34,7 +34,7 @@ export const AMAZON_LISTING_ZH: Record<string, string> = {
   'alst.design': '向设计岗下需求单',
   'alst.own': '自家商品',
   'alst.own.none': '还没设',
-  'alst.own.edit': '改',
+  'alst.own.edit': '修改',
   'alst.own.save': '存',
   'alst.own.placeholder': 'ASIN 或商品链接，逗号隔开',
   'alst.design.n': '向设计岗下需求单（{n} 处图片问题合成一张）',

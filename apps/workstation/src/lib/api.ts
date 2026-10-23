@@ -3868,6 +3868,8 @@ export interface StorageBackendView {
   bytes?: number
   objects?: number
   encrypted?: boolean
+  /** WP482：大文件放在外置硬盘 / NAS 上、这次连不上时是 `false`。 */
+  reachable?: boolean
 }
 
 export interface StorageView {

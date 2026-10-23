@@ -73,6 +73,11 @@ export interface BlobStore {
   describe(): { kind: 'local' | 's3'; display: string; encrypted: boolean }
   /** 占用（字节）。本地档遍历目录，S3 档遍历 list。贵，只给运维页调。 */
   usage(prefix?: string): Promise<{ objects: number; bytes: number }>
+  /**
+   * WP482：放大文件的地方现在连不连得上（本地档 = 根目录在不在）。没有这一项的后端当总连得上。
+   * 便宜：只看一眼根目录，不遍历。
+   */
+  reachable?(): Promise<boolean>
 }
 
 export function blobUri(key: string): BlobUri {
@@ -84,17 +89,31 @@ export function blobKey(uri: BlobUri): string {
   return uri.startsWith('blob://') ? uri.slice('blob://'.length) : uri
 }
 
+/**
+ * WP482：大文件放的位置这次连不上（外置硬盘没插、NAS 断网）。码用契约里的 `provider_unavailable`
+ * （网关原样转成 503 + 这句话），`details.reason` 固定是这个值，界面凭它出「再试一次」。
+ */
+export const BLOB_LOCATION_UNREACHABLE = 'blob_location_unreachable'
+
 export class BlobError extends Error {
-  readonly code: 'invalid_input' | 'not_found' | 'backend_error' | 'forbidden'
+  readonly code:
+    | 'invalid_input'
+    | 'not_found'
+    | 'backend_error'
+    | 'forbidden'
+    | 'provider_unavailable'
+  /** WP482：给网关的结构化细节（`normalizeError` 原样带出去）；没有就不出。 */
+  readonly details?: { reason: string; location?: string }
 
   constructor(
-    code: 'invalid_input' | 'not_found' | 'backend_error' | 'forbidden',
+    code: 'invalid_input' | 'not_found' | 'backend_error' | 'forbidden' | 'provider_unavailable',
     message: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; details?: { reason: string; location?: string } },
   ) {
-    super(message, options === undefined ? undefined : { cause: options.cause })
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause })
     this.name = 'BlobError'
     this.code = code
+    if (options?.details !== undefined) this.details = options.details
   }
 }
 

@@ -129,7 +129,7 @@ export function renderMessageRuleAnswer(input: {
   lines.push(
     d.card === false
       ? '（卡没出成，再说一次试试）'
-      : `确认卡已经发到卡片流，点「${d.editing === true ? '改' : '建'}」才生效。`,
+      : `确认卡已经发到卡片流，点「${d.editing === true ? '修改' : '建'}」才生效。`,
   )
   return lines.join('\n')
 }
