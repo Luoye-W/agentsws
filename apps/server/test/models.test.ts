@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type {
   ModelDefaultsView,
+  ModelEnableView,
   ModelImageView,
   ModelListing,
   ModelPricingRefreshResult,
@@ -593,12 +594,8 @@ describe('WP25 §C 热更新（保存即生效，不重启）', () => {
     await put('/v1/models/providers/deepseek', SAVE)
     const defaults = await data<ModelDefaultsView>(await api('/v1/models/defaults'))
     expect(defaults.default).toBe('deepseek/deepseek-chat')
-    // WP42：下拉里是拉回来的整份清单，配置里那一个排头一个
-    expect(defaults.choices.map((c) => c.id)).toEqual([
-      'deepseek/deepseek-chat',
-      'deepseek/deepseek-flash',
-      'deepseek/deepseek-v4-pro',
-    ])
+    // WP479（决策 1625）：下拉只列勾上的（主模型 + 勾进来的）；拉回来的整份在「模型」清单里勾
+    expect(defaults.choices.map((c) => c.id)).toEqual(['deepseek/deepseek-chat'])
   })
 
   it('换 base_url / 模型名之后，下一次请求就打到新地址（不用重启）', async () => {
@@ -1171,12 +1168,12 @@ describe('WP42 §1 拉模型列表', () => {
   it('按 purpose 可以挑这家的**另一个**模型，发出去的模型名跟着变', async () => {
     await put('/v1/models/providers/deepseek', SAVE)
     const defaults = await data<ModelDefaultsView>(await api('/v1/models/defaults'))
-    // 下拉里是拉回来的三个，不只是配置里那一个
-    expect(defaults.choices.map((c) => c.id)).toEqual([
-      'deepseek/deepseek-chat',
-      'deepseek/deepseek-flash',
-      'deepseek/deepseek-v4-pro',
-    ])
+    // WP479（决策 1625）：下拉只列勾上的；拉回来的三个都在「模型」清单里能勾
+    expect(defaults.choices.map((c) => c.id)).toEqual(['deepseek/deepseek-chat'])
+    const enable = await data<ModelEnableView>(await api('/v1/models/enabled'))
+    expect(
+      enable.sources.find((x) => x.provider_id === 'deepseek')?.models.map((m) => m.id),
+    ).toEqual(['deepseek-chat', 'deepseek-flash', 'deepseek-v4-pro'])
     const next = await data<ModelDefaultsView>(
       await put('/v1/models/defaults', { by_purpose: { judge: 'deepseek/deepseek-flash' } }),
     )
@@ -1197,14 +1194,29 @@ describe('WP42 §1 拉模型列表', () => {
     expect(JSON.stringify(saved)).toContain('"picker_models":["deepseek-v4-pro"]')
     expect(ctx.server.models.providers().map((r) => r.model)).toContain('deepseek-v4-pro')
     const defaults = await data<ModelDefaultsView>(await api('/v1/models/defaults'))
-    // 下拉先是与 AI 钮同一份（主模型 + 勾进来的），再接拉回来的其余
+    // WP479（决策 1625）：下拉与 AI 钮同一份——只有主模型 + 勾进来的
     expect(defaults.choices.map((c) => c.id)).toEqual([
       'deepseek/deepseek-chat',
       'deepseek/deepseek-v4-pro',
-      'deepseek/deepseek-flash',
     ])
     await put('/v1/models/providers/deepseek', { ...SAVE, picker_models: [] })
     expect(ctx.server.models.providers().map((r) => r.model)).not.toContain('deepseek-v4-pro')
+    // WP479：在「模型」清单里勾——同一份真源（picker_models），主模型 / 默认那个取消不了
+    const enabled = await data<ModelEnableView>(
+      await put('/v1/models/enabled', { provider_id: 'deepseek', enabled: ['deepseek-flash'] }),
+    )
+    const row = enabled.sources.find((x) => x.provider_id === 'deepseek')
+    expect(row?.models.filter((m) => m.enabled).map((m) => m.id)).toEqual([
+      'deepseek-chat',
+      'deepseek-flash',
+    ])
+    // 主模型同时是默认：标「默认」
+    expect(row?.models.find((m) => m.id === 'deepseek-chat')?.locked).toBe('default')
+    expect(ctx.server.models.providers().map((r) => r.model)).toContain('deepseek-flash')
+    const after = await data<{ providers: { picker_models?: string[] }[] }>(
+      await api('/v1/models/providers'),
+    )
+    expect(after.providers[0]?.picker_models).toEqual(['deepseek-flash'])
   })
 
   it('拉不到的模型名不给选（乱填一个 id 仍然 400）', async () => {

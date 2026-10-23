@@ -49,6 +49,7 @@ import {
   isSelfCard,
   type KnowledgePort,
   type LocalIdentityService,
+  type ModelEnableNotice,
   type ModelsActor,
   type PersonaPort,
   parseSubprotocols,
@@ -626,6 +627,7 @@ import {
   STUB_REF,
   templatesFor,
 } from './models.js'
+import { newModelNoticeCard } from './new-models.js'
 import {
   CREDITS_LOW_KEY,
   connectionBrokenNotification,
@@ -5049,7 +5051,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 模型设置里那条订阅（大家共用，谁打开都看得到）；同一对「从 → 到」只出一行。
      * 模型装配在下面才建好，这里先占位、建好后填上。
      */
-    const retiredModelsHolder: { swaps?: () => RetiredProviderSwap[] } = {}
+    const retiredModelsHolder: {
+      swaps?: () => RetiredProviderSwap[]
+      /** WP479：已连接来源的新模型（铃铛一条一个来源）。 */
+      fresh?: () => ModelEnableNotice[]
+      /** WP479：没收尾的事项自己选着的 AI（事项面在下面才建好）。 */
+      matterModels?: () => string[]
+    } = {}
+    /** WP479（决策 1625）：订阅 / 账号 / API key 有新模型 → 铃铛里一条（点了到设置 → 模型那个来源）。 */
+    const newModelAlerts = (person_id: string) => {
+      const notices = retiredModelsHolder.fresh?.() ?? []
+      if (notices.length === 0) return []
+      const position_id =
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: ws })
+          .find((a) => a.revoked_at === undefined && a.role_id.startsWith('common.'))?.id ?? ''
+      return notices.map((notice) => newModelNoticeCard({ notice, position_id }))
+    }
     const retiredModelAlerts = (person_id: string) => {
       const position_id =
         roles.assignments
@@ -5129,6 +5147,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             onboardingRef?.brandProfile(ws).markets_source,
           ),
           ...retiredModelAlerts(actor.person_id),
+          ...newModelAlerts(actor.person_id),
           // WP418（自查 B7）：店铺日报查出来的异常（销售骤降 / 断货），当天给店铺管理担着的人
           ...(storeDigestRef?.alerts(actor.person_id) ?? []),
           // WP448：改版回归里严重的那几条（担 SEO 与 GEO 或整站搭建的人看；点「去处理」到交给建站的那件事）
@@ -6913,6 +6932,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       cloudAttribution: (meta) => cloudAttributionOf(meta.assignment_id, meta.role_id),
       // WP334：模型配置变了 → 还在等的「接模型 / DeepSeek 账号」连接卡复查
       onChanged: () => recheckSetupCards(ws),
+      // WP479：首次算默认勾选时，某件事自己选着的 AI 也勾上（升级后跑着的不断）
+      inUseModels: () => retiredModelsHolder.matterModels?.() ?? [],
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
       ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
@@ -6967,6 +6988,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : ownModels
     // WP294：首页那一行看的是这个品牌真在用的那份模型设置（跟随公司默认就是公司那份）
     retiredModelsHolder.swaps = () => effectiveModels().retiredSwaps()
+    // WP479：新模型提醒看的同样是这个品牌真在用的那份
+    retiredModelsHolder.fresh = () => effectiveModels().newModelNotices()
     // WP334（决策 726）：连接卡上「AI 模型」「Agents 工坊账号」那两样连没连上
     setupProbes.set(ws, {
       model: () => effectiveModels().configured(),
@@ -7760,6 +7783,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       soleOwner: () => soleOwnerOf?.(ws),
     })
     runtime?.bind(work)
+    // WP479：没收尾的事项自己选着的 AI（模型面首次算默认勾选时据此保留）
+    retiredModelsHolder.matterModels = () =>
+      work
+        .listMatters({ status: ['open', 'waiting'], archived: false })
+        .flatMap((m) => (m.model === undefined ? [] : [m.model]))
     /*
      * WP319 ③：开机自检——这个品牌还没有运行在跑，最近一轮没收尾的事项（老版本没跑成只记了「跑完了」、
      * 跑到一半应用被关 / 被更新重启）按本机事件日志补一句「没跑成」+ 重试，不再一直挂在「进行中」。
@@ -11878,6 +11906,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         assignment_id: ownerAssignment.id,
         role_id: ownerAssignment.role_id,
       })
+      // WP479：顺手把 API key 那几条的模型清单重拉一遍（多出来的进铃铛「有新模型」）
+      await boot.ownModels.refreshListings().catch(() => 0)
       return { vendors: result.vendors, updated_providers: result.updated_providers }
     },
   })

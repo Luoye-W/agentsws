@@ -28,6 +28,10 @@ import type {
   FreeChatModelThinking,
   ModelAiSourceView,
   ModelDefaultsView,
+  ModelEnableModelView,
+  ModelEnableNotice,
+  ModelEnableSourceView,
+  ModelEnableView,
   ModelImageUsing,
   ModelImageView,
   ModelListing,
@@ -45,6 +49,7 @@ import type {
   ModelVisionStatus,
   SaveModelProviderInput,
   SetModelDefaultsInput,
+  SetModelEnableInput,
   SetModelImageInput,
 } from '@agentsws/api'
 import { messageRuleStubScript, replySuggestStubScript } from '@agentsws/channels'
@@ -126,6 +131,14 @@ import {
 } from '@agentsws/model-gateway'
 import { chatAnswerStubScript, emailAnswerStubScript } from '@agentsws/support-core'
 import { deepseekThinkingOf } from './deepseek-thinking.js'
+import {
+  defaultEnabledModels,
+  freshModels,
+  latestPerSeries,
+  type ModelEnableEntry,
+  noteNewModels,
+  pendingNotice,
+} from './model-enable.js'
 import { cloudRates, type ModelPrice, vendorOfModel } from './model-rates.js'
 import { thinkingOptionsFromLevels, thinkingOptionsOf } from './model-thinking.js'
 import type { RetiredModelSwap } from './retired-models.js'
@@ -405,6 +418,11 @@ interface ModelsStateFile {
   tests: Record<string, ModelTestResult>
   /** WP294：启动时自动换掉的退役订阅模型（首页提醒照它出；不进设置快照）。 */
   retired_swaps?: RetiredProviderSwap[]
+  /**
+   * WP479（决策 1625）：每个已连接来源勾了哪些模型、看过哪些、提醒过哪些（按 provider id）。
+   * 不进设置快照（订阅那一条本来就不在快照里；API key 勾的那几个在 `picker_models` 里跟着走）。
+   */
+  enabled_models?: Record<string, ModelEnableEntry>
 }
 
 /** WP294：哪一条 provider 上的哪个模型被自动换了。 */
@@ -490,6 +508,11 @@ export interface ModelsOptions {
    * 不给 = 这个进程没装订阅登录，下拉里没有订阅那一组。
    */
   subscription?: SubscriptionModelPort
+  /**
+   * WP479：这个品牌里**某件事自己选着的** AI（`provider_id/model`，没收尾的事项）。首次算默认勾选时
+   * 这些也勾上（升级后跑着的不断）；设置里标「正在用」。取值函数——事项面在模型面之后才装好。
+   */
+  inUseModels?: () => readonly string[]
 }
 
 /**
@@ -574,6 +597,16 @@ export interface ModelsAssembly {
   chatChoices(): ModelChatChoice[]
   /** WP362：消耗速率的 1x 是谁（`fallback` = 价目里没有 DeepSeek v4 Pro，退回了默认模型）。 */
   rateBase?(): { model: string; fallback: boolean } | undefined
+  /**
+   * WP479（决策 1625）：已连接的订阅 / 账号 / API key 多出来、人还没看过的新模型（铃铛里一条一个来源）。
+   * 人在设置里看过就没了。工坊积分那一组不在这里（我们自己发版时说）。
+   */
+  newModelNotices(): ModelEnableNotice[]
+  /**
+   * WP479：API key 那几条重拉一次模型清单（只拉以前拉通过的；出站急停开着就不拉）。多出来的进铃铛。
+   * 每周一那次价目刷新顺手调。回拉了几条。
+   */
+  refreshListings(): Promise<number>
 }
 
 /** WP188：随便聊下拉里的一项。 */
@@ -1420,6 +1453,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         tests: parsed.tests ?? {},
         ...(parsed.pricing === undefined ? {} : { pricing: parsed.pricing }),
         ...(parsed.retired_swaps === undefined ? {} : { retired_swaps: parsed.retired_swaps }),
+        ...(parsed.enabled_models === undefined ? {} : { enabled_models: parsed.enabled_models }),
       }
     } catch {
       // 第一次跑，或者文件坏了：从空开始。加密库里的 key 不受影响
@@ -2052,23 +2086,98 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    * 选中的才装。
    */
   const selectedModels = (config: ModelProviderConfig): string[] => {
-    // WP362：订阅目录 / 云端价目里的模型——全挂上（只是几个对象，不花钱建），AI 钮里每个都能点、点了真用它
-    if (config.kind === 'openai-codex' || config.kind === 'agentsws_cloud')
-      return knownModels(config)
-    // WP370：DeepSeek 账号照官方 alpha.5——账号目录整份都在选择器里（目录就几个）。
-    // API key 那条仍按 WP42 只挂选中的（它的清单是 `/models` 拉回来的，不保证短）；要多列在设置里勾
-    if (config.kind === 'deepseek_account') return knownModels(config)
+    // WP362：云端价目里的模型——全挂上（只是几个对象，不花钱建）。WP479：积分那一组由我们维护，不受勾选影响
+    if (config.kind === 'agentsws_cloud') return knownModels(config)
+    /*
+     * WP479（决策 1625）：ChatGPT 订阅、DeepSeek 账号——只挂**勾上的**（首次按「每条线最新那一版 + 正在用的」默认勾，
+     * 见 `model-enable.ts`）。默认 / 按用途选的总在（取消不了）；账号那条的主模型也总在。
+     * 目录还没读进来（订阅目录懒加载）时照老样子。
+     */
+    if (isCatalogSource(config)) {
+      const known = knownModels(config)
+      const entry = ensureEnable(config, known)
+      if (entry?.enabled === undefined) return known
+      const on = new Set([...entry.enabled, ...lockedModels(config).keys()])
+      const picked = known.filter((m) => on.has(m))
+      return picked.length > 0 ? picked : [config.model]
+    }
     // WP370：人在设置里勾了要在 AI 钮里列的那几个（主模型总在最前）
     const picked = new Set([config.model, ...(config.picker_models ?? [])])
-    const ids = [state.defaults.default, ...Object.values(state.defaults.by_purpose ?? {})]
-    for (const id of ids) {
-      if (id === undefined || id === '') continue
-      const at = id.indexOf('/')
-      if (at <= 0 || id.slice(0, at) !== config.id) continue
-      const model = id.slice(at + 1)
+    for (const model of defaultRefsOf(config.id)) {
       if (knownModels(config).includes(model)) picked.add(model)
     }
     return [...picked]
+  }
+
+  /** WP479：订阅、账号这两种按目录勾（API key 那几条照 `picker_models`）。 */
+  const isCatalogSource = (config: Pick<ModelProviderConfig, 'kind'>): boolean =>
+    config.kind === 'openai-codex' || config.kind === 'deepseek_account'
+
+  /** 这个来源上被默认 / 按用途选中的那几个模型名。 */
+  const defaultRefsOf = (provider_id: string): string[] => {
+    const out: string[] = []
+    for (const id of [state.defaults.default, ...Object.values(state.defaults.by_purpose ?? {})]) {
+      if (id === undefined || id === '') continue
+      const at = id.indexOf('/')
+      if (at <= 0 || id.slice(0, at) !== provider_id) continue
+      out.push(id.slice(at + 1))
+    }
+    return out
+  }
+
+  /** WP479：勾着而且取消不了的那几个——默认 / 按用途选的；API key 与账号那条的主模型。 */
+  const lockedModels = (config: ModelProviderConfig): Map<string, 'default' | 'main'> => {
+    const out = new Map<string, 'default' | 'main'>()
+    if (config.kind !== 'openai-codex') out.set(config.model, 'main')
+    for (const m of defaultRefsOf(config.id)) out.set(m, 'default')
+    return out
+  }
+
+  /** WP479：某件事自己选着的模型（这个来源上的；事项面没装好时空）。 */
+  const matterModelsOf = (provider_id: string): Set<string> => {
+    const out = new Set<string>()
+    let ids: readonly string[] = []
+    try {
+      ids = options.inUseModels?.() ?? []
+    } catch {
+      ids = []
+    }
+    for (const id of ids) {
+      if (id.startsWith(`${provider_id}/`)) out.add(id.slice(provider_id.length + 1))
+    }
+    return out
+  }
+
+  /**
+   * WP479：这个来源的勾选记录——没有就按「每条线最新 + 正在用的」建一份（首次连接、老用户升级后第一次），
+   * 有就对一遍目录：多出来的记成新模型（进铃铛、标「新」，**不自动勾**）。有变化就落盘。
+   * 工坊积分、只用来生图的那几条不管。
+   */
+  const ensureEnable = (
+    config: ModelProviderConfig,
+    known: readonly string[] = knownModels(config),
+    quiet = false,
+  ): ModelEnableEntry | undefined => {
+    if (config.kind === 'agentsws_cloud' || config.image_only === true) return undefined
+    if (state.enabled_models === undefined) state.enabled_models = {}
+    const all = state.enabled_models
+    const entry = all[config.id]
+    if (entry === undefined) {
+      // 目录还没读进来：先不定（下一次再算），不然一份空目录会被当成「全都看过」
+      if (isCatalogSource(config) && (config.models ?? []).length === 0) return undefined
+      const inUse = new Set([...defaultRefsOf(config.id), ...matterModelsOf(config.id)])
+      if (config.kind === 'deepseek_account') inUse.add(config.model)
+      const created: ModelEnableEntry = {
+        ...(isCatalogSource(config) ? { enabled: defaultEnabledModels(known, inUse) } : {}),
+        seen: [...known],
+        notified: [...known],
+      }
+      all[config.id] = created
+      flush()
+      return created
+    }
+    if (noteNewModels(entry, known, clock.now(), quiet)) flush()
+    return entry
   }
 
   /**
@@ -2161,9 +2270,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     const port = options.subscription
     if (port === undefined || !port.signedIn('openai-codex')) return []
     const models = port.catalog('openai-codex').map((m) => m.id)
-    const main = models.includes(SUBSCRIPTION_DEFAULT_MODEL)
+    // WP479：主模型挑勾着的（默认那个没勾就取勾着的第一个）；还没勾过照老样子
+    const enabled = state.enabled_models?.[SUBSCRIPTION_SOURCE_ID]?.enabled
+    const usable = enabled === undefined ? models : models.filter((m) => enabled.includes(m))
+    const main = usable.includes(SUBSCRIPTION_DEFAULT_MODEL)
       ? SUBSCRIPTION_DEFAULT_MODEL
-      : (models[0] ?? SUBSCRIPTION_DEFAULT_MODEL)
+      : (usable[0] ?? models[0] ?? SUBSCRIPTION_DEFAULT_MODEL)
     return [
       {
         id: SUBSCRIPTION_SOURCE_ID,
@@ -2586,14 +2698,20 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   const refreshListing = async (
     config: ModelProviderConfig,
     probe?: DiscoverModelsInput,
+    /** WP479：`true` = 人自己点的（新模型标「新」但不进铃铛）。 */
+    quiet = true,
   ): Promise<ModelListing> => {
     const listing = await listModelsOf(config.id, probe, config)
     const saved = state.providers.find((p) => p.id === config.id)
     const target = saved ?? config
+    // WP479：拉之前那一份当「看过的」底（第一次对清单时，新拉回来的不该全算新的）
+    if (saved !== undefined) ensureEnable(saved)
     target.last_listing = listing
     // WP88：兜底清单（`ok: false` 但有名字）也记下来——下拉框照它画，
     // 用户不用每次打开表单都再点一次"拉取"
     if (listing.ok || listing.models.length > 0) target.models = listing.models
+    // WP479：多出来的标「新」；人自己点的拉取不进铃铛（他就在设置里看着），每周那次后台重拉才进
+    if (saved !== undefined && listing.ok) ensureEnable(saved, knownModels(saved), quiet)
     if (saved !== undefined) {
       flush()
       // 清单变了，能选的模型跟着变——但只有被选中的那几个才真的挂上网关
@@ -2817,27 +2935,15 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       .map(({ choice: c }) => c)
   }
 
-  const defaultChoices = (
-    chat: readonly ModelChatChoice[],
-    active: readonly ModelProviderConfig[],
-  ): ModelDefaultsView['choices'] => {
-    const seen = new Set(chat.map((c) => c.id))
-    const rest = active.flatMap((c) =>
-      knownModels(c)
-        .filter((model) => !seen.has(`${c.id}/${model}`))
-        .map((model) => ({
-          id: `${c.id}/${model}`,
-          label: `${providerDisplayLabel(c)}（${model}）`,
-        })),
-    )
-    return [
-      ...chat.map((c) => ({
-        id: c.id,
-        label: `${c.label}（${c.name ?? c.id.slice(c.id.indexOf('/') + 1)}）`,
-      })),
-      ...rest,
-    ]
-  }
+  /**
+   * 默认模型下拉：与输入框 AI 钮同一份。WP479（决策 1625）：只列**勾上的**——原来 API key 拉回来的清单里
+   * 没勾的也接在后面（WP42），现在要用先去「模型」里勾上。
+   */
+  const defaultChoices = (chat: readonly ModelChatChoice[]): ModelDefaultsView['choices'] =>
+    chat.map((c) => ({
+      id: c.id,
+      label: `${c.label}（${c.name ?? c.id.slice(c.id.indexOf('/') + 1)}）`,
+    }))
 
   const defaultsView = (): ModelDefaultsView => {
     const active = textConfigs()
@@ -2855,7 +2961,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       budget: defined(budget),
       // WP370：先是与输入框 AI 钮同一份（同样的名字、同样的次序）；WP42 那条照旧——拉回来的清单里别的模型
       // 接在后面也能选，选了就挂上网关、也进 AI 钮（默认 / 按用途选中的总会挂上）
-      choices: defaultChoices(chatChoicesNow(), active),
+      choices: defaultChoices(chatChoicesNow()),
       ai_source: aiSourceView(active),
     }
   }
@@ -2930,6 +3036,125 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       price_source_url: existing?.price_source_url,
       price_as_of: existing?.price_as_of,
     })
+  }
+
+  // ── WP479（决策 1625）：订阅 / API 的模型勾选启用 ─────────────────────────
+
+  /** 设置里列的那几个来源：挂文字模型的、不是工坊积分的（订阅、账号、API key）。 */
+  const enableSources = (): ModelProviderConfig[] =>
+    textConfigs().filter((c) => c.kind !== 'agentsws_cloud')
+
+  const enableSourceView = (c: ModelProviderConfig): ModelEnableSourceView => {
+    const known = knownModels(c)
+    const entry = ensureEnable(c, known)
+    const on = new Set(selectedModels(c))
+    const locked = lockedModels(c)
+    const matters = matterModelsOf(c.id)
+    const fresh = new Set(freshModels(known, entry))
+    const latest = new Set(latestPerSeries(known))
+    const models: ModelEnableModelView[] = known.map((m) => {
+      const name = choiceFacts(c, m).name
+      const lock = locked.get(m)
+      return {
+        id: m,
+        ...(name === undefined || name === '' ? {} : { name }),
+        enabled: on.has(m),
+        ...(lock === undefined ? {} : { locked: lock }),
+        ...(matters.has(m) ? { in_use: true } : {}),
+        ...(fresh.has(m) ? { fresh: true } : {}),
+        ...(latest.has(m) ? { latest: true } : {}),
+        vision: visionStatusOf(c, m),
+      }
+    })
+    return {
+      provider_id: c.id,
+      label: providerDisplayLabel(c),
+      kind: c.kind,
+      group: c.kind === 'openai-codex' ? 'subscription' : 'own',
+      models,
+    }
+  }
+
+  const enableView = (): ModelEnableView => ({ sources: enableSources().map(enableSourceView) })
+
+  const setEnabledModels = (input: SetModelEnableInput): ModelEnableView => {
+    const c = enableSources().find((x) => x.id === input.provider_id)
+    if (c === undefined) throw notFound(`没有这个已连接的来源：${input.provider_id}`)
+    const known = knownModels(c)
+    if (isCatalogSource(c)) {
+      const entry = ensureEnable(c, known)
+      if (entry === undefined) throw invalid('这个来源的模型目录还没读进来，过一会儿再试。')
+      const wanted = new Set([...input.enabled, ...lockedModels(c).keys()])
+      const next = known.filter((m) => wanted.has(m))
+      // 一个都不勾等于这个来源白连了：至少留一个（主模型）
+      entry.enabled = next.length > 0 ? next : [c.model]
+    } else {
+      // API key：同一份真源（WP370 的 picker_models）；手填过、清单里没有的那几个照留
+      const target = state.providers.find((p) => p.id === c.id)
+      if (target === undefined) throw notFound(`没有这个已连接的来源：${input.provider_id}`)
+      const allowed = new Set([...known, ...(target.picker_models ?? [])])
+      const picked = input.enabled.filter((m) => allowed.has(m))
+      const next = pickerModelsFor(picked, undefined, target.model)
+      if (next === undefined) delete target.picker_models
+      else target.picker_models = next
+    }
+    flush()
+    reassemble()
+    return enableView()
+  }
+
+  const markModelsSeen = (provider_ids?: readonly string[]): ModelEnableView => {
+    let changed = false
+    for (const c of enableSources()) {
+      if (provider_ids !== undefined && !provider_ids.includes(c.id)) continue
+      const entry = ensureEnable(c)
+      if (entry === undefined) continue
+      const known = knownModels(c)
+      const seen = [...new Set([...entry.seen, ...known])]
+      if (seen.length !== entry.seen.length || entry.notice !== undefined) {
+        entry.seen = seen
+        delete entry.notice
+        changed = true
+      }
+    }
+    if (changed) flush()
+    return enableView()
+  }
+
+  const newModelNotices = (): ModelEnableNotice[] =>
+    enableSources().flatMap((c) => {
+      const entry = state.enabled_models?.[c.id]
+      const known = knownModels(c)
+      const pending = pendingNotice(entry, known)
+      if (pending.length === 0 || entry?.notice === undefined) return []
+      return [
+        {
+          provider_id: c.id,
+          label: providerDisplayLabel(c),
+          models: pending.map((m) => {
+            const name = choiceFacts(c, m).name
+            return name === undefined || name === '' ? { id: m } : { id: m, name }
+          }),
+          at: entry.notice.at,
+        },
+      ]
+    })
+
+  /** 每周一次：API key 那几条重拉清单（只拉以前拉通过的），多出来的进铃铛。 */
+  const refreshListings = async (): Promise<number> => {
+    if (options.halt?.isHalted('outbound') === true) return 0
+    let n = 0
+    for (const c of activeConfigs()) {
+      if (c.kind === 'agentsws_cloud' || isCatalogSource(c) || c.image_only === true) continue
+      if (c.last_listing?.ok !== true) continue
+      try {
+        await refreshListing(c, undefined, false)
+        n += 1
+      } catch {
+        // 一家拉不到不拦别家
+      }
+    }
+    return n
   }
 
   const port: ModelsPort = {
@@ -3270,6 +3495,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
     defaults: () => defaultsView(),
 
+    // WP479（决策 1625）
+    enabledModels: () => enableView(),
+    setEnabledModels: (_actor, input) => setEnabledModels(input),
+    markModelsSeen: (_actor, provider_ids) => markModelsSeen(provider_ids),
+
     setDefaults(_actor, input: SetModelDefaultsInput) {
       if (input.default !== undefined) {
         if (refOf(input.default) === undefined) {
@@ -3498,6 +3728,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     hasDeepseekSearchKey: () => deepseekOfficialConfigs().some((c) => hasKey(c.id)),
     chatChoices: () => chatChoicesNow(),
     rateBase: () => cloudRatesNow().base,
+    newModelNotices: () => newModelNotices(),
+    refreshListings: () => refreshListings(),
     dropAccountProvider(reason) {
       const rows = state.providers.filter((p) => p.kind === 'deepseek_account')
       if (rows.length === 0) return false

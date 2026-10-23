@@ -621,6 +621,56 @@ export interface ModelAiSourceView {
   fallback_to_cloud: boolean
 }
 
+/**
+ * WP479（决策 1625，只加）：设置里一个已连接来源（ChatGPT 订阅 / DeepSeek 账号 / 各家 API key）能用的一个模型。
+ * 工坊积分那一组由我们维护，不在这里。
+ */
+export interface ModelEnableModelView {
+  /** 模型名（不带来源前缀）。 */
+  id: string
+  /** 目录里给人看的名字（GPT-6.1 Sol）；没有界面用 `id`。 */
+  name?: string
+  /** 勾着：模型选择器里列它。 */
+  enabled: boolean
+  /** 勾着而且取消不了：默认模型 / 按用途选的 / 这条 key 的主模型（`reason` 说是哪一种）。 */
+  locked?: 'default' | 'main'
+  /** 有事项正在用它（只是标出来；取消了那件事跟品牌默认走）。 */
+  in_use?: boolean
+  /** 人还没在设置里看过的新模型（标「新」）。 */
+  fresh?: boolean
+  /** 这条线里最新的那一版（「全选最新」勾的就是这些）。 */
+  latest?: boolean
+  /** 能不能看图（目录 / 上次验证）。 */
+  vision?: ModelVisionStatus
+}
+
+/** WP479：一个已连接来源和它的模型清单。 */
+export interface ModelEnableSourceView {
+  provider_id: string
+  label: string
+  kind: ModelProviderKind
+  group: 'subscription' | 'own'
+  models: ModelEnableModelView[]
+}
+
+export interface ModelEnableView {
+  sources: ModelEnableSourceView[]
+}
+
+/** WP479：改一个来源勾哪些（整份给；锁着的那几个总在）。 */
+export interface SetModelEnableInput {
+  provider_id: string
+  enabled: string[]
+}
+
+/** WP479：铃铛那一条「ChatGPT 订阅有新模型：…」（同一来源同一批合成一条）。 */
+export interface ModelEnableNotice {
+  provider_id: string
+  label: string
+  models: { id: string; name?: string }[]
+  at: string
+}
+
 /** WP66（52 O3）：改"跟随公司默认"。 */
 export interface SetModelInheritanceInput {
   inherit_org: boolean
@@ -785,6 +835,17 @@ export interface ModelsPort {
   deepseekAccountCancel?(actor: ModelsActor, attempt_id: string): MaybePromise<DeepSeekAccountView>
   /** 登出 = 官方 signOut（先删本机凭据、后台调平台 logout）+ 摘掉这条 provider + 关模块。 */
   deepseekAccountSignOut?(actor: ModelsActor): MaybePromise<void>
+
+  /*
+   * WP479（决策 1625）：订阅 / API 的模型改成用户勾选启用。**三个都是可选的**——不实现 = 这个进程没装，
+   * 路由回 not_implemented（选择器照旧列全部）。
+   */
+  /** 每个已连接来源的全部可用模型 + 勾没勾、新不新。 */
+  enabledModels?(actor: ModelsActor): MaybePromise<ModelEnableView>
+  /** 改一个来源勾哪些（保存即生效：选择器跟着换）。 */
+  setEnabledModels?(actor: ModelsActor, input: SetModelEnableInput): MaybePromise<ModelEnableView>
+  /** 人在设置里看过了：这几个来源（不给 = 全部）的新模型不再标「新」，铃铛那一条收掉。 */
+  markModelsSeen?(actor: ModelsActor, provider_ids?: string[]): MaybePromise<ModelEnableView>
 }
 
 /** 装配方给网关的 ModelRef 拆解（`provider/model`）。 */
@@ -855,6 +916,13 @@ const SaveBody = z.object({
 /** 拉模型列表的请求体。`api_key` 同 `SaveBody`：只限长度，值不进任何错误信封。 */
 /** WP66（52 O3）：一个布尔，别的什么都不收。 */
 const InheritanceBody = z.object({ inherit_org: z.boolean() })
+/** WP479：一个来源勾哪些（模型名，限长限个数）。 */
+const EnableBody = z.object({
+  provider_id: z.string().min(1).max(64),
+  enabled: z.array(z.string().min(1).max(200)).max(500),
+})
+/** WP479：看过了哪几个来源（不给 = 全部）。 */
+const SeenBody = z.object({ provider_ids: z.array(z.string().min(1).max(64)).max(50).optional() })
 
 /** WP127：生图那一档。`provider_id` 空串 = 不配。 */
 const ImageBody = z.object({
@@ -998,6 +1066,68 @@ export function modelRoutes(): Route[] {
       async (c, deps) => {
         const input = await body(c, DefaultsBody)
         return ok(c, await portOf(deps).setDefaults(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/models/enabled',
+        operationId: 'getModelEnable',
+        summary:
+          'WP479：每个已连接来源（订阅 / 账号 / API key）的全部可用模型，勾没勾、新不新（工坊积分那一组不在这里）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'ModelEnableView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.enabledModels === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配模型勾选')
+        return ok(c, await port.enabledModels(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/models/enabled',
+        operationId: 'setModelEnable',
+        summary: 'WP479：改一个来源勾哪些模型（保存即生效，模型选择器只列勾上的；锁着的总在）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: EnableBody,
+        returns: 'ModelEnableView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setEnabledModels === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配模型勾选')
+        const input = await body(c, EnableBody)
+        return ok(c, await port.setEnabledModels(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/models/enabled/seen',
+        operationId: 'markModelsSeen',
+        summary: 'WP479：人在设置里看过了——新模型不再标「新」，铃铛那一条收掉',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        body: SeenBody,
+        returns: 'ModelEnableView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.markModelsSeen === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配模型勾选')
+        const input = await body(c, SeenBody)
+        return ok(c, await port.markModelsSeen(actorOf(c), input.provider_ids))
       },
     ),
     route(
