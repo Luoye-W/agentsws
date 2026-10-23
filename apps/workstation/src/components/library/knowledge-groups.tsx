@@ -11,12 +11,14 @@
  * 「上传的文档」是另一张表（`KnowledgeSource`）：它的那一列由页面自己画（点一份在第三栏预览、
  * 删除按钮），以 `uploads` 插进它该在的位置。空组不显示。
  */
+import { hasCommitment } from '@agentsws/contracts'
 import type { ReactNode } from 'react'
 import { StatusPill, type Tone, WsTag } from '@/components/design'
 import {
   AssistantNoteActions,
   isAssistantNote,
 } from '@/components/knowledge/assistant-note-actions'
+import { CommitmentMark } from '@/components/knowledge/commitment-mark'
 import { CardStageSelect } from '@/components/knowledge/stage-select'
 import type { KnowledgeCardRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -99,6 +101,8 @@ export function KnowledgeRow({
         ) : null}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-1 sm:max-w-[55%] sm:justify-end">
+        {/* WP495（1701）：待确认里只有真写了承诺的那几条挂小图标 */}
+        {status === 'pending' && hasCommitment(card.statement) ? <CommitmentMark /> : null}
         {kind === undefined ? null : <WsTag>{kind}</WsTag>}
         {(card.scope ?? []).map((s) => (
           <WsTag key={`${s.kind}:${s.id}`} data-testid="knowledge-row-scope">

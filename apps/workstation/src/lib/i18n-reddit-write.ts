@@ -34,6 +34,10 @@ export const REDDIT_WRITE_ZH: Record<string, string> = {
   'redditw.notice.refill.hint':
     '同一份批过的草稿再发一次，不用重批。ego 能用就工坊在 ego 里发，不能用交给浏览器插件。',
   'redditw.notice.sending': '在发…',
+  // WP495（1717）：ego 点过发送、没确认发出去的那一条，再填之前先问
+  'redditw.notice.refill.ask': '确认上次没发出去？',
+  'redditw.notice.refill.ask.yes': '确认',
+  'redditw.notice.refill.ask.no': '取消',
   'redditw.notice.via.ego': '正在 ego 里发：{what}',
   'redditw.notice.via.plugin': '已交给浏览器插件，等你在插件里发：{what}',
   'redditw.notice.sent': '发出去了：{what}',
@@ -83,6 +87,9 @@ export const REDDIT_WRITE_EN: Record<string, string> = {
   'redditw.notice.refill.hint':
     'Sends the same approved draft again, no new approval. Uses ego if it is available, otherwise the browser extension.',
   'redditw.notice.sending': 'Sending…',
+  'redditw.notice.refill.ask': 'Sure the last one didn’t go out?',
+  'redditw.notice.refill.ask.yes': 'Confirm',
+  'redditw.notice.refill.ask.no': 'Cancel',
   'redditw.notice.via.ego': 'Sending in ego: {what}',
   'redditw.notice.via.plugin': 'Handed to the browser extension, send it there: {what}',
   'redditw.notice.sent': 'Posted: {what}',
