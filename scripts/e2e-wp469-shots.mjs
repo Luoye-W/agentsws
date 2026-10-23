@@ -147,12 +147,15 @@ async function runTheme(browser, theme) {
     }
 
     // ① 清单（第一次打开是清单，决策 1523）
+    // Luoye 10-23：第一次打开改成日历（fix/default-views）；清单那一面用 `?view=list` 进
     await page.goto(`${BASE}/planner`, { waitUntil: 'load', timeout: 90_000 })
-    await page.getByTestId('horizon-week').waitFor({ timeout: 30_000 })
+    await page.getByTestId('cal-todo').waitFor({ timeout: 30_000 })
     check(
-      (await page.getByTestId('cal-todo').getAttribute('data-face')) === 'list',
-      '第一次打开是清单',
+      (await page.getByTestId('cal-todo').getAttribute('data-face')) === 'calendar',
+      '第一次打开是日历',
     )
+    await page.goto(`${BASE}/planner?view=list`, { waitUntil: 'load', timeout: 90_000 })
+    await page.getByTestId('horizon-week').waitFor({ timeout: 30_000 })
     const kinds = await page
       .getByTestId('todo-when')
       .evaluateAll((els) => els.map((e) => e.getAttribute('data-kind')))
@@ -310,7 +313,7 @@ async function runTheme(browser, theme) {
     await shot('nav')
 
     // ⑧ 收件箱「记成待办」
-    await page.goto(`${BASE}/inbox`, { waitUntil: 'load' })
+    await page.goto(`${BASE}/inbox?mode=list`, { waitUntil: 'load' })
     await page.getByTestId('inbox-row').first().waitFor({ timeout: 30_000 })
     const mailRow = page.locator('[data-testid="inbox-row"][data-type="mail"]').first()
     const target2 = (await mailRow.count()) > 0 ? mailRow : page.getByTestId('inbox-row').nth(1)
