@@ -676,6 +676,11 @@ export interface RuntimeOptions {
    */
   browser?: () => RunBrowser | undefined
   /**
+   * WP483（决策 1652）：这次运行算不算「个人用法」——是的话工作 Chrome / BrowserSkill 的填写、点击放行并留痕
+   * （与 ego 对齐）；不给 / 回 false = 照旧按 executor 拦。
+   */
+  personalBrowserWrites?: () => boolean
+  /**
    * WP86（55 §4 第三层）：**这条职责挂哪几台 MCP 服务器**。
    *
    * 来自连接目录（`connection-directory.ts` 的 `roleConnections`）。晚绑定的读法与
@@ -2378,7 +2383,15 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP236：没接上的工具，grounding 提示里也不提
       grounding: config.grounding.filter((g) => offerable(g.tool, config.role_id)),
       // 16 §3：公司端 write_external 一律经执行器，运行时拿不到写口
-      tools: { allow, connect_token, side_effect_policy: 'executor' },
+      tools: {
+        allow,
+        connect_token,
+        side_effect_policy: 'executor',
+        // WP483（决策 1652）：个人用法下浏览器的填写、点击放行 + 留痕（公司用法照旧拦）
+        ...(browser !== undefined && options.personalBrowserWrites?.() === true
+          ? { browser_write: 'personal' as const }
+          : {}),
+      },
       skills: config.skills,
       persona: {
         sections: [

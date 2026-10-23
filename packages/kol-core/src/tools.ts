@@ -82,6 +82,43 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
     },
   },
   {
+    /*
+     * WP483（决策 1661）：在浏览器（ego）里读到的红人**公开**主页数据，和浏览器插件采集的走同一条路：
+     * 存进本机红人库，同时备份到工坊云端（公共红人库的那一份；只上粉丝数等几格）。私信、账号凭据不在这里。
+     */
+    name: 'record_creator_observations',
+    description:
+      '把你在浏览器里（ego）亲眼读到的红人公开主页数据记下来：存进本机红人库，同时和浏览器插件采集的一样备份到工坊云端。一次最多 50 个。只记公开主页上看得到的（账号、名字、粉丝数、作品数、简介），不记私信、不记任何账号密码；联系方式不在这里收（要邮箱走取联系方式那一步）。数字以页面上看到的为准，看不清就不填。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: CHANNEL_ENUM,
+        observations: {
+          type: 'array',
+          description: '每个红人一行',
+          items: {
+            type: 'object',
+            properties: {
+              handle: str('账号名（不带 @ 也行）'),
+              display_name: str('名字'),
+              url: str('主页链接'),
+              followers: {
+                type: 'number',
+                description: '粉丝 / 订阅数（页面上的数字，换算成整数）',
+              },
+              video_count: { type: 'number', description: '作品 / 视频数' },
+              avg_views: { type: 'number', description: '最近作品的平均播放（页面上算得出才填）' },
+              country: str('国家 / 地区（主页上写了才填）'),
+              bio: str('简介原文'),
+            },
+            required: ['handle'],
+          },
+        },
+      },
+      required: ['observations'],
+    },
+  },
+  {
     name: 'get_creator',
     description: '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史。',
     input_schema: {

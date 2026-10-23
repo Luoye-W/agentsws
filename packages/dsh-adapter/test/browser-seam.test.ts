@@ -492,6 +492,35 @@ describe('(e) 读写分类（55 §3 第一行）', () => {
     }
   })
 
+  it('WP483（决策 1652）：个人用法（`browser_write: personal`）下 executor 档的浏览器点击放行并留痕；别的对外写照旧拦；注 JS 照旧拦', async () => {
+    const req = makeRequest({ ...KOL, side_effect_policy: 'executor' })
+    req.tools = { ...req.tools, browser_write: 'personal' }
+    const g = await gateOnBare(req)
+    try {
+      const click = await g.gate.execute('c_1', `${PREFIX}browser_click`, { target: 'e1' })
+      expect(click.isError).toBe(false)
+      expect(
+        g.events.some(
+          (e) =>
+            e.type === 'progress' &&
+            e.step === 'browser_write' &&
+            e.note === `${PREFIX}browser_click`,
+        ),
+      ).toBe(true)
+      const typed = await g.gate.execute('c_2', `${PREFIX}browser_type`, {
+        target: 'e1',
+        text: 'x',
+      })
+      expect(typed.isError).toBe(false)
+      // 在页面里跑脚本（注 JS）不在 1652 里：照旧拦
+      const js = await g.gate.execute('c_3', `${PREFIX}browser_evaluate`, { function: '() => 1' })
+      expect(js.isError).toBe(true)
+      expect(g.gate.records.get('c_3')?.reason).toContain('browser_script_forbidden')
+    } finally {
+      await g.dispose()
+    }
+  })
+
   it('executor 档下只读工具照样放行（不然连看一眼网页都做不到）', async () => {
     const g = await gateOnBare(makeRequest({ ...KOL, side_effect_policy: 'executor' }))
     try {

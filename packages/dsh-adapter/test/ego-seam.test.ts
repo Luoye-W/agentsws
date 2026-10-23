@@ -245,7 +245,11 @@ describe('(c) 装配：三个工具进这个 Agent 的 scope，说明原文进 p
       expect(text).toContain('taskSpace(name)')
       expect(text).toContain('一律改成调用 `ego_run`')
       expect(text).toContain('Reddit')
-      expect(text).toContain('等你发')
+      // WP483（决策 1660）：AI 不在脚本里点发送，出卡；批了工坊自己在 ego 里发
+      expect(text).toContain('不要自己在 ego 里点发送')
+      expect(text).toContain('工坊会自己在 ego 里填好、发出去')
+      // WP483（决策 1661）：红人公开数据记下来（上云备份 + 本机）
+      expect(text).toContain('record_creator_observations')
       // 不过白名单（Luoye 10-22）：别的浏览器那段「只能打开这些站」不出现
       expect(text).not.toContain('只能打开这些站')
     } finally {
