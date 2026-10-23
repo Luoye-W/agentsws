@@ -78,6 +78,7 @@
 |---|---|---|
 | `$pageview` | 打开了一页（换一个岗位 / 事项也算一次；报的仍是路由模板） | `route`、`position_template`、`role_id` |
 | `app_opened` | 打开一次工作台 | — |
+| `page_left` | 离开一页（换页时记） | `route`、`position_template`、`role_id`（打开那一刻那一页的）、`seconds`（这一页看了几秒，封顶 1800） |
 | `ui_click` | 点了下面「关键按钮」里的一颗 | `button_id`、`route`、`position_template`、`role_id` |
 | `client_error` | 页面报错（错误边界接住的、`window.onerror`、没人接的 Promise 拒绝） | `error_kind`、`error_name`（错误类名，如 `TypeError`）、`scope`、`route` |
 | `$autocapture` | 点了 / 改了 / 提交了一个带 testid 的元素（见下面「自动点击记录」） | `$event_type`、`testid`、`tag`、`route`、`position_template`、`role_id` |

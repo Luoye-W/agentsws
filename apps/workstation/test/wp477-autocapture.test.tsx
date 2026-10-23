@@ -9,7 +9,8 @@
  * | 工作台把界面语言告诉本机服务（PUT `{ lang }`），一种语言只说一次 | GA4 的 `market_region`（决策 1600 / 1609） |
  */
 import type { TelemetryView } from '@agentsws/contracts'
-import { fireEvent, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TelemetryRoot } from '@/components/telemetry/telemetry-root'
 import {
@@ -25,6 +26,7 @@ import {
   telemetryContextFor,
   track,
 } from '@/lib/telemetry/client'
+import { useTelemetryContext } from '@/lib/telemetry/context'
 import { renderWithProviders } from './helpers'
 
 const KEY = 'phc_testkey0123456789abcdef'
@@ -346,6 +348,66 @@ describe('WP477 按岗位 / 职责看体验（Luoye 10-23）', () => {
     // 自建职责的卡：工作台这一关只认编号样子；名字样的换成 custom（本机服务再按内置目录核）
     card.setAttribute('data-track-role', 'Acme 旗舰店')
     expect(cardRoleOf(button)).toEqual({ role_id: 'custom' })
+    expect(outbound()).toEqual([])
+  })
+})
+
+describe('WP477 岗位页的页面访问等岗位报上来再记；离开时记看了几秒', () => {
+  function Probe() {
+    useTelemetryContext({ position_template: 'customer-care', role_id: 'dtc.support' })
+    const navigate = useNavigate()
+    return (
+      <button type="button" data-testid="go" onClick={() => navigate('/inbox')}>
+        go
+      </button>
+    )
+  }
+
+  it('$pageview 带内置岗位 / 职责；page_left 带的是打开那一页的，不串新一页', async () => {
+    served = { ...VIEW, active: true, client: CLIENT, lang: 'zh' }
+    const captured: [string, Record<string, unknown>][] = []
+    const fake = {
+      posthog: {
+        init: () => undefined,
+        register: () => undefined,
+        unregister: () => undefined,
+        capture: (event: string, props: Record<string, unknown>) => {
+          captured.push([event, props])
+        },
+      },
+    }
+    await applyTelemetry(served, { shell: 'web', lang: 'zh' }, async () => fake as never)
+    window.history.replaceState(null, '', '/positions/customer-care')
+    renderWithProviders(
+      <>
+        <TelemetryRoot />
+        <Probe />
+      </>,
+      '/positions/customer-care',
+    )
+    await waitFor(() => {
+      expect(captured.some(([e]) => e === '$pageview')).toBe(true)
+    })
+    expect(captured.find(([e]) => e === '$pageview')?.[1]).toMatchObject({
+      route: '/positions/:id',
+      position_template: 'customer-care',
+      role_id: 'dtc.support',
+    })
+    window.history.replaceState(null, '', '/inbox')
+    fireEvent.click(screen.getByTestId('go'))
+    await waitFor(() => {
+      expect(captured.some(([e]) => e === 'page_left')).toBe(true)
+    })
+    const left = captured.find(([e]) => e === 'page_left')?.[1]
+    expect(left).toMatchObject({
+      route: '/positions/:id',
+      position_template: 'customer-care',
+      role_id: 'dtc.support',
+    })
+    expect(typeof left?.seconds).toBe('number')
+    const inbox = captured.filter(([e]) => e === '$pageview').at(-1)?.[1]
+    expect(inbox).toMatchObject({ route: '/inbox' })
+    expect(inbox).not.toHaveProperty('position_template', 'customer-care')
     expect(outbound()).toEqual([])
   })
 })

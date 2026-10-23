@@ -245,6 +245,16 @@ export const TELEMETRY_EVENTS = {
   },
   /** 打开一次工作台（日活的口径之一）。 */
   app_opened: {},
+  /**
+   * WP477（按岗位 / 职责看体验）：离开一页时记一条——这一页看了多少秒（封顶 1800，挂着不动不算进来太多）。
+   * 岗位 / 职责是**打开那一刻**那一页的。
+   */
+  page_left: {
+    route: { kind: 'route' },
+    position_template: { kind: 'code' },
+    role_id: { kind: 'code' },
+    seconds: { kind: 'int', max: 1800 },
+  },
   /** 关键按钮点击（固定编号）。 */
   ui_click: {
     button_id: { kind: 'enum', values: TELEMETRY_BUTTONS },

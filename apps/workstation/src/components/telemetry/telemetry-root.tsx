@@ -17,7 +17,14 @@ import { useApp } from '@/lib/app-context'
 import { useAppVersion } from '@/lib/app-version'
 import { useMode } from '@/lib/mode'
 import { buttonIdOf } from '@/lib/telemetry/buttons'
-import { applyTelemetry, cardRoleOf, onTelemetryContext, track } from '@/lib/telemetry/client'
+import {
+  applyTelemetry,
+  cardRoleOf,
+  onTelemetryContext,
+  type TelemetryPageContext,
+  telemetryContextFor,
+  track,
+} from '@/lib/telemetry/client'
 import { routeTemplate } from '@/lib/telemetry/routes'
 
 const isDesktop = (): boolean =>
@@ -31,6 +38,8 @@ const CONTEXT_ROUTES: ReadonlySet<string> = new Set([
   '/cards/:id',
 ])
 const CONTEXT_WAIT_MS = 3000
+/** 一页最多算这么多秒（挂着不动的不算进来太多）。 */
+const PAGE_SECONDS_MAX = 1800
 
 export function TelemetryRoot(): ReactNode {
   const { lang } = useApp()
@@ -82,25 +91,36 @@ export function TelemetryRoot(): ReactNode {
   const route = routeTemplate(location)
   const path = location.pathname
   useEffect(() => {
-    if (!CONTEXT_ROUTES.has(route)) {
-      track('$pageview', { route })
-      return
-    }
     let done = false
+    let viewedAt = 0
+    let ctx: TelemetryPageContext = {}
     const fire = (): void => {
       if (done) return
       done = true
+      viewedAt = Date.now()
+      ctx = telemetryContextFor(path)
       track('$pageview', { route })
     }
-    const timer = setTimeout(fire, CONTEXT_WAIT_MS)
-    const off = onTelemetryContext((p) => {
-      if (p === path) fire()
-    })
+    const waits = CONTEXT_ROUTES.has(route)
+    const timer = waits ? setTimeout(fire, CONTEXT_WAIT_MS) : undefined
+    const off = waits
+      ? onTelemetryContext((p) => {
+          if (p === path) fire()
+        })
+      : () => undefined
+    if (!waits) fire()
     return () => {
-      clearTimeout(timer)
+      if (timer !== undefined) clearTimeout(timer)
       off()
       // 还没等到就离开了：照样记一次（不带岗位 / 职责）
       fire()
+      // WP477：这一页看了多久（岗位 / 职责是打开那一刻的；新一页的不串进来）
+      track('page_left', {
+        route,
+        position_template: ctx.position_template,
+        role_id: ctx.role_id,
+        seconds: Math.min(PAGE_SECONDS_MAX, Math.round((Date.now() - viewedAt) / 1000)),
+      })
     }
   }, [path, route])
 

@@ -49,6 +49,7 @@ describe('WP476 事件清单（快照）', () => {
     expect(shape).toEqual({
       $pageview: ['position_template', 'role_id', 'route'],
       app_opened: [],
+      page_left: ['position_template', 'role_id', 'route', 'seconds'],
       ui_click: ['button_id', 'position_template', 'role_id', 'route'],
       client_error: ['error_kind', 'error_name', 'route', 'scope'],
       task_finished: [
