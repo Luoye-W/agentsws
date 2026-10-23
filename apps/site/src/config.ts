@@ -35,6 +35,13 @@ export function accountUrl(page: AccountPage, lang: 'zh' | 'en'): string {
  */
 export const DOWNLOADS_URL = 'https://dl.agentsws.com/downloads.json'
 
+/**
+ * WP477（决策 1609 / 1611）：官网与软件共用的 GA4 媒体资源的衡量 ID（本来就公开在页面里）。
+ * 只在正式域名上加载 gtag（`GA4_HOSTS`）：本机预览、构建、测试一个统计请求都不发。
+ */
+export const GA4_MEASUREMENT_ID = 'G-P4LBL51H3P'
+export const GA4_HOSTS: readonly string[] = ['agentsws.com', 'www.agentsws.com']
+
 /** 公开价目（WP165）：构建时取一次，取不到用仓库里的样例并标「以控制台为准」。 */
 export const PRICING_URL = `${CLOUD_URL}/v1/pricing`
 
@@ -67,3 +74,11 @@ export const SISTER_SITES: Readonly<Record<string, string>> = {
  * 没填之前页面上照原样显示 `{{EFFECTIVE_DATE}}`，`pnpm -F @agentsws/site launch:check` 也会拦下。
  */
 export const LEGAL_EFFECTIVE_DATE = '2026-10-15'
+
+/**
+ * WP477：单独改过的那一页用自己的日期（隐私政策 10-23 补了官网统计、软件匿名使用数据、反馈保存期）。
+ * **发布那天要是不是这一天，由主会话改成发布当天。** 没列的页照用 `LEGAL_EFFECTIVE_DATE`。
+ */
+export const LEGAL_PAGE_DATES: Readonly<Partial<Record<'terms' | 'privacy' | 'refund', string>>> = {
+  privacy: '2026-10-23',
+}

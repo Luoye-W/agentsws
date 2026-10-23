@@ -917,6 +917,8 @@ export const getTelemetrySettings = (): Promise<TelemetrySettings> =>
 export const putTelemetrySettings = (patch: {
   enabled?: boolean
   notice_seen?: boolean
+  /** WP477：告诉本机服务当前界面语言（它据此算 `market_region`，并在这一下报「打开了」）。 */
+  lang?: 'zh' | 'en'
 }): Promise<TelemetrySettings> =>
   api<TelemetrySettings>('/v1/settings/telemetry', { method: 'PUT', body: patch })
 

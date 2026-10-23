@@ -160,7 +160,8 @@ describe('条款三页', () => {
     expect(privacy).toContain('默认留在你自己的电脑上')
     for (const who of ['Cloudflare', 'Waffo', '模型提供方', '数据接口提供方'])
       expect(privacy).toContain(who)
-    expect(privacy).toContain('不设任何 Cookie')
+    // WP477（决策 1611）：官网接了 GA——同意前不存 Cookie
+    expect(privacy).toContain('不存任何 Cookie')
     expect(refund).toContain('拒付')
     expect(refund).toContain('不向你追讨')
   })

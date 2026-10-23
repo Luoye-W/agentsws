@@ -66,6 +66,7 @@ import {
   toolLines,
 } from '@/lib/duty-capabilities'
 import { dutyHref } from '@/lib/duty-href'
+import { useTelemetryContext } from '@/lib/telemetry/context'
 import { cn } from '@/lib/utils'
 import { matterUrl } from '@/lib/work'
 
@@ -202,6 +203,10 @@ export function DutyPage(): React.ReactNode {
   })
 
   const instance = owner.data
+  // WP477：这一页是哪个岗位、哪条职责
+  useTelemetryContext(
+    instance === undefined ? undefined : { position_template: instance.position_id, role_id },
+  )
   const here = instance?.roles.find((r) => r.role_id === role_id)
   const positionName =
     instance === undefined ? '' : lang === 'en' ? instance.name.en : instance.name.zh

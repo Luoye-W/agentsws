@@ -375,6 +375,8 @@ export function DeckCardView({
     <div
       data-testid="deck-card"
       data-kind={card.kind}
+      // WP477：这张卡挂在哪条职责上（使用数据按职责看卡的通过 / 驳回；本机服务把非内置的记成 custom）
+      data-track-role={card.role_id}
       data-go-messages={goMessages ? 'true' : undefined}
       data-layout={card.layout}
       data-band={card.priority_band}

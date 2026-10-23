@@ -3,6 +3,7 @@
  * 每一页的外壳：<head>（SEO / 分享 / hreflang）、公告条、顶栏、页脚、标记动效的 CSS 与那一小段脚本。
  */
 import { ASSEMBLE_TOTAL_MS, liveMarkCss, SPLIT_TOTAL_MS } from '@agentsws/brand'
+import Analytics from '../components/Analytics.astro'
 import Footer from '../components/Footer.astro'
 import Nav from '../components/Nav.astro'
 import { COMMON, type Lang, localePath } from '../i18n/common.js'
@@ -90,6 +91,7 @@ const other: Lang = lang === 'zh' ? 'en' : 'zh'
       <slot />
     </main>
     <Footer lang={lang} path={path} />
+    <Analytics lang={lang} />
     <script>
       import '../scripts/site.ts'
     </script>

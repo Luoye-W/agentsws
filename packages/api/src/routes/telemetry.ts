@@ -38,7 +38,12 @@ export const TELEMETRY_INGEST_RATE = { burst: 60, per_second: 2 }
 
 const READ = { domain: 'skill', op: 'read', range: 'workspace', sensitivity: 'internal' } as const
 
-const Body = z.object({ enabled: z.boolean().optional(), notice_seen: z.boolean().optional() })
+const Body = z.object({
+  enabled: z.boolean().optional(),
+  notice_seen: z.boolean().optional(),
+  /** WP477：工作台当前的界面语言（决策 1600：中文 → GA4 / PostHog 带 `market_region: CN`）。 */
+  lang: z.enum(['zh', 'en']).optional(),
+})
 
 function portOf(deps: GatewayDeps): TelemetrySettingsPort {
   const p = deps.telemetry
@@ -111,7 +116,7 @@ export function telemetryRoutes(): Route[] {
         method: 'put',
         path: '/v1/settings/telemetry',
         operationId: 'putTelemetrySettings',
-        summary: 'WP476 开 / 关匿名使用数据；记下第一次提示看过了',
+        summary: 'WP476 开 / 关匿名使用数据；记下第一次提示看过了；WP477 告诉本机服务界面语言',
         tag: 'settings',
         ...own,
         body: Body,
@@ -125,6 +130,7 @@ export function telemetryRoutes(): Route[] {
           await portOf(deps).set({
             ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
             ...(input.notice_seen === undefined ? {} : { notice_seen: input.notice_seen }),
+            ...(input.lang === undefined ? {} : { lang: input.lang }),
           }),
         )
       },

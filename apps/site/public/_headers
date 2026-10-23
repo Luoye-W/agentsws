@@ -1,11 +1,13 @@
-# Cloudflare Workers 静态资源的响应头（WP197）。官网是纯静态、零表单、零第三方脚本，所以 CSP 能收得很紧。
+# Cloudflare Workers 静态资源的响应头（WP197）。官网是纯静态、零表单，CSP 能收得很紧。
 # 脚本与样式允许内联：Astro 把那一小段站内脚本与每页 CSS 直接内联进 HTML（少一个阻塞请求）。
+# WP477（决策 1611）：唯一的第三方是 Google Analytics 4——照 Google 给 GA4 的 CSP 写法只放这几处：
+# gtag.js 从 *.googletagmanager.com 来，统计请求发到 *.google-analytics.com / *.analytics.google.com。
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
   X-Frame-Options: DENY
-  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://*.googletagmanager.com; font-src 'self'; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-ancestors 'none'; base-uri 'self'; form-action 'none'; object-src 'none'
 
 # 构建产物的文件名带内容哈希，可以永久缓存
 /_astro/*

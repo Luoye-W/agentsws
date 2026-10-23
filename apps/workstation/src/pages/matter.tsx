@@ -83,6 +83,7 @@ import { formatDateTime } from '@/lib/format'
 import type { FreeChatFile, ReasoningEffort } from '@/lib/free-chat'
 import { useMode } from '@/lib/mode'
 import { assignmentForPosition, myAssignments } from '@/lib/positions'
+import { useTelemetryContext } from '@/lib/telemetry/context'
 import { cn } from '@/lib/utils'
 import {
   archiveMatter,
@@ -174,6 +175,15 @@ export function MatterPage(): ReactNode {
   const view = matter.data
   const positionId = view?.matter.position_id
   const templateId = view?.matter.position_template_id
+  // WP477：这件事挂在哪个岗位、哪条职责
+  useTelemetryContext(
+    view === undefined
+      ? undefined
+      : {
+          ...(templateId === undefined ? {} : { position_template: templateId }),
+          role_id: view.matter.role_id,
+        },
+  )
   /*
    * WP456-T3：直接打开一件事项（链接、搜索、刷新）时，把当前岗位切到这件事所在的岗位——看板（对话 / 计划 / 报表 /
    * 清单卡）跟着当前岗位走，不切就是一列「先选一个岗位」。只认本人在那个岗位里有分配的；同一个岗位里已经对了就不动。

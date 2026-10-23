@@ -10,6 +10,7 @@ import {
   TRADEMARK_URL,
 } from '../config.js'
 import { COMMON, type Lang, localePath } from '../i18n/common.js'
+import { CONSENT } from '../i18n/consent.js'
 import Mark from './Mark.astro'
 
 interface Props {
@@ -55,6 +56,8 @@ const cols: { h: string; items: (Link | readonly [Link, Link])[] }[] = [
       [f.terms, p('/terms/')],
       [f.privacy, p('/privacy/')],
       [f.refund, p('/refund/')],
+      // WP477（决策 1611）：随时改「允许 / 不允许统计」（点了在当前页打开底部那条横幅）
+      [CONSENT[lang].settings, '#consent'],
     ],
   },
 ]

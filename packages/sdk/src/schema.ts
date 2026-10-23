@@ -6527,7 +6527,7 @@ export interface paths {
     }
     /** WP476「帮助改进工坊（匿名使用数据）」开关与工作台上报配置（没配置就不发） */
     get: operations['getTelemetrySettings']
-    /** WP476 开 / 关匿名使用数据；记下第一次提示看过了 */
+    /** WP476 开 / 关匿名使用数据；记下第一次提示看过了；WP477 告诉本机服务界面语言 */
     put: operations['putTelemetrySettings']
     post?: never
     delete?: never
@@ -54089,6 +54089,8 @@ export interface operations {
         'application/json': {
           enabled?: boolean
           notice_seen?: boolean
+          /** @enum {string} */
+          lang?: 'zh' | 'en'
         }
       }
     }
