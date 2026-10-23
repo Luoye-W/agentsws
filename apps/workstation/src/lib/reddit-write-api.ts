@@ -13,14 +13,19 @@ export const REDDIT_WRITES_KEY = ['reddit-writes'] as const
 export const listRedditWrites = (assignment: string): Promise<RedditWritesList> =>
   api('/v1/social/reddit/writes', { assignment })
 
-/** 决策 762：同一份已批的草稿再交给插件（不用重批）。 */
+/**
+ * 决策 762：同一份已批的草稿再交给插件（不用重批）。
+ * WP478：给了 `text` = 岗位页上「修改」过，按改过的字再填（这一条的草稿换成它）。
+ */
 export const refillRedditWrite = (
   assignment: string,
   job_id: string,
+  text?: string,
 ): Promise<import('@agentsws/contracts').RedditWriteView> =>
   api(`/v1/social/reddit/writes/${encodeURIComponent(job_id)}/refill`, {
     method: 'POST',
     assignment,
+    ...(text === undefined ? {} : { body: { text } }),
   })
 
 export const dismissRedditWrite = (

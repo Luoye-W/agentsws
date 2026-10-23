@@ -14,9 +14,9 @@ import { REDDIT_WRITE_FORM, type RedditWritePayload } from '@agentsws/contracts'
 import type { DeckCard } from '@agentsws/deck'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
+import { FootButtons, useCardFootActions } from '@/components/deck/card-foot'
 import { useReportDeckAfter } from '@/components/deck/deck-follow-strip'
 import { InfoTip } from '@/components/design'
-import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { decide, followOf } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -85,6 +85,22 @@ export function RedditWriteBody({
   const blank = text.trim() === '' || (target.kind === 'submit' && title.trim() === '')
   const field =
     'w-full rounded-lg border border-ws-border bg-ws-surface p-2.5 text-sm leading-6 text-ws-body disabled:opacity-70'
+  // WP478：主按钮并进卡底那一排（没有卡底时照旧画在卡身里）
+  const actions = decidable
+    ? [
+        {
+          key: 'reddit-write-send',
+          label: t('redditw.send'),
+          primary: true,
+          disabled: blank || send.isPending || send.isSuccess,
+          testId: 'reddit-write-send',
+          onSelect: () => {
+            send.mutate()
+          },
+        },
+      ]
+    : null
+  const hosted = useCardFootActions(actions)
   return (
     <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-reddit-write">
       {/* 版块与回复谁已经在卡的标题里（界面少字）；这里只放版规条数，原文进问号 */}
@@ -174,15 +190,7 @@ export function RedditWriteBody({
       )}
       {decidable ? (
         <div className="flex items-center gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            data-testid="reddit-write-send"
-            disabled={blank || send.isPending || send.isSuccess}
-            onClick={() => send.mutate()}
-          >
-            {t('redditw.send')}
-          </Button>
+          {hosted ? null : <FootButtons actions={actions ?? []} />}
           <Hint text={t('redditw.send.hint')} />
           {send.isSuccess ? (
             <span className="text-xs text-ws-muted-fg" data-testid="reddit-write-awaiting-note">

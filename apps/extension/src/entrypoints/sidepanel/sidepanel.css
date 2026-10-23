@@ -695,6 +695,14 @@ button {
   line-height: var(--ws-lh-note);
 }
 
+/* WP478：没发出去的那一条就地改字再填 */
+.ws-write-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .ws-write-acts {
   display: flex;
   flex-wrap: wrap;

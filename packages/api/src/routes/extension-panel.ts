@@ -83,6 +83,8 @@ export interface ExtensionPanelPort {
   refill(
     session: ExtensionSession,
     job_id: string,
+    /** WP478（只加）：侧边栏里改过字再填。 */
+    edit?: { text?: string },
   ): MaybePromise<{ ok: true; write: PanelWrite } | { ok: false; message: string }>
   /**
    * WP432：人在侧边栏里点「打开这一条」（改过就带改过的字）——回交给插件的那一件活。
@@ -545,6 +547,7 @@ const openSchema = z
     title: z.string().max(PANEL_TITLE_MAX).optional(),
   })
   .strict()
+const refillSchema = z.object({ text: z.string().max(PANEL_DRAFT_MAX).optional() }).strict()
 const dropSchema = z.object({ reason: z.string().max(300).optional() }).strict()
 const undoSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(50) }).strict()
 
@@ -760,11 +763,14 @@ export function extensionPanelRoutes(): Route[] {
         auth: 'public',
         outbound: true,
         params: [{ name: 'job', in: 'path', required: true, description: '插件动作的那一件 id' }],
+        // WP478（只加）：可选 `text`——改过字再填
+        body: refillSchema,
         returns: 'PanelFillResult',
       },
       async (c, deps) => {
         const session = actorOf(c, deps)
         const job = param(c, 'job')
+        const input = await body(c, refillSchema)
         const facts = await portOf(deps).facts(session)
         const w = facts.writes.find((x) => x.job_id === job)
         const it = w === undefined ? undefined : await deps.approvals.get(w.approval_item_id)
@@ -774,7 +780,11 @@ export function extensionPanelRoutes(): Route[] {
           !mine(it, session.person_id)
         )
           throw new ApiError('not_found', '没有这一条，或者它不是你批的。')
-        const out = await portOf(deps).refill(session, job)
+        const out = await portOf(deps).refill(
+          session,
+          job,
+          input.text === undefined ? undefined : { text: input.text },
+        )
         const result: PanelFillResult = out.ok ? { ok: true, write: out.write } : out
         return ok(c, result)
       },

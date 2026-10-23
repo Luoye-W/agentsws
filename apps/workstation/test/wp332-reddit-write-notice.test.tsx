@@ -64,9 +64,50 @@ describe('WP332 没发出去提醒条', () => {
     expect(rows[0]?.textContent).toContain('没发出去：回复 alice（Reddit · r/ivraxr）')
     expect(rows[0]?.textContent).toContain('你点了停止')
     fireEvent.click(screen.getByTestId('reddit-write-refill'))
-    await waitFor(() => expect(state.refill).toHaveBeenCalledWith('asg_reddit', 'rdw_1'))
+    await waitFor(() => expect(state.refill).toHaveBeenCalledWith('asg_reddit', 'rdw_1', undefined))
     fireEvent.click(screen.getByTestId('reddit-write-dismiss'))
     await waitFor(() => expect(state.dismiss).toHaveBeenCalledWith('asg_reddit', 'rdw_1'))
+  })
+
+  it('WP478 修改：就地摊开草稿，改好了再填一次 → 交的是改过的字', async () => {
+    state.rows = [row({ text: '原来的草稿' })]
+    renderWithProviders(<RedditWriteNotice duties={duties} />)
+    fireEvent.click(await screen.findByTestId('reddit-write-edit'))
+    const box = screen.getByTestId('reddit-write-edit-text') as HTMLTextAreaElement
+    expect(box.value).toBe('原来的草稿')
+    // 编辑时那一行上不再出「再填一次」（按钮一排：改好了，再填一次 + 取消）
+    expect(screen.queryByTestId('reddit-write-refill')).toBeNull()
+    fireEvent.change(box, { target: { value: '改过的草稿' } })
+    fireEvent.click(screen.getByTestId('reddit-write-edit-save'))
+    await waitFor(() =>
+      expect(state.refill).toHaveBeenCalledWith('asg_reddit', 'rdw_1', '改过的草稿'),
+    )
+    await waitFor(() => expect(screen.queryByTestId('reddit-write-editor')).toBeNull())
+  })
+
+  it('WP478 修改后取消：原样不动、不交；× 写「不发了」', async () => {
+    state.rows = [row({ text: '原来的草稿' })]
+    renderWithProviders(<RedditWriteNotice duties={duties} />)
+    fireEvent.click(await screen.findByTestId('reddit-write-edit'))
+    fireEvent.change(screen.getByTestId('reddit-write-edit-text'), { target: { value: '乱改' } })
+    fireEvent.click(screen.getByTestId('reddit-write-edit-cancel'))
+    expect(screen.queryByTestId('reddit-write-editor')).toBeNull()
+    expect(state.refill).not.toHaveBeenCalled()
+    // 再点修改：还是原来的字
+    fireEvent.click(screen.getByTestId('reddit-write-edit'))
+    expect((screen.getByTestId('reddit-write-edit-text') as HTMLTextAreaElement).value).toBe(
+      '原来的草稿',
+    )
+    const x = screen.getByTestId('reddit-write-dismiss')
+    expect(x.getAttribute('aria-label')).toBe('不发了')
+    expect(x.getAttribute('title')).toContain('不再提醒')
+  })
+
+  it('WP478 没记下草稿的：没有「修改」，只有「再填一次」', async () => {
+    state.rows = [row()]
+    renderWithProviders(<RedditWriteNotice duties={duties} />)
+    await screen.findByTestId('reddit-write-refill')
+    expect(screen.queryByTestId('reddit-write-edit')).toBeNull()
   })
 
   it('收起了的、正常的都不出；不能再填的只给收起', async () => {

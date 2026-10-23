@@ -156,7 +156,7 @@ export function createLinkedInAdapter(transport: SocialTransport): SocialChannel
           ok: false,
           reason: 'content_rejected',
           status: 422,
-          message: `${LABEL} 退回了这条（422）：多半是正文里有它不收的格式或超长。改一下再发。`,
+          message: `${LABEL} 退回了这条（422）：多半是正文里有它不收的格式或超长。修改后再发。`,
         }
       if (!res.ok) return httpFailure(LABEL, res.status, url)
       // 文件头第 2 条：id 在响应头上

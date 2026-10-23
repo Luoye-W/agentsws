@@ -11,9 +11,9 @@ import type { ContentDigestMine } from '@agentsws/contracts'
 import type { DeckCard } from '@agentsws/deck'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { type FootAction, FootButtons, useCardFootActions } from '@/components/deck/card-foot'
 import { StatusPill, type Tone, WsTag } from '@/components/design'
 import { useRailState } from '@/components/rail/rail-state'
-import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { decide } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -61,6 +61,45 @@ export function DigestCardBody({
       void qc.invalidateQueries({ queryKey: positionUpdatesKey(payload.position_id) })
     },
   })
+  // WP478：「全部应用 / 挑着看 / 这次跳过」并进卡底那一排（没有卡底时照旧画在卡身里）
+  const actions: FootAction[] = [
+    ...(decidable
+      ? [
+          {
+            key: 'cd-apply',
+            label: t('cd.apply_all'),
+            primary: true,
+            disabled: go.isPending,
+            testId: 'content-digest-apply',
+            onSelect: () => {
+              go.mutate('apply_all')
+            },
+          },
+        ]
+      : []),
+    {
+      key: 'cd-pick',
+      label: t('cd.pick'),
+      testId: 'content-digest-pick',
+      onSelect: () => {
+        rail.openAddress(contentUpdatesAddress(payload.position_id))
+      },
+    },
+    ...(decidable
+      ? [
+          {
+            key: 'cd-skip',
+            label: t('cd.skip'),
+            disabled: go.isPending,
+            testId: 'content-digest-skip',
+            onSelect: () => {
+              go.mutate('skip')
+            },
+          },
+        ]
+      : []),
+  ]
+  const hosted = useCardFootActions(actions)
   return (
     <div className="mt-2.5 flex flex-col gap-2" data-testid="content-digest">
       {payload.advice === undefined ? null : (
@@ -93,38 +132,14 @@ export function DigestCardBody({
           </li>
         ))}
       </ul>
-      <div className="flex flex-wrap items-center gap-2">
-        {decidable ? (
-          <Button
-            size="sm"
-            data-testid="content-digest-apply"
-            disabled={go.isPending}
-            onClick={() => go.mutate('apply_all')}
-          >
-            {t('cd.apply_all')}
-          </Button>
-        ) : null}
-        <Button
-          size="sm"
-          variant="outline"
-          data-testid="content-digest-pick"
-          onClick={() => rail.openAddress(contentUpdatesAddress(payload.position_id))}
-        >
-          {t('cd.pick')}
-        </Button>
-        {decidable ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            data-testid="content-digest-skip"
-            disabled={go.isPending}
-            onClick={() => go.mutate('skip')}
-          >
-            {t('cd.skip')}
-          </Button>
-        ) : null}
+      {hosted ? (
         <Hint text={t('cd.card.tip')} />
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <FootButtons actions={actions} />
+          <Hint text={t('cd.card.tip')} />
+        </div>
+      )}
       {go.isError ? (
         <p className="text-xs text-ws-bad" data-testid="content-digest-error">
           {t('cd.failed', { reason: go.error instanceof Error ? go.error.message : '' })}

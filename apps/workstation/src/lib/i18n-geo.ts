@@ -400,7 +400,7 @@ export const GEO_EN: Record<string, string> = {
   'geo.metric.accuracy': 'Accuracy',
   'geo.advice.keep': 'Keep',
   'geo.advice.expand': 'Expand',
-  'geo.advice.modify': 'Modify',
+  'geo.advice.modify': 'Edit',
   'geo.advice.stop': 'Stop',
   'geo.card.cons.said': 'Says "{s}" → official "{o}"',
   'geo.card.cons.outdated': 'old wording',

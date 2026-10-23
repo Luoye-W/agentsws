@@ -14,8 +14,8 @@ import type { DeckCard } from '@agentsws/deck'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { Link, useInRouterContext } from 'react-router-dom'
+import { type FootAction, FootButtons, useCardFootActions } from '@/components/deck/card-foot'
 import { MESSAGE_RULES_HREF } from '@/components/messages/rules-address'
-import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { decide } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -73,6 +73,31 @@ export function FollowUpCardBody({
   ].filter((x): x is string => x !== undefined && x !== '')
   const field =
     'w-full rounded-lg border border-ws-border bg-ws-surface p-2.5 text-sm leading-6 text-ws-body'
+  // WP478：「发出 / 修改」并进卡底那一排（没有卡底时照旧画在卡身里）
+  const actions: FootAction[] | null = decidable
+    ? [
+        {
+          key: 'follow-up-send',
+          label: t('follow_up.card.send'),
+          primary: true,
+          disabled: text.trim() === '' || send.isPending || send.isSuccess,
+          testId: 'follow-up-send',
+          onSelect: () => {
+            send.mutate()
+          },
+        },
+        {
+          key: 'follow-up-edit',
+          label: editing ? t('follow_up.card.edit_done') : t('follow_up.card.edit'),
+          disabled: send.isPending || send.isSuccess,
+          testId: 'follow-up-edit',
+          onSelect: () => {
+            setEditing((v) => !v)
+          },
+        },
+      ]
+    : null
+  const hosted = useCardFootActions(actions)
   return (
     <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-follow-up">
       <p className="text-xs text-ws-muted-fg" data-testid="follow-up-meta">
@@ -112,25 +137,7 @@ export function FollowUpCardBody({
       </div>
       {decidable ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            data-testid="follow-up-send"
-            disabled={text.trim() === '' || send.isPending || send.isSuccess}
-            onClick={() => send.mutate()}
-          >
-            {t('follow_up.card.send')}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            data-testid="follow-up-edit"
-            disabled={send.isPending || send.isSuccess}
-            onClick={() => setEditing((v) => !v)}
-          >
-            {editing ? t('follow_up.card.edit_done') : t('follow_up.card.edit')}
-          </Button>
+          {hosted ? null : <FootButtons actions={actions ?? []} />}
           <Hint text={t('follow_up.card.send.hint')} />
           {send.isSuccess ? (
             <span className="text-xs text-ws-muted-fg" data-testid="follow-up-sent">

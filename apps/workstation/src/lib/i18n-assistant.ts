@@ -122,7 +122,7 @@ export const ASSISTANT_EN: Record<string, string> = {
   'fanout.secret': 'Looks like a secret — skipped',
   'fanout.due': 'Due {due}',
   'fanout.ok': 'Looks good',
-  'fanout.edit': 'Revise',
+  'fanout.edit': 'Edit',
   'fanout.dismiss': 'Skip',
   'fanout.sent': 'Sent',
   'fanout.dismissed': 'Not sent',

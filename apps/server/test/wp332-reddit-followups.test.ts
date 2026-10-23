@@ -161,6 +161,34 @@ describe('WP332 没发出去 → 岗位页提醒 +「再填一次」（决策 76
     expect(await m.svc.refill(view.job_id)).toMatchObject({ ok: false })
   })
 
+  it('WP478：岗位页上修改过再填——交给插件的是改过的字，这一条的草稿换成它（侧边栏看到同一段），批的那一版留着', async () => {
+    const m = make()
+    const first = await sendAndEnd(m, 'handover', '等了 30 分钟没看到发出去的那一条。')
+    // Markdown 记号转纯文字（决策 1510）
+    const out = await m.svc.refill(first, { text: '**Hi Alice**, here is the fix.' })
+    expect(out.ok).toBe(true)
+    const view = (out as { view: { job_id: string; text?: string } }).view
+    expect(view.text).toBe('Hi Alice, here is the fix.')
+    expect(m.svc.writes()).toHaveLength(1)
+    const job = await openLatest(m)
+    expect(job?.plan.allow.values).toEqual(['Hi Alice, here is the fix.'])
+    m.actions.result(job?.id as string, {
+      outcome: 'done',
+      message: '做完了。',
+      step: 6,
+      reads: { fullname: 't1_n2', permalink: '/r/ivraxr/comments/abc/s/n2/' },
+    })
+    expect(m.records[0]).toMatchObject({ content: 'Hi Alice, here is the fix.' })
+  })
+
+  it('WP478：不带字 = 原样再填；带空字不交、照实说', async () => {
+    const m = make()
+    const first = await sendAndEnd(m, 'handover', '等了 30 分钟没看到发出去的那一条。')
+    expect(await m.svc.refill(first, { text: '   ' })).toMatchObject({ ok: false })
+    const out = await m.svc.refill(first)
+    expect((out as { view: { text?: string } }).view.text).toBe('Hi Alice')
+  })
+
   it('WP432：7 天没在插件里打开也能再填；插件不在线时照实说「打开 Chrome」', async () => {
     const m = make()
     await m.svc.send({

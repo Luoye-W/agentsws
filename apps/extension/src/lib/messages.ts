@@ -67,7 +67,7 @@ export type ExtensionMessage =
   /** WP445：撤回「同类的也一并不发了」那几张。 */
   | { type: 'panel-follow-undo'; leader: string; ids: string[] }
   /** 没发出去的那一条「再填一次」。 */
-  | { type: 'panel-refill'; job: string }
+  | { type: 'panel-refill'; job: string; text?: string }
   /** 打开设置页（侧边栏里「设置」那一下）。 */
   | { type: 'open-options' }
   /** WP419：在工坊里打开一张卡（侧边栏「去定」那一下；只认 `/cards/<id>`，后台拼本机地址）。 */

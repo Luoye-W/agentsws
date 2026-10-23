@@ -146,7 +146,8 @@ export function SidePanel(props: {
   )
   const winOf = props.windowId ?? currentWindowId
   const actions: CardActions = {
-    refill: (job) => act({ type: 'panel-refill', job }),
+    refill: (job, text) =>
+      act({ type: 'panel-refill', job, ...(text === undefined ? {} : { text }) }),
     sent: (job, how, link) =>
       act({ type: 'panel-sent', job, how, ...(link === undefined ? {} : { link }) }),
   }

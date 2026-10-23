@@ -398,8 +398,8 @@ export function createCompetitorStore(deps: CompetitorStoreDeps): CompetitorStor
           ...(text === '' ? {} : { value: text }),
           why:
             got.by === 'model'
-              ? 'AI 按标题和品类配的，改一下就按你的'
-              : '按标题和价位配的，改一下就按你的',
+              ? 'AI 按标题和品类配的，点「修改」就按你的'
+              : '按标题和价位配的，点「修改」就按你的',
           sources: got.by === 'model' ? [MODEL_SOURCE] : [DEFAULT_SOURCE],
         }
       }

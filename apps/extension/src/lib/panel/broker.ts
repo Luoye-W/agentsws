@@ -196,10 +196,12 @@ export async function panelAnswerPost(
 export async function panelRefillWrite(
   deps: PanelBrokerDeps,
   job: string,
+  /** WP478：改过字再填。 */
+  text?: string,
 ): Promise<PanelActOutcome> {
   const c = await client(deps)
   if (c === undefined) return { ok: false, message: NOT_PAIRED }
-  const got = await panelRefill(c, job)
+  const got = await panelRefill(c, job, text)
   if (!got.ok) return { ok: false, message: got.message }
   if (!got.data.ok) return { ok: false, message: got.data.message }
   // WP432：再填一次也只是回到「等你打开」（不自己开页面）
