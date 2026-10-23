@@ -305,7 +305,7 @@ task_examples:
     description: "一条爆了的帖子下面有几十条评论，来不及一条条看。"
     expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销，夸和投诉给出回复草稿，垃圾按群规处理。"
   - id: profile_refresh
-    title: { zh: "改一下账号简介", en: "Refresh the profile" }
+    title: { zh: "修改账号简介", en: "Refresh the profile" }
     description: "品牌换了新的一句话介绍，主页和 IG 的简介要跟着改。"
     expected_output: "一张带前后对比的改资料卡，要你点一下才生效；账号名那一格一个字都不会动（改了旧帖里的链接会全断）。"
 

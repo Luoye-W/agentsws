@@ -66,7 +66,7 @@ export const SETUP_EN: Record<string, string> = {
   'setup.plan.head': 'Say yes and it keeps going',
   'setup.plan.head_change': 'Takes effect when you say yes',
   'setup.plan.accept': 'Looks good',
-  'setup.plan.edit': 'Revise',
+  'setup.plan.edit': 'Edit',
   'setup.plan.fold': 'Fold',
   'setup.plan.save': 'Save & keep going',
   'setup.plan.needs_you': 'Needs you',
