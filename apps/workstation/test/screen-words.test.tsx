@@ -170,10 +170,53 @@ vi.mock('@/lib/api', async () => {
     listMembers: async () => [],
     listInProgress: async () => ({ items: [], scope: 'position' }),
     decide: async () => ({}),
+    // WP480：设置 → 数据与隐私 那一页（数据后端那一格、数据地图）
+    getStorage: async () => ({
+      tier: 'local',
+      database: { kind: 'sqlite', display: '/data', bytes: 2_400_000 },
+      blobs: { kind: 'local', display: '/data/blobs', bytes: 51_000_000, objects: 12 },
+      last_backup_at: '2026-10-23T03:44:17.085Z',
+      env: [],
+      compose_url: 'https://github.com/Luoye-W/agentsws/blob/main/docker-compose.yml',
+    }),
+    getPositionOntology: async () => ({
+      assignment_id: 'asg_1',
+      role_id: 'social.community',
+      objects: [
+        {
+          id: 'community_member',
+          label: 'community_member',
+          read_range: 'assigned',
+          source_of_truth: 'platform_api',
+          freshness: 'realtime',
+          read_via: [],
+        },
+        {
+          id: 'launch_item',
+          label: 'launch_item',
+          read_range: 'workspace',
+          source_of_truth: 'human',
+          freshness: 'authored',
+          read_via: [],
+        },
+      ],
+      actions: [
+        {
+          id: 'approve_member',
+          object: 'community_member',
+          label: 'approve member（community_member）',
+          risk_class: 'medium',
+          requires_approval: true,
+        },
+      ],
+      links: [],
+    }),
   }
 })
 
 const { HomePage } = await import('@/pages/home')
+const { DataBackend } = await import('@/components/connections/data-backend')
+const { DataMapPanel } = await import('@/components/data-map')
 const { InboxPage } = await import('@/pages/inbox')
 const { MatterPage } = await import('@/pages/matter')
 
@@ -220,6 +263,22 @@ describe('WP141 守卫：屏幕上没有内部值', () => {
     const { container } = renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     expect(rawTokens(screenText(container))).toEqual([])
+  })
+
+  it('WP480 数据与隐私：上次备份不露时间串，数据地图不露 community_member / approve member', async () => {
+    const { container } = renderWithProviders(
+      <>
+        <DataBackend assignment="asg_owner" />
+        <DataMapPanel position="asg_1" />
+      </>,
+    )
+    await screen.findByTestId('storage-last-backup')
+    await screen.findByTestId('data-map-table')
+    const text = screenText(container)
+    expect(rawTokens(text)).toEqual([])
+    expect(text).not.toMatch(/approve member/)
+    expect(text).toContain('社群成员')
+    expect(text).toContain('批入群申请')
   })
 
   it('报表块：日报列头是人话', () => {

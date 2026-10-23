@@ -19,6 +19,7 @@ import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watch'
 import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
+import { DATA_LOCATION_EN, DATA_LOCATION_ZH } from './i18n-data-location'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { FEEDBACK_EN, FEEDBACK_ZH } from './i18n-feedback'
@@ -9035,6 +9036,8 @@ const TABLES: Record<Lang, Table> = {
     ...SETTINGS_ZH,
     // WP476：「帮助改进工坊（匿名使用数据）」开关与第一次提示
     ...TELEMETRY_ZH,
+    // WP480：「数据放在哪」（更改位置 / 搬家进度）与同页两处屏幕用词
+    ...DATA_LOCATION_ZH,
     // WP426：设置 → 模型 整页重做（三块、状态标签、积分快用完）
     ...MODELS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
@@ -9106,6 +9109,7 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
     ...TELEMETRY_EN,
+    ...DATA_LOCATION_EN,
     ...MODELS_EN,
     ...PANEL_EN,
     ...AMAZON_OPS_EN,
