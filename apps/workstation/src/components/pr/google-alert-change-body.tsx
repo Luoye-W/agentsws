@@ -10,8 +10,8 @@ import { GOOGLE_ALERT_CHANGE_FORM, type GoogleAlertLine } from '@agentsws/contra
 import type { DeckCard } from '@agentsws/deck'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
+import { FootButtons, useCardFootActions } from '@/components/deck/card-foot'
 import { InfoTip } from '@/components/design'
-import { Button } from '@/components/ui/button'
 import { decide } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -81,6 +81,24 @@ export function GoogleAlertChangeBody({
     },
   })
   const any = t('galert.any')
+  // WP478：主按钮并进卡底那一排（没有卡底时照旧画在卡身里）
+  const actions = decidable
+    ? [
+        {
+          key: 'google-alerts-confirm',
+          label: t(payload.after.op === 'to_rss' ? 'galert.confirm.rss' : 'galert.confirm', {
+            n: keep.length,
+          }),
+          primary: true,
+          disabled: keep.length === 0 || send.isPending || send.isSuccess,
+          testId: 'google-alerts-confirm',
+          onSelect: () => {
+            send.mutate()
+          },
+        },
+      ]
+    : null
+  const hosted = useCardFootActions(actions)
   return (
     <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-google-alerts">
       <ul className="flex flex-col gap-1.5 text-[13px]">
@@ -124,17 +142,7 @@ export function GoogleAlertChangeBody({
       </InfoTip>
       {decidable ? (
         <div className="flex items-center gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            data-testid="google-alerts-confirm"
-            disabled={keep.length === 0 || send.isPending || send.isSuccess}
-            onClick={() => send.mutate()}
-          >
-            {t(payload.after.op === 'to_rss' ? 'galert.confirm.rss' : 'galert.confirm', {
-              n: keep.length,
-            })}
-          </Button>
+          {hosted ? null : <FootButtons actions={actions ?? []} />}
           {send.isError ? (
             <span className="text-xs text-ws-bad">
               {t('galert.failed', {

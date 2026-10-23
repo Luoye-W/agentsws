@@ -227,7 +227,7 @@ describe('WP414 按理由跟着处理（10-19 更正）', () => {
 })
 
 describe('WP414 Reddit「发出去」卡（「发送」在卡身里）', () => {
-  it('卡身里点「发送」→ 同类卡也报到顶上那一行「要一起发送吗」；底下那排是「修改 / 不发 / 稍后」', async () => {
+  it('卡身里点「发送」→ 同类卡也报到顶上那一行「要一起发送吗」；卡底一排是「批准 / 修改 / 不发 / 稍后」（WP478）', async () => {
     const user = userEvent.setup()
     const base = draftCard()
     home = homeData({
@@ -261,7 +261,8 @@ describe('WP414 Reddit「发出去」卡（「发送」在卡身里）', () => {
       within(bar)
         .getAllByRole('button')
         .map((b) => b.textContent?.trim()),
-    ).toEqual(['修改', '不发', '稍后'])
+      // WP478：卡身里的「批准」并进卡底这一排，排第一颗
+    ).toEqual(['批准', '修改', '不发', '稍后'])
     await user.click(screen.getByTestId('reddit-write-send'))
     const line = await screen.findByTestId('deck-follow-suggested')
     expect(line.textContent).toContain('要一起发送吗')

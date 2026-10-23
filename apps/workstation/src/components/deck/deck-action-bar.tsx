@@ -26,6 +26,7 @@ import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsws/deck'
 import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { type FootAction, FootButton } from '@/components/deck/card-foot'
 import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
@@ -46,13 +47,8 @@ export const MAX_QUICK_ACTIONS = 4
  */
 const themePublish = (card: DeckCard): boolean => card.change_kind === 'publish_theme'
 
-/**
- * 按钮行上的那几个：主动词 + 次动词，按 `LAYOUT_VERBS` 排，最多四个。
- *
- * 只出这张卡**真有**的动作（`available_actions` 是服务端按 kind × state 给的，
- * 这里一个都不添）。
- */
-export function quickActions(card: DeckCard): DeckAction[] {
+/** 按钮行上排得上的全部动作（主 + 次，按 `LAYOUT_VERBS` 排；不截）。 */
+function rowActions(card: DeckCard): DeckAction[] {
   const verbs = LAYOUT_VERBS[card.layout]
   // 排序按**表**走，不按 `available_actions` 的原序：画布上"发送 / 改一下 / 不发"
   // 的顺序是设计的一部分（最常按的那个在最左），而服务端那个数组是按 kind 给的
@@ -84,8 +80,17 @@ export function quickActions(card: DeckCard): DeckAction[] {
         (a) => !((form === 'message_rule' || form === FOLLOW_UP_CARD_FORM) && a === 'instruct'),
       )
       .sort((a, b) => rank(a) - rank(b))
-      .slice(0, MAX_QUICK_ACTIONS)
   )
+}
+
+/**
+ * 按钮行上的那几个：主动词 + 次动词，按 `LAYOUT_VERBS` 排，最多四个。
+ *
+ * 只出这张卡**真有**的动作（`available_actions` 是服务端按 kind × state 给的，
+ * 这里一个都不添）。
+ */
+export function quickActions(card: DeckCard): DeckAction[] {
+  return rowActions(card).slice(0, MAX_QUICK_ACTIONS)
 }
 
 /**
@@ -142,6 +147,7 @@ export function DeckActionBar({
   onAction,
   extra,
   keys,
+  lead,
 }: {
   card: DeckCard
   disabled?: boolean
@@ -152,6 +158,11 @@ export function DeckActionBar({
   extra?: React.ReactNode
   /** WP456-T3：哪几个动作有方向键（悬停提示里写上）。 */
   keys?: readonly DeckAction[]
+  /**
+   * WP478：卡身报上来的那几颗（方案卡的「就这样 / 修改」……），排在这一排最前面；
+   * 合起来超过 4 颗时多余的进「⋯」。
+   */
+  lead?: readonly FootAction[]
 }): React.ReactNode {
   // WP275：按钮的字按模式换（① ② 是「通过 / 不要」）
   const { t } = useMode()
@@ -162,8 +173,17 @@ export function DeckActionBar({
    */
   const [armed, setArmed] = useState(false)
   const box = useRef<HTMLSpanElement>(null)
-  const quick = quickActions(card)
-  const more = moreActions(card)
+  const leading = lead ?? []
+  /** 卡身已经有主按钮了：卡底这几个都是次按钮（一张卡只有一颗主按钮）。 */
+  const leadPrimary = leading.some((a) => a.primary === true)
+  // WP478：卡身那几颗 + 主次动作合成一排，最多 4 颗；多出来的和少用的一起进「⋯」
+  const room = Math.max(0, MAX_QUICK_ACTIONS - leading.length)
+  const shownLead = leading.slice(0, MAX_QUICK_ACTIONS)
+  const overflowLead = leading.slice(MAX_QUICK_ACTIONS)
+  const row = rowActions(card)
+  const quick = row.slice(0, room)
+  const more = [...row.slice(room), ...moreActions(card)]
+  const hasMore = more.length + overflowLead.length > 0
 
   // 换卡就把菜单收回去（与折叠区同一条理由：上一张卡的状态不该出现在下一张上）
   // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是"换了一张卡"这件事
@@ -189,6 +209,12 @@ export function DeckActionBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="deck-action-bar">
+      {shownLead.map((a) => (
+        <FootButton
+          key={`lead:${a.key}`}
+          action={{ ...a, disabled: disabled === true || a.disabled === true }}
+        />
+      ))}
       {quick.map((action) => {
         const waiting = action === 'approve' && optionMissing === true
         const key = keys?.includes(action) === true ? KEY_OF[action] : undefined
@@ -198,7 +224,9 @@ export function DeckActionBar({
             type="button"
             className={cn(
               'ws-btn',
-              verbRank(card.layout, action) === 'primary' ? 'ws-btn-primary' : 'ws-btn-secondary',
+              verbRank(card.layout, action) === 'primary' && !leadPrimary
+                ? 'ws-btn-primary'
+                : 'ws-btn-secondary',
             )}
             title={
               waiting
@@ -229,9 +257,9 @@ export function DeckActionBar({
         </span>
       ) : null}
       {extra}
-      {/* WP414：`···` 只留真正少用的（主次都排不上的动作）；没有就不出 */}
-      {more.length === 0 ? null : (
-        <span className="relative ml-auto inline-flex" ref={box}>
+      {/* WP414：`···` 只留真正少用的（主次都排不上的动作）；WP478：一排超过 4 颗多出来的也进这里；没有就不出 */}
+      {!hasMore ? null : (
+        <span className="relative inline-flex" ref={box}>
           <button
             type="button"
             aria-expanded={open}
@@ -254,6 +282,23 @@ export function DeckActionBar({
               data-testid="deck-more-menu"
               className="absolute right-0 bottom-full z-50 mb-1 flex w-44 flex-col rounded-md border bg-popover p-1 shadow-md"
             >
+              {overflowLead.map((a) => (
+                <button
+                  key={`lead:${a.key}`}
+                  type="button"
+                  role="menuitem"
+                  data-foot={a.key}
+                  data-testid={a.testId}
+                  disabled={disabled === true || a.disabled === true}
+                  className="rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+                  onClick={() => {
+                    setOpen(false)
+                    a.onSelect()
+                  }}
+                >
+                  {a.label}
+                </button>
+              ))}
               {more.map((action) => (
                 <button
                   key={action}
