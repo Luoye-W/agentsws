@@ -142,6 +142,18 @@ export type KolModelCall = (input: {
 /** 打开一个地址（宿主按用户的浏览器设置挑：插件里的浏览器 / 内置浏览器）。 */
 export type KolPageReader = (url: string, as: 'page' | 'html') => Promise<OnlinePageRead>
 
+/**
+ * WP493：在线表格读取口（ego 那一口：Google 导出 CSV / 飞书读格子、截住复制、导出 Excel）回来的东西。
+ * 与 `ego-read/sheet.ts` 的 `OnlineSheetRead` 同形（这里只用到这几格）。
+ */
+export type KolSheetRead =
+  | { ok: true; rows: string[][] }
+  | {
+      ok: false
+      reason: 'off' | 'login' | 'no_access' | 'unreadable' | 'failed'
+      message: string
+    }
+
 export interface KolMailbox {
   store: {
     list(query: { q?: string; limit?: number }): Promise<MessageRecord[]> | MessageRecord[]
@@ -171,6 +183,11 @@ export interface KolImportOptions {
   /** 模型网关这个月还剩多少（有上限才有）。 */
   budgetLeft?(actor: KolActor): Promise<number | undefined>
   readPage?: KolPageReader
+  /**
+   * WP493：先问这一口（ego 能用才回结果，用不了回 `undefined`）。`ok` → 用它的格子；`login` / `no_access` →
+   * 照它的话说（它知道是 ego 里没登录）；`off` / `unreadable` / `failed` → 再走 `readers` / `readPage` 那条老路。
+   */
+  readSheet?(url: string): Promise<KolSheetRead | undefined>
   /**
    * 决策 1708：读在线表的几只浏览器，按优先级排（用户已登录的那几只：ego / 插件里的浏览器 / 内置浏览器）。
    * 每次现取（用户改了浏览器设置立刻生效）。和 `readPage` 都给时先试这几只。
@@ -485,12 +502,23 @@ export function createKolImport(options: KolImportOptions): KolImportAssembly {
   }
 
   /**
-   * 决策 1684 / 1708：按顺序试几只浏览器（宿主按用户设置排：WP493 接上 ego 的读页口后它排第一），
+   * 决策 1684 / 1708：先问 ego 的表格读取口（WP493，有才问）；没读到再按顺序试几只浏览器（宿主按用户设置排，
+   * 本机档是 WP493 的选路链 ego → 插件 → 内置浏览器），
    * 每只按计划里的地址顺序读；读到表就停。全读不了再说是没登录、没权限还是读不出。
    */
   const readOnline = async (url: string): Promise<Grid> => {
     const plan = onlineSheetPlan(url)
     if (plan === undefined) return { ok: false, message: '这不是一条网页链接。' }
+    let viaSheet: KolSheetRead | undefined
+    try {
+      viaSheet = await options.readSheet?.(url)
+    } catch {
+      viaSheet = undefined
+    }
+    if (viaSheet?.ok === true && viaSheet.rows.some((r) => r.some((c) => c.trim() !== '')))
+      return { ok: true, rows: viaSheet.rows, source: url }
+    if (viaSheet?.ok === false && (viaSheet.reason === 'login' || viaSheet.reason === 'no_access'))
+      return { ok: false, message: viaSheet.message }
     const readers = [
       ...(options.readers?.() ?? []),
       ...(options.readPage === undefined ? [] : [{ id: 'default', read: options.readPage }]),

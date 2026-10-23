@@ -10061,6 +10061,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     ownChromeLate.reader = ownBrowserReader
     /*
+     * WP493：读页选路（ego → 插件 → 内置浏览器）。WP489 的在线表读页走它（int/1035 接上；所以挪到 kolImport 前面）；
+     * 选了 ego 时插件只要装着就是备用那一条（没选 ego 时与原来一样：设置是插件才有插件那一条）。
+     */
+    const pageRead =
+      hostedBoot !== undefined
+        ? undefined
+        : createPageReadChain({
+            ego: () => egoReader,
+            plugin: () => {
+              const own = ownBrowserReader()
+              if (own !== undefined) return own
+              if (egoReadPath() === undefined) return undefined
+              const path = browserSettings.bskInstalledPath()
+              if (path === undefined) return undefined
+              if (ownBrowserMemo?.path !== path)
+                ownBrowserMemo = { path, reader: createOwnBrowserReader({ bsk: bskJsonOf(path) }) }
+              return ownBrowserMemo.reader
+            },
+            ...(webSearchChannel === undefined
+              ? {}
+              : {
+                  builtin: async (url: string) => {
+                    const r = await webSearchThrottle.run(() =>
+                      webSearchChannel.open({
+                        workspace_id: ws,
+                        url,
+                        kind: 'page',
+                        timeout_ms: 30_000,
+                        settle_ms: 2_500,
+                      }),
+                    )
+                    if (r === undefined) return { ok: false, message: '内置浏览器在忙' }
+                    if (!r.ok) return { ok: false, message: r.message }
+                    return {
+                      ok: true,
+                      final_url: r.final_url,
+                      ...(r.page === undefined
+                        ? {}
+                        : { text: r.page.text, password_inputs: r.page.signals.passwordInputs }),
+                    }
+                  },
+                }),
+          })
+    /*
      * WP489（决策 1683–1686）：红人表格 / 在线表导入、读过往邮件判合作阶段。
      * - 认列 / 认状态词 / 判阶段先按规则，认不出的才问这个品牌的默认模型（`extraction` 档、不思考、封住输出；
      *   只有 stub 就只按规则）；用量走同一个网关（上限照算）。
@@ -10119,10 +10163,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return b.cap_base > 0 ? Math.max(b.cap_base - b.used_base, 0) : undefined
       },
       /*
-       * 决策 1708：读在线表的浏览器按优先级排。WP493 给 ego 接上通用读页口之后，把它放在最前面
-       * （`{ id: 'ego', read }`）；现在是：设成「插件里的浏览器」走它，然后内置浏览器（同一条节流队）。
+       * 决策 1708 + WP493（int/1035 接上）：在线表先问 ego 的表格读取口（Google 导出 CSV / 飞书截住复制 / 导出 Excel）；
+       * 读到就用，ego 里没登录 / 没权限照实说，别的（ego 用不了 / 读不出 / 没跑完）再走下面的读页。
+       */
+      ...(hostedBoot !== undefined
+        ? {}
+        : {
+            readSheet: async (url: string) =>
+              egoSheetReader.available() ? await egoSheetReader.read(url) : undefined,
+          }),
+      /*
+       * 读页：本机档走 WP493 的选路链（ego → 插件 → 内置浏览器，一只读页口）；托管实例没有链，照原来的两只排
+       * （设成「插件里的浏览器」走它，然后内置浏览器，同一条节流队）。
        */
       readers: () => {
+        if (pageRead !== undefined) return [{ id: 'chain', read: pageRead.readPage }]
         const list: { id: string; read: KolPageReader }[] = []
         const own =
           browserSettings.forRun()?.mode === 'browserskill' ? ownBrowserReader() : undefined
@@ -10679,50 +10734,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             },
           })
     void egoPumpLate.current?.kick()
-    /*
-     * WP493：读页选路（ego → 插件 → 内置浏览器）。WP489 的在线表 `readPage` 集成时接 `pageRead.readPage`；
-     * 选了 ego 时插件只要装着就是备用那一条（没选 ego 时与原来一样：设置是插件才有插件那一条）。
-     */
-    const pageRead =
-      hostedBoot !== undefined
-        ? undefined
-        : createPageReadChain({
-            ego: () => egoReader,
-            plugin: () => {
-              const own = ownBrowserReader()
-              if (own !== undefined) return own
-              if (egoReadPath() === undefined) return undefined
-              const path = browserSettings.bskInstalledPath()
-              if (path === undefined) return undefined
-              if (ownBrowserMemo?.path !== path)
-                ownBrowserMemo = { path, reader: createOwnBrowserReader({ bsk: bskJsonOf(path) }) }
-              return ownBrowserMemo.reader
-            },
-            ...(webSearchChannel === undefined
-              ? {}
-              : {
-                  builtin: async (url: string) => {
-                    const r = await webSearchThrottle.run(() =>
-                      webSearchChannel.open({
-                        workspace_id: ws,
-                        url,
-                        kind: 'page',
-                        timeout_ms: 30_000,
-                        settle_ms: 2_500,
-                      }),
-                    )
-                    if (r === undefined) return { ok: false, message: '内置浏览器在忙' }
-                    if (!r.ok) return { ok: false, message: r.message }
-                    return {
-                      ok: true,
-                      final_url: r.final_url,
-                      ...(r.page === undefined
-                        ? {}
-                        : { text: r.page.text, password_inputs: r.page.signals.passwordInputs }),
-                    }
-                  },
-                }),
-          })
     /*
      * WP329：巡查出了要回的 → 每条起草一份、出一张「发出去」卡（人在卡上改字、批）。
      * 起草的人 = 担「官方版块」的那个人（没人担就不起草，条目留在待处理里）。
