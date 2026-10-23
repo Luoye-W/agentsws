@@ -1,10 +1,10 @@
-/** 移植自 agentsws-extension `test/fixtures/lists/pipeline.ts` @ 57fca9c（WP130 列表页对拍流水线），逐字照搬。 */
+/** 移植自 agentsws-extension `test/fixtures/lists/pipeline.ts` @ 57fca9c（WP130 列表页对拍流水线），逐字照搬（注释里点名私有插件组件的两处换成「插件列表按钮」）。 */
 /**
  * WP130 对拍用的「同一条流水线」：夹具 HTML + 页面网址 → 面板会给出的那一切。
  *
  * 这一份代码**不认模块来自哪里**：新仓跑它时传新仓的解析器，对拍脚本
  * （`test-parity/lists.parity.test.ts`）跑它时传旧插件的解析器——同输入、
- * 同一条流水线，输出逐字比。流水线就是 SearchCaptureFab 在「打开面板 →
+ * 同一条流水线，输出逐字比。流水线就是插件列表按钮在「打开面板 →
  * 点采集」之间做的那几步，按原顺序：
  *
  *   列表页判定 → 读页面（搜索 / TikTok / Instagram 读卡片；相关视频栏读右栏 +
@@ -104,7 +104,7 @@ export function runListPipeline(mods: ListModules, fixture: ListFixture) {
       mods.youtubeInitialData.readInitialDataScript(doc),
       videoId,
     )
-    // 与 SearchCaptureFab 的 `rail` 那段 useMemo 同一个 join。
+    // 与插件列表按钮的 `rail` 那段 useMemo 同一个 join。
     const joined = entries.map((entry: { videoId: string }) => {
       const found = identities.byVideoId.get(entry.videoId)
       return found

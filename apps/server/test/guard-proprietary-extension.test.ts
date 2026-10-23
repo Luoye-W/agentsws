@@ -43,9 +43,12 @@ const FORBIDDEN = [
 /**
  * 点名放行：这几个文件提到嫌疑名单里的某一项是**正当的**，不是移植代码。只放行写明的那一项。
  * - 官网首页「四级台阶」把 KOLAgents 链到它的官网（WP227，Luoye 10-05 #4）——一条公开链接，不是插件调用。
+ * - `packages/creator-capture` 自己的守卫测试（WP496）：那里写的是要拦的名字。
  */
 const ALLOWED: Readonly<Record<string, readonly string[]>> = {
   'apps/site/src/config.ts': ['kolagents.com'],
+  // WP496：creator-capture 自己的守卫里写着要拦的名字（正则），不是移植代码
+  'packages/creator-capture/test/guard.test.ts': ['plasmo', 'kolagents.com'],
 }
 
 function walk(dir: string, out: string[] = []): string[] {
