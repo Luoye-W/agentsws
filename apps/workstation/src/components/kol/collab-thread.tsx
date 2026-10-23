@@ -428,7 +428,33 @@ export function CollabThread({
             <span className="text-foreground" data-testid="kol-thread-stage-now">
               {t(`kol.stage.${collab.stage}`)}
             </span>
+            {/* WP489：这一步是表格写的还是读邮件判的 */}
+            {collab.stage_source === undefined ? null : (
+              <span className="ml-1 text-muted-foreground" data-testid="kol-thread-stage-source">
+                · {t(`kol.stage_source.${collab.stage_source}`)}
+              </span>
+            )}
           </h4>
+          {/* WP489：邮件判阶段的依据（哪封、哪句） */}
+          {(collab.stage_evidence ?? []).length === 0 ? null : (
+            <ul className="mb-2 flex flex-col gap-0.5 text-xs" data-testid="kol-thread-evidence">
+              {(collab.stage_evidence ?? []).map((e) => (
+                <li key={e.message_id} className="text-muted-foreground">
+                  {t('kol.mailstage.evidence')} · {e.at.slice(0, 10)} · {e.subject.slice(0, 40)}：
+                  <span className="text-foreground">“{e.quote}”</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {collab.import_note === undefined ? null : (
+            <p
+              className="mb-2 truncate text-xs text-muted-foreground"
+              title={collab.import_note}
+              data-testid="kol-thread-import-note"
+            >
+              {collab.import_note}
+            </p>
+          )}
           {/* WP302：步进条——走过哪几段、停在哪、停了几天（停满 7 天那一段标黄） */}
           {collab.segments === undefined ? null : (
             <CollabProgress

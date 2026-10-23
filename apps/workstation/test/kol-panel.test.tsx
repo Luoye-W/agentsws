@@ -226,6 +226,53 @@ const importKolTable = vi.fn(async () => ({
   unmapped: [],
 }))
 
+// WP489：导入红人表（先预览再导）、用邮件更新阶段
+const previewKolImport = vi.fn(async () => ({
+  ok: true,
+  job_id: 'kij_1',
+  source: '红人表.xlsx',
+  summary: '新增 2 人 · 合并 1 人 · 带合作 2 条（历史 1）',
+  columns: [
+    { header: '名称', field: 'display_name', samples: ['小桌'] },
+    { header: '跟进情形', field: null, samples: ['已寄样'] },
+  ],
+  statuses: [{ source: '在等排期', stage: null, count: 2, by: 'none' }],
+  counts: { rows: 3, create: 2, merge: 1, skip: 0, collabs: 2, historical: 1, unknown_status: 2 },
+  rows: [{ source_row: 2, name: '小桌', action: 'merge', merge_into: '小桌', historical: true, stage: 'closed' }],
+  currency: 'USD',
+}))
+const commitKolImport = vi.fn(async () => ({
+  summary: '新增 2 人 · 合并 1 人 · 合作 2 条（1 条进「历史合作（导入）」）。',
+  created_creators: 2,
+  merged_creators: 1,
+  created_collaborations: 2,
+  updated_collaborations: 0,
+  historical: 1,
+  skipped: 0,
+  campaign_id: 'cmp_legacy_import',
+  campaign_name: '历史合作（导入）',
+}))
+const estimateKolMailStages = vi.fn(async () => ({
+  months: 12,
+  creators: 3,
+  messages: 18,
+  input_tokens: 9000,
+  output_tokens: 600,
+  model: true,
+  mail_connected: true,
+  summary: '近 12 个月：3 人、18 封，约 10k token',
+}))
+const runKolMailStages = vi.fn(async () => ({
+  summary: '判了 3 人 · 更新 2 · 1 个和表格不一样，出了卡。',
+  judged: 3,
+  updated: 2,
+  same: 0,
+  conflicts: 1,
+  by_model: 3,
+  by_rule: 0,
+  fallback: 0,
+}))
+
 // WP299（决策 386 / 387）：寄样与付款
 const shipKolSample = vi.fn(async () => ({ staged: true, approval_item_id: 'ap_s' }))
 const recordKolPayment = vi.fn(async () => ({ staged: true, approval_item_id: 'ap_p' }))
@@ -258,6 +305,10 @@ vi.mock('@/lib/api', async () => {
     addKolContact: (...a: unknown[]) => addKolContact(...(a as [])),
     addKolCreator: (...a: unknown[]) => addKolCreator(...(a as [])),
     importKolTable: (...a: unknown[]) => importKolTable(...(a as [])),
+    previewKolImport: (...a: unknown[]) => previewKolImport(...(a as [])),
+    commitKolImport: (...a: unknown[]) => commitKolImport(...(a as [])),
+    estimateKolMailStages: (...a: unknown[]) => estimateKolMailStages(...(a as [])),
+    runKolMailStages: (...a: unknown[]) => runKolMailStages(...(a as [])),
     getKolSandbox: (...a: unknown[]) => getKolSandbox(...(a as [])),
     startKolSandbox: (...a: unknown[]) => startKolSandbox(...(a as [])),
     shipKolSample: (...a: unknown[]) => shipKolSample(...(a as [])),
@@ -560,16 +611,63 @@ describe('WP68 红人岗位面板', () => {
     })
   })
 
-  it('导入按钮只挑 CSV / TSV，并把"为什么不收 xlsx"说在旁边', async () => {
+  it('WP489：导入收 Excel / CSV；先预览（列与状态可改）再导；导完能用邮件更新状态', async () => {
     renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
     await goto('campaign')
     const input = await screen.findByTestId('kol-import-file')
     const accept = input.getAttribute('accept') ?? ''
+    expect(accept).toContain('.xlsx')
     expect(accept).toContain('.csv')
-    // 挑得到却传不进去比挑不到更气人
-    expect(accept).not.toContain('.xlsx')
-    // WP157：「认什么格式」放在导入按钮旁的问号里
-    expect(screen.getByTestId('kol-import-hint').getAttribute('data-hint')).toContain('CSV / TSV')
+    expect(screen.getByTestId('kol-import-hint').getAttribute('data-hint')).toContain('Excel')
+    const file = new File(['名称,跟进情形\n小桌,已寄样\n'], '红人表.csv', { type: 'text/csv' })
+    fireEvent.change(input, { target: { files: [file] } })
+    await screen.findByTestId('kol-import-preview')
+    expect(previewKolImport).toHaveBeenCalledWith(
+      expect.objectContaining({ filename: '红人表.csv', content_base64: expect.any(String) }),
+      'asg_yt',
+    )
+    expect(screen.getByTestId('kol-import-summary').textContent).toContain('新增 2 人')
+    // 没认出的列指给「合作状态」，认不出的状态词指给「已谈成」
+    const cols = screen.getAllByTestId('kol-import-col')
+    fireEvent.change(cols[1] as HTMLSelectElement, { target: { value: 'status' } })
+    fireEvent.change(screen.getByTestId('kol-import-status'), { target: { value: 'agreed' } })
+    fireEvent.click(screen.getByTestId('kol-import-commit'))
+    await waitFor(() => {
+      expect(commitKolImport).toHaveBeenCalledWith(
+        {
+          job_id: 'kij_1',
+          columns: ['display_name', 'status'],
+          statuses: [{ source: '在等排期', stage: 'agreed' }],
+          currency: 'USD',
+        },
+        'asg_yt',
+      )
+    })
+    expect((await screen.findByTestId('kol-import-result')).textContent).toContain('历史合作（导入）')
+
+    fireEvent.click(screen.getByTestId('kol-mailstage'))
+    expect((await screen.findByTestId('kol-mailstage-estimate')).textContent).toContain('3 人')
+    fireEvent.click(screen.getByTestId('kol-mailstage-run'))
+    await waitFor(() => {
+      expect(runKolMailStages).toHaveBeenCalledWith(12, 'asg_yt')
+    })
+    expect((await screen.findByTestId('kol-import-result')).textContent).toContain('出了卡')
+  })
+
+  it('WP489：贴在线表格链接；读不了照实说', async () => {
+    previewKolImport.mockResolvedValueOnce({
+      ok: false,
+      message: '工坊的浏览器还没登录飞书——在浏览器里登录一下，再贴一次链接。',
+      currency: 'USD',
+    } as never)
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    await goto('campaign')
+    fireEvent.change(await screen.findByTestId('kol-import-link'), {
+      target: { value: 'https://acme.feishu.cn/sheets/shtX' },
+    })
+    fireEvent.click(screen.getByTestId('kol-import-link-go'))
+    expect((await screen.findByTestId('kol-import-error')).textContent).toContain('登录')
+    expect(previewKolImport).toHaveBeenCalledWith({ url: 'https://acme.feishu.cn/sheets/shtX' }, 'asg_yt')
   })
 })
 

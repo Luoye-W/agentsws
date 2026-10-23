@@ -37,10 +37,8 @@ import {
   getKolCreator,
   getKolCreators,
   getKolOutreachDefaults,
-  importKolTable,
   type KolCampaignData,
   type KolChannelId,
-  type KolImportData,
   type KolOutreachData,
   type KolSearchData,
   planKolCampaign,
@@ -62,6 +60,7 @@ import {
 import { CreatorCard, stepOpensThread } from './creator-card'
 import { KolSandboxBar } from './kol-sandbox-bar'
 import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
+import { KolSheetImport } from './kol-sheet-import'
 import { CollabProgress } from './segmented-progress'
 
 /** 五条渠道（真源是契约的 `KOL_CHANNEL_IDS`；工作台不依赖服务端包，这里照抄一份）。 */
@@ -1006,8 +1005,6 @@ function ImportAndCampaign({
   const { t } = useApp()
   const client = useQueryClient()
   const [, setSearch] = useSearchParams()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [imported, setImported] = useState<KolImportData | undefined>(undefined)
   const [plan, setPlan] = useState<KolCampaignData | undefined>(undefined)
   /**
    * WP142（docs/78 第 17 步）：接受之后「一条都没新建」时，说清是**因为都已在合作里**，
@@ -1032,19 +1029,6 @@ function ImportAndCampaign({
   const [channels, setChannels] = useState<KolChannelId[]>([channel])
   const [error, setError] = useState<string | undefined>(undefined)
   const [receipt, setReceipt] = useState<string | undefined>(undefined)
-
-  const doImport = useMutation({
-    mutationFn: (input: { filename: string; content: string }) => importKolTable(input, assignment),
-    onSuccess: (out) => {
-      setError(undefined)
-      setImported(out)
-      void client.invalidateQueries({ queryKey: ['kol-creators'] })
-    },
-    onError: (e: unknown) => {
-      setImported(undefined)
-      setError(errorText(e, '这张表没导进来。'))
-    },
-  })
 
   const doPlan = useMutation({
     mutationFn: () =>
@@ -1115,60 +1099,8 @@ function ImportAndCampaign({
         <CardTitle className="text-sm">{t('kol.tools.title')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
-        <section>
-          {/*
-            导入这一版只认 CSV / TSV（仓库的 pnpm 里没有 xlsx 依赖）。
-            `accept` 里不写 .xlsx——挑得到却传不进去比挑不到更气人；
-            服务端收到 .xlsx 也会照实说一句"另存为 CSV 再传一次"。
-          */}
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
-            className="hidden"
-            data-testid="kol-import-file"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file === undefined) return
-              void file.text().then((content) => {
-                doImport.mutate({ filename: file.name, content })
-              })
-            }}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            data-testid="kol-import"
-            disabled={doImport.isPending}
-            onClick={() => {
-              fileRef.current?.click()
-            }}
-          >
-            <Upload className="size-4" aria-hidden />
-            {t('kol.import')}
-          </Button>
-          {/* WP157：认什么格式、按什么去重，进问号 */}
-          <Hint
-            text={t('kol.import.hint')}
-            className="ml-1.5 align-middle"
-            testId="kol-import-hint"
-          />
-          {imported === undefined ? null : (
-            <div className="mt-1 text-xs" data-testid="kol-import-result">
-              <p>{imported.summary}</p>
-              {imported.note === undefined ? null : (
-                <p className="text-muted-foreground" data-testid="kol-import-note">
-                  {imported.note}
-                </p>
-              )}
-              {imported.rejected.slice(0, 3).map((r) => (
-                <p key={r.source_row} className="text-muted-foreground">
-                  {t('kol.import.rejected', { row: r.source_row, reason: r.reason })}
-                </p>
-              ))}
-            </div>
-          )}
-        </section>
+        {/* WP489：导入红人表（Excel / CSV / 在线表格链接，先预览再导）+ 用过往邮件更新阶段 */}
+        <KolSheetImport assignment={assignment} />
 
         <section data-testid="kol-campaign">
           <h4 className="mb-1 text-xs font-medium text-muted-foreground">
@@ -1272,7 +1204,10 @@ function ImportAndCampaign({
                 plan={plan}
                 want={Number(headcount)}
                 onImport={() => {
-                  fileRef.current?.click()
+                  // WP489：导入口子在 `KolSheetImport` 里（同一张卡上）
+                  document
+                    .querySelector<HTMLInputElement>('[data-testid="kol-import-file"]')
+                    ?.click()
                 }}
               />
               {plan.by_channel.map((group) => (
