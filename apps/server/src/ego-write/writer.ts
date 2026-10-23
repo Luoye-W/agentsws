@@ -27,6 +27,7 @@ export interface EgoWriterOptions {
 }
 
 export function createEgoWriter(options: EgoWriterOptions): EgoWriter {
+  let runs = 0
   return {
     available: () => options.egoPath() !== undefined,
     async run(cfg) {
@@ -35,7 +36,11 @@ export function createEgoWriter(options: EgoWriterOptions): EgoWriter {
         return { state: 'unavailable', platform: cfg.platform, why: 'ego 没装好或没选用' }
       return runEgoWrite({
         egoPath,
-        cfg: { ...cfg, space: cfg.space ?? `工坊 · ${cfg.platform}` },
+        // 每一趟一个新名字：上一趟把页面留给人（只填不发 / 没登录）之后，那个 Space 归用户了，同名会撞
+        cfg: {
+          ...cfg,
+          space: `${cfg.space ?? `工坊 · ${cfg.platform}`} · ${(++runs).toString(36)}${Date.now().toString(36).slice(-4)}`,
+        },
         ...(options.spawn === undefined ? {} : { spawn: options.spawn }),
         ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
       })

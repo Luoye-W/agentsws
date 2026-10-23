@@ -2534,7 +2534,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * WP483（决策 1658 / 1660）：发帖 / 回帖走 ego 的那只手（Reddit 写、社媒发帖 / 回帖共用）。
    * 能不能用每次现问浏览器设置（选了 ego，或没选过、默认 ego）+ 探测（缓存 30 秒）。
    */
-  const egoWriter = createEgoWriter({ egoPath: () => browserSettings.egoWritePath() })
+  const egoWriter = createEgoWriter({
+    // `AGENTSWS_EGO_WRITE=off`：开发 / 联调时整条 ego 发帖路关掉（一律插件路），免得开发机上的 ego 去碰真网站
+    egoPath: () => (env.AGENTSWS_EGO_WRITE === 'off' ? undefined : browserSettings.egoWritePath()),
+  })
   /*
    * WP144（docs/80）：电脑操控——**一台机器一份**，理由与浏览器设置逐字相同（操作的是
    * 这台电脑本身，与卖哪个品牌无关）。驱动装在数据目录下（不进 PATH）；只有本机档给。

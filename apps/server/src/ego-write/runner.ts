@@ -36,7 +36,8 @@ export function parseEgoWriteOutput(
   proc: EgoProcessResult,
 ): EgoWriteResult {
   const all = `${proc.stdout}\n${proc.stderr}`
-  const lines = proc.stdout.split(/\r?\n/u)
+  // 真机实测（ego 2.1.0，Mac）：管道里脚本的 console.log 走的是 stderr——两路一起认
+  const lines = all.split(/\r?\n/u)
   const finalLine = [...lines].reverse().find((l) => l.startsWith('@@FINAL '))
   const space = lines.find((l) => l.startsWith('@@SPACE '))
   const space_id = space === undefined ? undefined : Number(space.slice(8).trim())
@@ -125,7 +126,7 @@ export async function probeEgoConnection(
     stdin: 'const s = await listTaskSpaces();\nconsole.log("@@OK " + s.length);\n',
     timeoutMs: 20_000,
   })
-  if (proc.stdout.includes('@@OK ')) return { connected: true }
+  if (`${proc.stdout}\n${proc.stderr}`.includes('@@OK ')) return { connected: true }
   const all = `${proc.stdout}\n${proc.stderr}`
   if (ADMIN.test(all)) return { connected: false, admin: true, detail: EGO_ADMIN_SENTENCE }
   if (proc.spawn_error !== undefined)

@@ -42,6 +42,8 @@ export interface EgoWriteScriptConfig {
   files?: string[]
   /** 点不点发送（`false` = 「发之前让我看一眼」）。 */
   submit: boolean
+  /** 结束前截一张图存到这里（本机绝对路径；真机核对用，产品里不给）。 */
+  shot?: string
 }
 
 /** 草稿开头那一截（认「发出去的那一条」用）：去掉空白、小写、最多 60 字。 */
@@ -67,6 +69,11 @@ let page;
 let clicked = false;
 const say = (o) => console.log("@@FINAL " + JSON.stringify({ platform: CFG.platform, duration_ms: Date.now() - t0, steps, clicked, ...(task ? { space_id: task.spaceId } : {}), ...o }));
 const end = async (state, extra, keep) => {
+  if (CFG.shot && page) {
+    try {
+      await page.screenshot({ path: CFG.shot });
+    } catch {}
+  }
   say({ state, ...(extra || {}) });
   try {
     if (task) await task.finish({ keep: keep || [] });
@@ -644,7 +651,9 @@ try {
     task = CFG.resume ? await takeOverTaskSpace(CFG.resume) : await taskSpace(CFG.space);
   } catch (e) {
     const msg = String((e && e.message) || e);
-    say({ state: /user|control|inactive/i.test(msg) ? "needs_human" : "failed", why: msg.slice(0, 200), ...(CFG.resume ? { space_id: CFG.resume } : {}) });
+    // 同名的 Space 已经是用户的（上一趟把页面留给了人）：不是「交给人」，名字撞了——照实失败（不去认领用户的 Space）
+    const human = !/already exists|NAME_IN_USE/i.test(msg) && /controls|control of|inactive|unassigned/i.test(msg);
+    say({ state: human ? "needs_human" : "failed", why: msg.slice(0, 200), ...(CFG.resume ? { space_id: CFG.resume } : {}) });
     task = undefined;
   }
   if (task) {

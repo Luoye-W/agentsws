@@ -129,6 +129,14 @@ describe('WP483 读懂 ego 的输出', () => {
     expect(egoWriteNext(r)).toBe('done')
   })
 
+  it('真机实测：管道里脚本的 console.log 走 stderr——从 stderr 也认得出 @@FINAL', () => {
+    const r = parseEgoWriteOutput(
+      { platform: 'x-post' },
+      proc({ stderr: '@@SPACE 9\n@@FINAL {"state":"sent","link":"https://x.com/a/status/1"}\n' }),
+    )
+    expect(r).toMatchObject({ state: 'sent', space_id: 9, link: 'https://x.com/a/status/1' })
+  })
+
   it('浏览器权限框：ego 自己停下、交给人 → needs_human（带 Space，之后接着做）', () => {
     const r = parseEgoWriteOutput(
       { platform: 'facebook-post' },
