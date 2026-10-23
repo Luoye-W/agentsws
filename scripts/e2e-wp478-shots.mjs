@@ -147,7 +147,9 @@ async function composerChecks(page, theme, name) {
     )
     // 有字：点别处、再滚，也不缩回小条
     await page.keyboard.type('草稿')
-    await page.mouse.click(200, 300)
+    await page.evaluate(() =>
+      document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined,
+    )
     await page.mouse.wheel(0, 200)
     await page.waitForTimeout(500)
     check((await dockState(page)) === 'full', `[${theme}] ${name} 框里有字时不缩回小条`)
@@ -261,6 +263,99 @@ async function main() {
         await composerChecks(page, theme, '2-matter')
       }
       await context.close()
+      // 方案卡（demo 里没有这一种）：在岗位卡片的回包最前面塞一张「我打算这样设」，看卡底一排
+      if (ONLY !== 'preview') {
+        const plan = await open(theme)
+        await plan.page.route('**/v1/positions/*/cards*', async (route) => {
+          const res = await route.fetch()
+          const json = await res.json()
+          const first = json?.data?.cards?.[0]
+          if (first !== undefined)
+            json.data.cards.unshift({
+              ...first,
+              id: 'ap_demo_plan',
+              kind: 'setup_request',
+              layout: 'policy',
+              change_kind: undefined,
+              options: undefined,
+              title: 'Reddit 巡查：我打算这样设',
+              available_actions: ['approve', 'reject', 'snooze', 'open'],
+              action_labels: { approve: '就这样', reject: '先不设', snooze: '稍后' },
+              detail: {
+                ...first.detail,
+                payload: {
+                  form: 'setup_request',
+                  target: 'reddit.watch',
+                  why: '我先查了一遍，按这个方案巡查。',
+                  mode: 'plan',
+                  fields: [
+                    {
+                      key: 'watch_subreddits',
+                      label: '重点版块',
+                      kind: 'text',
+                      suggested: 'r/SmartGlasses, r/Xreal',
+                      suggested_why: '品类、竞品的用户在这几个版',
+                      required: false,
+                    },
+                    {
+                      key: 'every_hours',
+                      label: '多久看一次',
+                      kind: 'select',
+                      options: [
+                        { value: '24', label: '每天一次' },
+                        { value: '12', label: '每 12 小时' },
+                      ],
+                      suggested: '24',
+                      suggested_why: '默认每天一次',
+                      required: true,
+                    },
+                  ],
+                },
+              },
+            })
+          await route.fulfill({ response: res, json })
+        })
+        await plan.page.goto(`${BASE}/positions/${full.id}`, { waitUntil: 'load', timeout: 90_000 })
+        const card = plan.page.locator('[data-testid="deck-card"]', {
+          has: plan.page.getByTestId('setup-plan'),
+        })
+        await card.first().waitFor({ timeout: 30_000 })
+        await plan.page.waitForTimeout(800)
+        const labels = await card
+          .first()
+          .getByTestId('deck-action-bar')
+          .locator(':scope > button')
+          .allInnerTexts()
+        check(
+          labels.join('/') === '就这样/修改/先不设/稍后',
+          `[${theme}] 方案卡卡底一排：${labels.join(' / ')}`,
+        )
+        check(
+          (await card.first().getByTestId('card-body-actions').count()) === 0,
+          `[${theme}] 方案卡卡身里不再有另一排按钮`,
+        )
+        await card.first().screenshot({ path: join(SHOTS, `${theme}-3-card-plan.png`) })
+        console.log(`  📷 ${theme}-3-card-plan.png`)
+        await plan.page.getByTestId('setup-plan-edit').click()
+        await plan.page.waitForTimeout(500)
+        await card.first().screenshot({ path: join(SHOTS, `${theme}-3-card-plan-edit.png`) })
+        console.log(`  📷 ${theme}-3-card-plan-edit.png`)
+        // 窄窗（390）：卡底还是一排（快捷键灰字收掉）
+        await plan.page.setViewportSize({ width: 390, height: 844 })
+        await plan.page.reload({ waitUntil: 'load' })
+        await card.first().waitFor({ timeout: 30_000 })
+        await plan.page.waitForTimeout(800)
+        const tops = await card
+          .first()
+          .locator('[data-testid="deck-action-bar"] > button:visible')
+          .evaluateAll((els) => [
+            ...new Set(els.map((e) => Math.round(e.getBoundingClientRect().top))),
+          ])
+        check(tops.length === 1, `[${theme}] 窄窗方案卡卡底还是一排（${tops.length} 行）`)
+        await card.first().screenshot({ path: join(SHOTS, `${theme}-3-card-plan-narrow.png`) })
+        console.log(`  📷 ${theme}-3-card-plan-narrow.png`)
+        await plan.context.close()
+      }
       // 移动窄窗
       const narrow = await open(theme, { width: 390, height: 844 })
       await narrow.page.goto(`${BASE}/positions/${full.id}`, { waitUntil: 'load', timeout: 90_000 })
