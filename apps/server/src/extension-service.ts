@@ -51,7 +51,11 @@ import type {
   PlatformAccount,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { KOL_REVEAL_CAPABILITY } from '@agentsws/contracts'
+import {
+  KOL_REVEAL_CAPABILITY,
+  type PublicContactLink,
+  sanitizePublicContacts,
+} from '@agentsws/contracts'
 import { type PublicLibraryClient, scoreCreator } from '@agentsws/kol-core'
 import type {
   KolAccountObservation,
@@ -147,6 +151,20 @@ export interface PublicObservationRow {
   observed_at: string
   /** 公开的商务邮箱与它的来源页（用户显式收下过才有）。 */
   contact?: { value: string; source?: string | undefined } | undefined
+  /**
+   * WP487（决策 1661 补）：红人**主页上公开写着的**联系方式（过完 `sanitizePublicContacts` 的那几条）。
+   * 插件与 ego 两条路都从 `ingest` 进来，所以两条路送上去的这一格是同一个形状。
+   */
+  public_contacts?: PublicContactLink[] | undefined
+  /**
+   * WP489（决策 1707）：表格导入带来的公开资料。云端白名单现在只收 handle / 粉丝 / 互动率，这几格在
+   * 转发那一跳（`extension-contribute.ts`）照白名单裁掉；云端放开之后在那里加上就行。
+   */
+  display_name?: string | undefined
+  url?: string | undefined
+  category?: string | undefined
+  language?: string | undefined
+  region?: string | undefined
 }
 
 /**
@@ -452,6 +470,27 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
   function saveContact(creator_id: string, one: ExtensionObservation): string | undefined {
     if (one.contact === undefined) return undefined
     return storeContact(creator_id, one.contact)
+  }
+
+  /**
+   * WP487：主页上公开写着的邮箱（公开邮箱 > 商务邮箱 > 经纪邮箱）——这个人在本机还没有联系方式时
+   * 收一条进本机加密库（来源记 `public_profile`），和送上云的是同一条。已经有了就不动。
+   */
+  function savePublicEmail(
+    creator_id: string,
+    contacts: readonly PublicContactLink[],
+  ): string | undefined {
+    const order: PublicContactLink['kind'][] = ['email', 'business', 'agent']
+    for (const kind of order) {
+      const hit = contacts.find((c) => c.kind === kind && !c.value.startsWith('http'))
+      if (hit !== undefined)
+        return storeContact(creator_id, {
+          kind: 'email',
+          value: hit.value,
+          source: 'public_profile',
+        })
+    }
+    return undefined
   }
 
   /**
@@ -866,7 +905,10 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
           ...(batchId === undefined ? {} : { batch_id: batchId }),
         })
         scoreJobs.push({ creator_id: creator.id, account_id: account.id, batch_id: batchId })
-        const contactNote = saveContact(creator.id, one)
+        // WP487：主页上公开的联系方式——先筛（私信页、带凭据的链接、认不出的一律丢掉）
+        const publicContacts = sanitizePublicContacts(one.public_contacts)
+        const contactNote =
+          saveContact(creator.id, one) ?? savePublicEmail(creator.id, publicContacts)
         rows.push({
           handle: one.handle,
           // 本来就有 = `deduped`。**它不是失败**：库里那条的数字已经被这一次刷新了。
@@ -901,6 +943,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
                   ...(one.contact.source === undefined ? {} : { source: one.contact.source }),
                 },
               }),
+          ...(publicContacts.length === 0 ? {} : { public_contacts: publicContacts }),
         })
       }
 
@@ -943,6 +986,37 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         public_library_pending: forwardable.length - settled,
         ...extra,
       }
+    },
+
+    /*
+     * WP489（决策 1707）：表格导入的红人——只送公开资料，与插件同一条转发路（同样的筛法：
+     * 认不出 handle 的、没有粉丝数的不送；登录了才送；失败退避重试）。不等云端回话。
+     */
+    contributeProfiles: (session, rows) => {
+      void session
+      const cloud = options.publicLibrary
+      if (cloud === undefined || !cloud.linked()) return { queued: 0 }
+      const out: PublicObservationRow[] = []
+      for (const r of rows) {
+        const bare = normalizeHandle(r.handle)
+        if (bare === '' || (r.channel === 'youtube' && /^uc[a-z0-9_-]{22}$/.test(bare))) continue
+        if (r.followers === undefined) continue
+        out.push({
+          channel: r.channel,
+          handle: r.handle,
+          followers: r.followers,
+          ...(r.engagement_rate === undefined ? {} : { engagement_rate: r.engagement_rate }),
+          observed_at: r.observed_at,
+          ...(r.email === undefined ? {} : { contact: { value: r.email, source: 'import' } }),
+          ...(r.display_name === undefined ? {} : { display_name: r.display_name }),
+          ...(r.url === undefined || r.url === '' ? {} : { url: r.url }),
+          ...(r.category === undefined ? {} : { category: r.category }),
+          ...(r.language === undefined ? {} : { language: r.language }),
+          ...(r.region === undefined ? {} : { region: r.region }),
+        })
+      }
+      if (out.length > 0) void forward(out, 0)
+      return { queued: out.length }
     },
 
     /* ── WP119c：完整版面板要的那一批。每一条都先落本机，云是加分项 ─────── */

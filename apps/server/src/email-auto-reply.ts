@@ -82,7 +82,12 @@ export interface EmailAutoReplyOptions {
   models?: ModelGatewayApi
   /** 客服那条职责挂谁名下。 */
   position(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
-  searchKnowledge?(text: string, limit: number): Promise<ChatKnowledgeHit[]>
+  /** WP488：`ctx.thread` = 这条邮件线程（同一线程售前 / 售后只让 AI 判一次）。 */
+  searchKnowledge?(
+    text: string,
+    limit: number,
+    ctx?: { thread?: string },
+  ): Promise<ChatKnowledgeHit[]>
   /** 来信里报了订单号 → 只读查这一单（与聊天同一个记录源）。 */
   lookupOrder?(order_ref: string): Promise<unknown | undefined>
   /** 按收信那只邮箱取开关与档位；认不出邮箱（`undefined`）按缺省。 */
@@ -232,7 +237,7 @@ export function createEmailAutoReply(options: EmailAutoReplyOptions): EmailAutoR
   }
 
   /** 材料：知识（K1…）+ 来信里报了订单号就现查那一单（O1）。同聊天。 */
-  const sourcesFor = async (question: string): Promise<AutoAnswerSource[]> => {
+  const sourcesFor = async (question: string, thread?: string): Promise<AutoAnswerSource[]> => {
     const sources: AutoAnswerSource[] = []
     const orderRef = orderRefIn(question)
     if (orderRef !== undefined && options.lookupOrder !== undefined) {
@@ -248,7 +253,9 @@ export function createEmailAutoReply(options: EmailAutoReplyOptions): EmailAutoR
         })
     }
     const hits =
-      (await options.searchKnowledge?.(question, MAX_KNOWLEDGE_HITS).catch(() => [])) ?? []
+      (await options
+        .searchKnowledge?.(question, MAX_KNOWLEDGE_HITS, thread === undefined ? {} : { thread })
+        .catch(() => [])) ?? []
     for (const [i, h] of hits.entries())
       sources.push({
         ref: `K${i + 1}`,
@@ -363,7 +370,7 @@ export function createEmailAutoReply(options: EmailAutoReplyOptions): EmailAutoR
       return held(req, { kind: 'money', reason: '涉及退款、赔偿、改单或要人工，一律转人' })
 
     // ③ 一次轻模型起草：材料带编号、句后标出处、末尾自评
-    const sources = await sourcesFor(question)
+    const sources = await sourcesFor(question, req.thread_id)
     // 一条材料都没有：不可能逐句有出处——不花这一次模型，照旧出卡（同判定里的「没出处」）
     if (sources.length === 0)
       return held(req, { kind: 'no_source', reason: '知识库和订单里都没有能对上的出处' })

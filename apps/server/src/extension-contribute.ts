@@ -124,6 +124,20 @@ export function createExtensionContributor(
             // 本机有值就送、没有就不送（不补 0：缺不是 0）
             ...(row.posts_30d === undefined ? {} : { posts_30d: row.posts_30d }),
             ...(row.engagement_rate === undefined ? {} : { engagement_rate: row.engagement_rate }),
+            /*
+             * WP487（决策 1661 补）：主页上公开写着的联系方式。逐条只带 kind / value / label 三格
+             * （`ingest` 那一跳已经过了 `sanitizePublicContacts`；这里再逐键写一遍，别让别的键溜出去）。
+             * `contact`（用户点「收下」的那一条，可能是私信 / 电话）**不在这里**——它走单独的贡献那一跳。
+             */
+            ...(row.public_contacts === undefined || row.public_contacts.length === 0
+              ? {}
+              : {
+                  public_contacts: row.public_contacts.map((c) => ({
+                    kind: c.kind,
+                    value: c.value,
+                    ...(c.label === undefined ? {} : { label: c.label }),
+                  })),
+                }),
             observed_at: row.observed_at as Iso8601,
           },
         ],

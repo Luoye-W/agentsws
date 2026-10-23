@@ -274,6 +274,13 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
       now: () => T0,
       // WP483：ego 读到的公开数据（这里只核回执形状；走插件同一入口那一段在 wp483-ego-kol.test.ts）
       observe: async (_a, rows) => ({ saved: rows.length, deduped: 0, forwarded: rows.length }),
+      // WP489：表格导入 / 邮件判阶段（这里只核回执形状；真读表、真判在 wp489-kol-import.test.ts）
+      importer: () =>
+        ({
+          previewCard: async () => '出了一张「导入红人表」卡',
+          mailStageCard: async (_a: unknown, i: { months?: number }) =>
+            `近 ${i.months ?? 12} 个月：1 人`,
+        }) as never,
     })
 
   it('读工具回 rows + provenance；写工具回卡 id', async () => {
@@ -324,6 +331,16 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
         'add_to_campaign',
         { creator_ids: ['cr_1'] },
         (r) => expect((r.data as { approval_item_id: string }).approval_item_id).toBe('ap_3'),
+      ],
+      [
+        'import_creator_sheet',
+        { url: 'https://docs.google.com/spreadsheets/d/x/edit' },
+        (r) => expect((r.data as { message: string }).message).toContain('导入红人表'),
+      ],
+      [
+        'update_stages_from_mail',
+        { months: 6 },
+        (r) => expect((r.data as { message: string }).message).toContain('近 6 个月'),
       ],
     ]
     for (const [name, input, check] of cases) {

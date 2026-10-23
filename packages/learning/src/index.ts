@@ -24,8 +24,12 @@ export * from './history.js'
 export * from './pool.js'
 export * from './promote.js'
 export * from './proposals.js'
+// WP487（决策 1679）：夜里把「只删了几个字」提炼成一句规矩
+export * from './refine.js'
 export * from './resolved.js'
 export * from './semantic.js'
+// WP488（决策 1681）：从官网 / 售后网站学一遍（编排）
+export * from './site.js'
 export * from './sqlite.js'
 export * from './types.js'
 

@@ -33,6 +33,8 @@ import type {
   HelpArticleView,
   HelpCatalogView,
   HelpKind,
+  KnowledgeLearnEstimate,
+  KnowledgeLearnJob,
   MarketsSource,
   Matter,
   MatterEvent,
@@ -4679,6 +4681,52 @@ export const resolveKnowledgeRecheck = (
     ...(assignment === undefined ? {} : { assignment }),
   })
 
+/* ── WP488（决策 1680 / 1681 / 1682 / 1686）：学一遍 + 改范围 ─────────────────── */
+
+export type KnowledgeStageId = 'both' | 'presales' | 'postsales'
+
+export interface KnowledgeLearnInput {
+  source: 'email' | 'website'
+  months?: number
+  urls?: string[]
+}
+
+export const estimateKnowledgeLearn = (
+  input: KnowledgeLearnInput,
+  assignment?: string,
+): Promise<KnowledgeLearnEstimate> =>
+  api<KnowledgeLearnEstimate>('/v1/knowledge/learn/estimate', {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const startKnowledgeLearn = (
+  input: KnowledgeLearnInput,
+  assignment?: string,
+): Promise<KnowledgeLearnJob> =>
+  api<KnowledgeLearnJob>('/v1/knowledge/learn', {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listKnowledgeLearnJobs = (assignment?: string): Promise<KnowledgeLearnJob[]> =>
+  api<KnowledgeLearnJob[]>('/v1/knowledge/learn/jobs', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const setKnowledgeCardStage = (
+  id: string,
+  stage: KnowledgeStageId,
+  assignment?: string,
+): Promise<KnowledgeCardRow> =>
+  api<KnowledgeCardRow>(`/v1/knowledge/cards/${encodeURIComponent(id)}/stage`, {
+    method: 'POST',
+    body: { stage },
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
 export const listKnowledgeGaps = (assignment?: string): Promise<KnowledgeGapRow[]> =>
   api<KnowledgeGapRow[]>('/v1/knowledge/gaps?status=open', {
     ...(assignment === undefined ? {} : { assignment }),
@@ -5652,6 +5700,18 @@ export interface KolCollaborationData {
   payments?: { id: string; amount: number; currency: string; note?: string; paid_at: string }[]
   /** WP302：进了这一段的时刻。 */
   stage_changed_at?: string
+  /** WP489：这一步是表格写的（`import`）还是读邮件判的（`mail`）。 */
+  stage_source?: 'import' | 'mail'
+  /** WP489：邮件判阶段的依据（哪封、哪句）。 */
+  stage_evidence?: {
+    message_id: string
+    at: string
+    direction: 'in' | 'out'
+    subject: string
+    quote: string
+  }[]
+  /** WP489：表格导入时原样留下的（状态原话、金额原文、备注）。 */
+  import_note?: string
   /** WP302：紧急程度 + 清单行上那一小句（只有合作清单接口给）。 */
   status?: { tier: KolCollabTier; label: string }
   /** 还在等人批的卡（点了去卡片流）。 */
@@ -5897,6 +5957,111 @@ export const importKolTable = (
   assignment?: string,
 ): Promise<KolImportData> =>
   api('/v1/kol/import', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/** WP489：表格 / 在线表导入的预览（还什么都没写）。 */
+export interface KolImportPreviewData {
+  ok: boolean
+  message?: string
+  job_id?: string
+  source?: string
+  summary?: string
+  columns?: { header: string; field: string | null; samples: string[] }[]
+  statuses?: { source: string; stage: string | null; count: number; by: string }[]
+  counts?: {
+    rows: number
+    create: number
+    merge: number
+    skip: number
+    collabs: number
+    historical: number
+    unknown_status: number
+  }
+  rows?: {
+    source_row: number
+    name: string
+    action: 'create' | 'merge' | 'skip'
+    merge_into?: string
+    stage?: string
+    historical: boolean
+    skip?: string
+  }[]
+  currency: string
+}
+
+export interface KolImportCommitData {
+  summary: string
+  created_creators: number
+  merged_creators: number
+  created_collaborations: number
+  updated_collaborations: number
+  historical: number
+  skipped: number
+  campaign_id: string
+  campaign_name: string
+}
+
+export interface KolMailStageEstimateData {
+  months: number
+  creators: number
+  messages: number
+  input_tokens: number
+  output_tokens: number
+  cost?: number
+  currency?: string
+  model: boolean
+  budget_left?: number
+  backfill_from?: string
+  mail_connected: boolean
+  summary: string
+}
+
+export interface KolMailStageRunData {
+  summary: string
+  judged: number
+  updated: number
+  same: number
+  conflicts: number
+  by_model: number
+  by_rule: number
+  fallback: number
+}
+
+export const previewKolImport = (
+  input: { filename?: string; content?: string; content_base64?: string; url?: string },
+  assignment?: string,
+): Promise<KolImportPreviewData> =>
+  api('/v1/kol/import/preview', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const commitKolImport = (
+  input: {
+    job_id: string
+    columns?: (string | null)[]
+    statuses?: { source: string; stage: string | null }[]
+    currency?: string
+  },
+  assignment?: string,
+): Promise<KolImportCommitData> =>
+  api('/v1/kol/import/commit', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const estimateKolMailStages = (
+  months: number,
+  assignment?: string,
+): Promise<KolMailStageEstimateData> =>
+  api('/v1/kol/mail-stages/estimate', {
+    method: 'POST',
+    body: { months },
+    ...withAssignment(assignment),
+  })
+
+export const runKolMailStages = (
+  months: number,
+  assignment?: string,
+): Promise<KolMailStageRunData> =>
+  api('/v1/kol/mail-stages/run', {
+    method: 'POST',
+    body: { months },
+    ...withAssignment(assignment),
+  })
 
 export const planKolCampaign = (
   input: {

@@ -334,7 +334,8 @@ export const SITE_TECH_QUERIES: QueryDef[] = [
     run: (ctx) => {
       const columns = [
         { key: 'issue', label: '问题' },
-        { key: 'where', label: '证据' },
+        // WP487（决策 1678）：「证据」改「依据」（英文 Basis）
+        { key: 'where', label: '依据' },
         { key: 'owner', label: '交给' },
       ]
       const run = ctx.site_health?.run

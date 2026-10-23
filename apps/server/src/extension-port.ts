@@ -52,6 +52,15 @@ export function brandExtensionPort(options: BrandExtensionPortOptions): Extensio
     // 配对与令牌不按品牌分：一把令牌自己就带着 `workspace_id`。
     store: options.store,
     hello: async (session) => (await portOf(session.workspace_id)).hello(session),
+    // WP489（决策 1707）：表格导入的公开资料去公共库（算在导入的那个人头上）
+    contributeProfiles: async (session, rows) =>
+      as(
+        session,
+        async () =>
+          (await (await portOf(session.workspace_id)).contributeProfiles?.(session, rows)) ?? {
+            queued: 0,
+          },
+      ),
     ingest: async (session, input) =>
       as(session, async () => (await portOf(session.workspace_id)).ingest(session, input)),
 

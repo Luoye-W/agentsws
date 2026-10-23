@@ -388,6 +388,8 @@ export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
   draft_outreach: '开发信草稿',
   review_deliverable: '交付物审核',
   create_tracked_link: '追踪链接',
+  import_creator_sheet: '红人表',
+  update_stages_from_mail: '过往邮件',
 }
 
 const toolZh = (tool: string): string => KOL_TOOL_ZH[tool] ?? '一个工具'
@@ -419,6 +421,8 @@ export const KOL_TOOL_ACTION_ZH: Readonly<Record<string, string>> = {
   register_deliverable: '登记交付物',
   review_deliverable: '验收交付物',
   create_tracked_link: '建追踪链接',
+  import_creator_sheet: '读红人表',
+  update_stages_from_mail: '用邮件更新阶段',
   search_policies: '查政策',
 }
 

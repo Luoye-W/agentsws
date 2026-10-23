@@ -213,7 +213,12 @@ export interface ChatLaneOptions {
   /** 与运行时共用的记录源（订单只读、ObjectRef → 人话）。 */
   source?: MatterRecordSource
   /** 知识检索；不给就只拿事项现场答。 */
-  searchKnowledge?(text: string, limit: number): Promise<ChatKnowledgeHit[]>
+  /** WP488：`ctx.thread` = 这段会话（同一会话售前 / 售后只让 AI 判一次）。 */
+  searchKnowledge?(
+    text: string,
+    limit: number,
+    ctx?: { thread?: string },
+  ): Promise<ChatKnowledgeHit[]>
   /**
    * WP289（决策 318）：客服职责规矩里那几句「以后都这样」（与运行提示词同一本、同一节文字）。
    * 每一轮现取——改了 / 删了下一句就跟着变。不给 = 聊天里不带规矩。
@@ -589,7 +594,8 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           private_values: privateValuesOf(order),
         })
     }
-    const hits = (await options.searchKnowledge?.(turn_text, MAX_KNOWLEDGE_HITS)) ?? []
+    const hits =
+      (await options.searchKnowledge?.(turn_text, MAX_KNOWLEDGE_HITS, { thread: session.id })) ?? []
     if (mode === 'review') {
       if (hits.length > 0)
         parts.push(`客服知识：\n${hits.map((h) => `- ${h.statement}`).join('\n')}`)

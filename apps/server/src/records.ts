@@ -52,6 +52,7 @@ import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 import type { Work } from '@agentsws/work'
 import { catalogEntry } from './catalog.js'
 import type { ConnectLike } from './connections.js'
+import { retrievalStage } from './knowledge-learn.js'
 import { type LiveConnection, lineItemsOf, ordersArrayOf, toOrderRow } from './live-data.js'
 import type { MatterRecordSource } from './runtime.js'
 import { type AdminOperation, ShopAdminError, type ShopifyAdminReader } from './shop-admin.js'
@@ -114,6 +115,8 @@ export interface RecordKnowledgePort {
     text: string
     actor: RetrievalActor & { grants: PermissionScope[]; ranges?: RangeRef[] }
     k?: number
+    /** WP488：售前 / 售后（不给 = 两边都取）。 */
+    stage?: 'both' | 'presales' | 'postsales'
   }): Promise<{ hits: readonly RetrievalHit[] }>
 }
 
@@ -139,6 +142,11 @@ export interface ConnectRecordSourceOptions {
   workspace_id: WorkspaceId
   /** 19 §3 知识层；不给的话 `search_policies` 就是一句"这台机器上没有知识库"。 */
   knowledge?: RecordKnowledgePort
+  /**
+   * WP488（决策 1704 = C）：售前 / 售后由 AI 判（`key` = 这件事，同一件事只问一次）。
+   * 不给 = 规则判（判不出两边都取）。
+   */
+  judgeStage?(text: string, key: string): Promise<{ stage?: 'presales' | 'postsales' }>
   /** 检索要的岗位身份；不给就没有任何 grant，候选集为空（宁可零命中也不越权）。 */
   roles?: RecordRolesPort
   /**
@@ -921,6 +929,23 @@ export function createConnectRecordSource(
   }
 
   // ── 工具执行器 ─────────────────────────────────────────────────────
+  /** 来信（这件事的线程）优先，没有就看查询本身。 */
+  const stageOfRequest = async (
+    request: RunRequest,
+    query: string,
+  ): Promise<{ stage?: 'presales' | 'postsales' }> => {
+    const thread = (request.context ?? [])
+      .filter((c) => c.kind === 'thread')
+      .map((c) => contextTextOf(c.content))
+      .join('\n')
+      .trim()
+    const text = thread === '' ? query : thread
+    if (options.judgeStage === undefined) return retrievalStage(thread, query)
+    return options
+      .judgeStage(text, request.work_item?.id ?? (thread === '' ? `q:${query}` : request.id))
+      .catch(() => retrievalStage(thread, query))
+  }
+
   const searchPolicies = async (request: RunRequest, query: string): Promise<ToolExecution> => {
     const knowledge = options.knowledge
     if (knowledge === undefined) {
@@ -934,6 +959,8 @@ export function createConnectRecordSource(
     const config = options.roles?.effectiveConfig(request.actor.assignment_id)
     const { hits } = await knowledge.search({
       text: query,
+      // WP488（决策 1682 / 1704）：先判这件事是售前还是售后（AI 判、同一件事只问一次；判不出两边都取）
+      ...(await stageOfRequest(request, query)),
       actor: {
         person_id: request.actor.person_id,
         assignment_id: request.actor.assignment_id,
@@ -1637,4 +1664,20 @@ export function createConnectRecordSource(
     contacts: () => [...contacts.values()],
     noteContact: (email, opts = {}) => noteContact(email, opts),
   }
+}
+
+/** WP488：上下文条目的正文（字符串就是它；对象取 `text` / `body`，再不行整个 JSON）。 */
+function contextTextOf(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (content !== null && typeof content === 'object') {
+    const o = content as Record<string, unknown>
+    if (typeof o.text === 'string') return o.text
+    if (typeof o.body === 'string') return o.body
+    try {
+      return JSON.stringify(content).slice(0, 4000)
+    } catch {
+      return ''
+    }
+  }
+  return ''
 }

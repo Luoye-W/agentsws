@@ -18,7 +18,8 @@
  * 连预检都发不出来。
  */
 
-import type { Iso8601, KolChannel, MaybePromise } from '@agentsws/contracts'
+import type { Iso8601, KolChannel, MaybePromise, PublicContactLink } from '@agentsws/contracts'
+import { MAX_PUBLIC_CONTACTS, PUBLIC_CONTACT_KINDS } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import {
@@ -49,6 +50,12 @@ export interface ExtensionObservation {
   bio?: string | undefined
   /** 用户显式点过「收下这个邮箱」才有；明文当场进本机加密库。 */
   contact?: { kind: 'email' | 'dm' | 'phone' | 'form'; value: string; source?: string } | undefined
+  /**
+   * WP487（决策 1661 补，只加）：红人**主页上公开写着的**联系方式（公开邮箱、网站、其它平台主页、
+   * 商务合作入口、经纪联系）。本机服务过一遍 `sanitizePublicContacts` 再随观测一起备份到工坊云端；
+   * 私信内容、账号凭据、用户自己的数据没有地方放。
+   */
+  public_contacts?: PublicContactLink[] | undefined
   observed_at: Iso8601
   page_url?: string | undefined
   source: 'channel_page' | 'content_page' | 'search_results'
@@ -155,6 +162,25 @@ export interface ExtensionHello {
 /** WP202：工作台「去建红人岗位」的那一段路径（插件深链与工作台自己的按钮共用）。 */
 export const KOL_SETUP_PATH = '/org?tab=positions&new=kol'
 
+/**
+ * WP489（决策 1707）：表格导入的红人送去公共红人库的那一行——**只有公开资料**。
+ * 合作状态、金额、日期、备注、负责人这类用户自己的生意数据，这个形状上根本没有位置。
+ */
+export interface ExtensionProfileRow {
+  channel: KolChannel
+  handle: string
+  display_name?: string | undefined
+  url?: string | undefined
+  followers?: number | undefined
+  engagement_rate?: number | undefined
+  category?: string | undefined
+  language?: string | undefined
+  region?: string | undefined
+  /** 公开的联系邮箱。 */
+  email?: string | undefined
+  observed_at: Iso8601
+}
+
 export interface ExtensionPort {
   store: ExtensionStore
   ingest(
@@ -162,6 +188,14 @@ export interface ExtensionPort {
     input: { observations: ExtensionObservation[]; batch_id?: string },
   ): MaybePromise<ExtensionIngestResult>
   hello(session: ExtensionSession): MaybePromise<ExtensionHello>
+  /**
+   * WP489（决策 1707）：表格导入的红人只把**公开资料**送去公共红人库（与插件同一条转发路：登录了才送、
+   * 失败退避重试；本机已经写过，这里不落本机）。没有 HTTP 路由。
+   */
+  contributeProfiles?(
+    session: ExtensionSession,
+    rows: readonly ExtensionProfileRow[],
+  ): MaybePromise<{ queued: number }>
 
   /* ── WP119c：完整版面板要的那一批（docs/76 §10；清单出自私有仓 parity.md §六）────
    *
@@ -545,6 +579,15 @@ const contactSchema = z.object({
   source: z.string().max(300).optional(),
 })
 
+/** WP487：主页上公开的一条联系方式（形状在这里卡，内容规矩在服务端的 `sanitizePublicContacts`）。 */
+const publicContactSchema = z
+  .object({
+    kind: z.enum(PUBLIC_CONTACT_KINDS as unknown as [string, ...string[]]),
+    value: z.string().min(1).max(600),
+    label: z.string().max(200).optional(),
+  })
+  .strict()
+
 /**
  * 观测的**白名单**。`.strict()` 不是洁癖：多一个键整批拒，是因为
  * 一条带正文的观测是一个信号，悄悄丢掉它等于把信号也丢了（同 48 §5.3）。
@@ -564,6 +607,11 @@ const observationSchema = z
     country: z.string().max(80).optional(),
     bio: z.string().max(2000).optional(),
     contact: contactSchema.optional(),
+    // WP487（只加；老插件不带）：主页上公开的联系方式
+    public_contacts: z
+      .array(publicContactSchema)
+      .max(MAX_PUBLIC_CONTACTS * 2)
+      .optional(),
     observed_at: z.string().min(1),
     page_url: z.string().max(600).optional(),
     source: z.enum(['channel_page', 'content_page', 'search_results']),

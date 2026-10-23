@@ -263,7 +263,7 @@ describe('Instagram / TikTok 的最小版', () => {
 })
 
 describe('快照 → 观测：白名单', () => {
-  it('links / recent_items / total_views 留在本机，不往上报', () => {
+  it('recent_items / total_views 留在本机，不往上报；外链作为公开联系方式报（WP487）', () => {
     const snapshot = {
       platform: 'youtube' as const,
       external_id: '@a',
@@ -287,9 +287,40 @@ describe('快照 → 观测：白名单', () => {
         'handle',
         'observed_at',
         'page_url',
+        'public_contacts',
         'source',
         'url',
       ].sort(),
+    )
+    expect(obs.public_contacts).toEqual([{ kind: 'website', value: 'https://example.com' }])
+  })
+
+  it('WP487：外链分网站 / 别的平台主页，mailto 算邮箱；点开看到的商务邮箱算商务入口', () => {
+    const snapshot = {
+      platform: 'youtube' as const,
+      external_id: '@a',
+      name: '甲',
+      page_url: 'https://www.youtube.com/@a',
+      business_email: 'deals@example.com',
+      links: [
+        'https://www.instagram.com/a',
+        'https://linktr.ee/a',
+        'mailto:hi@example.com',
+        'not a url',
+      ],
+      recent_items: [],
+      observed_at: NOW,
+    }
+    expect(creatorObservation(snapshot, computeCreatorHealth(snapshot)).public_contacts).toEqual([
+      { kind: 'business', value: 'deals@example.com' },
+      { kind: 'social', value: 'https://www.instagram.com/a' },
+      { kind: 'website', value: 'https://linktr.ee/a' },
+      { kind: 'email', value: 'mailto:hi@example.com' },
+    ])
+    // 没有外链、没有商务邮箱：不带这一格
+    const none = { ...snapshot, business_email: undefined, links: [] }
+    expect(creatorObservation(none, computeCreatorHealth(none))).not.toHaveProperty(
+      'public_contacts',
     )
   })
 

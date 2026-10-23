@@ -203,6 +203,8 @@ export interface MessagesOptions {
   searchKnowledge?(
     text: string,
     limit: number,
+    /** WP488：`ctx.thread` = 这条邮件线程（同一线程售前 / 售后只让 AI 判一次）。 */
+    ctx?: { thread?: string },
   ): Promise<{ source_id: string; title: string; text: string }[]>
   /**
    * 语气与签名（个人层技能 / 记忆，54 的六层）。
@@ -1012,7 +1014,9 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
               options.searchKnowledge === undefined
                 ? []
                 : await options
-                    .searchKnowledge(`${record.subject}\n${record.text.slice(0, 500)}`, 3)
+                    .searchKnowledge(`${record.subject}\n${record.text.slice(0, 500)}`, 3, {
+                      thread: record.thread_id,
+                    })
                     .catch(() => [])
             const out = await suggester.suggest(`${record.id}:rule`, {
               subject: record.subject,
@@ -2028,7 +2032,9 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       const needsReply = row.triage?.needs_reply === true && !handed
       const knowledge =
         needsReply && options.searchKnowledge !== undefined
-          ? await options.searchKnowledge(`${row.subject}\n${row.text.slice(0, 500)}`, 3)
+          ? await options.searchKnowledge(`${row.subject}\n${row.text.slice(0, 500)}`, 3, {
+              thread: row.thread_id,
+            })
           : []
       const context = (await store.thread(row.thread_id))
         .filter((m) => m.id !== row.id)

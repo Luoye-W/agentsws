@@ -287,6 +287,13 @@ export interface DemoOptions {
   /** 工作台构建产物；不给就按 `apps/workstation/dist` 找 */
   staticDir?: string
   /**
+   * WP488：「学一遍」的三个口（截图脚本注入一批模拟往来、一个本地假站点、一个假模型；不给 = 生产那一套）。
+   */
+  knowledgeLearn?: Pick<
+    ServerOptions,
+    'knowledgeLearnMail' | 'knowledgeLearnModel' | 'knowledgeSiteFetch'
+  >
+  /**
    * WP66（52 O1）：多造一个品牌，用来看"一个进程装多套品牌模块"长什么样。
    *
    * **默认不造**（`false`）：demo 的本分是把一个品牌的活演完整，多一个品牌只会
@@ -1715,6 +1722,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     clock: world.clock,
     random: world.random,
     mount,
+    ...(options.knowledgeLearn ?? {}),
     ...(options.execution === undefined ? {} : { execution: options.execution }),
     competitorAdapters: () => ({ shop_catalog: competitorShop }),
     // WP393：自家店的几件商品（比价用；demo 不连真店）；探平台不出网（demo 竞品都是 `.example` 保留域）

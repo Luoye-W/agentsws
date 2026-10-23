@@ -26,9 +26,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, FileText, Trash2, Upload, UploadCloud } from 'lucide-react'
 import { type DragEvent, useRef, useState } from 'react'
-import { WsCard, WsTag } from '@/components/design'
+import { Segmented, WsCard, WsTag } from '@/components/design'
 import { ClaimRulesSection } from '@/components/knowledge/claim-rules'
 import { GapRow } from '@/components/knowledge/gap-row'
+import { LearnPanel } from '@/components/knowledge/learn-panel'
 import { RecheckCard } from '@/components/knowledge/recheck-card'
 import { KnowledgeGroups } from '@/components/library/knowledge-groups'
 import { FilterChip, LibrarySearch } from '@/components/library/library-group'
@@ -51,6 +52,7 @@ import {
   importKnowledgePack,
   type KnowledgePackImportResult,
   type KnowledgeSource,
+  type KnowledgeStageId,
   listKnowledgeBoundaries,
   listKnowledgeCards,
   listKnowledgeGaps,
@@ -115,6 +117,8 @@ export function KnowledgePage(): React.ReactNode {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<string>(SCOPE_ALL)
   const [status, setStatus] = useState<KnowledgeStatus | 'all'>('all')
+  // WP488（决策 1682）：公共 / 售前 / 售后三个标签页（公共 = 两边都用的、没标的）
+  const [stageTab, setStageTab] = useState<KnowledgeStageId>('both')
 
   const cards = useQuery({ queryKey: ['knowledge-cards'], queryFn: () => listKnowledgeCards() })
   const rechecks = useQuery({
@@ -278,7 +282,16 @@ export function KnowledgePage(): React.ReactNode {
   const uploads = (sources.data ?? []).filter((s) => s.kind === 'upload')
 
   // ── WP209：知识那一块 ─────────────────────────────────────────
-  const allCards = cards.data ?? []
+  const everyCard = cards.data ?? []
+  const stageOfCard = (c: { stage?: KnowledgeStageId }): KnowledgeStageId => c.stage ?? 'both'
+  const stageCounts = {
+    both: everyCard.filter((c) => c.status !== 'retired' && stageOfCard(c) === 'both').length,
+    presales: everyCard.filter((c) => c.status !== 'retired' && stageOfCard(c) === 'presales')
+      .length,
+    postsales: everyCard.filter((c) => c.status !== 'retired' && stageOfCard(c) === 'postsales')
+      .length,
+  }
+  const allCards = everyCard.filter((c) => stageOfCard(c) === stageTab)
   const filtering = query.trim() !== '' || scope !== SCOPE_ALL || status !== 'all'
   const shownCards = filterKnowledge(allCards, { query, scope, status })
   const statusCounts = countByStatus(filterKnowledge(allCards, { query, scope }))
@@ -287,7 +300,7 @@ export function KnowledgePage(): React.ReactNode {
     scopeLabel(ref, rangeGroups.data ?? [], tm)
   // 上传的文件没有状态、没有范围：按状态 / 范围筛的时候不列它们，只按名字搜
   const shownUploads =
-    status !== 'all' || scope !== SCOPE_ALL
+    status !== 'all' || scope !== SCOPE_ALL || stageTab !== 'both'
       ? []
       : uploads.filter((u) => nameOfSource(u).toLowerCase().includes(query.trim().toLowerCase()))
   const uploadList = (
@@ -400,6 +413,13 @@ export function KnowledgePage(): React.ReactNode {
         </CardContent>
       </Card>
 
+      {/* WP488：从过往邮件 / 官网 / 售后网站学一遍 */}
+      <Card data-testid="knowledge-learn">
+        <CardContent className="pt-4">
+          <LearnPanel />
+        </CardContent>
+      </Card>
+
       {rechecks.isLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : (
@@ -418,6 +438,22 @@ export function KnowledgePage(): React.ReactNode {
       )}
 
       <section className="flex flex-col gap-3" data-testid="knowledge-library">
+        <div className="flex items-center gap-1">
+          <Segmented<KnowledgeStageId>
+            kind="tabs"
+            label={t('kl.stage.label')}
+            value={stageTab}
+            testId="knowledge-stage-tabs"
+            onChange={setStageTab}
+            options={(['both', 'presales', 'postsales'] as const).map((v) => ({
+              value: v,
+              label: t(`kl.tab.${v}`),
+              count: stageCounts[v],
+              testId: `knowledge-stage-${v}`,
+            }))}
+          />
+          <Hint text={t('kl.tabs.hint')} />
+        </div>
         <div className="flex flex-wrap items-center gap-2" data-testid="knowledge-toolbar">
           <LibrarySearch value={query} onChange={setQuery} testId="knowledge-search" />
           {scopes.length === 0 ? null : (

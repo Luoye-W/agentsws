@@ -233,6 +233,28 @@ export interface Collaboration {
   sample?: KolSample
   /** WP299（决策 387）：付给这个红人的钱（每一笔都是批过的「花钱」卡落下来的）。 */
   payments?: KolPayment[]
+  /**
+   * WP489：现在这个阶段是谁定的。`import` = 用户的表格写的（邮件判出来的与它不一样时出卡让人选，
+   * 不直接盖掉）；`mail` = 读往来邮件判的；没有 = 工坊自己的流程推的。
+   */
+  stage_source?: 'import' | 'mail'
+  /** WP489：邮件判阶段的依据（哪封、哪句）。最近一次判的那几条。 */
+  stage_evidence?: KolStageEvidence[]
+  /** WP489：表格导入时这一行原样留下的东西（状态原话、金额原文、备注、没用上的列）。 */
+  import_note?: string
+  /** WP489：表格那一行的指纹（同一张表再导一次不重复建合作）。 */
+  import_key?: string
+}
+
+/** WP489：邮件判阶段的一条依据。 */
+export interface KolStageEvidence {
+  /** 往来记录 id（`KolExchange.id`）。 */
+  message_id: string
+  at: Iso8601
+  direction: 'out' | 'in'
+  subject: string
+  /** 那一句原话（≤ 200 字）。 */
+  quote: string
 }
 
 /**

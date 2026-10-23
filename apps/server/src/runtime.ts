@@ -136,10 +136,12 @@ import {
   isAmazonKeywordRole,
   isAmazonListingRole,
   isB2bOutboundRole,
+  isKnowledgeLearnRole,
   isOwnerRole,
   isScheduleTool,
   isSiteHealthRole,
   isThemeRole,
+  KNOWLEDGE_LEARN_TOOL_NAMES,
   MESSAGE_RULE_TOOL_NAMES,
   OWNER_TOOL_NAMES,
   orderContextItems,
@@ -247,6 +249,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...SETUP_REQUEST_TOOL_NAMES,
     // WP385：读网站体检结论——只读本机体检记录（不现跑体检）
     ...SITE_HEALTH_TOOL_NAMES,
+    // WP488：客服知识库「学一遍」——读邮箱 / 读公开网页；只写待确认的条目 + 一张卡
+    ...KNOWLEDGE_LEARN_TOOL_NAMES,
     // WP387：交代建 / 读 Google 提醒的结果——只写本机信息监控库（先拉一次 feed 是读）
     ...GOOGLE_ALERTS_TOOL_NAMES,
     // WP393：店铺管理「竞品动向」——探平台 / 现在读一次只读外部公开页面；写的只是本机竞品清单
@@ -604,6 +608,11 @@ export interface RuntimeOptions {
    * 只给店铺管理、SEO 与 GEO（`dtc.store` / `dtc.seo`）。不给 = 没有这个工具（老装配、模拟世界字节不变）。
    */
   siteHealthTools?: ToolExecutor
+  /**
+   * WP488（决策 1680 / 1681）：客服岗位「学一遍」的工具 `learn_support_knowledge`（`knowledge-learn-tools.ts`）。
+   * 只给客服那几条职责。不给 = 没有这个工具（老装配、模拟世界字节不变）。
+   */
+  knowledgeLearnTools?: ToolExecutor
   /**
    * WP419（自查 R10 / S3）：社媒发帖 / Reddit 起草出卡的工具（`social-tools.ts` 建的那一份）。
    * Reddit 那两个给官方版块 / 外部版块，发帖那两个给社媒内容账号那几条。不给 = 没有（老装配、模拟世界字节不变）。
@@ -1488,6 +1497,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const amazonKeywordTools = options.amazonKeywordTools
     const setupRequest = options.setupRequestTool
     const siteHealthTools = options.siteHealthTools
+    const knowledgeLearnTools = options.knowledgeLearnTools
     const socialWork = options.socialWorkTools
     const googleAlerts = options.googleAlertsTool
     const competitorStore = options.competitorStoreTools
@@ -1529,6 +1539,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       adsDataTools === undefined &&
       setupRequest === undefined &&
       siteHealthTools === undefined &&
+      knowledgeLearnTools === undefined &&
       socialWork === undefined &&
       prMonitor === undefined &&
       googleAlerts === undefined &&
@@ -1621,6 +1632,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bareOf(call.name))) {
         return siteHealthTools(call)
       }
+      // WP488：客服知识库「学一遍」（名字与别处不重名；职责在执行器里再判一次）
+      if (
+        knowledgeLearnTools !== undefined &&
+        KNOWLEDGE_LEARN_TOOL_NAMES.includes(bareOf(call.name))
+      ) {
+        return knowledgeLearnTools(call)
+      }
       // WP419：社媒发帖 / Reddit 起草（名字与别处不重名；职责在执行器里再判一次）
       if (socialWork !== undefined && SOCIAL_WORK_TOOL_NAMES.includes(bareOf(call.name))) {
         return socialWork(call)
@@ -1707,6 +1725,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.setupRequestTool !== undefined && SETUP_REQUEST_TOOL_NAMES.includes(bare))
       return true
     if (options.siteHealthTools !== undefined && SITE_HEALTH_TOOL_NAMES.includes(bare)) return true
+    if (options.knowledgeLearnTools !== undefined && KNOWLEDGE_LEARN_TOOL_NAMES.includes(bare))
+      return true
     if (options.socialWorkTools !== undefined && SOCIAL_WORK_TOOL_NAMES.includes(bare)) return true
     if (options.googleAlertsTool !== undefined && GOOGLE_ALERTS_TOOL_NAMES.includes(bare))
       return true
@@ -2285,6 +2305,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP385：读网站体检结论（只给店铺管理、内容与搜索；服务端接了才有）
         ...(isSiteHealthRole(config.role_id) && options.siteHealthTools !== undefined
           ? SITE_HEALTH_TOOL_NAMES
+          : []),
+        // WP488：客服知识库「学一遍」（只给客服那几条；服务端接了才有）
+        ...(isKnowledgeLearnRole(config.role_id) && options.knowledgeLearnTools !== undefined
+          ? KNOWLEDGE_LEARN_TOOL_NAMES
           : []),
         // WP419：社媒发帖 / Reddit 起草出卡（按职责：Reddit 两条、社媒内容账号几条；服务端接了才有）
         ...(options.socialWorkTools === undefined ? [] : socialWorkToolsFor(config.role_id)),

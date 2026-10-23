@@ -69,15 +69,26 @@ function rowActions(card: DeckCard): DeckAction[] {
     form === 'content_update_digest' ||
     // WP441：「要建这条规则吗」——「建」要带上「也处理过去 30 天的」那个勾，在卡身里
     form === 'message_rule' ||
+    // WP489：「没对上红人的往来」那张卡的「记下」要带上卡里选的 / 填的，在卡身里
+    form === 'kol_mail_match' ||
     // WP442：催促卡的「发出」「修改」都在卡身里（就地改字、带着改过的那一版批）
-    form === FOLLOW_UP_CARD_FORM
+    form === FOLLOW_UP_CARD_FORM ||
+    // WP488：「学到 N 条」的「采纳」要带上卡上改过的范围 / 去掉的几条；「可能过期」两个选项也在卡身里
+    form === 'knowledge_learned' ||
+    form === 'knowledge_stale'
   return (
     card.available_actions
       .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
       .filter((a) => !(bodyPrimary && a === 'approve'))
       // WP441：「要建这条规则吗」的「修改」在卡身里（把原话带回规则面板）；WP442 催促卡的「修改」也在卡身里
       .filter(
-        (a) => !((form === 'message_rule' || form === FOLLOW_UP_CARD_FORM) && a === 'instruct'),
+        (a) =>
+          !(
+            (form === 'message_rule' ||
+              form === FOLLOW_UP_CARD_FORM ||
+              form === 'kol_mail_match') &&
+            a === 'instruct'
+          ),
       )
       .sort((a, b) => rank(a) - rank(b))
   )

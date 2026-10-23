@@ -82,6 +82,16 @@ const GapAnswerBody = z.object({
 
 const RECHECK_STATUSES: readonly string[] = ['open', 'resolved', 'superseded']
 
+const LearnBody = z.object({
+  source: z.enum(['email', 'website']),
+  /** 邮件：回看几个月（默认 12，1–36）。 */
+  months: z.number().int().min(1).max(36).optional(),
+  /** 网站：官网 / 售后（帮助中心）网址；不给 = 品牌建档时的官网。 */
+  urls: z.array(z.string().min(1).max(500)).max(5).optional(),
+})
+
+const StageBody = z.object({ stage: z.enum(['both', 'presales', 'postsales']) })
+
 const RecheckResolveBody = z.object({
   /** 冻结的三选一（`packages/knowledge` 的 `RECHECK_OPTIONS`）。 */
   resolution: z.enum(['unchanged', 'adopt_new', 'ignore']),
@@ -180,6 +190,8 @@ function needs<T>(fn: T | undefined, what: string): NonNullable<T> {
 
 const SearchBody = z.object({
   text: z.string().min(1),
+  /** WP488：售前 / 售后（不给 = 两边都取）。 */
+  stage: z.enum(['both', 'presales', 'postsales']).optional(),
   domains: z.array(z.string().min(1)).optional(),
   scope: z
     .array(
@@ -241,6 +253,7 @@ export function knowledgeRoutes(): Route[] {
             ...(input.layers === undefined ? {} : { layers: [...input.layers] }),
             ...(input.k === undefined ? {} : { k: input.k }),
             ...(input.precheck === undefined ? {} : { precheck: input.precheck }),
+            ...(input.stage === undefined ? {} : { stage: input.stage }),
           }),
         )
       },
@@ -524,6 +537,104 @@ export function knowledgeRoutes(): Route[] {
             },
           ),
         )
+      },
+    ),
+
+    /* ── WP488（决策 1680 / 1681 / 1682 / 1686）：学一遍 + 改范围 ─────────── */
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/learn/estimate',
+        operationId: 'estimateKnowledgeLearn',
+        summary: '学一遍之前的预估：几次模型调用、预估花费、网关上限装不装得下、接没接邮箱',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: LearnBody,
+        returns: 'KnowledgeLearnEstimate',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const input = await body(c, LearnBody)
+        const fn = needs(deps.knowledge.learnEstimate, '「学一遍」')
+        return ok(
+          c,
+          await fn.call(deps.knowledge, actorOf(deps, { principal: p, assignment: a }), input),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/learn',
+        operationId: 'startKnowledgeLearn',
+        summary: '从过往邮件 / 官网 / 售后网站学一遍（后台跑；学到的待确认，出一张汇总卡）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: LearnBody,
+        returns: 'KnowledgeLearnJob',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const input = await body(c, LearnBody)
+        const fn = needs(deps.knowledge.learnStart, '「学一遍」')
+        return ok(
+          c,
+          await fn.call(deps.knowledge, actorOf(deps, { principal: p, assignment: a }), input),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/knowledge/learn/jobs',
+        operationId: 'listKnowledgeLearnJobs',
+        summary: '最近几次「学一遍」的进度（新的在前）',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'KnowledgeLearnJob[]',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const fn = needs(deps.knowledge.learnJobs, '「学一遍」')
+        return ok(c, await fn.call(deps.knowledge, actorOf(deps, { principal: p, assignment: a })))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/cards/:id/stage',
+        operationId: 'setKnowledgeCardStage',
+        summary: '改一条知识的范围：公共 / 售前 / 售后',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '事实卡 id' }],
+        body: StageBody,
+        returns: 'FactCard',
+      },
+      async (c, deps) => {
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const input = await body(c, StageBody)
+        const fn = needs(deps.knowledge.setCardStage, '改范围')
+        const card = await fn.call(
+          deps.knowledge,
+          actorOf(deps, { principal: p, assignment: a }),
+          param(c, 'id'),
+          input.stage,
+        )
+        if (card === undefined) throw new ApiError('not_found', '没有这条知识')
+        return ok(c, card)
       },
     ),
 

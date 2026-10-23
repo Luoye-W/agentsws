@@ -29,7 +29,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { suppressionKey } from '@agentsws/core'
-import { classifyReply } from '@agentsws/kol-core'
+import { advanceByMail, classifyReply } from '@agentsws/kol-core'
 import type { BackendResult } from '@agentsws/txn'
 import type { DirectMailInput, DirectMailResult } from './channels.js'
 import type { KolStore } from './kol.js'
@@ -394,13 +394,40 @@ export function createKolMail(options: KolMailOptions): KolMailAssembly {
     let stage: CollaborationStage | undefined
     if (collab !== undefined) {
       const stop = verdict.opt_out || verdict.klass === 'declined'
-      stage =
-        collab.stage === 'sourced' || collab.stage === 'contacted'
-          ? stop
-            ? 'declined'
-            : 'replied'
-          : collab.stage
-      store.saveCollaboration({ ...collab, stage, last_activity_at: at })
+      /*
+       * WP489（决策 1685）：全阶段——对方的信里有报价 / 谈妥 / 单号 / 脚本 / 发布链接就推到那一步（只往前推）。
+       * 「不做」仍只在还没谈起来时（已找到 / 已建联）判谢绝：谈到一半的一句 decline 多半是在还价。
+       */
+      const early = collab.stage === 'sourced' || collab.stage === 'contacted'
+      const next = advanceByMail(
+        collab.stage,
+        { id: exchange.id, direction: 'in', at, subject: mail.subject, text: mail.text },
+        { declined: stop && early },
+      )
+      stage = next?.stage ?? collab.stage
+      store.saveCollaboration({
+        ...collab,
+        stage,
+        last_activity_at: at,
+        ...(next === undefined
+          ? {}
+          : {
+              stage_source: 'mail' as const,
+              ...(next.quote === undefined
+                ? {}
+                : {
+                    stage_evidence: [
+                      {
+                        message_id: exchange.id,
+                        at,
+                        direction: 'in' as const,
+                        subject: mail.subject,
+                        quote: next.quote,
+                      },
+                    ],
+                  }),
+            }),
+      })
     }
     emit('kol.reply_matched', {
       creator_id,

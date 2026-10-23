@@ -27,13 +27,17 @@ import type {
   RunRequest,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { sanitizePublicContacts } from '@agentsws/contracts'
 import { KOL_TOOL_NAMES, kolChannelOfRole } from '@agentsws/kol-core'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
+import type { KolImportAssembly } from './kol-import.js'
 
 export interface KolToolsOptions {
   workspace_id: WorkspaceId
   /** 懒取：红人装配比运行时晚建出来（同 server.ts 里 `work: () => workRef` 那一处）。 */
   port(): KolPort | undefined
+  /** WP489：表格导入 / 邮件判阶段（懒取；没装就没有）。 */
+  importer?(): KolImportAssembly | undefined
   /** 现在几点（登记交付物没给 `due_at` 时按「一周后」兜底）。 */
   now(): Iso8601
   /**
@@ -203,6 +207,26 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
     const channel = channelOf(input.channel, own)
 
     switch (bare) {
+      // WP489：在线表格链接 → 预览卡；用过往邮件更新阶段 → 预估卡（两样都是人点了才动库）
+      case 'import_creator_sheet': {
+        const url = str(input.url)
+        if (url === undefined) return missing('表格链接')
+        const importer = options.importer?.()
+        if (importer === undefined) return { status: 'error', reason: '这个进程没装表格导入。' }
+        const message = await importer.previewCard(actor, { filename: url, url })
+        return { status: 'ok', data: { kind: 'kol_import_preview', message } }
+      }
+      case 'update_stages_from_mail': {
+        const importer = options.importer?.()
+        if (importer === undefined) return { status: 'error', reason: '这个进程没装邮件判阶段。' }
+        const months = num(input.months)
+        const message = await importer.mailStageCard(actor, {
+          ...(months === undefined
+            ? {}
+            : { months: Math.max(1, Math.min(60, Math.round(months))) }),
+        })
+        return { status: 'ok', data: { kind: 'kol_mail_stage_estimate', message } }
+      }
       case 'search_creators': {
         /*
          * WP117b（66 复测 #15）：**关键词可以是空的，粉丝区间不能丢。**
@@ -343,7 +367,7 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
 
       /*
        * WP483（决策 1661）：浏览器（ego）里读到的公开主页数据 → 和插件同一条路（本机 + 云端备份）。
-       * 只收白名单那几格；私信、联系方式、账号凭据一格都没有。
+       * 只收白名单那几格；私信、账号凭据一格都没有。WP487：加上主页上公开的联系方式（过 `sanitizePublicContacts`）。
        */
       case 'record_creator_observations': {
         if (options.observe === undefined)
@@ -363,6 +387,7 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
           const videos = count(r.video_count)
           const views = count(r.avg_views)
           const url = str(r.url)
+          const contacts = sanitizePublicContacts(r.public_contacts)
           observations.push({
             channel,
             handle: channel === 'youtube' ? handle : handle.replace(/^@/u, ''),
@@ -375,6 +400,8 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
             ...(views === undefined ? {} : { avg_views: views }),
             ...(str(r.country) === undefined ? {} : { country: str(r.country)?.slice(0, 60) }),
             ...(str(r.bio) === undefined ? {} : { bio: str(r.bio)?.slice(0, 1000) }),
+            // WP487（1661 补）：主页上公开的联系方式——和插件那条路同一个口子（`ingest` 里再筛一遍）
+            ...(contacts.length === 0 ? {} : { public_contacts: contacts }),
             observed_at: at,
             source: 'channel_page',
           })

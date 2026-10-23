@@ -58,6 +58,7 @@ import type { DesignServiceAssembly, DesignStore } from './design.js'
 import type { EconomicsService } from './economics.js'
 import type { GoogleReads } from './google-reads.js'
 import type { KolStore } from './kol.js'
+import type { KolImportAssembly } from './kol-import.js'
 import type { KolMailAssembly } from './kol-mail.js'
 import type { KolSandboxAssembly } from './kol-sandbox.js'
 import type { KolServiceAssembly } from './kol-service.js'
@@ -190,6 +191,8 @@ export interface BrandModuleSet {
    * 可选：老装配 / 测试替身没有它（那几张卡照旧掉回原来那条路）。
    */
   kolMail?: KolMailAssembly
+  /** WP489：红人表格 / 在线表导入、读过往邮件判合作阶段。可选：老装配没有它。 */
+  kolImport?: KolImportAssembly
   /**
    * WP131：这个品牌连云端公共红人库的那个客户端（`kol-public-client`）。插件「采集后
    * 自动评分」的体检那一半经它走（令牌是这个品牌那一把）。可选：老装配没有它。
@@ -374,6 +377,11 @@ export interface BrandModuleSet {
    * （这个品牌真在用的默认模型；stub / 没配回 `undefined`，走剧本）。
    */
   reasonComplete?: () => ReasonComplete | undefined
+  /**
+   * WP487（决策 1679）：夜里把「只删了几个字」的修改提炼成一句规矩用的那一份模型（这个品牌真在用的
+   * 便宜档 `extraction`；stub / 没配回 `undefined`，学习回路留着规则版那一句）。
+   */
+  lessonComplete?: () => ((prompt: string) => Promise<string>) | undefined
   /**
    * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
    */

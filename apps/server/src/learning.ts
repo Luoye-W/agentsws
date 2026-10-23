@@ -39,6 +39,7 @@ import type { Knowledge } from '@agentsws/knowledge'
 import {
   applyLessonDecision,
   createLearning,
+  DEFAULT_REFINE_MAX_PER_NIGHT,
   draftProposals,
   type ExtractInput,
   extractLessons,
@@ -51,7 +52,10 @@ import {
   type LessonSource,
   OPTION_NONE,
   type PromotionCard,
+  planDeletionRefine,
   promotionCriteria,
+  type RefineComplete,
+  refineDeletionLesson,
   skillReaderOf,
   weeklyPromotions,
 } from '@agentsws/learning'
@@ -371,6 +375,11 @@ export interface LearningAssembly {
   proposeDailyFor(
     workspace_id: WorkspaceId,
     now: Iso8601,
+    /**
+     * WP487（决策 1679）：这个品牌真在用的便宜档模型（提炼「只删了几个字」那几条用）。
+     * 不给 / 没配模型 = 留着规则版那一句「删掉了『…』」。
+     */
+    opts?: { refine?: RefineComplete | undefined },
   ): Promise<{ created: string[]; filtered: FilteredProposal[] }>
   /** 周一 06:00：跨人聚类 → `skill_promotion` 卡。 */
   weeklyConsolidate(
@@ -572,7 +581,11 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
         ? d.action
         : undefined
     if (action === undefined) return undefined
-    const before = textOf(item.payload)
+    /*
+     * WP487：改了再批之后总线把 `item.payload` 换成了改后那一版——原文在决定的 `edit_diff.before` 上。
+     * 以前拿 `item.payload` 当原文，原文 = 改后，于是「改了字」学到的永远是改后整行（「只删了几个字」也认不出）。
+     */
+    const before = textOf(d.edit_diff?.before ?? item.payload)
     const after = textOf(d.edited_payload)
     const boundary = boundaryOf(item, input)
     return {
@@ -839,6 +852,12 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     if (item.kind === 'knowledge_update' && form === 'faq_batch') return
     // WP350：助理扇出的「要记的 N 条」也一样（条目早就以待确认建好了，批了只是生效）
     if (item.kind === 'knowledge_update' && form === 'assistant_notes') return
+    // WP488：「学到 N 条」汇总卡 / 「这几条可能过期」卡也由学习器自己施行（条目早就以待确认建好了）
+    if (
+      item.kind === 'knowledge_update' &&
+      (form === 'knowledge_learned' || form === 'knowledge_stale')
+    )
+      return
     const decided =
       item.state === 'approved' || item.state === 'approved_edited' || item.state === 'rejected'
     if (!decided) return
@@ -980,11 +999,59 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     return { lessons: bad.length, cards: swept }
   }
 
-  const proposeDailyFor: LearningAssembly['proposeDailyFor'] = async (ws, now) => {
+  /**
+   * WP487（决策 1679）：出卡前，把够格出卡、还停在「删掉了『…』」的那几条交给模型提炼成一句规矩。
+   * 先算再打：几次、多少 token 记一笔 `lesson.refine_planned`；一晚最多 {@link DEFAULT_REFINE_MAX_PER_NIGHT} 次；
+   * 真花多少走模型网关的花费上限——网关拒了（超预算 / 急停 / 断网）就停下，剩下的留着规则版，明晚再试。
+   */
+  const refineDeletions = async (
+    ws: WorkspaceId,
+    now: Iso8601,
+    complete: RefineComplete | undefined,
+  ): Promise<void> => {
+    if (complete === undefined) return
+    const plan = planDeletionRefine(learning.pool.list({ workspace_id: ws }), {
+      rejectedKeys: learning.pool.rejectedKeys(ws).map((r) => r.semantic_key),
+    })
+    if (plan.lessons.length === 0) return
+    emit(
+      'lesson.refine_planned',
+      { ...plan.estimate, deferred: plan.deferred, cap: DEFAULT_REFINE_MAX_PER_NIGHT },
+      undefined,
+      ws,
+    )
+    for (const lesson of plan.lessons) {
+      let text: string | undefined
+      try {
+        text = await refineDeletionLesson(lesson, complete)
+      } catch (e) {
+        emit(
+          'lesson.refine_stopped',
+          {
+            lesson_id: lesson.id,
+            reason: e instanceof Error ? e.message.slice(0, 200) : String(e),
+            left: plan.lessons.length - plan.lessons.indexOf(lesson),
+          },
+          undefined,
+          ws,
+        )
+        return
+      }
+      if (text === undefined) {
+        emit('lesson.refine_skipped', { lesson_id: lesson.id }, undefined, ws)
+        continue
+      }
+      learning.pool.reword(lesson.id, text, now)
+      emit('lesson.refined', { lesson_id: lesson.id, by: 'model' }, undefined, ws)
+    }
+  }
+
+  const proposeDailyFor: LearningAssembly['proposeDailyFor'] = async (ws, now, opts) => {
     // 这个品牌里找不到负责人：池子照留着，等有人了再出（绝不把卡挂到别的品牌的人头上）
     if (targetOf(ws) === undefined) return { created: [], filtered: [] }
     const workspace_id = ws
     await sweepButtonOnly(ws)
+    await refineDeletions(ws, now, opts?.refine)
     const lessons = learning.pool.list({ workspace_id })
     // WP486：来源那几张卡先查好（卡片正文要说「你在哪几张卡上做了什么纠正」，详情要链过去）
     const origin = await sourceCards(lessons.filter((l) => l.status === 'pooled'))

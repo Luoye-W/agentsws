@@ -37,6 +37,11 @@ export interface LessonEvidence {
    */
   before?: string
   after?: string
+  /**
+   * WP487（决策 1679）：「只删了几个字」的那一次——删掉的那几段（如 `["DM us"]`）。
+   * 规则版拿它写「删掉了『DM us』」，夜里模型拿它和原文 / 改后提炼成一句规矩。
+   */
+  deleted?: string[]
 }
 
 /** WP486：证据里原文 / 改后各留多少字（详情面板上读得完就行，不存整封信）。 */

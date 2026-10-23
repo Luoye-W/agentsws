@@ -33,13 +33,17 @@ export interface LearnFromHistoryInput {
   at: Iso8601
   minClusterSize?: number
   maxClusters?: number
+  /** WP488：第几簇了（进度）。 */
+  onProgress?: (done: number, total: number) => void
+  /** WP488：每一簇之前问一声；回 `false` 就停（剩下的记成 `stopped`）。 */
+  shouldContinue?: () => boolean | Promise<boolean>
 }
 
 export interface LearnFromHistoryResult {
   clusters: HistoryCluster[]
   candidates: KnowledgeCandidate[]
   /** 归纳不出东西的簇（给运营看"为什么只学到 3 条"）。 */
-  skipped: { category: string; reason: 'no_summary' | 'not_a_candidate' }[]
+  skipped: { category: string; reason: 'no_summary' | 'not_a_candidate' | 'stopped' }[]
 }
 
 /**
@@ -51,13 +55,17 @@ export interface LearnFromHistoryResult {
 export async function learnFromHistory(
   input: LearnFromHistoryInput,
 ): Promise<LearnFromHistoryResult> {
-  const clusters = clusterHistory(input.pairs, {
-    ...(input.minClusterSize === undefined ? {} : { minClusterSize: input.minClusterSize }),
-    ...(input.maxClusters === undefined ? {} : { maxClusters: input.maxClusters }),
-  })
+  const clusters = planHistory(input.pairs, input)
   const candidates: KnowledgeCandidate[] = []
   const skipped: LearnFromHistoryResult['skipped'] = []
-  for (const cluster of clusters) {
+  for (const [i, cluster] of clusters.entries()) {
+    // WP488：每一簇之前问一声还跑不跑（网关上限到了 / 人停了）
+    if (input.shouldContinue !== undefined && !(await input.shouldContinue())) {
+      for (const rest of clusters.slice(i))
+        skipped.push({ category: rest.category, reason: 'stopped' })
+      break
+    }
+    input.onProgress?.(i, clusters.length)
     const summary = await input.summarize(historyPrompt(cluster))
     if (summary === undefined) {
       skipped.push({ category: cluster.category, reason: 'no_summary' })
@@ -70,5 +78,19 @@ export async function learnFromHistory(
     }
     candidates.push(candidate)
   }
+  input.onProgress?.(clusters.length, clusters.length)
   return { clusters, candidates, skipped }
+}
+
+/**
+ * WP488：开跑前先聚一遍类——簇数就是要问模型的次数，预估花费按它算（不读模型）。
+ */
+export function planHistory(
+  pairs: readonly QaPair[],
+  opts: { minClusterSize?: number; maxClusters?: number } = {},
+): HistoryCluster[] {
+  return clusterHistory(pairs, {
+    ...(opts.minClusterSize === undefined ? {} : { minClusterSize: opts.minClusterSize }),
+    ...(opts.maxClusters === undefined ? {} : { maxClusters: opts.maxClusters }),
+  })
 }
