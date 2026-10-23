@@ -26,6 +26,8 @@ export * from './promote.js'
 export * from './proposals.js'
 export * from './resolved.js'
 export * from './semantic.js'
+// WP488（决策 1681）：从官网 / 售后网站学一遍（编排）
+export * from './site.js'
 export * from './sqlite.js'
 export * from './types.js'
 

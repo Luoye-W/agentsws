@@ -52,6 +52,7 @@ import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 import type { Work } from '@agentsws/work'
 import { catalogEntry } from './catalog.js'
 import type { ConnectLike } from './connections.js'
+import { retrievalStage } from './knowledge-learn.js'
 import { type LiveConnection, lineItemsOf, ordersArrayOf, toOrderRow } from './live-data.js'
 import type { MatterRecordSource } from './runtime.js'
 import { type AdminOperation, ShopAdminError, type ShopifyAdminReader } from './shop-admin.js'
@@ -114,6 +115,8 @@ export interface RecordKnowledgePort {
     text: string
     actor: RetrievalActor & { grants: PermissionScope[]; ranges?: RangeRef[] }
     k?: number
+    /** WP488：售前 / 售后（不给 = 两边都取）。 */
+    stage?: 'both' | 'presales' | 'postsales'
   }): Promise<{ hits: readonly RetrievalHit[] }>
 }
 
@@ -934,6 +937,13 @@ export function createConnectRecordSource(
     const config = options.roles?.effectiveConfig(request.actor.assignment_id)
     const { hits } = await knowledge.search({
       text: query,
+      // WP488（决策 1682）：先看这件事的来信是售前还是售后，判不出再看查询本身；都判不出两边都取
+      ...retrievalStage(
+        ...(request.context ?? [])
+          .filter((c) => c.kind === 'thread')
+          .map((c) => contextTextOf(c.content)),
+        query,
+      ),
       actor: {
         person_id: request.actor.person_id,
         assignment_id: request.actor.assignment_id,
@@ -1637,4 +1647,20 @@ export function createConnectRecordSource(
     contacts: () => [...contacts.values()],
     noteContact: (email, opts = {}) => noteContact(email, opts),
   }
+}
+
+/** WP488：上下文条目的正文（字符串就是它；对象取 `text` / `body`，再不行整个 JSON）。 */
+function contextTextOf(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (content !== null && typeof content === 'object') {
+    const o = content as Record<string, unknown>
+    if (typeof o.text === 'string') return o.text
+    if (typeof o.body === 'string') return o.body
+    try {
+      return JSON.stringify(content).slice(0, 4000)
+    } catch {
+      return ''
+    }
+  }
+  return ''
 }

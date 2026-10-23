@@ -227,7 +227,8 @@ export function policyKindOf(card: KnowledgeCardRow): PolicyKind | undefined {
 export function knowledgeGroupOf(card: KnowledgeCardRow): Exclude<KnowledgeGroupId, 'uploads'> {
   if (card.subject.key.startsWith('b2b:') || card.subject.type === 'b2b_fact') return 'b2b'
   // WP322：FAQ 表导入的卡归「常见问答」（不按里面的词再分去物流 / 政策——它们是一张表里来的）
-  if (card.subject.type === 'faq') return 'faq'
+  // WP488：从过往邮件 / 网站学来的问答也进「常见问答」那一组
+  if (card.subject.type === 'faq' || card.subject.type === 'learned_qa') return 'faq'
   if (card.layer === 'historical_case') return 'other'
   const k = keyOf(card)
   if (card.layer === 'phrasing' || BRAND_VOICE.test(k)) return 'brand_voice'

@@ -30,6 +30,7 @@ import {
   isMcpReadTool,
   isScheduleTool,
   isWebTool,
+  KNOWLEDGE_LEARN_TOOL_DEF_BY_NAME,
   MESSAGE_RULE_TOOL_DEF_BY_NAME,
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
@@ -381,6 +382,8 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
     // WP385：读网站体检结论（定义在 stand-ins 的 `runtime/site-health.ts`）
     SITE_HEALTH_TOOL_DEF_BY_NAME.get(name) ??
+    // WP488：客服知识库「学一遍」（定义在 stand-ins 的 `runtime/knowledge-learn.ts`）
+    KNOWLEDGE_LEARN_TOOL_DEF_BY_NAME.get(name) ??
     // WP387：浏览器建完 / 读完 Google 提醒后交代结果（定义在 stand-ins 的 `runtime/google-alerts.ts`）
     GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name) ??
     // WP390：工坊服务（定义在 stand-ins 的 `runtime/workshop-service.ts`）
@@ -562,6 +565,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP385：读网站体检结论（只读；不现跑体检）
       SITE_HEALTH_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP488：客服知识库「学一遍」（只写待确认的条目 + 一张卡）
+      KNOWLEDGE_LEARN_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP387：浏览器建完 / 读完 Google 提醒后交代结果
       GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP390：工坊服务（查目录只读本机缓存；出卡不下单）

@@ -42,6 +42,7 @@ import {
 } from './desk-tools.js'
 import { GOOGLE_ALERTS_TOOL_DEF_BY_NAME } from './google-alerts.js'
 import { IMAGE_TOOL_DEF_BY_NAME, imageBranch, imageDataOf, renderImageAnswer } from './image.js'
+import { KNOWLEDGE_LEARN_TOOL_DEF_BY_NAME } from './knowledge-learn.js'
 import {
   attributionOf,
   collabsOf,
@@ -442,6 +443,8 @@ function toolDefs(req: RunRequest): ToolDef[] {
       SETUP_REQUEST_TOOL_DEF_BY_NAME.get(name) ??
       // WP385：网站运营 / 内容与搜索读体检结论（服务端接了才有）
       SITE_HEALTH_TOOL_DEF_BY_NAME.get(name) ??
+      // WP488：客服知识库「学一遍」（服务端接了才有）
+      KNOWLEDGE_LEARN_TOOL_DEF_BY_NAME.get(name) ??
       // WP387：浏览器建完 / 读完 Google 提醒后交代结果（只有信息监控、服务端接了才有）
       GOOGLE_ALERTS_TOOL_DEF_BY_NAME.get(name) ??
       // WP386：信息监控查提及（只有 grounding 里挂了它的那条职责才有）

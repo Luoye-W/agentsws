@@ -839,6 +839,12 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     if (item.kind === 'knowledge_update' && form === 'faq_batch') return
     // WP350：助理扇出的「要记的 N 条」也一样（条目早就以待确认建好了，批了只是生效）
     if (item.kind === 'knowledge_update' && form === 'assistant_notes') return
+    // WP488：「学到 N 条」汇总卡 / 「这几条可能过期」卡也由学习器自己施行（条目早就以待确认建好了）
+    if (
+      item.kind === 'knowledge_update' &&
+      (form === 'knowledge_learned' || form === 'knowledge_stale')
+    )
+      return
     const decided =
       item.state === 'approved' || item.state === 'approved_edited' || item.state === 'rejected'
     if (!decided) return

@@ -12,7 +12,7 @@
  * 这里零 IO：不碰库、不碰模型、不看时钟（时间由调用方给）。
  */
 import type { FactCard, FaqField, FaqSheetMapping } from '@agentsws/contracts'
-import { FAQ_SUBJECT_TYPE } from '@agentsws/contracts'
+import { FAQ_SUBJECT_TYPE, stageOfText } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { SheetGrid } from './sheet.js'
 
@@ -430,7 +430,15 @@ export function faqCard(row: FaqRow, ctx: FaqCardContext): ProposedFaqCard {
     valid: {},
     owner: ctx.owner,
     created_by: { kind: 'person', id: ctx.by },
+    // WP488（决策 1682）：问法明显是售前 / 售后的标上；判不出不写（= 公共）
+    ...faqStage(row),
   }
+}
+
+/** WP488：一行问答的范围（规则判：只认强信号；判不出 = 公共，不写这一格）。 */
+function faqStage(row: Pick<FaqRow, 'question'>): { stage?: 'presales' | 'postsales' } {
+  const stage = stageOfText(row.question)
+  return stage === undefined ? {} : { stage }
 }
 
 /** 库里已有的一张 FAQ 卡（比对用的那几格）。 */

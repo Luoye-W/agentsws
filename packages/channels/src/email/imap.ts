@@ -22,6 +22,11 @@ export interface RawEmailMessage {
 export interface MailSource {
   /** 按 UID 增量拉取（只返回 uid > since_uid 的，升序）。 */
   fetchSince(since_uid: number, limit?: number): Promise<RawEmailMessage[]>
+  /**
+   * WP488：按日期回看（IMAP `SEARCH SINCE`）——**不碰游标**，取这一天以来最新的 `limit` 封（升序）。
+   * 「从过往邮件学」读历史往来用；读到的不落消息库、不分拣、不交岗位。不实现 = 只能学消息库里已有的。
+   */
+  fetchSinceDate?(since: Iso8601, limit: number): Promise<RawEmailMessage[]>
   health(): Promise<{ ok: boolean; detail?: string }>
   close?(): Promise<void>
   /**
@@ -96,7 +101,7 @@ export interface ImapClientLike {
   list?(): Promise<readonly { path: string }[]>
   /** WP55：按头搜（对账用）。imapflow 有，最小桩可以不实现。 */
   search?(
-    query: { header: Record<string, string> },
+    query: { header?: Record<string, string>; since?: Date },
     options: { uid: true },
   ): Promise<number[] | false | undefined>
   fetch(
@@ -300,6 +305,44 @@ export class ImapMailSource implements MailSource {
     } catch (e) {
       client.close()
       throw asChannelError(e, 'IMAP 拉取失败')
+    }
+    return out.sort((a, b) => a.uid - b.uid)
+  }
+
+  async fetchSinceDate(since: Iso8601, limit: number): Promise<RawEmailMessage[]> {
+    const client = this.connectedClient()
+    if (client.search === undefined) return []
+    const out: RawEmailMessage[] = []
+    try {
+      await client.connect()
+      const lock = await client.getMailboxLock(this.mailbox)
+      try {
+        const hits = await client.search({ since: new Date(since) }, { uid: true })
+        // 只取最新的 `limit` 封（历史太长时先学近的）
+        const uids = (Array.isArray(hits) ? hits : []).sort((a, b) => a - b).slice(-limit)
+        if (uids.length > 0) {
+          for await (const msg of client.fetch(
+            uids.join(','),
+            { uid: true, source: true, internalDate: true },
+            { uid: true },
+          )) {
+            if (msg.source === undefined) continue
+            const internal = internalDateOf(msg.internalDate)
+            out.push({
+              uid: msg.uid,
+              mailbox: this.mailbox,
+              source: Buffer.from(msg.source).toString('utf8'),
+              ...(internal === undefined ? {} : { internal_date: internal as Iso8601 }),
+            })
+          }
+        }
+      } finally {
+        lock.release()
+      }
+      await client.logout()
+    } catch (e) {
+      client.close()
+      throw asChannelError(e, 'IMAP 回看历史失败')
     }
     return out.sort((a, b) => a.uid - b.uid)
   }

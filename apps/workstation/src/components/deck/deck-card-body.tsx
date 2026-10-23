@@ -51,6 +51,12 @@ import {
   isFaqBatchPayload,
   isFaqImportPayload,
 } from './faq-import-body'
+import {
+  isKnowledgeLearnedBody,
+  isKnowledgeStaleBody,
+  KnowledgeLearnedBody,
+  KnowledgeStaleBody,
+} from './knowledge-learned-body'
 import { isReport, ReportBody } from './report-body'
 import { isThemeChoicePayload, ThemeChoiceBody } from './theme-choice-body'
 import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
@@ -428,6 +434,11 @@ export function DeckCardBody({
         if (isFaqBatchPayload(payload)) return <FaqBatchBody payload={payload} />
         // WP350：助理扇出的「要记的 N 条」——按岗位列正文与原文出处
         if (isAssistantNotesPayload(payload)) return <AssistantNotesBody payload={payload} />
+        // WP488：「学到 N 条」——每条可改范围、可去掉，一次采纳；「这几条可能过期」——都没变 / 按网站重学
+        if (isKnowledgeLearnedBody(payload))
+          return <KnowledgeLearnedBody card={card} payload={payload} />
+        if (isKnowledgeStaleBody(payload))
+          return <KnowledgeStaleBody card={card} payload={payload} />
         // WP335：AI 回答监测的设定卡 / 竞品卡——几行要点 + 就地「改」（改好了带着改过的策略批）
         if (isGeoWatchPayload(payload)) return <GeoWatchCardBody card={card} payload={payload} />
         // WP387：在你的 Google 账号里建 / 改 N 条提醒——每条可勾掉、一次确认（主按钮在卡身里）
