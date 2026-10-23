@@ -6,17 +6,19 @@ import type { Lang } from './common.js'
 
 export const CONSENT: Record<
   Lang,
-  { text: string; allow: string; deny: string; policy: string; settings: string; label: string }
+  { title: string; text: string; allow: string; deny: string; policy: string; settings: string; label: string }
 > = {
   zh: {
+    title: '允许我们统计访问吗？',
     text: '我们用 Google Analytics 统计访问量，同意后才存 Cookie。',
-    allow: '允许统计',
+    allow: '允许',
     deny: '不允许',
     policy: '隐私政策',
     settings: '统计设置',
     label: '统计设置',
   },
   en: {
+    title: 'Help us count visits?',
     text: 'We use Google Analytics to count visits. Cookies are stored only if you agree.',
     allow: 'Allow',
     deny: 'Decline',
