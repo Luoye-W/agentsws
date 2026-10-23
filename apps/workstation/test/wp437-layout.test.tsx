@@ -92,10 +92,22 @@ const { CORE_MIN_WIDTH, ShellSizeContext, boardWidthAt, columnsLayout } = await 
   '@/components/rail/board-fit'
 )
 const { REPORT_ADDRESS_PREFIX } = await import('@/components/reports/report-data')
+const { resetSidePaneMode } = await import('@/lib/side-pane-window')
+
+/**
+ * WP481（决策 1632）：第三栏只有在桌面壳把窗口加宽了才并排（浏览器里一律浮层）。
+ * 这里的外壳宽度是写死的，所以「加宽了但宽度没变」= 加宽之后人又把窗口拖窄了——并排挤窄、看板让位那一套照旧。
+ */
+function widenedShell(): void {
+  ;(window as unknown as { agentsws?: unknown }).agentsws = {
+    sidePane: { sync: async (w: number | null) => (w === null ? 'none' : 'widened') },
+  }
+}
 
 let box = new Map<string, string>()
 beforeEach(() => {
   resetRightPane()
+  resetSidePaneMode()
   box = new Map<string, string>()
   vi.stubGlobal('localStorage', {
     getItem: (k: string) => box.get(k) ?? null,
@@ -109,6 +121,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.unstubAllGlobals()
+  ;(window as unknown as { agentsws?: unknown }).agentsws = undefined
 })
 
 /** 外面点一下 / 开第三栏用。 */
@@ -245,7 +258,8 @@ describe('看板自动隐藏 + 「看一眼」', () => {
     expect(box).toEqual(before)
   })
 
-  it('打开第三栏把中栏挤窄：看板自动隐藏、出「看一眼」；收起第三栏看板回来', async () => {
+  it('（桌面壳加宽后人又拖窄了窗口）并排的第三栏把中栏挤窄：看板自动隐藏、出「看一眼」；收起第三栏看板回来', async () => {
+    widenedShell()
     renderAt({ body: 1200, viewport: 1440 })
     expect(await screen.findByTestId('rail-board')).toBeDefined()
     fireEvent.click(screen.getByTestId('open-browser'))
@@ -302,6 +316,7 @@ describe('第三栏宿主：openRightPane({ kind, id })', () => {
   })
 
   it('开一份报表：第三栏开「report」那一格（同一时间一格，换成别的就换掉），× / closeRightPane 收起', async () => {
+    widenedShell()
     renderAt({ body: 1700, viewport: 1940 })
     fireEvent.click(await screen.findByTestId('open-report'))
     const frame = await screen.findByTestId('rail-panel-frame')
@@ -381,13 +396,14 @@ describe('第三栏宿主：openRightPane({ kind, id })', () => {
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
-  it('报表按 560 宽算挤不挤：1440 宽的岗位页开报表，并排、看板让位；1300 宽盖在中栏上', () => {
+  it('报表按 560 宽算挤不挤（窗口已为它加宽）：1440 宽并排、看板让位；1399 盖上去；看板按「窗口 − 第三栏」定宽', () => {
     const at = (viewport: number, third: number) =>
       columnsLayout({ size: { body: viewport - 240, viewport }, third, narrow: false })
     expect(at(1440, paneWidth('report', 380))).toMatchObject({ overlay: false, board: false })
     expect(at(1399, paneWidth('report', 380)).overlay).toBe(true)
     expect(at(1400, paneWidth('report', 380)).overlay).toBe(false)
-    expect(at(1800, paneWidth('report', 380)).board).toBe(true)
-    expect(at(1799, paneWidth('report', 380)).board).toBe(false)
+    // WP481：看板宽度不跟着为第三栏加出来的那一截变（1700 − 560 = 1140 → 看板 300）
+    expect(at(1700, paneWidth('report', 380))).toMatchObject({ board: true, boardWidth: 300 })
+    expect(at(1699, paneWidth('report', 380)).board).toBe(false)
   })
 })

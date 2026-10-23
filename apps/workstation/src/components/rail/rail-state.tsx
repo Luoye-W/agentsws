@@ -177,6 +177,25 @@ const readBucket = (bucket: string, kind: RailPageKind | undefined): BucketState
   cards: readRailCardFlags(bucket),
 })
 
+const isThird = (id: string | null): id is string => id !== null && id !== RAIL_CARDS
+
+/**
+ * WP481（决策 1632）：**换页时第三栏跟着人走**——开着浏览器 / 教程 / 报表时点进另一页（岗位 → 职责、→ 事项……），
+ * 那一格照旧开着（宽度也照旧）；收着进另一页也照旧收着，不按那一页上次记的弹出来。
+ * 以前按页记（WP95），换页时第三栏一会儿收一会儿开；现在第三栏开着窗口就向右加宽、收起就缩回，
+ * 按页记的话换个页窗口就来回弹。刷新（第一次读）照旧按这一页记的来。只在内存里换，不改本机记录。
+ */
+function carryThird(prev: BucketState, next: BucketState): BucketState {
+  const was = isThird(prev.layout.open_panel_id) ? prev.layout.open_panel_id : null
+  const now = isThird(next.layout.open_panel_id) ? next.layout.open_panel_id : null
+  if (was === now) return next
+  const layout: RailLayoutEntry =
+    was === null
+      ? withPageDefault({ ...next.layout, open_panel_id: null }, next.kind)
+      : { ...next.layout, open_panel_id: was, width: prev.layout.width }
+  return { ...next, layout }
+}
+
 export function RailStateProvider({ children }: { children: ReactNode }): ReactNode {
   const location = useLocation()
   const { position } = useApp()
@@ -187,7 +206,10 @@ export function RailStateProvider({ children }: { children: ReactNode }): ReactN
   // 会先拿旧桶的值画一帧，人眼看得见第三栏"闪"一下别的岗位的面板。
   // WP412：同一个桶换了页面类型（首页 → 那个岗位页）也重读一次——进干活的页要按「默认打开」算。
   const [state, setState] = useState<BucketState>(() => readBucket(bucket, kind))
-  const current = state.bucket === bucket && state.kind === kind ? state : readBucket(bucket, kind)
+  const current =
+    state.bucket === bucket && state.kind === kind
+      ? state
+      : carryThird(state, readBucket(bucket, kind))
   if (current !== state) setState(current)
   const layout = current.layout
 

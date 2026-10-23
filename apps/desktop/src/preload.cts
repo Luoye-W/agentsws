@@ -57,6 +57,7 @@ const CHANNELS = {
   dataLocationChanged: 'agentsws:data-location-changed',
   dataLocationDeleteOld: 'agentsws:data-location-delete-old',
   dataLocationReveal: 'agentsws:data-location-reveal',
+  sidePane: 'agentsws:side-pane',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -198,6 +199,18 @@ const bridge: DesktopBridge = {
             ipcRenderer.invoke(CHANNELS.dataLocationDeleteOld) as Promise<boolean>,
           reveal: (): Promise<boolean> =>
             ipcRenderer.invoke(CHANNELS.dataLocationReveal) as Promise<boolean>,
+        },
+      }),
+  // WP481：主窗口才有——右栏开着时窗口向右加宽、关掉缩回；放不下回 overlay（页面改浮层）
+  ...(info.side_pane !== true
+    ? {}
+    : {
+        sidePane: {
+          sync: (width: number | null): Promise<'widened' | 'overlay' | 'none'> =>
+            ipcRenderer.invoke(
+              CHANNELS.sidePane,
+              typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : null,
+            ) as Promise<'widened' | 'overlay' | 'none'>,
         },
       }),
   // WP424：藏了系统标题栏才有这一项（页面据此给红绿灯 / 系统按钮留位置、设拖动区）

@@ -171,6 +171,7 @@ import {
   telemetryHostFor,
 } from './server-process.js'
 import { createSessionKeeper } from './session-keeper.js'
+import { attachSidePane, parseSidePaneWidth, type SidePaneController } from './side-pane-window.js'
 import { createSidecar, type SidecarSnapshot } from './sidecar.js'
 import { ensureStableNode, nodeStableNodeFs, stableNodePath } from './stable-node.js'
 import { proxyUrlFromResolution } from './system-proxy.js'
@@ -803,6 +804,8 @@ async function bootstrap(): Promise<void> {
   let trayShowsActive = false
   let tray: Tray | undefined
   let window: BrowserWindow | undefined
+  /** WP481：主窗口的右栏加宽（窗口建好时挂上）。 */
+  let sidePane: SidePaneController | undefined
 
   /*
    * WP60：值守档的服务地址带一段 `/w/<ws>` 前缀，但**源只有一个**。
@@ -1030,6 +1033,8 @@ async function bootstrap(): Promise<void> {
       ...(chrome === undefined || !isMain ? {} : { title_bar: chrome }),
       // WP480：只有服务进程归这台电脑上的壳管（个人档）才能换数据位置
       ...(remote || !isMain ? {} : { data_location: true }),
+      // WP481：主窗口——右栏开着时向右加宽
+      ...(isMain ? { side_pane: true } : {}),
     }
     event.returnValue = info
   })
@@ -1042,6 +1047,16 @@ async function bootstrap(): Promise<void> {
     if (target === null || target !== window) return false
     target.setTitleBarOverlay(titleBarOverlay(theme))
     return true
+  })
+  // WP481（决策 1632）：右栏开着时主窗口向右加宽它那么宽、关掉缩回；放不下回 overlay（页面改浮层）
+  ipcMain.handle(BRIDGE_CHANNELS.sidePane, (event, raw: unknown) => {
+    const width = parseSidePaneWidth(raw)
+    if (!fromLocalWindow(event) || width === undefined) return 'overlay'
+    const target = BrowserWindow.fromWebContents(event.sender)
+    if (target === null || target !== window || sidePane === undefined) return 'overlay'
+    // 页面给的是 CSS 像素，网页缩放过就乘回窗口坐标
+    const zoom = target.webContents.getZoomFactor()
+    return sidePane.sync(width === null ? null : Math.round(width * zoom))
   })
   // WP475：反馈框「附上截图」——只截发起调用的那个工坊窗口（不截屏幕、不截别的应用）
   ipcMain.handle(BRIDGE_CHANNELS.captureWindow, async (event) => {
@@ -1231,11 +1246,14 @@ async function bootstrap(): Promise<void> {
       })
       window.on('closed', () => {
         window = undefined
+        sidePane = undefined
       })
       // WP298：页面报错 / 渲染进程崩了 / 没加载出来，都落 desktop.log（以前只在 DevTools 里）
       attachRendererLogging(window.webContents, logger)
       // WP339：窗口换大小 / 显示器变化之后网页没跟上，落一行（只记，不动窗口）
       watchWindowFit(window, screen, logger)
+      // WP481：右栏开着时向右加宽（人拖过窗口就照人的）
+      sidePane = attachSidePane(window, (bounds) => screen.getDisplayMatching(bounds).workArea)
       window.once('ready-to-show', () => {
         window?.show()
       })
