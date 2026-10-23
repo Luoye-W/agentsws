@@ -58,6 +58,19 @@ export const MODELS_ZH: Record<string, string> = {
   'model.pick.cap.no_vision.short': '不能看图',
   'free_chat.model.no_vision': '这个模型看不了图（读图片、看手册这类事要换一个能看图的）。',
 
+  // ── WP479（决策 1625）：每个已连接来源勾哪些模型（选择器只列勾上的）
+  'models.enable.toggle': '模型 {on}/{all}',
+  'models.enable.toggle.hint': '勾上的才出现在模型选择里。有新模型会在铃铛里提醒。',
+  'models.enable.latest': '全选最新',
+  'models.enable.latest.hint': '每个系列勾上最新那一版（已经勾的不动）。',
+  'models.enable.search': '搜模型…',
+  'models.enable.new': '新',
+  'models.enable.locked.default': '默认 / 按用途在用，取消不了。先在下面换掉默认。',
+  'models.enable.locked.main': '这条连接的主模型，取消不了。',
+  'models.enable.in_use': '在用',
+  'models.enable.in_use.hint': '有事项选着它。取消勾选后那件事改用默认模型。',
+  'models.enable.saving': '保存中…',
+
   // ── 积分快用完（原来写死「余额低于 50」，注册才送 5 积分，一进来就红）
   'credits.low': '积分快用完了：大约还够 {n} 轮对话',
   'credits.low.hint': '按便宜档一轮对话约 {per} 积分估算；少于 {min} 轮时提醒。',
@@ -111,6 +124,21 @@ export const MODELS_EN: Record<string, string> = {
   'model.pick.cap.long.short': 'Long context',
   'model.pick.cap.no_vision.short': 'No images',
   'free_chat.model.no_vision': 'This model cannot see images.',
+
+  'models.enable.toggle': 'Models {on}/{all}',
+  'models.enable.toggle.hint':
+    'Only checked models show up in model pickers. New models are announced in the bell.',
+  'models.enable.latest': 'Select latest',
+  'models.enable.latest.hint':
+    'Check the newest version in each series (keeps what is already checked).',
+  'models.enable.search': 'Search models…',
+  'models.enable.new': 'New',
+  'models.enable.locked.default': 'Used as default / for a purpose. Change the default first.',
+  'models.enable.locked.main': 'Main model of this connection; always on.',
+  'models.enable.in_use': 'In use',
+  'models.enable.in_use.hint':
+    'A task has picked it. Unchecking makes that task use the default model.',
+  'models.enable.saving': 'Saving…',
 
   'credits.low': 'Credits running low: about {n} more chats',
   'credits.low.hint':

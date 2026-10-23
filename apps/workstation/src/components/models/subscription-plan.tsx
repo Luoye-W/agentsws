@@ -95,6 +95,8 @@ export function SubscriptionPlan({
     // WP362：订阅进了「默认模型」下拉与输入框的 AI 钮——两份清单跟着刷新
     void client.invalidateQueries({ queryKey: ['free-chat', 'models'] })
     void client.invalidateQueries({ queryKey: ['model-defaults'] })
+    // WP479：「模型 N/M」那份勾选清单跟着变（登上 / 登出、目录换了）
+    void client.invalidateQueries({ queryKey: ['model-enable'] })
   }
 
   const login = useMutation({

@@ -2864,6 +2864,56 @@ export const discoverModelProviderModels = (
     ...withAssignment(assignment),
   })
 
+/** WP479（决策 1625）：一个已连接来源能用的一个模型（勾没勾、新不新）。 */
+export interface ModelEnableModelView {
+  id: string
+  name?: string
+  enabled: boolean
+  /** 勾着而且取消不了：默认 / 按用途在用（`default`）、这条连接的主模型（`main`）。 */
+  locked?: 'default' | 'main'
+  /** 有事项选着它。 */
+  in_use?: boolean
+  /** 还没在设置里看过的新模型。 */
+  fresh?: boolean
+  /** 这条线里最新那一版（「全选最新」勾的就是这些）。 */
+  latest?: boolean
+  vision?: 'ok' | 'no' | 'unchecked'
+}
+
+export interface ModelEnableSourceView {
+  provider_id: string
+  label: string
+  kind: ModelProviderKind
+  group: 'subscription' | 'own'
+  models: ModelEnableModelView[]
+}
+
+export interface ModelEnableView {
+  sources: ModelEnableSourceView[]
+}
+
+/** WP479：每个已连接来源（订阅 / 账号 / API key）的全部可用模型。工坊积分那一组不在这里。 */
+export const getModelEnable = (assignment?: string): Promise<ModelEnableView> =>
+  api('/v1/models/enabled', withAssignment(assignment))
+
+/** WP479：改一个来源勾哪些（整份给；锁着的那几个服务端总会留着）。 */
+export const setModelEnable = (
+  input: { provider_id: string; enabled: string[] },
+  assignment?: string,
+): Promise<ModelEnableView> =>
+  api('/v1/models/enabled', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+/** WP479：看过了——新模型不再标「新」，铃铛那一条收掉。不给来源 = 全部。 */
+export const markModelsSeen = (
+  provider_ids?: string[],
+  assignment?: string,
+): Promise<ModelEnableView> =>
+  api('/v1/models/enabled/seen', {
+    method: 'POST',
+    body: provider_ids === undefined ? {} : { provider_ids },
+    ...withAssignment(assignment),
+  })
+
 export const getModelDefaults = (assignment?: string): Promise<ModelDefaultsView> =>
   api('/v1/models/defaults', withAssignment(assignment))
 

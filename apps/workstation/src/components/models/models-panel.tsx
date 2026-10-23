@@ -37,6 +37,7 @@ import {
 import { TutorialHint } from '@/components/help/tutorial-link'
 import { AiSourceOrder } from '@/components/models/ai-source-order'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
+import { EnabledModels } from '@/components/models/enabled-models'
 import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelStatusIcons } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
@@ -55,6 +56,7 @@ import { Switch } from '@/components/ui/switch'
 import type {
   ModelAiSourceView,
   ModelDefaultsView,
+  ModelEnableView,
   ModelPricingRefreshResult,
   ModelPricingView,
   ModelProviderKind,
@@ -69,16 +71,19 @@ import {
   discoverModelProviderModels,
   getDeepSeekAccount,
   getModelDefaults,
+  getModelEnable,
   getModelPricing,
   getModelSubscription,
   getModelUsage,
   isAccountTemplate,
   isDeepSeekAccountKind,
   listModelProviders,
+  markModelsSeen,
   refreshModelPricing,
   removeModelProvider,
   saveModelProvider,
   setModelDefaults,
+  setModelEnable,
   setModelInheritance,
   testModelProvider,
 } from '@/lib/api'
@@ -203,9 +208,51 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
     retry: false,
   })
 
+  /*
+   * WP479（决策 1625）：每个已连接来源勾哪些模型（选择器只列勾上的）。老服务端没有这条路就不画那一行。
+   * 打开这一页 = 看过了：先记下这一次还是「新」的那几个（面板关上前照样标），再告诉服务端（铃铛那一条收掉）。
+   */
+  const enable = useQuery({
+    queryKey: ['model-enable', assignment],
+    queryFn: () => getModelEnable(assignment),
+    retry: false,
+  })
+  const [freshAtOpen, setFreshAtOpen] = useState<ReadonlySet<string>>(() => new Set())
+  const seenSent = useRef(false)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 每次打开只报一次「看过了」
+  useEffect(() => {
+    if (enable.data === undefined || seenSent.current) return
+    seenSent.current = true
+    const fresh = enable.data.sources.flatMap((src) =>
+      src.models.filter((m) => m.fresh === true).map((m) => `${src.provider_id}/${m.id}`),
+    )
+    if (fresh.length === 0) return
+    setFreshAtOpen(new Set(fresh))
+    void markModelsSeen(undefined, assignment)
+      .then((view) => {
+        client.setQueryData(['model-enable', assignment], view)
+        // 铃铛那一条跟着收
+        void client.invalidateQueries({ queryKey: ['notifications'] })
+      })
+      .catch(() => undefined)
+  }, [enable.data])
+  const saveEnable = useMutation({
+    mutationFn: (input: { provider_id: string; enabled: string[] }) =>
+      setModelEnable(input, assignment),
+    onSuccess: (view: ModelEnableView) => {
+      setError(null)
+      client.setQueryData(['model-enable', assignment], view)
+      refresh()
+    },
+    onError: (e: Error) => {
+      setError(e.message)
+    },
+  })
+
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['model-providers'] })
     void client.invalidateQueries({ queryKey: ['model-defaults'] })
+    void client.invalidateQueries({ queryKey: ['model-enable'] })
     // WP370：设置页与输入框 AI 钮同一份清单——存完 AI 钮跟着换
     void client.invalidateQueries({ queryKey: ['free-chat', 'models'] })
     // 接上模型之后首页那条黄条要消失
@@ -366,6 +413,28 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
   const isDefault = (prefix: string): boolean => defaultId.startsWith(`${prefix}/`)
   const readonly = settings?.inherit_org === true
 
+  /** WP479：这个来源的「模型 N/M」那一行（只有一个模型可选就不出）。 */
+  const enableFor = (provider_id: string): ReactNode => {
+    const source = enable.data?.sources.find((src) => src.provider_id === provider_id)
+    if (source === undefined || source.models.length < 2) return null
+    return (
+      <EnabledModels
+        source={source}
+        busy={readonly || saveEnable.isPending}
+        freshIds={
+          new Set(
+            [...freshAtOpen]
+              .filter((k) => k.startsWith(`${provider_id}/`))
+              .map((k) => k.slice(provider_id.length + 1)),
+          )
+        }
+        onChange={(enabled) => {
+          saveEnable.mutate({ provider_id, enabled })
+        }}
+      />
+    )
+  }
+
   const editTemplate = (p: ModelProviderView): ModelProviderTemplate =>
     // WP88：同一个 kind 现在可能有两张卡，先按接口地址认是哪一张
     templates.find(
@@ -469,10 +538,13 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   <StatusPill tone="good">{t('models.subscription.signed_in.short')}</StatusPill>
                 }
               >
-                <SubscriptionPlan
-                  provider={subProvider}
-                  {...(assignment === undefined ? {} : { assignment })}
-                />
+                <div className="flex flex-col gap-2">
+                  <SubscriptionPlan
+                    provider={subProvider}
+                    {...(assignment === undefined ? {} : { assignment })}
+                  />
+                  {enableFor(subProvider)}
+                </div>
               </SourceShell>
             ) : null}
             {accountIn ? (
@@ -487,7 +559,10 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                     : undefined
                 }
               >
-                <DeepSeekAccountLogin {...(assignment === undefined ? {} : { assignment })} />
+                <div className="flex flex-col gap-2">
+                  <DeepSeekAccountLogin {...(assignment === undefined ? {} : { assignment })} />
+                  {accountRow === undefined ? null : enableFor(accountRow.id)}
+                </div>
               </SourceShell>
             ) : null}
             {keyRows.map((p) => (
@@ -513,7 +588,9 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                 body={
                   p.kind === 'agentsws_cloud' ? (
                     <CloudPlanActions {...(assignment === undefined ? {} : { assignment })} />
-                  ) : null
+                  ) : p.image_only === true ? null : (
+                    enableFor(p.id)
+                  )
                 }
                 form={
                   editing === p.id ? (
