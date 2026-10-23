@@ -172,8 +172,10 @@ export function splitHelpFrontmatter(text: string): {
   data: Record<string, string | string[]>
   body: string
 } {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/u.exec(text)
-  if (m === null) return { data: {}, body: text }
+  // Windows 上检出的文件可能是 CRLF、开头带 BOM（10-23 右栏露出过元数据原文）
+  const clean = text.replace(/^\uFEFF/u, '')
+  const m = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u.exec(clean)
+  if (m === null) return { data: {}, body: clean }
   const data: Record<string, string | string[]> = {}
   const unquote = (s: string): string => s.trim().replace(/^(['"])(.*)\1$/u, '$2')
   for (const line of (m[1] ?? '').split(/\r?\n/u)) {
@@ -189,7 +191,7 @@ export function splitHelpFrontmatter(text: string): {
             .map(unquote)
             .filter((x) => x !== '')
   }
-  return { data, body: text.slice(m[0].length) }
+  return { data, body: clean.slice(m[0].length) }
 }
 
 /** 拆出元数据（按 {@link HelpArticleMeta} 认好）与正文。 */

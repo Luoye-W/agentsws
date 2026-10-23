@@ -100,6 +100,15 @@ describe('文章元数据', () => {
     expect(body.startsWith('# 连')).toBe(true)
   })
 
+  it('Windows 检出的 CRLF、开头带 BOM 的也认（10-23 右栏露出过元数据原文）', () => {
+    const { meta, body } = readHelpArticle(
+      '\uFEFF---\r\ngroup: tools\r\npositions: [kol-marketing]\r\n---\r\n# 浏览器\r\n',
+    )
+    expect(meta.positions).toEqual(['kol-marketing'])
+    expect(meta.group).toBe('tools')
+    expect(body).toBe('# 浏览器\r\n')
+  })
+
   it('没有元数据的原样回', () => {
     expect(splitHelpFrontmatter('# A\n')).toEqual({ data: {}, body: '# A\n' })
   })

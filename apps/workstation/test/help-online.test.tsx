@@ -115,3 +115,38 @@ describe('右栏「教程」读本机服务', () => {
     expect(screen.queryByTestId('help-version-note')).toBeNull()
   })
 })
+
+describe('Luoye 10-23 三条', () => {
+  it('设置弹窗里的「看教程」：系统浏览器打开官网那一篇（中英按界面语言），不开右栏', async () => {
+    const bridge = await import('@/components/connections/bridge')
+    const open = vi.spyOn(bridge, 'openExternal').mockImplementation(() => undefined)
+    const { TutorialLink, TutorialOpensSite } = await import('@/components/help/tutorial-link')
+    renderWithProviders(
+      <RailStateProvider>
+        <TutorialOpensSite>
+          <TutorialLink slug="conn-email" />
+        </TutorialOpensSite>
+        <RightRail />
+      </RailStateProvider>,
+    )
+    fireEvent.click(screen.getByTestId('tutorial-link'))
+    expect(open).toHaveBeenCalledWith('https://agentsws.com/docs/conn-email/')
+    expect(screen.queryByTestId('help-panel')).toBeNull()
+  })
+
+  it('右栏正文开头的元数据一律拿掉（CRLF / BOM 的文件也是）', async () => {
+    api.article.mockResolvedValue({
+      ...ONLINE_ONLY,
+      needs_newer_app: false,
+      markdown:
+        '﻿---\r\npositions: [kol-marketing]\r\nroles: [kol.youtube]\r\n---\r\n# 浏览器\r\n\r\n正文\r\n',
+      newer_online: false,
+    })
+    await openHelp()
+    fireEvent.click(await screen.findByText('官网刚写的一篇'))
+    const article = await screen.findByTestId('help-article')
+    expect(article.textContent).toContain('正文')
+    expect(article.textContent).not.toContain('positions')
+    expect(article.textContent).not.toContain('---')
+  })
+})

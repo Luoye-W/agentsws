@@ -9,6 +9,7 @@
 import BUNDLED from 'virtual:agentsws-help'
 import {
   HELP_GROUPS,
+  HELP_SITE_URL,
   HELP_SLUG_PATTERN,
   type HelpCatalogEntry,
   readHelpArticle,
@@ -149,6 +150,11 @@ export function isKnownHelp(slug: string): boolean {
  */
 export function isHelpSlug(value: string): value is HelpSlug {
   return HELP_SLUG_PATTERN.test(value)
+}
+
+/** 官网上那一篇（中文在根下、英文加 `/en`；与官网 `docHref` 同一套网址）。 */
+export function helpSiteUrl(slug: HelpSlug, lang: Lang): string {
+  return `${HELP_SITE_URL}${lang === 'en' ? '/en' : ''}/docs/${slug}/`
 }
 
 /** 右栏认的资源地址（`registry.ts` 的 `matches` 用 `agentsws://help/*`）。 */

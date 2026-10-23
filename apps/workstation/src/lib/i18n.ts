@@ -1574,7 +1574,7 @@ const zh: Table = {
   'connections.subtitle': '把店铺、邮箱、数据后台接进来。',
   'connections.connected': '已连接',
   'connections.available': '可以连接',
-  'connections.empty': '还什么都没连。下面挑一个开始，不会就点「看教程」。',
+  'connections.empty': '还什么都没连。下面挑一个开始，不会就点卡上的书本图标看教程。',
   'connections.test': '测试',
   'connections.testing': '测试中…',
   'connections.disconnect': '断开',
@@ -2433,7 +2433,7 @@ const zh: Table = {
   'models.chip': '还没接模型',
   'models.banner.cta': '接一个 →',
   'models.configured': '已配的',
-  'models.empty': '还一个都没配。下面挑一种开始，不会就点「看教程」。',
+  'models.empty': '还一个都没配。下面挑一种开始，不会就点卡上的书本图标看教程。',
   // WP156（36 §7）：「加一个」每张厂商卡上那一句（整段介绍在问号里，步骤在教程里）
   'models.vendor.deepseek': '国内直连、便宜、够用；账号登录或 API key 二选一。',
   'models.vendor.openai-compatible': '任何 OpenAI 格式的服务：Kimi、通义、智谱、本机 Ollama。',
@@ -5960,7 +5960,8 @@ const en: Table = {
   'connections.subtitle': 'Hook up your store, mailbox and analytics.',
   'connections.connected': 'Connected',
   'connections.available': 'Available',
-  'connections.empty': 'Nothing connected yet. Pick one below; stuck? Open its tutorial.',
+  'connections.empty':
+    'Nothing connected yet. Pick one below; stuck? Click the book icon on its card.',
   'connections.test': 'Test',
   'connections.testing': 'Testing…',
   'connections.disconnect': 'Disconnect',
@@ -6838,7 +6839,7 @@ const en: Table = {
   'models.chip': 'No model',
   'models.banner.cta': 'Connect one →',
   'models.configured': 'Configured',
-  'models.empty': 'Nothing configured yet. Pick one below; stuck? Open its tutorial.',
+  'models.empty': 'Nothing configured yet. Pick one below; stuck? Click the book icon on its card.',
   // WP156 (36 §7): the one line on each provider card in "Add one"
   'models.vendor.deepseek': 'Direct in China, cheap, good enough; account sign-in or API key.',
   'models.vendor.openai-compatible': 'Any OpenAI-format service: Kimi, Qwen, GLM, local Ollama.',

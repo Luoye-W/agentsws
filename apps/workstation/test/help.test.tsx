@@ -83,7 +83,9 @@ describe('右栏「教程」面板', () => {
       '/settings',
     )
     const link = screen.getByTestId('tutorial-link')
-    expect(link.textContent).toBe('看教程')
+    // Luoye 10-23：书本图标，名字在 aria-label / 悬停提示里
+    expect(link.textContent).toBe('')
+    expect(link.getAttribute('aria-label')).toBe('看教程')
     fireEvent.click(link)
     const panel = await screen.findByTestId('help-panel')
     expect(panel.getAttribute('data-slug')).toBe('browser')
@@ -145,7 +147,7 @@ describe('没有右栏时', () => {
         </AppProvider>
       </QueryClientProvider>,
     )
-    expect(screen.getByTestId('tutorial-link').textContent).toBe('Tutorial')
+    expect(screen.getByTestId('tutorial-link').getAttribute('aria-label')).toBe('Tutorial')
     fireEvent.click(screen.getByTestId('tutorial-link'))
     const dialog = await screen.findByRole('dialog')
     expect((await within(dialog).findByTestId('help-article')).textContent).toContain(
