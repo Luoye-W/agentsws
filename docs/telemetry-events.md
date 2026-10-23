@@ -169,6 +169,7 @@
 - 路线：本机服务 → 官方转发地址的 `/mp/collect` → GA4 Measurement Protocol。转发那边没配 GA4 的密钥时，
   `/config` 说 `ga4: false`，本机服务一件都不发；转发那边自己也只认这四个名字、这几个参数。
 - 国家：界面中文的记成中国（`CN`）；别的由转发那边按 Cloudflare 判断的国家填，**不把 IP 交给 Google**。
+- 转发那边另给每件加一个用户属性 `client_type: app`，在同一个 GA4 媒体资源里把软件用户和官网访客分开看。
 - 发成功才记在 `telemetry.json`（`ga4` 那一格）；发不出去下次打开再发。
 
 ## 录屏回放
