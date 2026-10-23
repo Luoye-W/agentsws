@@ -43,8 +43,45 @@ const probeOf = (live: string[]): CdpProbe & { calls: string[] } => {
   return fn
 }
 
+/** WP483：探 ego 一律注入（开发机上装着的 ego 不漏进来）；缺省 = 没装。 */
+const NO_EGO = () => ({ ok: false as const, detail: '没装' })
 const local = (over: Partial<Parameters<typeof createBrowserSettings>[0]> = {}) =>
-  createBrowserSettings({ runtimeMode: () => 'local', probe: probeOf([]), ...over })
+  createBrowserSettings({
+    runtimeMode: () => 'local',
+    probe: probeOf([]),
+    detectEgo: NO_EGO,
+    ...over,
+  })
+
+describe('WP483（决策 1658）：没选过、探到 ego → 默认用 ego', () => {
+  const EGO = () => ({ ok: true as const, path: '/u/.local/bin/ego-browser', version: '2.1.0' })
+  it('没有 browser.json + 探到 ego：按 ego 算（设置页标「默认」）；发帖那一路拿得到路径', () => {
+    const dir = tempDir()
+    const s = local({ dir, detectEgo: EGO })
+    expect(s.get()).toMatchObject({ mode: 'ego', ego_default: true })
+    expect(s.forRun()).toEqual({ mode: 'ego', ego_path: '/u/.local/bin/ego-browser' })
+    expect(s.egoWritePath()).toBe('/u/.local/bin/ego-browser')
+    expect(s.egoStatus()).toMatchObject({ installed: true, default_ego: true })
+  })
+  it('点过保存（哪怕选的是「不开」= 选了插件路）：按存的来，不再默认 ego', () => {
+    const dir = tempDir()
+    local({ dir, detectEgo: EGO }).set({ mode: 'off' })
+    const s = local({ dir, detectEgo: EGO })
+    expect(s.get().mode).toBe('off')
+    expect(s.get().ego_default).toBeUndefined()
+    expect(s.egoWritePath()).toBeUndefined()
+  })
+  it('没探到 ego：照旧不开；公司档（不在你电脑上）不默认 ego', () => {
+    expect(local({ dir: tempDir() }).get().mode).toBe('off')
+    const docker = createBrowserSettings({
+      runtimeMode: () => 'docker',
+      probe: probeOf([]),
+      detectEgo: EGO,
+    })
+    expect(docker.get().mode).toBe('off')
+    expect(docker.egoWritePath()).toBeUndefined()
+  })
+})
 
 describe('缺省与落盘', () => {
   it('没配过 = 不开浏览器（这是安全的那一侧）', () => {

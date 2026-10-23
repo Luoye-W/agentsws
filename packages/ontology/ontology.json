@@ -42,6 +42,7 @@
     "packages/contracts/src/design.ts",
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/economics.ts",
+    "packages/contracts/src/ego-write.ts",
     "packages/contracts/src/events.ts",
     "packages/contracts/src/execution.ts",
     "packages/contracts/src/feedback.ts",
@@ -166,7 +167,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "f74c8ef4642a8c923e654fb1f1d59509",
+  "source_digest": "18fc756632c5f86fee1d8d18b5a65daf",
   "objects": [
     {
       "id": "ad",
@@ -4821,7 +4822,7 @@
         },
         {
           "name": "published_via",
-          "type": "'api' | 'extension'",
+          "type": "'api' | 'extension' | 'ego'",
           "sensitivity": "internal",
           "optional": true
         },
@@ -4833,7 +4834,13 @@
         },
         {
           "name": "readback",
-          "type": "'link' | 'self_report'",
+          "type": "'link' | 'self_report' | 'clicked'",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "ego",
+          "type": "EgoWriteProgress",
           "sensitivity": "internal",
           "optional": true
         }

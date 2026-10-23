@@ -25,6 +25,7 @@
  */
 
 import type { Iso8601, WorkspaceId } from './common.js'
+import type { EgoWriteProgress } from './ego-write.js'
 
 /**
  * 九条渠道（56 拆法那一行，Luoye 09-16 手写）。职责 id 是 `social.<channel>`
@@ -414,14 +415,19 @@ export interface SocialPost {
    */
   handoff?: { at: Iso8601; owner?: string; todo_id?: string; reason?: string }
   /** WP419：怎么发出去的：`api` 官方接口代发；`extension` 人在自己的后台里发（插件打开发帖页）。 */
-  published_via?: 'api' | 'extension'
+  published_via?: 'api' | 'extension' | 'ego'
   /** WP419：发出去那一条的链接（人贴回来的；接口代发时由平台 id 拼）。 */
   post_url?: string
   /**
    * WP419：发没发出去是怎么确认的——`link` 人贴回了那一条的链接；`self_report` 只有人说「发好了」，
    * 工坊没读回确认（照实标，不当成已核实）。
    */
-  readback?: 'link' | 'self_report'
+  readback?: 'link' | 'self_report' | 'clicked'
+  /**
+   * WP483（决策 1658 / 1660）：走 ego 那一路的进度（工坊在 ego 里挂图、填字、点发布）。没有 = 没走过 ego。
+   * `readback: 'clicked'` = 工坊在 ego 里点了发布、页面没报错，但没读回那一条的链接（照实标）。
+   */
+  ego?: EgoWriteProgress
 }
 
 /**

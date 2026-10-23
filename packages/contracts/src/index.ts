@@ -62,6 +62,8 @@ export * from './design.js'
 // WP136（docs/79）：dsh 的「场景」（Profile）——Agents 工坊是其中一个，其余由 DeepSeek 官方维护
 export * from './dsh-scenes.js'
 export * from './economics.js'
+// WP483（决策 1658–1661）：发帖 / 回帖两条路——ego 主推（自动点发送）、插件备份
+export * from './ego-write.js'
 export * from './events.js'
 export * from './execution.js'
 export * from './feedback.js'

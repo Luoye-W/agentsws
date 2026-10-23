@@ -243,6 +243,12 @@ const STATE_EVENTS = new Set([RELOGIN_NEEDED_EVENT, KEY_REJECTED_EVENT])
  */
 export const REDDIT_AWAITING_EVENT = 'reddit.write_awaiting'
 const REDDIT_SETTLED = new Set(['reddit.write_sent', 'reddit.write_failed', 'reddit.write_dropped'])
+/**
+ * WP483（决策 1658 / 1660）：走 ego 那一路要人管一下的两种——ego 里弹了要你处理的框（处理完工坊接着做）、
+ * 平台拦了 / 点过发送没确认（工坊停下了，不绕）。key 用 `ego:<卡>`，发出去了收成已读。
+ */
+export const REDDIT_EGO_HUMAN_EVENT = 'reddit.write_needs_human'
+export const REDDIT_EGO_STOPPED_EVENT = 'reddit.write_ego_stopped'
 
 /** 卡的地址。 */
 export const cardHref = (id: string): string => `/cards/${encodeURIComponent(id)}`
@@ -370,6 +376,32 @@ export async function notificationsOfEvent(
       category: 'outbound' as const,
       text: `等你在浏览器插件里发：${what}`,
       key: `outbound:${id}`,
+    }))
+  }
+
+  if (e.type === REDDIT_EGO_HUMAN_EVENT || e.type === REDDIT_EGO_STOPPED_EVENT) {
+    const id = str(p.approval_item_id)
+    if (id === undefined) return []
+    const item = await ctx.approval?.(id)
+    const proposer = item?.proposer.kind === 'person' ? item.proposer.id : undefined
+    const by = item?.decision?.by
+    const people =
+      proposer !== undefined
+        ? [proposer as PersonId]
+        : by !== undefined && by !== 'mandate'
+          ? [by as PersonId]
+          : await ctx.owners()
+    const what = short(str(p.label) ?? item?.title ?? 'Reddit', 60)
+    const text =
+      e.type === REDDIT_EGO_HUMAN_EVENT
+        ? `ego 里有个框要你点一下（比如「显示通知」点「阻止」），点完工坊接着发：${what}`
+        : `工坊在 ego 里停下了，去看一眼：${what}`
+    return people.map((person_id) => ({
+      workspace_id: ws,
+      person_id,
+      category: 'outbound' as const,
+      text,
+      key: `ego:${id}`,
     }))
   }
 
@@ -646,6 +678,8 @@ export function createNotifications(options: NotificationsOptions): Notification
     if (REDDIT_SETTLED.has(e.type)) {
       const id = str((e.payload as Record<string, unknown> | undefined)?.approval_item_id)
       if (id !== undefined) settle(e.workspace_id, `outbound:${id}`)
+      // WP483：发出去了，「ego 里要你点一下」那条也收掉
+      if (id !== undefined && e.type === 'reddit.write_sent') settle(e.workspace_id, `ego:${id}`)
       return
     }
     const ctx = resolvers.get(e.workspace_id) ?? makeResolver?.(e.workspace_id)
@@ -657,7 +691,12 @@ export function createNotifications(options: NotificationsOptions): Notification
        * WP436：「key 用不了了」同一口径。
        */
       // WP445：同一条「等你发」（插件里批了又进「等你打开」）还没读时不再加一条
-      if ((STATE_EVENTS.has(e.type) || e.type === REDDIT_AWAITING_EVENT) && n.key !== undefined) {
+      if (
+        (STATE_EVENTS.has(e.type) ||
+          e.type === REDDIT_AWAITING_EVENT ||
+          e.type === REDDIT_EGO_HUMAN_EVENT) &&
+        n.key !== undefined
+      ) {
         const prev = backend.byKey(n.workspace_id, n.person_id, n.key)
         if (prev !== undefined && prev.read_at === undefined) continue
       }
@@ -674,6 +713,8 @@ export function createNotifications(options: NotificationsOptions): Notification
     RELOGIN_NEEDED_EVENT,
     KEY_REJECTED_EVENT,
     REDDIT_AWAITING_EVENT,
+    REDDIT_EGO_HUMAN_EVENT,
+    REDDIT_EGO_STOPPED_EVENT,
     ...REDDIT_SETTLED,
     ...CARD_SETTLED,
   ])

@@ -105,6 +105,11 @@ export interface BrowserSettingsAssembly {
   bskPath(): string | undefined
   /** WP463：这台机器上 ego 装没装、能不能跑（现探一次，顺便刷新 `forRun()` 用的那份缓存）。 */
   egoStatus(): EgoBrowserStatus
+  /**
+   * WP483（决策 1658 / 1660）：发帖 / 回帖走 ego 那一路用的 `ego-browser` 路径——浏览器设置（或默认）是 ego、
+   * 本机档、探得到才有；别的情况（用户选了别的浏览器 = 选了插件路）回 `undefined`。走缓存，每次发之前都问。
+   */
+  egoWritePath(): string | undefined
 }
 
 /** CDP 的 endpoint 只允许 http(s) / ws(s)，且不能带空白（上游 provider 的同一条口径）。 */
@@ -155,10 +160,13 @@ export async function probeCdpEndpoint(endpoint: string): Promise<BrowserProbeRe
 export function createBrowserSettings(options: BrowserSettingsOptions): BrowserSettingsAssembly {
   const file = options.dir === undefined ? undefined : join(options.dir, 'browser.json')
   const probe = options.probe ?? probeCdpEndpoint
+  /** WP483：用户在这台机器上点过「保存」没有（没点过 + 探到 ego = 默认用 ego）。 */
+  let chosen = file !== undefined && existsSync(file)
   let settings: BrowserSettings = load()
 
   function load(): BrowserSettings {
     if (file === undefined) return { ...DEFAULT }
+    if (!existsSync(file)) return { ...DEFAULT }
     try {
       const parsed = JSON.parse(readFileSync(file, 'utf8')) as StateFile
       return parsed.version === 1 ? parsed.settings : { ...DEFAULT }
@@ -169,6 +177,7 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
   }
 
   function persist(): void {
+    chosen = true
     if (file === undefined) return
     mkdirSync(dirname(file), { recursive: true })
     const state: StateFile = { version: 1, settings }
@@ -190,6 +199,13 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
    * 不是版本目录（升级后联接指向会变，下一次照样跑得到新的那一份）。
    */
   const egoAllowed = attachAllowed
+  /*
+   * WP483（决策 1658）：用户还没在设置里选过（没有 `browser.json`）、探到 ego 能跑 → 默认用 ego。
+   * 点过一次「保存」之后就按他存的来。
+   */
+  const egoByDefault = (): boolean =>
+    !chosen && settings.mode === 'off' && egoAllowed() && egoDetection(false).ok
+  const effective = (): BrowserSettings => (egoByDefault() ? { mode: 'ego' } : settings)
   const detectEgo =
     options.detectEgo ??
     ((saved) => detectEgoBrowser(saved === undefined ? {} : { savedPath: saved }))
@@ -211,7 +227,8 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
   }
 
   const view = (): BrowserSettingsView => ({
-    ...settings,
+    ...effective(),
+    ...(egoByDefault() ? { ego_default: true } : {}),
     attach_allowed: attachAllowed(),
     ...(attachAllowed()
       ? {}
@@ -330,7 +347,7 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
         if (path === undefined || !bskExists(path)) return undefined
         return { mode: 'browserskill', bsk_path: path }
       }
-      if (settings.mode === 'ego') {
+      if (effective().mode === 'ego') {
         /*
          * WP463：**探到能跑才给**（同 WP92「装好了才挂」）。没装 / 跑不起来 / 档位变了
          * 就当这次运行没有浏览器——与"没配浏览器"是同一种结果。
@@ -352,6 +369,11 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
       return undefined
     },
     bskPath: bskPathOf,
+    egoWritePath() {
+      if (effective().mode !== 'ego' || !egoAllowed()) return undefined
+      const found = egoDetection(false)
+      return found.ok ? found.path : undefined
+    },
     egoStatus() {
       if (!egoAllowed()) {
         return {
@@ -367,6 +389,7 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
         ...(found.path === undefined ? {} : { ego_path: found.path }),
         ...(found.version === undefined ? {} : { version: found.version }),
         ...(found.detail === undefined ? {} : { detail: found.detail }),
+        ...(egoByDefault() ? { default_ego: true } : {}),
       }
     },
   }

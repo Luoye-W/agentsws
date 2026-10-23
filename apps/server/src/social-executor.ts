@@ -28,9 +28,16 @@ import type {
   StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { socialChannelSpec } from '@agentsws/contracts'
+import {
+  type EgoWriteResult,
+  egoReplyPlatformOf,
+  egoWriteNext,
+  egoWriteSentence,
+  socialChannelSpec,
+} from '@agentsws/contracts'
 import type { ModerateInput, SocialChannelAdapter } from '@agentsws/social-core'
 import { finalPayload } from '@agentsws/txn'
+import type { EgoWriteCall } from './ego-write/writer.js'
 import { OWN_SUB_SOURCE } from './own-sub-queue.js'
 import type { SocialStore } from './social.js'
 
@@ -46,6 +53,15 @@ export interface SocialExecResult {
 }
 
 export interface SocialExecutorOptions {
+  /**
+   * WP483（决策 1658 / 1660）：没有回帖接口的渠道（X / FB / IG / LinkedIn / TikTok 的评论），ego 能用就工坊自己在 ego 里
+   * 回（批了自动发；岗位开了「发之前让我看一眼」就只填好）。私信不走这里。
+   */
+  ego?: {
+    available(): boolean
+    run(cfg: EgoWriteCall): Promise<EgoWriteResult>
+    reviewFirst?(who: { assignment_id?: string; role_id?: string }): boolean
+  }
   workspace_id: WorkspaceId
   store: SocialStore
   clock: Clock
@@ -266,6 +282,99 @@ export function createSocialExecutor(options: SocialExecutorOptions): SocialExec
         'Reddit 只在浏览器插件里由你自己点发送；这一条插件填不了（私信或没有链接），没发。去 Reddit 上自己回。',
       )
     const adapter = options.adapter(thread.channel)
+    const egoPlatform = egoReplyPlatformOf(thread.channel)
+    if (
+      adapter?.reply === undefined &&
+      thread.surface !== 'dm' &&
+      thread.permalink !== undefined &&
+      egoPlatform !== undefined &&
+      options.ego?.available() === true
+    ) {
+      const review =
+        options.ego.reviewFirst?.({
+          ...(item.proposer.assignment_id === undefined
+            ? {}
+            : { assignment_id: String(item.proposer.assignment_id) }),
+          role_id: String(item.role_id),
+        }) === true
+      const r = await options.ego
+        .run({
+          platform: egoPlatform,
+          mode: 'write',
+          url: thread.permalink,
+          text,
+          submit: !review,
+          space: `工坊 · 回帖 ${item.id}`,
+        })
+        .catch(
+          (e: unknown): EgoWriteResult => ({
+            state: 'unavailable',
+            platform: egoPlatform,
+            why: String(e),
+          }),
+        )
+      options.emit('social.reply_ego', 'system', {
+        approval_item_id: item.id,
+        thread_id: thread.id,
+        channel: thread.channel,
+        state: r.state,
+        next: egoWriteNext(r),
+      })
+      const next = egoWriteNext(r)
+      if (next === 'review')
+        return {
+          status: 'ok',
+          execution_id: `social_reply_ego_${item.id}`,
+          outcome_ref: { type: 'community_thread', id: thread.id },
+        }
+      if (next !== 'done') {
+        const why = r.why === undefined ? '' : `（${r.why.slice(0, 200)}）`
+        return fail(
+          next === 'stop' || next === 'wait_human'
+            ? egoWriteSentence(r)
+            : `ego 没回成${why}；${label(thread.channel)} 没有别的回帖出口，这一条没发，去平台上自己回。`,
+        )
+      }
+      store.saveThread({
+        ...thread,
+        status: 'answered',
+        ...(r.external_id === undefined ? {} : { reply_external_id: r.external_id }),
+      })
+      options.emit('social.reply_sent', 'system', {
+        approval_item_id: item.id,
+        thread_id: thread.id,
+        channel: thread.channel,
+        via: 'ego',
+      })
+      try {
+        const by = item.decision?.by
+        options.onSent?.({
+          source_key: `approval:${item.id}`,
+          channel: thread.channel,
+          action: 'reply',
+          kind: 'social_reply',
+          destination: account.display_name,
+          counterpart: thread.author_handle,
+          counterpart_text: thread.text.slice(0, 1000),
+          content: r.sent_text?.trim() || text,
+          ...(r.external_id === undefined ? {} : { external_id: r.external_id }),
+          ...(r.link === undefined ? {} : { link: r.link }),
+          parent_external_id: thread.external_id,
+          approval_item_id: item.id,
+          ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
+          role_id: item.role_id,
+          ...(by === undefined ? {} : { approved_by: by === 'mandate' ? '自动' : by }),
+          ...(item.decision?.at === undefined ? {} : { approved_at: item.decision.at }),
+        })
+      } catch {
+        // 记不上不挡发送结果
+      }
+      return {
+        status: 'ok',
+        execution_id: `social_reply_${item.id}`,
+        outcome_ref: { type: 'community_thread', id: thread.id },
+      }
+    }
     if (adapter?.reply === undefined)
       return fail(`${label(thread.channel)} 还没有能回帖的出口，这一条没发。`)
     const res = await adapter.reply({
