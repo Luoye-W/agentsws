@@ -91,6 +91,11 @@ export interface ServerSpawnInput {
   entry: string
   port: number
   dataDir: string
+  /**
+   * WP482：大文件单独放的位置（用户搬到外置硬盘 / NAS 后才有）。经 `AGENTSWS_BLOB_DIR` 给服务进程；
+   * 不给 = 跟着数据库（`<dataDir>/blobs`）。服务进程不替这个目录建，连不上时只有用到大文件的地方报「连不上」。
+   */
+  blobDir?: string
   halt: readonly HaltScope[]
   secrets: DesktopSecrets
   version: string
@@ -180,6 +185,7 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     ...(input.runtime.kind === 'electron' ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     AGENTSWS_PORT: String(input.port),
     AGENTSWS_DB_DIR: input.dataDir,
+    ...(input.blobDir === undefined ? {} : { AGENTSWS_BLOB_DIR: input.blobDir }),
     AGENTSWS_VERSION: input.version,
     /*
      * WP219（docs/90 §6）：桌面版的服务进程查「已审的内容更新」（每 6 小时 + 启动时）。

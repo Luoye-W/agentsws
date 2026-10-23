@@ -172,18 +172,22 @@ const bridge: DesktopBridge = {
         dataLocation: {
           get: (): Promise<DesktopDataLocation> =>
             ipcRenderer.invoke(CHANNELS.dataLocationGet) as Promise<DesktopDataLocation>,
-          choose: (): Promise<DesktopDataTargetCheck | null> =>
+          // WP482：`which` 只认 'blobs'，其余一律当数据库（不给页面传别的东西的口子）
+          choose: (which?: string): Promise<DesktopDataTargetCheck | null> =>
             ipcRenderer.invoke(
               CHANNELS.dataLocationChoose,
+              which === 'blobs' ? 'blobs' : 'database',
             ) as Promise<DesktopDataTargetCheck | null>,
-          checkDefault: (): Promise<DesktopDataTargetCheck> =>
+          checkDefault: (which?: string): Promise<DesktopDataTargetCheck> =>
             ipcRenderer.invoke(
               CHANNELS.dataLocationCheckDefault,
+              which === 'blobs' ? 'blobs' : 'database',
             ) as Promise<DesktopDataTargetCheck>,
-          move: (to: 'chosen' | 'default'): Promise<DesktopDataMoveStatus> =>
+          move: (to: 'chosen' | 'default', which?: string): Promise<DesktopDataMoveStatus> =>
             ipcRenderer.invoke(
               CHANNELS.dataLocationMove,
               to === 'default' ? 'default' : 'chosen',
+              which === 'blobs' ? 'blobs' : 'database',
             ) as Promise<DesktopDataMoveStatus>,
           onChange: (listener: (status: DesktopDataMoveStatus) => void): (() => void) => {
             const handler = (_event: unknown, status: DesktopDataMoveStatus): void => {
@@ -194,10 +198,16 @@ const bridge: DesktopBridge = {
               ipcRenderer.removeListener(CHANNELS.dataLocationChanged, handler)
             }
           },
-          deleteOld: (): Promise<boolean> =>
-            ipcRenderer.invoke(CHANNELS.dataLocationDeleteOld) as Promise<boolean>,
-          reveal: (): Promise<boolean> =>
-            ipcRenderer.invoke(CHANNELS.dataLocationReveal) as Promise<boolean>,
+          deleteOld: (which?: string): Promise<boolean> =>
+            ipcRenderer.invoke(
+              CHANNELS.dataLocationDeleteOld,
+              which === 'blobs' ? 'blobs' : 'database',
+            ) as Promise<boolean>,
+          reveal: (which?: string): Promise<boolean> =>
+            ipcRenderer.invoke(
+              CHANNELS.dataLocationReveal,
+              which === 'blobs' ? 'blobs' : 'database',
+            ) as Promise<boolean>,
         },
       }),
   // WP424：藏了系统标题栏才有这一项（页面据此给红绿灯 / 系统按钮留位置、设拖动区）
