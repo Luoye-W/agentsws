@@ -18,7 +18,8 @@
  * 连预检都发不出来。
  */
 
-import type { Iso8601, KolChannel, MaybePromise } from '@agentsws/contracts'
+import type { Iso8601, KolChannel, MaybePromise, PublicContactLink } from '@agentsws/contracts'
+import { MAX_PUBLIC_CONTACTS, PUBLIC_CONTACT_KINDS } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import {
@@ -49,6 +50,12 @@ export interface ExtensionObservation {
   bio?: string | undefined
   /** 用户显式点过「收下这个邮箱」才有；明文当场进本机加密库。 */
   contact?: { kind: 'email' | 'dm' | 'phone' | 'form'; value: string; source?: string } | undefined
+  /**
+   * WP487（决策 1661 补，只加）：红人**主页上公开写着的**联系方式（公开邮箱、网站、其它平台主页、
+   * 商务合作入口、经纪联系）。本机服务过一遍 `sanitizePublicContacts` 再随观测一起备份到工坊云端；
+   * 私信内容、账号凭据、用户自己的数据没有地方放。
+   */
+  public_contacts?: PublicContactLink[] | undefined
   observed_at: Iso8601
   page_url?: string | undefined
   source: 'channel_page' | 'content_page' | 'search_results'
@@ -545,6 +552,15 @@ const contactSchema = z.object({
   source: z.string().max(300).optional(),
 })
 
+/** WP487：主页上公开的一条联系方式（形状在这里卡，内容规矩在服务端的 `sanitizePublicContacts`）。 */
+const publicContactSchema = z
+  .object({
+    kind: z.enum(PUBLIC_CONTACT_KINDS as unknown as [string, ...string[]]),
+    value: z.string().min(1).max(600),
+    label: z.string().max(200).optional(),
+  })
+  .strict()
+
 /**
  * 观测的**白名单**。`.strict()` 不是洁癖：多一个键整批拒，是因为
  * 一条带正文的观测是一个信号，悄悄丢掉它等于把信号也丢了（同 48 §5.3）。
@@ -564,6 +580,11 @@ const observationSchema = z
     country: z.string().max(80).optional(),
     bio: z.string().max(2000).optional(),
     contact: contactSchema.optional(),
+    // WP487（只加；老插件不带）：主页上公开的联系方式
+    public_contacts: z
+      .array(publicContactSchema)
+      .max(MAX_PUBLIC_CONTACTS * 2)
+      .optional(),
     observed_at: z.string().min(1),
     page_url: z.string().max(600).optional(),
     source: z.enum(['channel_page', 'content_page', 'search_results']),

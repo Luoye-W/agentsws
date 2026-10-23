@@ -14876,6 +14876,29 @@
         },
         "description": "WP377：界面三档「快 / 标准 / 深度」各落到哪一档（每一格都必须在 `efforts` 里）。"
       },
+      "PublicContactKind": {
+        "type": "string",
+        "enum": ["email", "website", "social", "business", "agent"],
+        "description": "WP487（决策 1661 补）：主页上公开的一条联系方式是哪一种。"
+      },
+      "PublicContactLink": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PublicContactKind"
+          },
+          "value": {
+            "type": "string",
+            "description": "邮箱（小写）或 `https://` / `http://` 链接（去掉了 `#…` 与跟踪参数）。"
+          },
+          "label": {
+            "type": "string",
+            "description": "页面上写在它旁边的那几个字（「Business inquiries」「Managed by …」），最多 {@link PUBLIC_CONTACT_LABEL_MAX} 字。"
+          }
+        },
+        "required": ["kind", "value"],
+        "description": "一条公开联系方式。**就这三格**——没有「从哪个私信里看到的」这种东西。"
+      },
       "PublicContentObservation": {
         "type": "object",
         "properties": {
@@ -15091,6 +15114,13 @@
               "type": "string"
             },
             "description": "类目（自由词，最多 {@link MAX_CATEGORIES} 个）。"
+          },
+          "public_contacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicContactLink"
+            },
+            "description": "WP487（决策 1661 补）：红人**主页上公开写着的**联系方式——公开邮箱、网站、其它平台主页、 商务合作入口、经纪 / 代理联系。只收 {@link PublicContactLink} 那三格，最多 {@link MAX_PUBLIC_CONTACTS} 条；私信内容、账号凭据、用户自己的数据没有一格能落进来。 发出去之前先过 {@link sanitizePublicContacts}（本机那一跳就过，云端再按同一套规矩判一次）。"
           },
           "observed_at": {
             "type": "string",

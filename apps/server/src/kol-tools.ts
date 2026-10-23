@@ -27,6 +27,7 @@ import type {
   RunRequest,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { sanitizePublicContacts } from '@agentsws/contracts'
 import { KOL_TOOL_NAMES, kolChannelOfRole } from '@agentsws/kol-core'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 
@@ -343,7 +344,7 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
 
       /*
        * WP483（决策 1661）：浏览器（ego）里读到的公开主页数据 → 和插件同一条路（本机 + 云端备份）。
-       * 只收白名单那几格；私信、联系方式、账号凭据一格都没有。
+       * 只收白名单那几格；私信、账号凭据一格都没有。WP487：加上主页上公开的联系方式（过 `sanitizePublicContacts`）。
        */
       case 'record_creator_observations': {
         if (options.observe === undefined)
@@ -363,6 +364,7 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
           const videos = count(r.video_count)
           const views = count(r.avg_views)
           const url = str(r.url)
+          const contacts = sanitizePublicContacts(r.public_contacts)
           observations.push({
             channel,
             handle: channel === 'youtube' ? handle : handle.replace(/^@/u, ''),
@@ -375,6 +377,8 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
             ...(views === undefined ? {} : { avg_views: views }),
             ...(str(r.country) === undefined ? {} : { country: str(r.country)?.slice(0, 60) }),
             ...(str(r.bio) === undefined ? {} : { bio: str(r.bio)?.slice(0, 1000) }),
+            // WP487（1661 补）：主页上公开的联系方式——和插件那条路同一个口子（`ingest` 里再筛一遍）
+            ...(contacts.length === 0 ? {} : { public_contacts: contacts }),
             observed_at: at,
             source: 'channel_page',
           })

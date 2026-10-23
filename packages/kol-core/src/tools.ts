@@ -85,10 +85,11 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
     /*
      * WP483（决策 1661）：在浏览器（ego）里读到的红人**公开**主页数据，和浏览器插件采集的走同一条路：
      * 存进本机红人库，同时备份到工坊云端（公共红人库的那一份；只上粉丝数等几格）。私信、账号凭据不在这里。
+     * WP487（1661 补）：加上主页上**公开写着的**联系方式（`public_contacts`），和插件那条路同一个形状。
      */
     name: 'record_creator_observations',
     description:
-      '把你在浏览器里（ego）亲眼读到的红人公开主页数据记下来：存进本机红人库，同时和浏览器插件采集的一样备份到工坊云端。一次最多 50 个。只记公开主页上看得到的（账号、名字、粉丝数、作品数、简介），不记私信、不记任何账号密码；联系方式不在这里收（要邮箱走取联系方式那一步）。数字以页面上看到的为准，看不清就不填。',
+      '把你在浏览器里（ego）亲眼读到的红人公开主页数据记下来：存进本机红人库，同时和浏览器插件采集的一样备份到工坊云端。一次最多 50 个。只记公开主页上看得到的（账号、名字、粉丝数、作品数、简介，以及主页 / 简介 / 「关于」里公开写着的联系方式：邮箱、网站、其它平台主页、商务合作入口、经纪联系）。不记私信内容、不记任何账号密码、不记你自己账号上的东西（页面顶上登录着的那个号的邮箱、设置页、收件箱都不算）。数字以页面上看到的为准，看不清就不填。',
     input_schema: {
       type: 'object',
       properties: {
@@ -110,6 +111,25 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
               avg_views: { type: 'number', description: '最近作品的平均播放（页面上算得出才填）' },
               country: str('国家 / 地区（主页上写了才填）'),
               bio: str('简介原文'),
+              public_contacts: {
+                type: 'array',
+                description:
+                  '主页上公开写着的联系方式（没写就不填，不要猜、不要从私信里抄）。最多 10 条',
+                items: {
+                  type: 'object',
+                  properties: {
+                    kind: {
+                      type: 'string',
+                      enum: ['email', 'website', 'social', 'business', 'agent'],
+                      description:
+                        'email 公开邮箱 / website 网站或 link-in-bio 页 / social 别的平台主页 / business 商务合作入口（邮箱或表单链接）/ agent 经纪或代理公司联系',
+                    },
+                    value: str('邮箱，或 https:// 开头的链接（原样抄页面上的）'),
+                    label: str('页面上写在旁边的那几个字（如 Business inquiries），没有就不填'),
+                  },
+                  required: ['kind', 'value'],
+                },
+              },
             },
             required: ['handle'],
           },
