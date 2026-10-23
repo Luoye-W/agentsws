@@ -64,6 +64,7 @@ import { useApp } from '@/lib/app-context'
 import { dutyHref } from '@/lib/duty-href'
 import { NO_FILTERS, type WorkPrefs } from '@/lib/position-work'
 import { assignmentForPosition, myAssignments } from '@/lib/positions'
+import { useTelemetryContext } from '@/lib/telemetry/context'
 import { cn } from '@/lib/utils'
 import { matterUrl } from '@/lib/work'
 
@@ -127,6 +128,8 @@ export function PositionPage(): React.ReactNode {
     enabled: id !== '',
   })
   const view = instance.data
+  // WP477：这一页是哪个岗位（内置岗位的 id 就是模板 id；自建的本机服务记成 custom；岗位名不报）
+  useTelemetryContext(view === undefined ? undefined : { position_template: view.position_id })
 
   /*
    * 本人在这个岗位做的几条职责：岗位实体里本人那几条；地址栏这一条万一不在里面

@@ -35,7 +35,9 @@
 
 这不靠每个调用的地方自己记得清理，而是**从结构上**拦住：
 
-- 只认清单里的事件名，清单外的一律丢（包括 SDK 自己想发的 `$autocapture`、`$exception`、`$web_vitals`、`$pageleave` 等）；
+- 只认清单里的事件名，清单外的一律丢（包括 SDK 自己想发的 `$exception`、`$web_vitals`、`$pageleave`、`$rageclick` 等）；
+- 自动点击记录（`$autocapture`）在 SDK 里就**遮住全部文字和全部属性**，出门前再只留四样：哪种操作、元素的 testid、标签名、
+  路由模板（见下面「自动点击记录」）；
 - 只认清单里的属性，值还要过规则：只能是枚举值、小写 ASCII 编号、路由模板、版本号、随机生成的匿名编号。
   中文、空格、大写、`@`、网址、长串数字（电话、订单号）一律过不去；
 - 页面地址只报**路由模板**：`/positions/a_9f3/duties/dtc.support?draft=…` 发出去是 `/positions/:assignment/duties/:role_id`；
@@ -74,17 +76,47 @@
 
 | 事件 | 什么时候 | 属性 |
 |---|---|---|
-| `$pageview` | 页面（路由模板）变了 | `route` |
+| `$pageview` | 打开了一页（换一个岗位 / 事项也算一次；报的仍是路由模板） | `route`、`position_template`、`role_id` |
 | `app_opened` | 打开一次工作台 | — |
-| `ui_click` | 点了下面「关键按钮」里的一颗 | `button_id`、`route` |
+| `ui_click` | 点了下面「关键按钮」里的一颗 | `button_id`、`route`、`position_template`、`role_id` |
 | `client_error` | 页面报错（错误边界接住的、`window.onerror`、没人接的 Promise 拒绝） | `error_kind`、`error_name`（错误类名，如 `TypeError`）、`scope`、`route` |
+| `$autocapture` | 点了 / 改了 / 提交了一个带 testid 的元素（见下面「自动点击记录」） | `$event_type`、`testid`、`tag`、`route`、`position_template`、`role_id` |
+
+### 按岗位 / 职责看（`position_template`、`role_id`）
+
+岗位页、职责页、事项页、卡片页上的页面访问、按钮、自动点击记录，另带这一页是哪个岗位、哪条职责：
+
+- `position_template`：**内置岗位模板**的编号（如 `customer-care`、`kol-marketing`、`owner`）。内置岗位改了名编号也不变，
+  所以就算岗位叫「某某品牌旗舰店客服」，出门的也只有 `customer-care`；用户自己建的岗位一律 `custom`；
+- `role_id`：**内置职责**的编号（如 `dtc.support`、`kol.youtube`）；用户自己建的一律 `custom`。
+  事项页带事项挂的那条职责；点在一张卡上（收件箱一行、第三栏的卡）带那张卡的职责；
+- 岗位名、职责名永远不带。工作台先把不像编号的换成 `custom`，本机服务转发前再按随软件带的内置目录核一遍。
+
+`task_finished` 里的 `position_id` 与这里的 `position_template` 是同一套编号（WP476 起就叫 `position_id`，没改名）。
+
+### 自动点击记录（`$autocapture`）
+
+用来看「大家都点哪儿」，不用每颗按钮手工登记。它比关键按钮更容易带出东西，所以收得更紧：
+
+- SDK 里开着 `mask_all_text` 和 `mask_all_element_attributes`：元素上的字、`href`、`class`、`title`、所有属性都**不采**；
+- 出门只留四样：
+  - `$event_type`：`click` / `change` / `submit`（只开这三种）；
+  - `testid`：元素（或离它最近的上层）的 `data-testid`，**只认工作台源码里写死的**——
+    `packages/contracts/src/telemetry-testids.ts` 是从源码扫出来的表（`node scripts/gen-telemetry-testids.mjs` 生成）。
+    带变量的 testid（`brand-row-${id}`、`rail-office-sheet-tab-${工作表名}`）只发模板 `brand-row-:x`，变量那段永远不出门；
+    不在表里的整条不发；
+  - `tag`：标签名（`button`、`a`、`div`…，只认一张固定表）；
+  - `route`：路由模板；
+- `$el_text`、`$elements`、`$elements_chain`、`$external_click_url`、`$element_selectors`、`attr__*` 一律丢；
+- 本机服务转发前按同一张表再查一遍。
+- 热力图、死点击、连点、性能、录屏在代码里照旧关着。
 
 ### 本机服务发的
 
 | 事件 | 什么时候 | 属性 |
 |---|---|---|
 | `task_finished` | 一次 AI 运行收尾 | `outcome`（`success` / `failure` / `cancelled`）、`cost_tier`、`cache_tier`、`role_id`、`position_id`、`error_code`、`runtime` |
-| `card_decided` | 一张卡被人定了 | `decision`（`approve` / `edit` / `reject` / `other`）、`card_kind`（卡的类型编号，如 `outbound_draft`） |
+| `card_decided` | 一张卡被人定了 | `decision`（`approve` / `edit` / `reject` / `other`）、`card_kind`（卡的类型编号，如 `outbound_draft`）、`role_id`（卡挂在哪条内置职责上，自建的是 `custom`） |
 
 - `cost_tier`：这次运行花费的大概档位（`none` / `low` / `mid` / `high` / `top`），不发具体数字；
 - `cache_tier`：模型缓存命中的大概档位（`none` / `low` / `mid` / `high`）；
@@ -119,6 +151,25 @@
 | `update.check` | 检查更新 |
 | `update.restart` | 更新后「立即重启」 |
 
+## 另报 GA4 的四件关键事
+
+官网和软件共用一个 Google Analytics 4 媒体资源，用来看「官网访客 → 下载 → 第一次打开 → 用起来」这条线。
+软件只往 GA4 报下面四件事，和上面同一个开关（关了一件都不发）：
+
+| 事件 | 什么时候 | 次数 |
+|---|---|---|
+| `app_first_open` | 第一次打开工作台（GA4 自己的 `first_open` 是保留名，所以加了前缀） | 一台电脑一次 |
+| `setup_complete` | 首次设置向导走完、建好了岗位 | 一台电脑一次 |
+| `first_task` | 第一次有一次 AI 任务跑成 | 一台电脑一次 |
+| `daily_active` | 每天第一次打开工作台（按这台电脑的本地日期） | 一天一次 |
+
+- 每件只带：`app_version`、`market_region`（界面中文才带 `CN`）、GA4 要的 `session_id` 与 `engagement_time_msec`；
+  GA4 的 `client_id` 就是上面的匿名设备号 `install_id`。不带任何业务内容、不带账号编号。
+- 路线：本机服务 → 官方转发地址的 `/mp/collect` → GA4 Measurement Protocol。转发那边没配 GA4 的密钥时，
+  `/config` 说 `ga4: false`，本机服务一件都不发；转发那边自己也只认这四个名字、这几个参数。
+- 国家：界面中文的记成中国（`CN`）；别的由转发那边按 Cloudflare 判断的国家填，**不把 IP 交给 Google**。
+- 发成功才记在 `telemetry.json`（`ga4` 那一格）；发不出去下次打开再发。
+
 ## 录屏回放
 
 默认**关**，代码里留了开关。要开得在上报地址那边单独打开；开了也强制：
@@ -134,8 +185,11 @@
 ---
 
 **English.** Agents Workshop sends a small amount of **anonymous** usage data (page route templates, fixed button IDs,
+masked click autocapture that keeps only the event type, a source-code `data-testid`, the tag name and the route template,
 task outcome and cost tier, card decision type, error class names). It never sends emails, drafts, customer or product
 names, anything you type, URL parameters or error messages. Nothing is sent unless the official desktop build provides
 a reporting host (`AGENTSWS_TELEMETRY_HOST`) and the host returns a project key; running from source, tests and
-self-hosting send nothing. Turn it off in Settings → Data & privacy. The browser only talks to the local server, which
+self-hosting send nothing. Four milestones (`app_first_open`, `setup_complete`, `first_task`, `daily_active`) are also sent to
+Google Analytics 4 through the same relay, with only the app version, a `CN` market region for Chinese UI and GA4 session
+fields. Turn it off in Settings → Data & privacy. The browser only talks to the local server, which
 re-checks every event against the allowlist in `packages/contracts/src/telemetry.ts` before forwarding it.

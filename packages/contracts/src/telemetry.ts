@@ -13,6 +13,10 @@
  *    `/config` 给；两样缺一样，工作台不加载 SDK、服务进程不排队。开发、测试、自建默认都是这一档。
  */
 
+import { TELEMETRY_TESTID_TEMPLATES, TELEMETRY_TESTIDS } from './telemetry-testids.js'
+
+export { TELEMETRY_TESTID_TEMPLATES, TELEMETRY_TESTIDS }
+
 /** 上报地址（自家域名的转发，见私有云仓 telemetry Worker）。只有桌面安装包的壳会给它。 */
 export const TELEMETRY_HOST_ENV = 'AGENTSWS_TELEMETRY_HOST'
 /** 桌面安装包默认给的那一条。**开源仓的开发、测试、自建都不会自己用它**——要壳显式传下去。 */
@@ -42,6 +46,11 @@ export interface TelemetryView {
   client?: { api_host: string; key: string; replay: boolean }
   /** 关联了云账号时的账号 id（不是邮箱）。 */
   account_id?: string
+  /**
+   * WP477：工作台最近一次告诉本机服务的界面语言（只用来按决策 1600 算 `market_region`）。
+   * 工作台发现它和自己当前的语言不一样就 PUT 一次。
+   */
+  lang?: 'zh' | 'en'
 }
 
 /** posthog-js 打到本机 `/v1/telemetry/<口>` 的一次请求。 */
@@ -61,6 +70,8 @@ export interface TelemetryIngestReply {
 export interface TelemetryPatch {
   enabled?: boolean
   notice_seen?: boolean
+  /** WP477：工作台当前的界面语言。 */
+  lang?: 'zh' | 'en'
 }
 
 /** 值规则：每个属性只许是这几种之一。 */
@@ -80,6 +91,11 @@ export type TelemetryRule =
    */
   | { kind: 'opaque_id' }
   | { kind: 'bool' }
+  /**
+   * WP477（决策 1617 / 1618）：autocapture 的元素编号——只许是工作台源码里写死的 testid（`TELEMETRY_TESTIDS`），
+   * 或带变量 testid 的模板（`TELEMETRY_TESTID_TEMPLATES`，变量那段是 `:x`）。见 `telemetryTestidOf`。
+   */
+  | { kind: 'testid' }
   /** 非负整数（屏幕宽高这类），上限防滥用。 */
   | { kind: 'int'; max: number }
 
@@ -108,6 +124,8 @@ export function passesRule(rule: TelemetryRule, value: unknown): boolean {
       return typeof value === 'string' && OPAQUE.test(value) && /[A-Za-z]/.test(value)
     case 'bool':
       return typeof value === 'boolean'
+    case 'testid':
+      return typeof value === 'string' && telemetryTestidOf(value) === value
     case 'int':
       return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= rule.max
   }
@@ -149,18 +167,92 @@ export const TELEMETRY_COST_TIERS = ['none', 'low', 'mid', 'high', 'top'] as con
 export const TELEMETRY_CACHE_TIERS = ['none', 'low', 'mid', 'high'] as const
 export const TELEMETRY_DECISIONS = ['approve', 'edit', 'reject', 'other'] as const
 export const TELEMETRY_ERROR_KINDS = ['boundary', 'panel', 'error', 'rejection', 'preload'] as const
+/** WP477：autocapture 只开这三种 DOM 事件（posthog-js 的 `dom_event_allowlist`）。 */
+export const TELEMETRY_AUTOCAPTURE_EVENTS = ['click', 'change', 'submit'] as const
+/** WP477：autocapture 记的元素标签（只是标签名；不在表里的不带）。 */
+export const TELEMETRY_AUTOCAPTURE_TAGS = [
+  'a',
+  'button',
+  'input',
+  'select',
+  'textarea',
+  'label',
+  'form',
+  'option',
+  'summary',
+  'details',
+  'li',
+  'tr',
+  'td',
+  'div',
+  'span',
+  'p',
+  'img',
+  'svg',
+  'section',
+  'article',
+  'nav',
+  'header',
+  'footer',
+  'aside',
+  'main',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+] as const
+
+let testidStatics: ReadonlySet<string> | undefined
+let testidPatterns: readonly { template: string; re: RegExp }[] | undefined
+
+/**
+ * WP477（决策 1617 / 1618）：一个元素的 `data-testid` → 能出门的样子。
+ * 源码里写死的原样给；套得上带变量模板的给模板本身（`brand-row-:x`，变量那段永远不出门）；都不是 → `undefined`（整条不发）。
+ */
+export function telemetryTestidOf(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || raw === '' || raw.length > 200) return undefined
+  testidStatics ??= new Set(TELEMETRY_TESTIDS)
+  if (testidStatics.has(raw)) return raw
+  testidPatterns ??= TELEMETRY_TESTID_TEMPLATES.map((template) => ({
+    template,
+    re: new RegExp(
+      `^${template
+        .split(':x')
+        .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('.+?')}$`,
+      's',
+    ),
+  }))
+  // 模板本身（`brand-row-:x`）也认：服务进程那一关收到的就是它
+  if (TELEMETRY_TESTID_TEMPLATES.includes(raw)) return raw
+  for (const { template, re } of testidPatterns) if (re.test(raw)) return template
+  return undefined
+}
 
 /**
  * 事件清单：事件名 → 它自己能带的属性。改这张表就要改 `docs/telemetry-events.md` 和
  * `packages/contracts/test/telemetry.test.ts` 里钉的那份快照。
  */
 export const TELEMETRY_EVENTS = {
-  /** 页面访问（只带路由模板）。 */
-  $pageview: { route: { kind: 'route' } },
+  /**
+   * 页面访问（只带路由模板）。WP477：岗位 / 职责 / 事项 / 卡片页另带这一页是哪个**内置**岗位模板、哪条**内置**职责
+   * （本机服务转发前再核一遍：不在内置目录里的一律 `custom`；岗位名永远不带）。
+   */
+  $pageview: {
+    route: { kind: 'route' },
+    position_template: { kind: 'code' },
+    role_id: { kind: 'code' },
+  },
   /** 打开一次工作台（日活的口径之一）。 */
   app_opened: {},
   /** 关键按钮点击（固定编号）。 */
-  ui_click: { button_id: { kind: 'enum', values: TELEMETRY_BUTTONS }, route: { kind: 'route' } },
+  ui_click: {
+    button_id: { kind: 'enum', values: TELEMETRY_BUTTONS },
+    route: { kind: 'route' },
+    // WP477：在哪个内置岗位 / 职责的页面上点的；点在一张卡上时 `role_id` 是那张卡的职责
+    position_template: { kind: 'code' },
+    role_id: { kind: 'code' },
+  },
   /** 前端报错（只有错误类名与在哪一层接住的，不带报错文字）。 */
   client_error: {
     error_kind: { kind: 'enum', values: TELEMETRY_ERROR_KINDS },
@@ -178,10 +270,25 @@ export const TELEMETRY_EVENTS = {
     error_code: { kind: 'code' },
     runtime: { kind: 'code' },
   },
+  /**
+   * WP477（决策 1617 / 1618）：posthog-js 的 autocapture。文字与属性在 SDK 里就全遮了（`mask_all_text`、
+   * `mask_all_element_attributes`）；这里再只留四样：哪种 DOM 事件、元素的 testid（只许源码里写死的 / 模板）、
+   * 标签名、路由模板。`$el_text`、`$elements`、`$elements_chain`、`$external_click_url`、`attr__*` 一律丢。
+   */
+  $autocapture: {
+    $event_type: { kind: 'enum', values: TELEMETRY_AUTOCAPTURE_EVENTS },
+    testid: { kind: 'testid' },
+    tag: { kind: 'enum', values: TELEMETRY_AUTOCAPTURE_TAGS },
+    route: { kind: 'route' },
+    position_template: { kind: 'code' },
+    role_id: { kind: 'code' },
+  },
   /** 一张卡被人定了（服务进程发）：通过 / 改了再过 / 驳回 / 别的，卡的类型。 */
   card_decided: {
     decision: { kind: 'enum', values: TELEMETRY_DECISIONS },
     card_kind: { kind: 'code' },
+    /** WP477：卡挂在哪条内置职责上（用户自建的记 `custom`）。 */
+    role_id: { kind: 'code' },
   },
 } as const satisfies Record<string, Record<string, TelemetryRule>>
 
@@ -289,6 +396,8 @@ export function sanitizeTelemetryProps(
     const rule = own[key] ?? COMMON[key] ?? SDK[key]
     if (rule !== undefined && passesRule(rule, value)) out[key] = value as string | number | boolean
   }
+  // WP477：认不出是哪个元素的 autocapture（没有 testid / testid 不在表里）整条不要
+  if (event === '$autocapture' && out.testid === undefined) return null
   return out
 }
 
@@ -311,4 +420,79 @@ export function telemetryCacheTier(
   if (rate < 0.3) return 'low'
   if (rate < 0.7) return 'mid'
   return 'high'
+}
+
+/* ───────────────────────── WP477（决策 1609）：软件的几件关键事 → GA4 ───────────────────────── */
+
+/**
+ * 官网与软件共用的那个 GA4 媒体资源的衡量 ID（官网页面里本来就公开写着）。云上转发 Worker 的配置里也写一份。
+ */
+export const GA4_MEASUREMENT_ID = 'G-P4LBL51H3P'
+
+/** 本机服务把关键事交给上报地址的那条路（`<上报地址>/mp/collect`，云上 Worker 再转 Measurement Protocol）。 */
+export const GA4_RELAY_PATH = '/mp/collect'
+
+/**
+ * 软件只往 GA4 报这四件事（决策 1609），名字按 GA4 规范：
+ *
+ * - `app_first_open`：第一次打开工作台（`first_open` 是 GA4 保留名，Measurement Protocol 不收，所以加了 `app_` 前缀）；
+ * - `setup_complete`：首次设置向导走完（建好了岗位）；
+ * - `first_task`：第一次有一次 AI 任务跑成；
+ * - `daily_active`：每天第一次打开工作台（按这台电脑的本地日期）。
+ *
+ * 前三件每台电脑只发一次，`daily_active` 一天一次。加一件 = 在这里加一行 + 文档加一行 + 云上 Worker 的白名单加一行。
+ */
+export const GA4_APP_EVENTS = [
+  'app_first_open',
+  'setup_complete',
+  'first_task',
+  'daily_active',
+] as const
+export type Ga4AppEvent = (typeof GA4_APP_EVENTS)[number]
+
+/**
+ * 每件事能带的参数（全部是代码里的标识，没有业务内容）：
+ * - `app_version`：版本号；
+ * - `market_region`：界面是中文就带 `CN`（决策 1600），不是中文不带；
+ * - `session_id`：这次进程起来的时间（秒），GA4 要它才把事件算进会话 / 实时；
+ * - `engagement_time_msec`：固定 1（同上，GA4 要它才算「活跃」）。
+ */
+export const GA4_APP_PARAMS = {
+  app_version: { kind: 'version' },
+  market_region: { kind: 'enum', values: TELEMETRY_MARKET_REGIONS },
+  session_id: { kind: 'int', max: 9_999_999_999 },
+  engagement_time_msec: { kind: 'int', max: 60_000 },
+} as const satisfies Record<string, TelemetryRule>
+
+/** 本机服务 POST 到 `<上报地址>/mp/collect` 的请求体（Worker 再拼成 Measurement Protocol 的样子）。 */
+export interface Ga4RelayBody {
+  /** GA4 的 `client_id`：就是匿名设备号 `install_id`。 */
+  client_id: string
+  events: { name: Ga4AppEvent; params: Record<string, string | number> }[]
+}
+
+/** 一件关键事出门前的最后一关：名字不在四件里 → `null`；参数只留白名单里、值过得了规则的。 */
+export function sanitizeGa4Event(
+  name: string,
+  params: Readonly<Record<string, unknown>>,
+): { name: Ga4AppEvent; params: Record<string, string | number> } | null {
+  if (!(GA4_APP_EVENTS as readonly string[]).includes(name)) return null
+  const rules: Readonly<Record<string, TelemetryRule>> = GA4_APP_PARAMS
+  const out: Record<string, string | number> = {}
+  for (const [key, value] of Object.entries(params)) {
+    const rule = rules[key]
+    if (rule !== undefined && passesRule(rule, value)) out[key] = value as string | number
+  }
+  return { name: name as Ga4AppEvent, params: out }
+}
+
+/**
+ * WP477：内置目录之外的岗位 / 职责一律记成这个（名字里可能有品牌或商品，id 也可能是从名字算出来的）。
+ */
+export const TELEMETRY_CUSTOM = 'custom'
+
+/** WP477：工作台这一侧先把不像编号的岗位 / 职责 id 换成 `custom`（本机服务再按内置目录核一遍）。 */
+export function telemetrySafeId(id: unknown): string | undefined {
+  if (id === undefined || id === null || id === '') return undefined
+  return passesRule({ kind: 'code' }, id) ? (id as string) : TELEMETRY_CUSTOM
 }

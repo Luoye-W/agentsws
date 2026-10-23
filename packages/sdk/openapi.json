@@ -60855,7 +60855,7 @@
       },
       "put": {
         "operationId": "putTelemetrySettings",
-        "summary": "WP476 开 / 关匿名使用数据；记下第一次提示看过了",
+        "summary": "WP476 开 / 关匿名使用数据；记下第一次提示看过了；WP477 告诉本机服务界面语言",
         "tags": ["settings"],
         "parameters": [
           {
@@ -60965,6 +60965,10 @@
                   },
                   "notice_seen": {
                     "type": "boolean"
+                  },
+                  "lang": {
+                    "type": "string",
+                    "enum": ["zh", "en"]
                   }
                 }
               }

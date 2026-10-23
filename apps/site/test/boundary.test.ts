@@ -50,9 +50,10 @@ describe('只有公开页面', () => {
   it('没有表单、输入框、密码框、Cookie 读写', () => {
     for (const f of code) {
       const text = readFileSync(f, 'utf8')
-      expect(text, f).not.toMatch(
-        /<form\b|<input\b|<textarea\b|type=["']password|document\.cookie/iu,
-      )
+      expect(text, f).not.toMatch(/<form\b|<input\b|<textarea\b|type=["']password/iu)
+      // WP477：唯一碰 Cookie 的是统计脚本——只在访客改成「不允许」时让 GA 的 `_ga*` 过期
+      if (f.endsWith(join('scripts', 'analytics.ts'))) continue
+      expect(text, f).not.toMatch(/document\.cookie/iu)
     }
   })
 
