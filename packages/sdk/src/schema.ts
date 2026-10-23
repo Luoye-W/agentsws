@@ -66151,7 +66151,13 @@ export interface operations {
       }
       cookie?: never
     }
-    requestBody?: never
+    requestBody: {
+      content: {
+        'application/json': {
+          text?: string
+        }
+      }
+    }
     responses: {
       /** @description RedditWriteView */
       200: {
@@ -81509,7 +81515,13 @@ export interface operations {
       }
       cookie?: never
     }
-    requestBody?: never
+    requestBody: {
+      content: {
+        'application/json': {
+          text?: string
+        }
+      }
+    }
     responses: {
       /** @description PanelFillResult */
       200: {

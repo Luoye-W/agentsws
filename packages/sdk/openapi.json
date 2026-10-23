@@ -78933,7 +78933,25 @@
           "range": "assigned",
           "sensitivity": "internal"
         },
-        "x-returns": "RedditWriteView"
+        "x-returns": "RedditWriteView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "maxLength": 10000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
       }
     },
     "/v1/social/reddit/writes/{job_id}/dismiss": {
@@ -102710,7 +102728,25 @@
         },
         "security": [],
         "x-halt-scope": "outbound",
-        "x-returns": "PanelFillResult"
+        "x-returns": "PanelFillResult",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "maxLength": 10000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
       }
     },
     "/v1/extension/panel/writes/{job}/open": {
