@@ -11,7 +11,7 @@
  *
  * 这里零 IO：不碰库、不碰模型、不看时钟（时间由调用方给）。
  */
-import type { FactCard, FaqField, FaqSheetMapping } from '@agentsws/contracts'
+import type { FactCard, FaqField, FaqSheetMapping, KnowledgeStage } from '@agentsws/contracts'
 import { FAQ_SUBJECT_TYPE, stageOfText } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import type { SheetGrid } from './sheet.js'
@@ -397,7 +397,10 @@ export interface FaqCardContext {
 }
 
 /** 一行问答 → 一张待提议的卡（事实层；状态由 `propose` 钉成 `proposed`）。 */
-export function faqCard(row: FaqRow, ctx: FaqCardContext): ProposedFaqCard {
+/**
+ * @param stage WP488（决策 1700 = B）：AI 整表判过的范围（给了就用它，`both` 也写上）；不给退回规则。
+ */
+export function faqCard(row: FaqRow, ctx: FaqCardContext, stage?: KnowledgeStage): ProposedFaqCard {
   const structured: Record<string, unknown> = { question: row.question, answer: row.answer }
   if (row.category !== undefined) structured.category = row.category
   if (row.product !== undefined) structured.product = row.product
@@ -430,8 +433,8 @@ export function faqCard(row: FaqRow, ctx: FaqCardContext): ProposedFaqCard {
     valid: {},
     owner: ctx.owner,
     created_by: { kind: 'person', id: ctx.by },
-    // WP488（决策 1682）：问法明显是售前 / 售后的标上；判不出不写（= 公共）
-    ...faqStage(row),
+    // WP488（决策 1682 / 1700）：AI 整表判过就用它；没判（模型出错 / 撞上限）退回规则——问法明显是售前 / 售后的标上，判不出不写（= 公共）
+    ...(stage === undefined ? faqStage(row) : { stage }),
   }
 }
 

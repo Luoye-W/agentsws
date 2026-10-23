@@ -27,6 +27,8 @@ export * from './prompt-text.js'
 export * from './prompts/index.js'
 export * from './site-learning.js'
 export * from './sla.js'
+// WP488（决策 1700 / 1704）：售前 / 售后由 AI 判（提示词与认回话）
+export * from './stage-ai.js'
 export * from './text.js'
 export * from './types.js'
 // WP54（48 v2 L2）：实物 / 虚拟两套垂直包与 `getVerticalPack` 解析入口

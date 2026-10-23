@@ -569,7 +569,6 @@ import { createImageService, type ImageService } from './image-tools.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { knowledgeSourceFile } from './knowledge-file.js'
-// WP488：客服知识库从过往邮件 / 官网 / 售后网站学一遍
 import {
   createKnowledgeLearner,
   isLearnedCard,
@@ -580,6 +579,13 @@ import {
 } from './knowledge-learn.js'
 import { createKnowledgeLearnToolExecutor } from './knowledge-learn-tools.js'
 import { importKnowledgePack } from './knowledge-pack.js'
+// WP488：客服知识库从过往邮件 / 官网 / 售后网站学一遍
+import {
+  cheapestRef,
+  createStageJudge,
+  type StageJudge,
+  type StageJudgeDeps,
+} from './knowledge-stage.js'
 import { checkUpload, UploadRejected, uploadBlobKey, uploadSubjectRef } from './knowledge-upload.js'
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createByoSourceStore } from './kol-byo.js'
@@ -1690,6 +1696,8 @@ export interface ServerOptions {
   knowledgeLearnMail?: KnowledgeLearnDeps['mail']
   /** WP488：「学一遍」问模型那一口（测试注入假模型）。不给 = 这个品牌的网关、`extraction` 档。 */
   knowledgeLearnModel?: KnowledgeLearnDeps['model']
+  /** WP488：判售前 / 售后那一口（测试注入假模型）。不给 = 这个品牌最便宜的那一档模型。 */
+  knowledgeStageModel?: StageJudgeDeps['model']
   /**
    * WP346：品牌分析 AI 归纳那一步的模型**替身**（测试与离线 demo 用）。生产不传——走这个品牌
    * 自己的默认模型（没接模型就跳过 AI 那几格）。
@@ -3341,6 +3349,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let faqImporter: FaqImporter | undefined
   /** WP488：客服知识库「学一遍」（过往邮件 / 官网 / 售后网站）；知识口装好时才建。 */
   let knowledgeLearner: KnowledgeLearner | undefined
+  /** WP488（决策 1704 = C）：售前 / 售后由 AI 判（同一线程只问一次）；模型口装好时才建，之前退回规则。 */
+  let stageJudge: StageJudge | undefined
+  const stageFor = async (
+    ws: WorkspaceId,
+    text: string,
+    key?: string,
+  ): Promise<{ stage?: 'presales' | 'postsales' }> =>
+    stageJudge === undefined ? retrievalStage(text) : stageJudge.retrieval(ws, text, key)
   /** WP488：复查一小时最多看一次（到期的页一周才一次，这一层只是别每一刻钟都列一遍源）。 */
   const knowledgeRecheckAt = new Map<string, number>()
   const knowledgeRecheckIfDue = async (ws: WorkspaceId): Promise<number | undefined> => {
@@ -6804,6 +6820,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         clock,
         workspace_id: ws,
         knowledge: knowledge.retrieval,
+        // WP488（决策 1704 = C）：查政策前先让 AI 判这件事是售前还是售后（同一件事只问一次）
+        judgeStage: (text, key) => stageFor(ws, text, key),
         roles,
         // 运行时装在工作模型之前（两者互相需要），所以这里收的是取值函数
         work: () => workRef,
@@ -8842,15 +8860,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       models: gatewayProxy,
       // 同一套知识与订单只读：记录源就是运行时那一个
       source: records,
-      searchKnowledge: async (text, limit) => {
+      searchKnowledge: async (text: string, limit: number, ctx?: { thread?: string }) => {
         const position = positionFor(ws, LIVE_CHAT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const { hits } = await knowledge.retrieval.search({
           text,
           k: limit,
-          // WP488（决策 1682）：售前问的不取只管售后的，反之亦然；判不出两边都取
-          ...retrievalStage(text),
+          // WP488（决策 1682 / 1704）：先问 AI 售前还是售后（同一线程只问一次）；判不出两边都取
+          ...(await stageFor(ws, text, ctx?.thread)),
           actor: {
             person_id: position.person_id,
             workspace_id: ws,
@@ -9175,15 +9193,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       models: gatewayProxy,
       rawStore: channels.raw,
       sendMail: (input) => channels.sendMail(input),
-      searchKnowledge: async (text, limit) => {
+      searchKnowledge: async (text: string, limit: number, ctx?: { thread?: string }) => {
         const position = firstPositionOf(ws)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const { hits } = await knowledge.retrieval.search({
           text,
           k: limit,
-          // WP488（决策 1682）：售前问的不取只管售后的，反之亦然；判不出两边都取
-          ...retrievalStage(text),
+          // WP488（决策 1682 / 1704）：先问 AI 售前还是售后（同一线程只问一次）；判不出两边都取
+          ...(await stageFor(ws, text, ctx?.thread)),
           actor: {
             person_id: position.person_id,
             workspace_id: ws,
@@ -9601,15 +9619,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
       models: gatewayProxy,
       position: () => positionFor(ws, SUPPORT_DUTIES),
-      searchKnowledge: async (text, limit) => {
+      searchKnowledge: async (text: string, limit: number, ctx?: { thread?: string }) => {
         const position = positionFor(ws, SUPPORT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const { hits } = await knowledge.retrieval.search({
           text,
           k: limit,
-          // WP488（决策 1682）：售前问的不取只管售后的，反之亦然；判不出两边都取
-          ...retrievalStage(text),
+          // WP488（决策 1682 / 1704）：先问 AI 售前还是售后（同一线程只问一次）；判不出两边都取
+          ...(await stageFor(ws, text, ctx?.thread)),
           actor: {
             person_id: position.person_id,
             workspace_id: ws,
@@ -12781,11 +12799,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       // WP240：首批知识进**确认的那个品牌**的知识库（以前一律进启动品牌）
       seedKnowledge: async (profile, actor) => {
-        for (const card of brandKnowledgeCards(profile, {
+        const seeds = brandKnowledgeCards(profile, {
           workspace_id: actor.workspace_id as WorkspaceId,
           at: clock.now(),
           owner: actor.person_id as PersonId,
-        })) {
+        })
+        // WP488（决策 1700 = B）：整批一次问 AI 归公共 / 售前 / 售后；问不成用默认（政策公共、商品售前）
+        const stages = await stageJudge
+          ?.batch(
+            actor.workspace_id as WorkspaceId,
+            seeds.map((c) => c.statement),
+          )
+          .catch(() => undefined)
+        for (const [i, seed] of seeds.entries()) {
+          const stage = stages?.[i]
+          const card = stage === undefined ? seed : { ...seed, stage }
           try {
             await knowledge.store.propose(card)
           } catch (err) {
@@ -13123,6 +13151,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       )?.bytes,
     approvalFlow: async (ws) => hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'),
     approverOf: async (ws) => (await identity.getWorkspace(ws))?.owner_id,
+    // WP488（决策 1700 = B）：整表一次问 AI 归公共 / 售前 / 售后（判官晚绑定；问不成按规则）
+    stages: async (actor, items) => stageJudge?.batch(actor.workspace_id, items),
     mapper: async (actor, prompt) => {
       const ws = actor.workspace_id
       const own = ws === workspace.id
@@ -13338,6 +13368,65 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           // 挂不上事项不影响卡本身
         }
       return out.item.id
+    },
+  })
+
+  /*
+   * WP488（决策 1700 = B、1704 = C）：售前 / 售后由 AI 判——这个品牌最便宜的那一档模型、短提示、不思考；
+   * 撞网关上限 / 出错退回规则。FAQ 整表 / 品牌种子整批也走它（一次调用判完）。
+   */
+  stageJudge = createStageJudge({
+    clock,
+    log: (line) => process.stdout.write(`${line}\n`),
+    model: async (ws) => {
+      if (options.knowledgeStageModel !== undefined) return options.knowledgeStageModel(ws)
+      const models = await learnModelsOf(ws)
+      if (!models.configured()) return undefined
+      const gateway = await learnGatewayOf(ws)
+      const ref = cheapestRef(
+        gateway.providers(),
+        (r) => models.priceOf?.(r),
+        models.purposeRef('extraction'),
+      )
+      if (ref === undefined) return undefined
+      const price = models.priceOf?.(ref)
+      return {
+        complete: async (prompt, o) =>
+          (
+            await gateway.complete({
+              messages: [{ role: 'user', content: prompt }],
+              meta: {
+                workspace_id: ws,
+                assignment_id: 'system' as never,
+                role_id: 'system' as never,
+                run_id: o.run_id as never,
+                purpose: 'extraction',
+              },
+              model: ref,
+              max_output_tokens: o.max_output_tokens,
+              thinking: 'off',
+            })
+          ).text,
+        estimate: (calls, inputChars, outputTokens) =>
+          price === undefined || (price.in === 0 && price.out === 0)
+            ? undefined
+            : (calls * (Math.ceil(inputChars / 4) * price.in + outputTokens * price.out)) /
+              1_000_000,
+        budget: async () => {
+          const b = await (
+            gateway as Partial<{
+              budget(scope: { workspace_id: WorkspaceId }): Promise<{
+                used_base: number
+                cap_base: number
+                frozen: boolean
+              }>
+            }>
+          ).budget?.({ workspace_id: ws })
+          return b === undefined || (b.cap_base <= 0 && !b.frozen)
+            ? undefined
+            : { used: b.used_base, cap: b.cap_base, frozen: b.frozen }
+        },
+      }
     },
   })
 
@@ -14865,8 +14954,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const { hits } = await knowledge.retrieval.search({
           text,
           k: 8,
-          // WP488（决策 1682）：岗位问答同样先判售前 / 售后
-          ...retrievalStage(text),
+          // WP488（决策 1682 / 1704）：岗位问答同样先让 AI 判售前 / 售后
+          ...(await stageFor(actor.workspace_id as WorkspaceId, text)),
           actor: {
             person_id: actor.person_id,
             workspace_id: actor.workspace_id,

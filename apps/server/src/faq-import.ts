@@ -29,6 +29,7 @@ import type {
   FaqImportPayload,
   FaqSheetMapping,
   KnowledgeSource,
+  KnowledgeStage,
   PersonId,
   RoleId,
   WorkspaceId,
@@ -76,6 +77,14 @@ export interface FaqImportDeps {
   approvalFlow(workspace_id: WorkspaceId): Promise<boolean>
   /** ③ 时整批卡发给谁（知识的负责人 = 工作区所有者）。 */
   approverOf(workspace_id: WorkspaceId): Promise<PersonId | undefined>
+  /**
+   * WP488（决策 1700 = B）：整表一次问 AI 每一行归公共 / 售前 / 售后（与入参同序）。
+   * 问不成（没接模型 / 出错 / 撞网关上限）回 `undefined`——那就按规则判。
+   */
+  stages?(
+    actor: { workspace_id: WorkspaceId },
+    items: readonly string[],
+  ): Promise<KnowledgeStage[] | undefined>
   /** AI 认列：给提示词回一段字；没接模型 / 出错回 `undefined`（只按规则认）。 */
   mapper?(actor: FaqActor, prompt: string): Promise<string | undefined>
 }
@@ -493,8 +502,15 @@ export function createFaqImporter(deps: FaqImportDeps): FaqImporter {
         : plan.changed.map((c) => ({ row: c.row, replaces: c.replaces.id }))),
     ]
     const created: { id: string; row: FaqRow; replaces?: string }[] = []
-    for (const t of todo) {
-      const card = await knowledge.store.propose(faqCard(t.row, ctx))
+    // WP488（决策 1700 = B）：整表一次问 AI 每一行归哪一份；问不成按规则
+    const stages = await deps
+      .stages?.(
+        { workspace_id: item.workspace_id },
+        todo.map((t) => `Q: ${t.row.question}\nA: ${t.row.answer}`),
+      )
+      .catch(() => undefined)
+    for (const [i, t] of todo.entries()) {
+      const card = await knowledge.store.propose(faqCard(t.row, ctx, stages?.[i]))
       created.push({ id: card.id, ...t })
     }
     const flow = await deps.approvalFlow(item.workspace_id)

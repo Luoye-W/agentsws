@@ -145,9 +145,10 @@ function fakeModel(calls: string[]): LearnModel {
 
 const PAD = '<p>We are a small lamp company and answer every email within one business day.</p>'
 
-async function boot(opts: { connected?: boolean } = {}) {
+async function boot(opts: { connected?: boolean; stageModel?: boolean } = {}) {
   dir = mkdtempSync(join(tmpdir(), 'agentsws-wp488-'))
   const calls: string[] = []
+  const stagePrompts: string[] = []
   const refundDays = { value: 30 }
   const pages = (): Record<string, string> => ({
     'https://www.lamp.test/': `<html><body><a href="/pages/faq">FAQ</a><a href="/policies/refund-policy">Refunds</a><h1>Lamp</h1>${PAD}</body></html>`,
@@ -181,6 +182,24 @@ async function boot(opts: { connected?: boolean } = {}) {
     mdns: () => ({ mdns: { publish() {}, browse() {}, stop() {} } }),
     knowledgeLearnMail: async () => mail,
     knowledgeLearnModel: async () => fakeModel(calls),
+    // 决策 1700 / 1704：判售前 / 售后那一口（整批回 JSON；一封信回一个词）
+    ...(opts.stageModel === true
+      ? {
+          knowledgeStageModel: async () => ({
+            complete: async (prompt: string) => {
+              stagePrompts.push(prompt)
+              if (prompt.includes('"stages"')) {
+                const n = Number(/数组长度 = 条数（(\d+)）/.exec(prompt)?.[1] ?? '0')
+                const out = Array.from({ length: n }, (_, i) =>
+                  i === 0 ? 'presales' : i === 1 ? 'postsales' : 'both',
+                )
+                return JSON.stringify({ stages: out })
+              }
+              return 'postsales'
+            },
+          }),
+        }
+      : {}),
     knowledgeSiteFetch: siteFetch as never,
   })
   server = s
@@ -220,7 +239,7 @@ async function boot(opts: { connected?: boolean } = {}) {
     expect(res.status).toBe(200)
     await s.knowledgeLearn.settled()
   }
-  return { s, call, data, queue, decide, calls, refundDays }
+  return { s, call, data, queue, decide, calls, refundDays, stagePrompts }
 }
 
 describe('从过往邮件学', () => {
@@ -373,5 +392,55 @@ describe('三份：回复前先判售前 / 售后', () => {
     expect(res.status).toBe(200)
     const pre2 = await search('Which lamp is best for camping, and how much is it?')
     expect(pre2.some((h) => h.statement_redacted.includes('replacement'))).toBe(true)
+  })
+})
+
+describe('决策 1700 / 1704：范围由 AI 判', () => {
+  it('FAQ 表导入：整表一次问 AI（不按规则）', async () => {
+    const { s, call, queue, stagePrompts } = await boot({ stageModel: true })
+    const csv = [
+      'Question,Answer',
+      // 规则会判成售后，AI 判成售前——以 AI 为准
+      '"Where is my order shipped from?","From our US warehouse."',
+      '"How much is the 2-pack?","USD 39."',
+      '"What is your return policy?","30 days."',
+    ].join('\n')
+    const fd = new FormData()
+    fd.set('file', new Blob([csv]), 'faq.csv')
+    const up = await s.gateway.fetch(
+      new Request('http://127.0.0.1/v1/knowledge/sources/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${s.bootstrap.internalToken}`,
+          'X-Assignment': s.bootstrap.ownerAssignment.id,
+        },
+        body: fd,
+      }),
+    )
+    expect(up.status).toBe(201)
+    await s.faqImport.settled()
+    const [card] = await queue('faq_import')
+    const fresh = await s.txn.approvals.get(card?.id ?? '')
+    const token = [...(fresh?.deliveries ?? [])]
+      .reverse()
+      .find((d) => d.status === 'sent')?.decision_token
+    const res = await call('POST', `/v1/approvals/${card?.id}/decide`, {
+      decision_token: token,
+      action: 'approve',
+      selected_option_id: 'all',
+    })
+    expect(res.status).toBe(200)
+    await s.faqImport.settled()
+    const batch = stagePrompts.filter((p) => p.includes('"stages"'))
+    expect(batch).toHaveLength(1)
+    const faq = (
+      s.knowledge.db.prepare("SELECT id FROM fact_cards WHERE subject_type = 'faq'").all() as {
+        id: string
+      }[]
+    ).map((r) => s.knowledge.store.getUnchecked(r.id))
+    const byQ = (q: string) => faq.find((c) => c?.statement.includes(q))?.stage
+    expect(byQ('Where is my order')).toBe('presales')
+    expect(byQ('How much')).toBe('postsales')
+    expect(byQ('return policy')).toBe('both')
   })
 })
