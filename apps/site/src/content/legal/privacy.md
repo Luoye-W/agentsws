@@ -63,9 +63,9 @@ Agents 工坊的开源软件装在你的电脑上运行。你的客户、订单�
 
 ## 四、Cookie 与本机存储
 
-- **官网 {{SITE_URL}} 用 Google Analytics 统计访问量**，没有广告或跨站跟踪。第一次打开时底部会问你「允许统计 / 不允许」：
-  - 你点「允许统计」之前（包括点了「不允许」），**不存任何 Cookie**，Google Analytics 只收到不带 Cookie 的匿名计数；
-  - 点了「允许统计」，Google Analytics 会存两张统计 Cookie（`_ga`、`_ga_` 开头的那张，最长保存 2 年），用来分辨回访；广告相关的功能一律关着；
+- **官网 {{SITE_URL}} 用 Google Analytics 统计访问量**，没有广告或跨站跟踪。第一次打开时底部会问你「允许 / 不允许」：
+  - 你点「允许」之前（包括点了「不允许」），**不存任何 Cookie**，Google Analytics 只收到不带 Cookie 的匿名计数；
+  - 点了「允许」，Google Analytics 会存两张统计 Cookie（`_ga`、`_ga_` 开头的那张，最长保存 2 年），用来分辨回访；广告相关的功能一律关着；
   - 你的选择存在本机浏览器里（localStorage）。想改主意，点页脚的「[统计设置](/privacy/#consent)」；改成「不允许」时，之前那两张 Cookie 会一起清掉。
   - 你切换明暗主题时，浏览器也会在本机存一个偏好（localStorage），不会发给我们。
 - **账号页（cloud.agentsws.com）**：只用两张保持登录与防伪造所必需的 Cookie，不用于统计或广告：
