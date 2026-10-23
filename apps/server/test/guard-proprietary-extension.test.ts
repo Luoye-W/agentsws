@@ -5,7 +5,10 @@
  * 模板，授权不允许公开分发；完整版插件整体住在**私有仓库**
  * `agentsws-extension`。开源仓库这边只放开放接口与参考实现。
  *
- * 这组测试只干一件事：**防止移植代码被手滑提交进开源仓库**。扫描的是
+ * 这组测试只干一件事：**防止移植代码被手滑提交进开源仓库**。WP496（决策 1739 A）起有一个例外：
+ * 采集器与指标算法（DOM 只读采集、快照类型、体检 / 真实性 / 估值等纯算法）按决策搬进了
+ * `packages/creator-capture`，那个包自己的守卫（`packages/creator-capture/test/guard.test.ts`）管它只放这些；
+ * 插件框架、模板、面板 / 设置页这些照旧一个字节都不许进来。扫描的是
  * `apps/` 与 `packages/`（构建产物 `dist`、`node_modules`、文档里的"提到"不算），
  * 命中旧插件 / 模板特有的文件名、目录名或源码标识就当场红。
  */
@@ -33,15 +36,19 @@ const FORBIDDEN = [
   'influencer-api',
   // WP130：列表页批量采集那一批（完整版插件私有仓里的文件 / 函数名）
   'SearchCaptureFab',
-  'collectSocialListCreators',
+  // WP496（决策 1739 A）：`collectSocialListCreators` 不再在这里——采集器与指标算法（不含插件框架 / 模板 / 界面）
+  // 已经按决策搬进开源仓 `packages/creator-capture`（文件头写着出处）。界面那一批照旧一个字节都不许进来。
 ]
 
 /**
  * 点名放行：这几个文件提到嫌疑名单里的某一项是**正当的**，不是移植代码。只放行写明的那一项。
  * - 官网首页「四级台阶」把 KOLAgents 链到它的官网（WP227，Luoye 10-05 #4）——一条公开链接，不是插件调用。
+ * - `packages/creator-capture` 自己的守卫测试（WP496）：那里写的是要拦的名字。
  */
 const ALLOWED: Readonly<Record<string, readonly string[]>> = {
   'apps/site/src/config.ts': ['kolagents.com'],
+  // WP496：creator-capture 自己的守卫里写着要拦的名字（正则），不是移植代码
+  'packages/creator-capture/test/guard.test.ts': ['plasmo', 'kolagents.com'],
 }
 
 function walk(dir: string, out: string[] = []): string[] {

@@ -301,6 +301,8 @@ export interface EgoBrowserStatus {
   admin?: boolean
   /** WP483（决策 1658）：用户还没在设置里选过浏览器、探到 ego 就默认用它——这次是不是按这个默认。 */
   default_ego?: boolean
+  /** WP496（决策 1729 A）：ego 自己说有新版本（只提醒；工坊不替人升级）。老服务端不带这一格。 */
+  update_available?: boolean
 }
 
 /**

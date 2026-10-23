@@ -1,0 +1,52 @@
+{
+  "page": "instagram-post",
+  "capture": {
+    "content": {
+      "platform": "instagram",
+      "contentId": "CFixtureP07",
+      "contentType": "post",
+      "title": "New glaze test, third firing",
+      "url": "https://www.instagram.com/p/CFixtureP07/",
+      "thumbnailUrl": "https://cdn.example/post-clay-01.png",
+      "likes": 1234,
+      "comments": 56,
+      "publishedAt": "2026-09-20T09:00:00.000Z",
+      "publishedText": "September 20, 2026",
+      "orientation": null,
+      "durationSeconds": null,
+      "author": {
+        "externalId": "clayfixture",
+        "handle": "clayfixture",
+        "name": "clayfixture",
+        "profileUrl": "https://www.instagram.com/clayfixture/"
+      },
+      "pageUrl": "https://www.instagram.com/clayfixture/p/CFixtureP07/",
+      "paidPromotion": true
+    }
+  },
+  "observation_batches": [],
+  "content_observations": [
+    {
+      "channel": "instagram",
+      "content_external_id": "CFixtureP07",
+      "content_type": "post",
+      "title": "New glaze test, third firing",
+      "url": "https://www.instagram.com/p/CFixtureP07/",
+      "thumbnail_url": "https://cdn.example/post-clay-01.png",
+      "published_at": "2026-09-20T09:00:00.000Z",
+      "stats": {
+        "likes": 1234,
+        "comments": 56
+      },
+      "author": {
+        "external_id": "clayfixture",
+        "handle": "clayfixture",
+        "name": "clayfixture"
+      },
+      "paid_promotion": true,
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/clayfixture/p/CFixtureP07/"
+    }
+  ],
+  "bio_link_observations": []
+}

@@ -1,6 +1,22 @@
 /**
  * WP493（决策 1718 / 1708）：ego 只读通道——读页、读 Reddit、读在线表格。见各文件头。
  */
+
+export {
+  createEgoCreatorCapture,
+  EGO_CAPTURE_BIO_LINKS,
+  EGO_CAPTURE_MAX_PAGES,
+  type EgoCaptureOptions,
+  type EgoCapturePort,
+  type EgoCaptureSummary,
+  type EgoCreatorCapture,
+  type EgoIngestOutcome,
+  type EgoPageCapture,
+  egoCaptureCall,
+  egoCapturePage,
+  ingestEgoPlan,
+  summarizeCapture,
+} from './capture.js'
 export {
   type ChainPageRead,
   createPageReadChain,

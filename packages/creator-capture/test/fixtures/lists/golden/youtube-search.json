@@ -1,0 +1,237 @@
+{
+  "target": {
+    "platform": "youtube",
+    "pageType": "search",
+    "sourceQuery": "standing desk"
+  },
+  "candidates": [
+    {
+      "key": "@deskcraft",
+      "externalId": "@deskcraft",
+      "handle": "@deskcraft",
+      "displayName": "Desk Craft",
+      "url": "https://www.youtube.com/@deskcraft",
+      "avatarUrl": "https://yt3.ggpht.com/fixture-deskcraft=s88",
+      "subscriberCountText": "312K subscribers",
+      "videoCountText": "418 videos",
+      "source": "channel_result",
+      "videos": [
+        {
+          "contentId": "DeskVid0001",
+          "url": "https://www.youtube.com/watch?v=DeskVid0001",
+          "title": "I tried 5 standing desks so you don't have to",
+          "viewsText": "1.2M views",
+          "durationText": "18:42"
+        },
+        {
+          "contentId": "DeskShort01",
+          "url": "https://www.youtube.com/shorts/DeskShort01",
+          "title": "Desk hack in 30 seconds",
+          "viewsText": "86K views",
+          "isShort": true
+        }
+      ]
+    },
+    {
+      "key": "@cableguy",
+      "externalId": "@cableguy",
+      "handle": "@cableguy",
+      "displayName": "Cable Guy",
+      "url": "https://www.youtube.com/@cableguy",
+      "avatarUrl": "https://yt3.ggpht.com/fixture-cableguy=s68",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "CableVid001",
+          "url": "https://www.youtube.com/watch?v=CableVid001",
+          "title": "Cable management for people who hate cable management",
+          "viewsText": "9.4K views"
+        }
+      ]
+    },
+    {
+      "key": "UCfixtureHomeOffice0001",
+      "externalId": "UCfixtureHomeOffice0001",
+      "displayName": "Home Office Lab",
+      "url": "https://www.youtube.com/channel/UCfixtureHomeOffice0001",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "OfficeVid01",
+          "url": "https://www.youtube.com/watch?v=OfficeVid01",
+          "title": "Home office tour 2026",
+          "viewsText": "240K views"
+        }
+      ]
+    }
+  ],
+  "offered": {
+    "views": true,
+    "subscribers": true
+  },
+  "evidence": [
+    {
+      "total": 2,
+      "shorts": 1,
+      "longform": 1,
+      "topViewsText": "1.2M views"
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1,
+      "topViewsText": "9.4K views"
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1,
+      "topViewsText": "240K views"
+    }
+  ],
+  "bands": {
+    "relevant": 0,
+    "suspect": 0,
+    "irrelevant": 0,
+    "unscored": 3
+  },
+  "filters": [
+    {
+      "prefs": {},
+      "hidden": 0,
+      "unknown": 0,
+      "visibleKeys": [
+        "@deskcraft",
+        "@cableguy",
+        "UCfixtureHomeOffice0001"
+      ],
+      "items": [
+        {
+          "externalId": "@deskcraft",
+          "handle": "@deskcraft",
+          "displayName": "Desk Craft",
+          "url": "https://www.youtube.com/@deskcraft",
+          "avatarUrl": "https://yt3.ggpht.com/fixture-deskcraft=s88",
+          "subscriberCountText": "312K subscribers",
+          "videoCountText": "418 videos",
+          "videos": [
+            {
+              "contentId": "DeskVid0001",
+              "url": "https://www.youtube.com/watch?v=DeskVid0001",
+              "title": "I tried 5 standing desks so you don't have to",
+              "viewsText": "1.2M views",
+              "durationText": "18:42"
+            },
+            {
+              "contentId": "DeskShort01",
+              "url": "https://www.youtube.com/shorts/DeskShort01",
+              "title": "Desk hack in 30 seconds",
+              "viewsText": "86K views",
+              "isShort": true
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "channel_result"
+          }
+        },
+        {
+          "externalId": "@cableguy",
+          "handle": "@cableguy",
+          "displayName": "Cable Guy",
+          "url": "https://www.youtube.com/@cableguy",
+          "avatarUrl": "https://yt3.ggpht.com/fixture-cableguy=s68",
+          "videos": [
+            {
+              "contentId": "CableVid001",
+              "url": "https://www.youtube.com/watch?v=CableVid001",
+              "title": "Cable management for people who hate cable management",
+              "viewsText": "9.4K views"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "UCfixtureHomeOffice0001",
+          "displayName": "Home Office Lab",
+          "url": "https://www.youtube.com/channel/UCfixtureHomeOffice0001",
+          "videos": [
+            {
+              "contentId": "OfficeVid01",
+              "url": "https://www.youtube.com/watch?v=OfficeVid01",
+              "title": "Home office tour 2026",
+              "viewsText": "240K views"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        }
+      ],
+      "chunks": [
+        3
+      ]
+    },
+    {
+      "prefs": {
+        "minViewsText": "50K"
+      },
+      "hidden": 1,
+      "unknown": 0,
+      "visibleKeys": [
+        "@deskcraft",
+        "UCfixtureHomeOffice0001"
+      ],
+      "items": [
+        {
+          "externalId": "@deskcraft",
+          "handle": "@deskcraft",
+          "displayName": "Desk Craft",
+          "url": "https://www.youtube.com/@deskcraft",
+          "avatarUrl": "https://yt3.ggpht.com/fixture-deskcraft=s88",
+          "subscriberCountText": "312K subscribers",
+          "videoCountText": "418 videos",
+          "videos": [
+            {
+              "contentId": "DeskVid0001",
+              "url": "https://www.youtube.com/watch?v=DeskVid0001",
+              "title": "I tried 5 standing desks so you don't have to",
+              "viewsText": "1.2M views",
+              "durationText": "18:42"
+            },
+            {
+              "contentId": "DeskShort01",
+              "url": "https://www.youtube.com/shorts/DeskShort01",
+              "title": "Desk hack in 30 seconds",
+              "viewsText": "86K views",
+              "isShort": true
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "channel_result"
+          }
+        },
+        {
+          "externalId": "UCfixtureHomeOffice0001",
+          "displayName": "Home Office Lab",
+          "url": "https://www.youtube.com/channel/UCfixtureHomeOffice0001",
+          "videos": [
+            {
+              "contentId": "OfficeVid01",
+              "url": "https://www.youtube.com/watch?v=OfficeVid01",
+              "title": "Home office tour 2026",
+              "viewsText": "240K views"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        }
+      ],
+      "chunks": [
+        2
+      ]
+    }
+  ]
+}

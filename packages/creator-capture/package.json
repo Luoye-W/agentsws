@@ -1,0 +1,45 @@
+{
+  "name": "@agentsws/creator-capture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "红人主页 / 内容页 / 列表页 / 链接页的读取规则（决策 1739 A）：页面采集器、快照类型与指标算法（体检、受众真实性、频道估值、更新规律），浏览器插件与 ego 路共用同一套。纯函数 + 只读 DOM，不发请求、不碰浏览器存储。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./kol/*": {
+      "types": "./dist/kol/*.d.ts",
+      "import": "./dist/kol/*.js"
+    },
+    "./kol/utils/*": {
+      "types": "./dist/kol/utils/*.d.ts",
+      "import": "./dist/kol/utils/*.js"
+    },
+    "./collectors/*": {
+      "types": "./dist/collectors/*.d.ts",
+      "import": "./dist/collectors/*.js"
+    },
+    "./wire/*": {
+      "types": "./dist/wire/*.d.ts",
+      "import": "./dist/wire/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "build:page-script": "node scripts/build-page-script.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "esbuild": "^0.28.1",
+    "jsdom": "^25.0.1"
+  }
+}

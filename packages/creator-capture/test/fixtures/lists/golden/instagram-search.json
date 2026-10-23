@@ -1,0 +1,198 @@
+{
+  "target": null,
+  "candidates": [
+    {
+      "key": "prep.daily",
+      "externalId": "prep.daily",
+      "handle": "prep.daily",
+      "url": "https://www.instagram.com/prep.daily/",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "CfixSrc0001",
+          "url": "https://www.instagram.com/reel/CfixSrc0001/",
+          "contentType": "reel"
+        }
+      ]
+    },
+    {
+      "key": "kitchenjane",
+      "externalId": "kitchenjane",
+      "handle": "kitchenjane",
+      "url": "https://www.instagram.com/kitchenjane/",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "CfixSrc0002",
+          "url": "https://www.instagram.com/p/CfixSrc0002/",
+          "contentType": "post"
+        }
+      ]
+    },
+    {
+      "key": "greenbowl",
+      "externalId": "greenbowl",
+      "handle": "greenbowl",
+      "url": "https://www.instagram.com/greenbowl/",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "CfixSrc0004",
+          "url": "https://www.instagram.com/p/CfixSrc0004/",
+          "contentType": "post"
+        }
+      ]
+    }
+  ],
+  "offered": {
+    "views": false,
+    "subscribers": false
+  },
+  "evidence": [
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1
+    }
+  ],
+  "bands": {
+    "relevant": 0,
+    "suspect": 0,
+    "irrelevant": 0,
+    "unscored": 3
+  },
+  "filters": [
+    {
+      "prefs": {},
+      "hidden": 0,
+      "unknown": 0,
+      "visibleKeys": [
+        "prep.daily",
+        "kitchenjane",
+        "greenbowl"
+      ],
+      "items": [
+        {
+          "externalId": "prep.daily",
+          "handle": "prep.daily",
+          "url": "https://www.instagram.com/prep.daily/",
+          "videos": [
+            {
+              "contentId": "CfixSrc0001",
+              "url": "https://www.instagram.com/reel/CfixSrc0001/",
+              "contentType": "reel"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "kitchenjane",
+          "handle": "kitchenjane",
+          "url": "https://www.instagram.com/kitchenjane/",
+          "videos": [
+            {
+              "contentId": "CfixSrc0002",
+              "url": "https://www.instagram.com/p/CfixSrc0002/",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "greenbowl",
+          "handle": "greenbowl",
+          "url": "https://www.instagram.com/greenbowl/",
+          "videos": [
+            {
+              "contentId": "CfixSrc0004",
+              "url": "https://www.instagram.com/p/CfixSrc0004/",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        }
+      ],
+      "chunks": [
+        3
+      ]
+    },
+    {
+      "prefs": {
+        "minViewsText": "50K"
+      },
+      "hidden": 0,
+      "unknown": 3,
+      "visibleKeys": [
+        "prep.daily",
+        "kitchenjane",
+        "greenbowl"
+      ],
+      "items": [
+        {
+          "externalId": "prep.daily",
+          "handle": "prep.daily",
+          "url": "https://www.instagram.com/prep.daily/",
+          "videos": [
+            {
+              "contentId": "CfixSrc0001",
+              "url": "https://www.instagram.com/reel/CfixSrc0001/",
+              "contentType": "reel"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "kitchenjane",
+          "handle": "kitchenjane",
+          "url": "https://www.instagram.com/kitchenjane/",
+          "videos": [
+            {
+              "contentId": "CfixSrc0002",
+              "url": "https://www.instagram.com/p/CfixSrc0002/",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "greenbowl",
+          "handle": "greenbowl",
+          "url": "https://www.instagram.com/greenbowl/",
+          "videos": [
+            {
+              "contentId": "CfixSrc0004",
+              "url": "https://www.instagram.com/p/CfixSrc0004/",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        }
+      ],
+      "chunks": [
+        3
+      ]
+    }
+  ]
+}

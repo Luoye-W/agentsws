@@ -1,0 +1,268 @@
+{
+  "target": {
+    "platform": "instagram",
+    "pageType": "search",
+    "sourceQuery": "https://www.instagram.com/explore/tags/mealprep/"
+  },
+  "candidates": [
+    {
+      "key": "kitchenjane",
+      "externalId": "kitchenjane",
+      "handle": "kitchenjane",
+      "url": "https://www.instagram.com/kitchenjane/",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "CfixTag0001",
+          "url": "https://www.instagram.com/p/CfixTag0001/",
+          "contentType": "post"
+        },
+        {
+          "contentId": "CfixTag0004",
+          "url": "https://www.instagram.com/p/CfixTag0004/",
+          "contentType": "post"
+        }
+      ]
+    },
+    {
+      "key": "gymchef",
+      "externalId": "gymchef",
+      "handle": "gymchef",
+      "url": "https://www.instagram.com/gymchef/",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "CfixTag0002",
+          "url": "https://www.instagram.com/reel/CfixTag0002/",
+          "contentType": "reel"
+        }
+      ]
+    },
+    {
+      "key": "bento.lab",
+      "externalId": "bento.lab",
+      "handle": "bento.lab",
+      "url": "https://www.instagram.com/bento.lab/",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "CfixTag0005",
+          "url": "https://www.instagram.com/p/CfixTag0005/",
+          "contentType": "post"
+        }
+      ]
+    },
+    {
+      "key": "prep.daily",
+      "externalId": "prep.daily",
+      "handle": "prep.daily",
+      "url": "https://www.instagram.com/prep.daily/",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "CfixTag0006",
+          "url": "https://www.instagram.com/reel/CfixTag0006/",
+          "contentType": "reel"
+        }
+      ]
+    }
+  ],
+  "offered": {
+    "views": false,
+    "subscribers": false
+  },
+  "evidence": [
+    {
+      "total": 2,
+      "shorts": 0,
+      "longform": 2
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1
+    }
+  ],
+  "bands": {
+    "relevant": 0,
+    "suspect": 0,
+    "irrelevant": 0,
+    "unscored": 4
+  },
+  "filters": [
+    {
+      "prefs": {},
+      "hidden": 0,
+      "unknown": 0,
+      "visibleKeys": [
+        "kitchenjane",
+        "gymchef",
+        "bento.lab",
+        "prep.daily"
+      ],
+      "items": [
+        {
+          "externalId": "kitchenjane",
+          "handle": "kitchenjane",
+          "url": "https://www.instagram.com/kitchenjane/",
+          "videos": [
+            {
+              "contentId": "CfixTag0001",
+              "url": "https://www.instagram.com/p/CfixTag0001/",
+              "contentType": "post"
+            },
+            {
+              "contentId": "CfixTag0004",
+              "url": "https://www.instagram.com/p/CfixTag0004/",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "gymchef",
+          "handle": "gymchef",
+          "url": "https://www.instagram.com/gymchef/",
+          "videos": [
+            {
+              "contentId": "CfixTag0002",
+              "url": "https://www.instagram.com/reel/CfixTag0002/",
+              "contentType": "reel"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "bento.lab",
+          "handle": "bento.lab",
+          "url": "https://www.instagram.com/bento.lab/",
+          "videos": [
+            {
+              "contentId": "CfixTag0005",
+              "url": "https://www.instagram.com/p/CfixTag0005/",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "prep.daily",
+          "handle": "prep.daily",
+          "url": "https://www.instagram.com/prep.daily/",
+          "videos": [
+            {
+              "contentId": "CfixTag0006",
+              "url": "https://www.instagram.com/reel/CfixTag0006/",
+              "contentType": "reel"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        }
+      ],
+      "chunks": [
+        4
+      ]
+    },
+    {
+      "prefs": {
+        "minViewsText": "50K"
+      },
+      "hidden": 0,
+      "unknown": 4,
+      "visibleKeys": [
+        "kitchenjane",
+        "gymchef",
+        "bento.lab",
+        "prep.daily"
+      ],
+      "items": [
+        {
+          "externalId": "kitchenjane",
+          "handle": "kitchenjane",
+          "url": "https://www.instagram.com/kitchenjane/",
+          "videos": [
+            {
+              "contentId": "CfixTag0001",
+              "url": "https://www.instagram.com/p/CfixTag0001/",
+              "contentType": "post"
+            },
+            {
+              "contentId": "CfixTag0004",
+              "url": "https://www.instagram.com/p/CfixTag0004/",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "gymchef",
+          "handle": "gymchef",
+          "url": "https://www.instagram.com/gymchef/",
+          "videos": [
+            {
+              "contentId": "CfixTag0002",
+              "url": "https://www.instagram.com/reel/CfixTag0002/",
+              "contentType": "reel"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "bento.lab",
+          "handle": "bento.lab",
+          "url": "https://www.instagram.com/bento.lab/",
+          "videos": [
+            {
+              "contentId": "CfixTag0005",
+              "url": "https://www.instagram.com/p/CfixTag0005/",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "prep.daily",
+          "handle": "prep.daily",
+          "url": "https://www.instagram.com/prep.daily/",
+          "videos": [
+            {
+              "contentId": "CfixTag0006",
+              "url": "https://www.instagram.com/reel/CfixTag0006/",
+              "contentType": "reel"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        }
+      ],
+      "chunks": [
+        4
+      ]
+    }
+  ]
+}

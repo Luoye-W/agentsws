@@ -13,6 +13,8 @@ export interface EgoReadiness {
   refresh(): Promise<boolean>
   /** 那一趟 ego 跑不起来：先当它连不上（下一次到期再连）。 */
   markDown(): void
+  /** WP496（决策 1729 A）：上一次真连时 ego 说「有新版本」（当前版本写在 `current`）；没说 = `undefined`。 */
+  update(): { current?: string } | undefined
 }
 
 export interface EgoReadinessOptions {
@@ -25,7 +27,7 @@ export interface EgoReadinessOptions {
 export function createEgoReadiness(options: EgoReadinessOptions): EgoReadiness {
   const ttl = options.ttlMs ?? 60_000
   const now = options.nowMs ?? Date.now
-  let last: { at: number; path: string; ok: boolean } | undefined
+  let last: { at: number; path: string; ok: boolean; update?: { current?: string } } | undefined
   let inflight: Promise<boolean> | undefined
 
   const refresh = (): Promise<boolean> => {
@@ -38,13 +40,18 @@ export function createEgoReadiness(options: EgoReadinessOptions): EgoReadiness {
     inflight = options
       .probe(path)
       .then(
-        (p) => p.connected,
-        () => false,
+        (p): { ok: boolean; update?: { current?: string } } => ({
+          ok: p.connected,
+          ...(p.update_available === true
+            ? { update: p.update_current === undefined ? {} : { current: p.update_current } }
+            : {}),
+        }),
+        () => ({ ok: false }),
       )
-      .then((ok) => {
-        last = { at: now(), path, ok }
+      .then((got) => {
+        last = { at: now(), path, ...got }
         inflight = undefined
-        return ok
+        return got.ok
       })
     return inflight
   }
@@ -60,6 +67,10 @@ export function createEgoReadiness(options: EgoReadinessOptions): EgoReadiness {
     markDown() {
       const path = options.path()
       if (path !== undefined) last = { at: now(), path, ok: false }
+    },
+    update() {
+      const path = options.path()
+      return last !== undefined && last.path === path ? last.update : undefined
     },
   }
 }

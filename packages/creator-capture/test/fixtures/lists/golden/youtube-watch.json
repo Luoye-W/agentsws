@@ -1,0 +1,313 @@
+{
+  "target": {
+    "platform": "youtube",
+    "pageType": "watch_related",
+    "sourceQuery": "https://www.youtube.com/watch?v=SeedVideo01",
+    "videoId": "SeedVideo01"
+  },
+  "candidates": [
+    {
+      "key": "@deskcraft",
+      "externalId": "UCfixtureDeskCraft00001",
+      "handle": "@deskcraft",
+      "displayName": "Desk Craft",
+      "url": "https://www.youtube.com/@deskcraft",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "RailVid0001",
+          "url": "https://www.youtube.com/watch?v=RailVid0001",
+          "title": "Standing desk mistakes I made for 3 years",
+          "viewsText": "412K",
+          "durationText": "14:05",
+          "publishedText": "2 months ago"
+        },
+        {
+          "contentId": "RailVid0002",
+          "url": "https://www.youtube.com/watch?v=RailVid0002",
+          "title": "The desk setup that fixed my back",
+          "viewsText": "1.1M",
+          "durationText": "21:17",
+          "publishedText": "1 year ago"
+        }
+      ],
+      "relevanceScore": 71
+    },
+    {
+      "key": "@cableguy",
+      "externalId": "UCfixtureCableGuy000001",
+      "handle": "@cableguy",
+      "displayName": "Cable Guy",
+      "url": "https://www.youtube.com/@cableguy",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "RailVid0003",
+          "url": "https://www.youtube.com/watch?v=RailVid0003",
+          "title": "Under-desk cable trays, ranked",
+          "viewsText": "38K",
+          "durationText": "9:48",
+          "publishedText": "3 weeks ago"
+        }
+      ],
+      "relevanceScore": 75
+    },
+    {
+      "key": "@catvideos",
+      "externalId": "UCfixtureCatVideos00001",
+      "handle": "@catvideos",
+      "displayName": "Cat Videos",
+      "url": "https://www.youtube.com/@catvideos",
+      "source": "video_attribution",
+      "videos": [
+        {
+          "contentId": "RailVid0006",
+          "url": "https://www.youtube.com/watch?v=RailVid0006",
+          "title": "Funny cats compilation 2026",
+          "viewsText": "9.4M",
+          "durationText": "10:01",
+          "publishedText": "8 years ago"
+        }
+      ],
+      "relevanceScore": 0
+    }
+  ],
+  "rail": {
+    "entries": [
+      {
+        "videoId": "RailVid0001",
+        "url": "https://www.youtube.com/watch?v=RailVid0001",
+        "title": "Standing desk mistakes I made for 3 years",
+        "channelName": "Desk Craft",
+        "viewCountText": "412K",
+        "publishedText": "2 months ago",
+        "durationText": "14:05"
+      },
+      {
+        "videoId": "RailVid0002",
+        "url": "https://www.youtube.com/watch?v=RailVid0002",
+        "title": "The desk setup that fixed my back",
+        "channelName": "Desk Craft",
+        "viewCountText": "1.1M",
+        "publishedText": "1 year ago",
+        "durationText": "21:17"
+      },
+      {
+        "videoId": "RailVid0003",
+        "url": "https://www.youtube.com/watch?v=RailVid0003",
+        "title": "Under-desk cable trays, ranked",
+        "channelName": "Cable Guy",
+        "viewCountText": "38K",
+        "publishedText": "3 weeks ago",
+        "durationText": "9:48"
+      },
+      {
+        "videoId": "RailVid0004",
+        "url": "https://www.youtube.com/watch?v=RailVid0004",
+        "title": "My standing desk, one year later",
+        "channelName": "Seed Channel",
+        "viewCountText": "220K",
+        "publishedText": "4 months ago",
+        "durationText": "12:30"
+      },
+      {
+        "videoId": "RailVid0005",
+        "url": "https://www.youtube.com/watch?v=RailVid0005",
+        "title": "Minimal desk setup tour",
+        "channelName": "Tiny Desk Studio",
+        "viewCountText": "57K",
+        "publishedText": "6 days ago",
+        "durationText": "8:12"
+      },
+      {
+        "videoId": "RailVid0006",
+        "url": "https://www.youtube.com/watch?v=RailVid0006",
+        "title": "Funny cats compilation 2026",
+        "channelName": "Cat Videos",
+        "viewCountText": "9.4M",
+        "publishedText": "8 years ago",
+        "durationText": "10:01"
+      }
+    ],
+    "seed": {
+      "externalId": "@seedchannel",
+      "handle": "@seedchannel",
+      "name": "Seed Channel"
+    },
+    "fresh": true,
+    "unidentified": 1,
+    "channelCount": 4
+  },
+  "offered": {
+    "views": true,
+    "subscribers": false
+  },
+  "evidence": [
+    {
+      "total": 2,
+      "shorts": 0,
+      "longform": 2,
+      "topViewsText": "1.1M"
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1,
+      "topViewsText": "38K"
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1,
+      "topViewsText": "9.4M"
+    }
+  ],
+  "bands": {
+    "relevant": 2,
+    "suspect": 0,
+    "irrelevant": 1,
+    "unscored": 0
+  },
+  "filters": [
+    {
+      "prefs": {},
+      "hidden": 0,
+      "unknown": 0,
+      "visibleKeys": [
+        "@deskcraft",
+        "@cableguy",
+        "@catvideos"
+      ],
+      "items": [
+        {
+          "externalId": "UCfixtureDeskCraft00001",
+          "handle": "@deskcraft",
+          "displayName": "Desk Craft",
+          "url": "https://www.youtube.com/@deskcraft",
+          "videos": [
+            {
+              "contentId": "RailVid0001",
+              "url": "https://www.youtube.com/watch?v=RailVid0001",
+              "title": "Standing desk mistakes I made for 3 years",
+              "viewsText": "412K",
+              "durationText": "14:05"
+            },
+            {
+              "contentId": "RailVid0002",
+              "url": "https://www.youtube.com/watch?v=RailVid0002",
+              "title": "The desk setup that fixed my back",
+              "viewsText": "1.1M",
+              "durationText": "21:17"
+            }
+          ],
+          "relevanceScore": 71,
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "UCfixtureCableGuy000001",
+          "handle": "@cableguy",
+          "displayName": "Cable Guy",
+          "url": "https://www.youtube.com/@cableguy",
+          "videos": [
+            {
+              "contentId": "RailVid0003",
+              "url": "https://www.youtube.com/watch?v=RailVid0003",
+              "title": "Under-desk cable trays, ranked",
+              "viewsText": "38K",
+              "durationText": "9:48"
+            }
+          ],
+          "relevanceScore": 75,
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "UCfixtureCatVideos00001",
+          "handle": "@catvideos",
+          "displayName": "Cat Videos",
+          "url": "https://www.youtube.com/@catvideos",
+          "videos": [
+            {
+              "contentId": "RailVid0006",
+              "url": "https://www.youtube.com/watch?v=RailVid0006",
+              "title": "Funny cats compilation 2026",
+              "viewsText": "9.4M",
+              "durationText": "10:01"
+            }
+          ],
+          "relevanceScore": 0,
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        }
+      ],
+      "chunks": [
+        3
+      ]
+    },
+    {
+      "prefs": {
+        "minViewsText": "50K"
+      },
+      "hidden": 1,
+      "unknown": 0,
+      "visibleKeys": [
+        "@deskcraft",
+        "@catvideos"
+      ],
+      "items": [
+        {
+          "externalId": "UCfixtureDeskCraft00001",
+          "handle": "@deskcraft",
+          "displayName": "Desk Craft",
+          "url": "https://www.youtube.com/@deskcraft",
+          "videos": [
+            {
+              "contentId": "RailVid0001",
+              "url": "https://www.youtube.com/watch?v=RailVid0001",
+              "title": "Standing desk mistakes I made for 3 years",
+              "viewsText": "412K",
+              "durationText": "14:05"
+            },
+            {
+              "contentId": "RailVid0002",
+              "url": "https://www.youtube.com/watch?v=RailVid0002",
+              "title": "The desk setup that fixed my back",
+              "viewsText": "1.1M",
+              "durationText": "21:17"
+            }
+          ],
+          "relevanceScore": 71,
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "UCfixtureCatVideos00001",
+          "handle": "@catvideos",
+          "displayName": "Cat Videos",
+          "url": "https://www.youtube.com/@catvideos",
+          "videos": [
+            {
+              "contentId": "RailVid0006",
+              "url": "https://www.youtube.com/watch?v=RailVid0006",
+              "title": "Funny cats compilation 2026",
+              "viewsText": "9.4M",
+              "durationText": "10:01"
+            }
+          ],
+          "relevanceScore": 0,
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        }
+      ],
+      "chunks": [
+        2
+      ]
+    }
+  ]
+}

@@ -503,11 +503,13 @@ import {
 import { createEconomicsService } from './economics.js'
 import { detectEgoBrowser } from './ego-browser.js'
 import {
+  createEgoCreatorCapture,
   createEgoPageReader,
   createEgoReadiness,
   createEgoRedditPump,
   createEgoSheetReader,
   createPageReadChain,
+  type EgoCapturePort,
   type EgoRedditPump,
   egoRedditRead,
 } from './ego-read/index.js'
@@ -2611,11 +2613,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     probe: (path) => probeEgoConnection(path),
   })
   const egoSheetReader = createEgoSheetReader({ ego: egoReader })
+  /**
+   * WP496：ego 路采集红人——插件同一套采集器 + 插件同一个入口（`extensionPortOf` 按会话里的品牌分派；
+   * 那一份在后面才建，这里取值函数只在真调工具时才取）。
+   */
+  const egoCreatorCapture = createEgoCreatorCapture({
+    reader: egoReader,
+    port: () => extensionPortOfLate.current,
+    now: () => new Date().toISOString(),
+  })
+  const extensionPortOfLate: { current: EgoCapturePort | undefined } = { current: undefined }
   /** WP493：ego 能做哪几样插件的活（读 + 写 Reddit、社媒发帖）。 */
-  const egoCovers = (): ('reddit' | 'social')[] => {
+  const egoCovers = (): ('reddit' | 'social' | 'kol')[] => {
     if (!egoReadiness.ready()) return []
     const write = egoWriter.available()
-    return write ? ['reddit', 'social'] : []
+    // WP496（决策 1738 / 1741）：收红人只要读——ego 连得上就由 ego 用插件同一套采集器做，插件对它只是备用
+    return write ? ['reddit', 'social', 'kol'] : ['kol']
   }
   /*
    * WP144（docs/80）：电脑操控——**一台机器一份**，理由与浏览器设置逐字相同（操作的是
@@ -7523,6 +7536,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               observe: observeViaIngest(async (session, input) =>
                 extensionPortOf.ingest(session as never, input),
               ),
+              /*
+               * WP496（决策 1738 / 1739 A）：ego 打开红人页面 → 插件同一套采集器读数 → 插件同一个入口记下。
+               * ego 只有一个，读页都排在 `egoReader` 那一条队里（一次只跑一趟）。
+               */
+              egoCapture: egoCreatorCapture,
             }),
             /*
              * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
@@ -15931,6 +15949,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     role: (id) => roles.roles.get(id as never),
     // WP493（决策 1718）：ego 连得上就不为 Reddit / 社媒发帖催装插件（插件只是备用）
     egoCovers: () => egoCovers(),
+    // WP496（决策 1729 A）：ego 说有新版本——连接卡上 ego 那一行提一句
+    egoUpdate: () => egoReadiness.update() !== undefined,
     heldRoleIds: (ws, person) =>
       roles.assignments
         .listByPerson(person as never, { workspace_id: ws as WorkspaceId })
@@ -16067,6 +16087,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }
     },
   })
+  extensionPortOfLate.current = extensionPortOf
   /** WP73（56 §6）：社媒库 `/v1/social/*`（一个品牌一张库、一段加密库）。 */
   const socialPortOf = brandSocialPort(
     brandModules,
@@ -16890,6 +16911,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               connected: c.connected,
               ...(c.detail === undefined ? {} : { connect_detail: c.detail }),
               ...(c.admin === true ? { admin: true } : {}),
+              // WP496（决策 1729 A）：ego 说有新版本——设置页那一行提一句，不替人升级
+              ...(c.update_available === true ? { update_available: true } : {}),
             }
       },
       /*

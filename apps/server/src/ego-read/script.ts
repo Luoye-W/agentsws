@@ -12,6 +12,7 @@
  * | `fetch` | 用这一页的登录态 GET 几个同源地址（Reddit 的 `.json`、Google 的导出 CSV） | 只 GET；跨源的一律不发 |
  * | `download_url` | 打开一个「直接下载」的地址，把下下来的文件存到给定位置 | 只是打开一个地址 |
  * | `copy` | 画布表格（飞书多维表格 / 表格）：先在页面里截住「复制」写出的内容，点一下画布里的一格 → 全选 → 复制 → Esc | 只按 {@link EGO_READ_KEYS} 这三个键（不打字）；截住的 `setData` 不调原来那一个——**不改用户的剪贴板**；点的是格子（单击只是选中，不进编辑） |
+ * | `capture` | WP496：用插件同一套采集器读这一页（红人主页 / 内容页 / 列表页 / 链接页），可顺手读主页上的 link-in-bio 页 | `evaluate` 只读 DOM（脚本见 `@agentsws/creator-capture` 的页面脚本守卫）；打开的只是公开链接页 |
  * | `export` | 依次点几个菜单项（「更多 → 下载为 → Excel」）等下载 | 每一点都过白名单（{@link EGO_READ_SAFE_CLICK}），碰到黑名单字样（发送 / 提交 / 删除 / 分享…）拒点 |
  *
  * 脚本里**没有** `fill` / `type` / `insertText` / `paste` / `selectOption` / `setInputFiles` / 对话框处理；
@@ -84,6 +85,26 @@ export type EgoReadStep =
       unless?: string[]
     }
   | {
+      /**
+       * WP496：用插件同一套采集器读这一页（`@agentsws/creator-capture` 打好的页面脚本，经 `page.evaluate` 求值）。
+       * 读不到（没渲染完）按插件面板的节奏重试；主页上有 link-in-bio（Linktree / Beacons）就顺手打开读一遍（只读）。
+       */
+      op: 'capture'
+      id: string
+      lang?: 'zh' | 'en'
+      /** 读不到最多再试几次、隔多久（插件面板：12 次 × 800 毫秒）。 */
+      retries?: number
+      gap_ms?: number
+      /** 顺手读几个 link-in-bio 页（缺省 0 = 不读）。 */
+      follow_bio_links?: number
+      /**
+       * **只给本机假页面测试用**：真地址 → 假页面地址。给了就只打开映射里有的（没有的一律不开），
+       * 读假页面时采集器看到的地址换回真地址。正式路径不给。
+       */
+      rewrite?: Record<string, string>
+      unless?: string[]
+    }
+  | {
       op: 'export'
       id: string
       clicks: EgoReadTarget[]
@@ -102,6 +123,9 @@ export interface EgoReadScriptConfig {
   /** 打开后再等多久（毫秒，缺省 2500；飞书这种重页面给长一点）。 */
   settle_ms?: number
   steps: EgoReadStep[]
+  /** WP496：`capture` 那一步用的页面脚本模板（参数那一处是 `capture_placeholder`）。只在有 `capture` 步时给。 */
+  capture_template?: string
+  capture_placeholder?: string
 }
 
 /** 拼一段完整脚本。 */
@@ -383,6 +407,53 @@ const ops = {
     await pressKey("Escape");
     const ok = copied.some(([type, value]) => /^text\/(plain|bitable)/i.test(type) && String(value).trim() !== "");
     step({ id: s.id, op: "copy", ok, ...(ok ? {} : { why: "nothing-copied" }), copied });
+  },
+  async capture(s) {
+    if (!CFG.capture_template) {
+      step({ id: s.id, op: "capture", ok: false, why: "no-template" });
+      return;
+    }
+    const realOf = (href) => {
+      if (!s.rewrite) return undefined;
+      for (const [real, local] of Object.entries(s.rewrite)) if (local === href) return real;
+      return undefined;
+    };
+    // 读一遍这一页；没渲染完（pending）就等一会儿再读（插件面板同一个节奏）
+    const readOnce = async () => {
+      const here = String(await Promise.resolve().then(() => page.url()));
+      const asUrl = realOf(here);
+      const args = { ...(s.lang ? { lang: s.lang } : {}), ...(asUrl ? { as_url: asUrl } : {}) };
+      const expr = CFG.capture_template.split(CFG.capture_placeholder).join(JSON.stringify(args));
+      let last;
+      const tries = s.retries == null ? 12 : s.retries;
+      for (let i = 0; i <= tries; i += 1) {
+        last = await page.evaluate(expr);
+        if (last && !last.pending) return last;
+        if (i < tries) await page.waitForTimeout(s.gap_ms || 800);
+      }
+      return last || { href: here, pending: true };
+    };
+    const main = await readOnce();
+    const captures = [main];
+    const BIO = /^https:\/\/(www\.)?(linktr\.ee|beacons\.ai)\/[^/?#]+/i;
+    const links = main && main.creator && Array.isArray(main.creator.links) ? main.creator.links : [];
+    const bios = [...new Set(links.map((l) => l && l.url).filter((u) => typeof u === "string" && BIO.test(u)))].slice(0, s.follow_bio_links || 0);
+    for (const u of bios) {
+      const target = s.rewrite ? s.rewrite[u] : u;
+      if (!target) {
+        captures.push({ href: u, pending: false, skipped: "not-mapped" });
+        continue;
+      }
+      try {
+        await page.goto(target, { timeout: 30000 });
+        await page.waitForTimeout(CFG.settle_ms || 2500);
+        captures.push(await readOnce());
+      } catch (e) {
+        captures.push({ href: u, pending: false, error: msg(e) });
+      }
+    }
+    const got = !!(main && !main.pending && (main.creator || main.content || main.bio_link || (main.list && main.list.candidates && main.list.candidates.length)));
+    step({ id: s.id, op: "capture", ok: got, ...(got ? {} : { why: main && main.pending ? "not-rendered" : "not-a-creator-page" }), captures });
   },
   async export(s) {
     const wait = arm(s.timeout_ms || 60000);
