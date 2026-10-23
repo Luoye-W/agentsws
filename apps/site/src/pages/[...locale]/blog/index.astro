@@ -1,0 +1,12 @@
+---
+import { siteCatalog } from '../../../lib/catalog.js'
+import { localeStaticPaths } from '../../../lib/locales.js'
+import BlogIndex from '../../../views/BlogIndex.astro'
+
+// 一篇已发表的笔记都没有时不出这一页
+export function getStaticPaths() {
+  return siteCatalog().notes.zh.length === 0 ? [] : localeStaticPaths()
+}
+const { lang } = Astro.props
+---
+<BlogIndex lang={lang} />

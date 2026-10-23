@@ -1,6 +1,9 @@
+---
+description: Klaviyo, Shopify Email, AfterShip and 17TRACK don't make real API calls yet. The Klaviyo and AfterShip read-only key forms are ready; panels say not connected.
+---
 # Email marketing and shipment tracking
 
-The four connections for email marketing (Klaviyo, Shopify Email) and shipment tracking (AfterShip, 17TRACK). **None of them makes real API calls yet** — here's exactly how far each one has got.
+The four connections for email marketing (Klaviyo, Shopify Email) and shipment tracking (AfterShip, 17TRACK) **don't make real API calls yet**: the Klaviyo and AfterShip read-only forms are in place, and the other two come after them. Here's exactly how far each one has got.
 
 | Connection | In one line | Where it stands |
 |---|---|---|

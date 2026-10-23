@@ -1,0 +1,13 @@
+---
+import { hubIds } from '../../../../lib/hubs.js'
+import { localeStaticPaths } from '../../../../lib/locales.js'
+import RoleHub from '../../../../views/RoleHub.astro'
+
+export function getStaticPaths() {
+  return localeStaticPaths().flatMap((l) =>
+    hubIds().map((role) => ({ params: { ...l.params, role }, props: { ...l.props, role } })),
+  )
+}
+const { lang, role } = Astro.props
+---
+<RoleHub lang={lang} role={role} />

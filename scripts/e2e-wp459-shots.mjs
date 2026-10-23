@@ -128,7 +128,7 @@ async function main() {
       console.log(`── ${theme}`)
       const { context, page } = await open(theme)
       // ① 列表
-      await page.goto(`${BASE}/inbox`, { waitUntil: 'load', timeout: 90_000 })
+      await page.goto(`${BASE}/inbox?mode=list`, { waitUntil: 'load', timeout: 90_000 })
       await page.getByTestId('inbox-row').first().waitFor({ timeout: 30_000 })
       const groups = await page.getByTestId('inbox-group').count()
       check(groups >= 2, `列表：分了 ${groups} 组`)
@@ -168,7 +168,7 @@ async function main() {
         await page.getByTestId('inbox-draft-edit').click()
       }
       await page.keyboard.press('Escape')
-      await page.goto(`${BASE}/inbox`, { waitUntil: 'load' })
+      await page.goto(`${BASE}/inbox?mode=list`, { waitUntil: 'load' })
       await page.getByTestId('inbox-row').first().waitFor({ timeout: 30_000 })
 
       // ③ 按岗位筛（下拉 + 筛好的样子）
@@ -192,7 +192,7 @@ async function main() {
       await shot(page, theme, '4-filter')
 
       // ④ AI 猜着交给岗位的（改判）
-      await page.goto(`${BASE}/inbox`, { waitUntil: 'load' })
+      await page.goto(`${BASE}/inbox?mode=list`, { waitUntil: 'load' })
       await page.getByTestId('inbox-row').first().waitFor({ timeout: 30_000 })
       const guessed = page.getByTestId('inbox-brief-guessed')
       if ((await guessed.count()) > 0) {
@@ -269,7 +269,7 @@ async function main() {
     check(left.counts.all === 0, `清空：剩 ${left.counts.all} 件`)
     for (const theme of ['light', 'dark']) {
       const { context, page } = await open(theme)
-      await page.goto(`${BASE}/inbox`, { waitUntil: 'load', timeout: 90_000 })
+      await page.goto(`${BASE}/inbox?mode=list`, { waitUntil: 'load', timeout: 90_000 })
       await page.getByTestId('inbox-empty').waitFor({ timeout: 30_000 })
       check(
         (await page.getByTestId('nav-inbox-count').count()) === 0,

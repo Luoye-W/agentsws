@@ -1,6 +1,9 @@
+---
+description: Turn on IMAP/SMTP in your webmail, create an app password, and enter it with your email address; server settings fill in automatically. Not your login password.
+---
 # Connect a mailbox (any email via IMAP / SMTP)
 
-How to connect any mailbox with an app password, so roles can read and send email.
+Any mailbox can be connected: turn on IMAP / SMTP, create an app password and enter it in the form, and roles can read and send email — no platform approval needed.
 
 ## Any mailbox (IMAP / SMTP)
 

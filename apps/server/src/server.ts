@@ -49,6 +49,7 @@ import {
   isSelfCard,
   type KnowledgePort,
   type LocalIdentityService,
+  type ModelEnableNotice,
   type ModelsActor,
   type PersonaPort,
   parseSubprotocols,
@@ -540,6 +541,7 @@ import { createGenuiImageHosts } from './genui-image-hosts.js'
 import { createGeoStore } from './geo-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import { createHandoff, type HandoffAssembly, withHandoff } from './handoff.js'
+import { createHelpLibrary, type HelpFetch } from './help-library.js'
 import {
   createHostedOwnerClient,
   ensureCloudModelDefault,
@@ -626,6 +628,7 @@ import {
   STUB_REF,
   templatesFor,
 } from './models.js'
+import { newModelNoticeCard } from './new-models.js'
 import {
   CREDITS_LOW_KEY,
   connectionBrokenNotification,
@@ -1000,6 +1003,7 @@ import {
   type WorkArchiveAssembly,
 } from './work-archive.js'
 import { createWorkHoursStore } from './work-hours.js'
+import { createWorkshopHelpTool, searchWorkshopHelp } from './workshop-help-tool.js'
 import {
   createWorkshopServiceTools,
   isBackgroundRun,
@@ -1352,6 +1356,20 @@ export interface ServerOptions {
   competitorShopCloud?: (workspace_id: WorkspaceId) => ShopPageCloudPort | undefined
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
+  /**
+   * 教程上官网（私有 docs/113 §4）：帮助库。默认装好的桌面版（有数据目录、不在测试里）启动 30 秒后
+   * 与每 6 小时去官网拉一次；`AGENTSWS_HELP_ONLINE=off` 关掉，`AGENTSWS_HELP_SITE` 换站（开发时指到本机）。
+   * 测试塞替身：`online` / `fetch` / `bundled` / `schedule`。
+   */
+  help?: {
+    online?: boolean
+    site?: string
+    fetch?: HelpFetch
+    bundled?: Record<string, string>
+    /** 起不起定时（默认跟着 `online`）。 */
+    schedule?: boolean
+    appVersion?: string
+  }
   /** demo：把模拟世界接进来（同一进程）。 */
   mount?: MountedWorld
   /**
@@ -3271,6 +3289,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 或测试 / demo 注入）且**有存放处**时装配；内置公钥是空的就照样装配、但通道关着（设置里照实说）。
    * 出卡走同一条审批总线：内容更新卡批了 / 冲突卡选了，在 `contentUpdates.wrap` 里接住。
    */
+  // 教程上官网（私有 docs/113 §4）：右栏「教程」与「查工坊帮助」共用的帮助库
+  const helpOpts = options.help
+  const helpOnline =
+    helpOpts?.online ??
+    (env.AGENTSWS_HELP_ONLINE !== 'off' && process.env.VITEST === undefined && dbDir !== undefined)
+  const helpSite = helpOpts?.site ?? env.AGENTSWS_HELP_SITE
+  const helpLibrary = createHelpLibrary({
+    appVersion: helpOpts?.appVersion ?? env.AGENTSWS_VERSION ?? '0.0.0-dev',
+    online: helpOnline,
+    ...(dbDir === undefined ? {} : { cacheDir: join(dbDir, 'help-cache') }),
+    ...(helpSite === undefined ? {} : { site: helpSite }),
+    ...(helpOpts?.fetch === undefined ? {} : { fetch: helpOpts.fetch }),
+    ...(helpOpts?.bundled === undefined ? {} : { bundled: helpOpts.bundled }),
+    ...(options.staticDir === undefined ? {} : { staticDir: options.staticDir }),
+  })
+  if (helpOnline && helpOpts?.schedule !== false) helpLibrary.start()
+
   const contentOpts = options.contentUpdates
   const contentRoot =
     contentOpts?.root ?? (dbDir === undefined ? undefined : join(dbDir, 'content-updates'))
@@ -5049,7 +5084,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 模型设置里那条订阅（大家共用，谁打开都看得到）；同一对「从 → 到」只出一行。
      * 模型装配在下面才建好，这里先占位、建好后填上。
      */
-    const retiredModelsHolder: { swaps?: () => RetiredProviderSwap[] } = {}
+    const retiredModelsHolder: {
+      swaps?: () => RetiredProviderSwap[]
+      /** WP479：已连接来源的新模型（铃铛一条一个来源）。 */
+      fresh?: () => ModelEnableNotice[]
+      /** WP479：没收尾的事项自己选着的 AI（事项面在下面才建好）。 */
+      matterModels?: () => string[]
+    } = {}
+    /** WP479（决策 1625）：订阅 / 账号 / API key 有新模型 → 铃铛里一条（点了到设置 → 模型那个来源）。 */
+    const newModelAlerts = (person_id: string) => {
+      const notices = retiredModelsHolder.fresh?.() ?? []
+      if (notices.length === 0) return []
+      const position_id =
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: ws })
+          .find((a) => a.revoked_at === undefined && a.role_id.startsWith('common.'))?.id ?? ''
+      return notices.map((notice) => newModelNoticeCard({ notice, position_id }))
+    }
     const retiredModelAlerts = (person_id: string) => {
       const position_id =
         roles.assignments
@@ -5129,6 +5180,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             onboardingRef?.brandProfile(ws).markets_source,
           ),
           ...retiredModelAlerts(actor.person_id),
+          ...newModelAlerts(actor.person_id),
           // WP418（自查 B7）：店铺日报查出来的异常（销售骤降 / 断货），当天给店铺管理担着的人
           ...(storeDigestRef?.alerts(actor.person_id) ?? []),
           // WP448：改版回归里严重的那几条（担 SEO 与 GEO 或整站搭建的人看；点「去处理」到交给建站的那件事）
@@ -5614,10 +5666,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           in_plugin: redditWrites?.inPlugin() ?? 0,
         }),
         // WP332（决策 762）：没发出去 → 岗位页「再填一次」（同一份已批草稿再交给插件，不用重批）
-        redditRefill: async (_actor, job_id) => {
+        // WP478：岗位页上「修改」过就带着改过的字（草稿换成它）
+        redditRefill: async (_actor, job_id, edit) => {
           if (redditWrites === undefined)
             throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
-          const out = await redditWrites.refill(job_id)
+          const out = await redditWrites.refill(job_id, edit)
           if (!out.ok) throw new ApiError('conflict', out.message)
           return out.view
         },
@@ -6913,6 +6966,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       cloudAttribution: (meta) => cloudAttributionOf(meta.assignment_id, meta.role_id),
       // WP334：模型配置变了 → 还在等的「接模型 / DeepSeek 账号」连接卡复查
       onChanged: () => recheckSetupCards(ws),
+      // WP479：首次算默认勾选时，某件事自己选着的 AI 也勾上（升级后跑着的不断）
+      inUseModels: () => retiredModelsHolder.matterModels?.() ?? [],
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
       ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
@@ -6967,6 +7022,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : ownModels
     // WP294：首页那一行看的是这个品牌真在用的那份模型设置（跟随公司默认就是公司那份）
     retiredModelsHolder.swaps = () => effectiveModels().retiredSwaps()
+    // WP479：新模型提醒看的同样是这个品牌真在用的那份
+    retiredModelsHolder.fresh = () => effectiveModels().newModelNotices()
     // WP334（决策 726）：连接卡上「AI 模型」「Agents 工坊账号」那两样连没连上
     setupProbes.set(ws, {
       model: () => effectiveModels().configured(),
@@ -7092,6 +7149,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 只在人在场的那一轮（这一轮之前最后一句是人说的；定时 / 巡查 / 接着做都不推）、同一对话一项只推一次、
              * 说过「不用」30 天不推。人回「不用」→ 上一轮挂过的那一项记下（30 天不推，进记忆）。
              */
+            // 教程上官网（私有 docs/113 §5）：查工坊帮助（所有职责；只在本机帮助库里搜）
+            workshopHelp: createWorkshopHelpTool(() => helpLibrary),
             workshopServices: {
               execute: createWorkshopServiceTools({
                 services: () => workshopServicesOf(ws),
@@ -7760,6 +7819,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       soleOwner: () => soleOwnerOf?.(ws),
     })
     runtime?.bind(work)
+    // WP479：没收尾的事项自己选着的 AI（模型面首次算默认勾选时据此保留）
+    retiredModelsHolder.matterModels = () =>
+      work
+        .listMatters({ status: ['open', 'waiting'], archived: false })
+        .flatMap((m) => (m.model === undefined ? [] : [m.model]))
     /*
      * WP319 ③：开机自检——这个品牌还没有运行在跑，最近一轮没收尾的事项（老版本没跑成只记了「跑完了」、
      * 跑到一半应用被关 / 被更新重启）按本机事件日志补一句「没跑成」+ 重试，不再一直挂在「进行中」。
@@ -11878,6 +11942,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         assignment_id: ownerAssignment.id,
         role_id: ownerAssignment.role_id,
       })
+      // WP479：顺手把 API key 那几条的模型清单重拉一遍（多出来的进铃铛「有新模型」）
+      await boot.ownModels.refreshListings().catch(() => 0)
       return { vendors: result.vendors, updated_providers: result.updated_providers }
     },
   })
@@ -14249,6 +14315,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })) as ApprovalItem[]
     const assistant = createAssistant({
       clock,
+      // 教程上官网（私有 docs/113 §5）：查工坊帮助（只在本机帮助库里搜）
+      help: { search: (query, kind) => searchWorkshopHelp(helpLibrary, query, kind) },
       positions: async (actor) => (await positionPortFor(ws)).mine(positionActor(actor)),
       work: async (actor, position_id) => {
         const port = await positionPortFor(ws)
@@ -15767,6 +15835,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     workshopServices: workshopServicesPort((ws) => workshopServicesOf(ws), {
       positionOf: (ws, role_id, assignment_id) => cloudPositionOf(ws, role_id, assignment_id),
     }),
+    help: {
+      catalog: (lang) => {
+        helpLibrary.refreshIfStale()
+        return helpLibrary.catalog(lang)
+      },
+      article: (slug, lang, kind) => helpLibrary.article(slug, lang, kind),
+    },
     dshScenes: {
       list: async () => {
         const manager = dshScenesSetup.manager
@@ -17070,6 +17145,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       feedbackService.stop()
       // WP429：注入的那一份由测试自己关
       if (options.notifications === undefined) notifications.close()
+      helpLibrary.stop()
       outboundStore.close()
       redditWatchStore.close()
       secrets.close()

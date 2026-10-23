@@ -13,6 +13,7 @@
 import { XIcon } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { GroupLabel, SectionHeader } from '@/components/design'
+import { TutorialOpensSite } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -68,7 +69,12 @@ export function SettingsDialog({
       >
         <DialogTitle className="sr-only">{t('sp.title')}</DialogTitle>
         <DialogDescription className="sr-only">{t('sp.search')}</DialogDescription>
-        {target === null ? null : <SettingsBody target={target} onNavigate={onNavigate} />}
+        {/* Luoye 10-23：弹窗里的「看教程」跳官网那一篇（右栏在弹窗后面看不到） */}
+        {target === null ? null : (
+          <TutorialOpensSite>
+            <SettingsBody target={target} onNavigate={onNavigate} />
+          </TutorialOpensSite>
+        )}
       </DialogContent>
     </Dialog>
   )

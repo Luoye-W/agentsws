@@ -1,6 +1,9 @@
+---
+description: Gmail, GA4, Search Console and Google Ads authorize through your own Google Cloud project; YouTube needs just an API key; Google Alerts is free, delivered via RSS.
+---
 # The Google connections
 
-What each of the six Google connections does and how to set it up. The first ones use your own Google Cloud project; Google Alerts at the end needs no approval at all.
+Google has six connections: Gmail, GA4, Search Console and Google Ads authorize through your own Google Cloud project, YouTube needs only an API key, and Google Alerts at the end is free with nothing to apply for.
 
 | Connection | In one line | Review / cost |
 |---|---|---|
@@ -51,7 +54,7 @@ Authorize once with your own Google OAuth app. GA4 analytics data isn't a restri
 
 **Once connected**
 
-The GA4 tile on the role panel lights up. Active users and event data arrive in the next version.
+Pick the property on the panel (if there is only one, it is picked for you). From then on it reads once a day: active users, conversion rate, events, and the two GA4 columns in the revenue-by-page table.
 
 ## Google Search Console
 
@@ -70,7 +73,7 @@ Same Google project as GA4 — just enable one more API.
 
 **Once connected**
 
-The Search Console tile on the role panel lights up. Query and landing-page data arrive in the next version.
+Pick the site on the "SEO & GEO" panel (a domain property or a URL prefix both work; if there is only one, it is picked for you). From then on it reads every morning: "Daily 5 things", queries and landing pages are all real numbers.
 
 ## YouTube Data API
 
@@ -168,6 +171,6 @@ Many blogs, forums and store blogs have their own RSS. Paste it in; it carries e
 ## FAQ
 
 - **Can these share one Google project?** Yes. GA4 can share a project with Gmail, and Search Console reuses GA4's OAuth client ID.
-- **GA4 / Search Console is connected, so where are the numbers?** In this version connecting only lights up the tile; the actual data comes in the next version.
+- **GA4 / Search Console is connected, so where are the numbers?** First check the panel for the small "pick one" card — reading starts once you pick the site or property. Search Console numbers lag two to three days; we read the latest full 7 days.
 - **Why can't I search YouTube creators freely?** The whole site gets 10,000 units a day and each search costs 100. Reading a single channel costs 1.
 - **No alerts today — does that mean nobody mentioned us?** Not necessarily. Alerts lag and miss things; if the feed didn't come through, the panel says so rather than showing 0.

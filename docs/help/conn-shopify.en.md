@@ -1,6 +1,9 @@
+---
+description: In Settings → Account connections, click Connect Shopify and approve the install with the store owner account. No developer app or API keys needed.
+---
 # Connect your Shopify store
 
-How to plug your Shopify store into Agents Workshop.
+Sign in to your Agents Workshop account, then click Connect Shopify on the Shopify card in Settings → Account connections and approve the install with the store owner account. No developer app or API keys needed.
 
 ## One-click connect (recommended)
 

@@ -38,6 +38,7 @@ import {
   toolWordZh,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
+  WORKSHOP_HELP_TOOL_NAMES,
   WORKSHOP_SERVICE_TOOL_NAMES,
 } from '@agentsws/stand-ins'
 import {
@@ -81,6 +82,8 @@ export const HOST_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...SITE_HEALTH_TOOL_NAMES,
   ...GOOGLE_ALERTS_TOOL_NAMES,
   ...WORKSHOP_SERVICE_TOOL_NAMES,
+  // 教程上官网（私有 docs/113）：查工坊帮助（只读本机帮助库）
+  ...WORKSHOP_HELP_TOOL_NAMES,
   ...COMPETITOR_STORE_TOOL_NAMES,
   ...AMAZON_COMPETITOR_TOOL_NAMES,
   // WP419：社媒发帖 / Reddit 起草（查只读本机，起草只出卡）

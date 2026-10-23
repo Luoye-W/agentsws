@@ -77,6 +77,109 @@ export interface DesktopBridge {
    * 截不到 / 太大回 `null`。旧壳没有这一项：先判空（页面退回粘贴 / 拖入图片）。
    */
   captureWindow?(): Promise<DesktopCapture | null>
+  /**
+   * WP480：工坊数据放在哪——设置 → 数据与隐私 →「数据放在哪」。选文件夹的框由壳弹，
+   * **页面拿不到、也传不进任意路径**：`move` 只认「刚才选好、查过的那一个」或「默认位置」。
+   * 旧壳与远程档没有这一项：先判空（没有就不出那一行）。
+   */
+  dataLocation?: DesktopDataLocationBridge
+}
+
+/** WP480：现在的数据位置。 */
+export interface DesktopDataLocation {
+  /** 现在的数据目录。 */
+  path: string
+  /** 是不是默认位置（`<userData>/data`）。 */
+  is_default: boolean
+  default_path: string
+  /** 有多大（数一遍要一会儿，没数完就没有）。 */
+  bytes?: number
+  files?: number
+  /** 搬走后留着的旧目录（到期自动删；界面上能「现在就删」）。 */
+  old?: { path: string; until: string }
+  /** 这台电脑在搬吗 / 上次搬的结果（页面重开时接上进度）。 */
+  status: DesktopDataMoveStatus
+}
+
+/** WP480：选好一个文件夹之后的检查结果（确认框照它说「要搬多少、大约多久」）。 */
+export interface DesktopDataTargetCheck {
+  ok: boolean
+  chosen: string
+  /** 数据实际放哪（选的文件夹不空时是它下面的 `agentsws-data`）。 */
+  target: string
+  bytes: number
+  files: number
+  free_bytes?: number
+  estimate_seconds: number
+  problems: (
+    | 'same_place'
+    | 'inside_current'
+    | 'inside_app'
+    | 'system_dir'
+    | 'not_found'
+    | 'not_writable'
+    | 'no_space'
+    | 'target_has_data'
+  )[]
+  warnings: ('cloud_sync' | 'network')[]
+}
+
+export type DesktopDataMoveStep =
+  | 'pause'
+  | 'backup'
+  | 'stop'
+  | 'copy'
+  | 'verify'
+  | 'start'
+  | 'check'
+  | 'finish'
+
+export type DesktopDataMoveFailure =
+  | 'backup_failed'
+  | 'no_space'
+  | 'not_writable'
+  | 'verify_failed'
+  | 'copy_failed'
+  | 'start_failed'
+  | 'busy'
+  | 'unknown'
+
+export type DesktopDataMoveStatus =
+  | { state: 'idle' }
+  | {
+      state: 'running'
+      step: DesktopDataMoveStep
+      to: string
+      copied_bytes: number
+      total_bytes: number
+      files_done: number
+      files_total: number
+      started_at: string
+    }
+  | { state: 'done'; to: string; from: string; old?: { path: string; until: string }; at: string }
+  | {
+      state: 'failed'
+      code: DesktopDataMoveFailure
+      step: DesktopDataMoveStep
+      back_to: string
+      recovered: boolean
+      at: string
+    }
+
+export interface DesktopDataLocationBridge {
+  get(): Promise<DesktopDataLocation>
+  /** 弹系统选文件夹框 → 查一遍；点了取消回 `null`。 */
+  choose(): Promise<DesktopDataTargetCheck | null>
+  /** 恢复默认位置之前查一遍（目标固定是默认位置）。 */
+  checkDefault(): Promise<DesktopDataTargetCheck>
+  /** 开搬：`chosen` = 刚才 `choose()` 查过的那一个；`default` = 恢复默认位置。立刻回第一步的状态，之后看 `onChange`。 */
+  move(to: 'chosen' | 'default'): Promise<DesktopDataMoveStatus>
+  /** 进度 / 结果一变就回调；返回取消订阅。 */
+  onChange(listener: (status: DesktopDataMoveStatus) => void): () => void
+  /** 「现在就删」旧目录；回删没删成。 */
+  deleteOld(): Promise<boolean>
+  /** 在访达 / 资源管理器里打开现在的数据目录。 */
+  reveal(): Promise<boolean>
 }
 
 /** WP475：截到的那一张。 */
@@ -251,6 +354,14 @@ export const BRIDGE_CHANNELS = {
   titleBarTheme: 'agentsws:title-bar-theme',
   /** WP475 */
   captureWindow: 'agentsws:capture-window',
+  /** WP480 */
+  dataLocationGet: 'agentsws:data-location-get',
+  dataLocationChoose: 'agentsws:data-location-choose',
+  dataLocationCheckDefault: 'agentsws:data-location-check-default',
+  dataLocationMove: 'agentsws:data-location-move',
+  dataLocationChanged: 'agentsws:data-location-changed',
+  dataLocationDeleteOld: 'agentsws:data-location-delete-old',
+  dataLocationReveal: 'agentsws:data-location-reveal',
 } as const
 
 export interface BridgeInfo {
@@ -258,4 +369,6 @@ export interface BridgeInfo {
   version: string
   /** WP424：主窗口藏了系统标题栏时是哪一种（见 `window-chrome.ts`）；没藏就没有。 */
   title_bar?: 'inset' | 'overlay'
+  /** WP480：这台电脑上的服务进程归壳管（个人档）——才有「数据放在哪」。 */
+  data_location?: boolean
 }

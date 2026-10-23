@@ -1,0 +1,30 @@
+---
+/** 工坊笔记目录 `/blog/`（docs/113 §2.1）：新的在前。 */
+import type { Lang } from '../i18n/common.js'
+import { PAGES } from '../i18n/pages.js'
+import Base from '../layouts/Base.astro'
+import { blogHref } from '../lib/blog.js'
+import { siteCatalog } from '../lib/catalog.js'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = PAGES[lang].blog
+const posts = siteCatalog().notes[lang]
+---
+<Base lang={lang} path="/blog/" title={t.meta.title} description={t.meta.description} og="docs" current="blog">
+  <section class="page-hero" style="padding-bottom:88px">
+    <div class="wrap center">
+      <div class="eyebrow">{t.eyebrow}</div>
+      <h1 class="page-h1">{t.title}</h1>
+      <p class="sub">{t.sub}</p>
+      <ul class="post-list">
+        {posts.map((p) => (
+          <li><a href={blogHref(p.slug, lang)}><time datetime={p.date}>{p.date}</time><h2>{p.title}</h2><p>{p.description}</p></a></li>
+        ))}
+      </ul>
+    </div>
+  </section>
+</Base>

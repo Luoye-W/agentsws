@@ -71,6 +71,8 @@ export interface PanelWrites {
   writes(): RedditWriteView[]
   refill(
     job_id: string,
+    /** WP478（只加）：改过字再填。 */
+    edit?: { text?: string },
   ): Promise<{ ok: true; view: RedditWriteView } | { ok: false; message: string }>
   /** WP432：人点「打开这一条」（老实现没有 = 侧边栏打不开，照实说）。 */
   open?(
@@ -544,10 +546,10 @@ export function createExtensionPanelPort(options: ExtensionPanelOptions): Extens
     async notifySystem(session) {
       return (await options.notifySystem?.(session.workspace_id, session.person_id)) ?? true
     },
-    async refill(session, job_id) {
+    async refill(session, job_id, edit) {
       const writes = await options.writes(session.workspace_id)
       if (writes === undefined) return { ok: false, message: '这个品牌没有装 Reddit 写。' }
-      const out = await writes.refill(job_id)
+      const out = await writes.refill(job_id, edit)
       return out.ok ? { ok: true, write: panelWriteOf(out.view) } : out
     },
   }

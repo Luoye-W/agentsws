@@ -19,6 +19,7 @@ import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watch'
 import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
+import { DATA_LOCATION_EN, DATA_LOCATION_ZH } from './i18n-data-location'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { FEEDBACK_EN, FEEDBACK_ZH } from './i18n-feedback'
@@ -1167,10 +1168,7 @@ const zh: Table = {
   'block.rerun.checklist': '现在检查',
   'block.rerun.checklist.running': '正在检查…',
   'block.rerun.checklist.failed': '这次没检查成，再点一次',
-  'help.site-health.title': '网站体检：AI 读不读得到你的店',
   // WP447：六个新平台的报表怎么导出
-  'help.ads-export.title': '怎么导出广告报表给我',
-  'help.content-quality.title': '发布前质检：引用、市场版本、被 AI 引用',
   'card.evidence': '证据',
   'card.detail': '详情',
   'card.options.hint': '选一个，答案会沉淀成策略',
@@ -2440,7 +2438,7 @@ const zh: Table = {
   'models.chip': '还没接模型',
   'models.banner.cta': '接一个 →',
   'models.configured': '已配的',
-  'models.empty': '还一个都没配。下面挑一种开始，不会就点「看教程」。',
+  'models.empty': '还一个都没配。下面挑一种开始，不会就点卡上的书本图标看教程。',
   // WP156（36 §7）：「加一个」每张厂商卡上那一句（整段介绍在问号里，步骤在教程里）
   'models.vendor.deepseek': '国内直连、便宜、够用；账号登录或 API key 二选一。',
   'models.vendor.openai-compatible': '任何 OpenAI 格式的服务：Kimi、通义、智谱、本机 Ollama。',
@@ -3864,8 +3862,6 @@ const zh: Table = {
   'scenes.officialDesktop.tag': '你自己装的',
   'scenes.officialDesktop.note': '用它自己的数据和登录，和上面的官方场景是两份。',
   'scenes.officialDesktop.opened': '已打开官方桌面端。',
-  'help.dsh-scenes.title': '切换场景',
-  'help.install-update.title': '安装与更新',
   'scenes.error': '没办成：{message}',
   // ── WP141（docs/78 §1 #4、§2）：牌堆与屏上的字 ─────────────────────────
   'kind.kol_campaign': '红人挑人清单',
@@ -4002,20 +3998,12 @@ const zh: Table = {
   'help.open': '看教程',
   'help.index': '全部教程',
   'help.missing': '这篇教程还没写。',
-  'help.agentsws-credits.title': 'Agents 工坊官方接口与积分',
-  'help.model-deepseek.title': '接 DeepSeek（账户登录 / API key）',
-  'help.model-openai-compatible.title':
-    '接 OpenAI / Anthropic 兼容服务（Kimi、Ollama、Claude 中转站…）',
-  'help.model-bailian.title': '接阿里云百炼（三个方案怎么选）',
-  'help.model-openai.title': '接 OpenAI / ChatGPT 订阅',
-  'help.model-anthropic.title': '接 Anthropic / Claude 订阅',
-  'help.model-google.title': '接 Google Gemini',
-  'help.browser.title': '让 AI 用浏览器（四种方式）',
-  'help.computer-use.title': '让 AI 操作这台电脑',
-  'help.search-data.title': '搜索数据接口',
-  'help.conn-shopify.title': '连 Shopify 店铺',
+  'help.needs_newer_app': '{requires} 起才有，你这版还没有',
+  'help.newer_online': '新版里这部分变了，下面是你这版的说法',
+  'help.update_hint': '左下角出现「有新版本」时点一下就能更新',
+  'help.on_site': '在官网打开',
+  'help.tag_new': '新版',
   // WP216：建站平台的官方 CLI（卡在连接页与建站岗位页；平台没有 CLI 就不出）
-  'help.shopify-cli.title': '装好并登录 Shopify CLI',
   'platform_cli.hint':
     '建站岗位用它拉主题、推一份未发布副本给你预览、跑官方 Liquid 校验；上线永远等你点头。',
   'platform_cli.item.installed': '装好',
@@ -4074,20 +4062,7 @@ const zh: Table = {
   'onboarding.platform_cli.ask': '建站岗位会用到 {label}，要现在装吗？',
   'onboarding.platform_cli.go': '现在装',
   'onboarding.platform_cli.later': '之后在建站岗位页也能装',
-  'help.conn-email.title': '连邮箱（任意邮箱 IMAP / SMTP）',
-  'help.conn-google.title': 'Google 家的几个连接',
-  'help.conn-meta.title': 'Meta 家的几个连接（Facebook / Instagram / Threads / WhatsApp）',
-  'help.conn-tiktok.title': 'TikTok 的三个连接',
-  'help.conn-x.title': 'X（Twitter）的两个连接',
   // WP191（docs/86 §4）
-  'help.conn-linkedin.title': 'LinkedIn：公司主页与老板本人号',
-  'help.conn-community.title': '社群机器人：Reddit / Discord / Telegram',
-  'help.conn-marketing-logistics.title': '邮件营销与物流追踪',
-  'help.browser-extension.title': '浏览器插件「Agents 工坊助手」',
-  'help.im-channels.title': '消息渠道：微信、企业微信、飞书与钉钉',
-  'help.chat-window.title': '网站在线客服（聊天窗）',
-  'help.im-feishu.title': '飞书机器人：建应用、开长连接、拿凭据',
-  'help.im-dingtalk.title': '钉钉机器人：建应用、开 Stream、拿凭据',
   'kind.computer_use': '操作电脑',
   'category.computer_use': '操作电脑',
   'verb.policy.approve.computer_use': '允许',
@@ -4251,7 +4226,6 @@ const zh: Table = {
   'credits.pricing.cached': '云上暂时连不通，这是上次存下的那一份。',
   'credits.unit.image': '每张',
   // WP173：主动开发 · 开发信
-  'help.b2b-sending-domain.title': '开发信的发信域名与体检',
   // WP317：投放 · 素材流水线
   'ads.creative.title': '素材流水线',
   'ads.creative.hint':
@@ -4492,7 +4466,6 @@ const zh: Table = {
   'free_chat.recall.title': '找到这几个，点一下放回左栏',
   'free_chat.recall.restore': '放回来',
   'free_chat.recall.restored': '已放回',
-  'help.archive.title': '对话与任务的归档与找回',
 }
 
 const en: Table = {
@@ -5602,15 +5575,12 @@ const en: Table = {
   'block.rerun.checklist': 'Check now',
   'block.rerun.checklist.running': 'Checking…',
   'block.rerun.checklist.failed': "Check didn't finish — try again",
-  'help.site-health.title': 'Site health: can AI read your store?',
-  'help.ads-export.title': 'How to export an ad report for me',
-  'help.content-quality.title': 'Pre-publish check: sources, market versions, AI citations',
   'card.evidence': 'Evidence',
   'card.detail': 'Details',
   'card.options.hint': 'Pick one; the answer becomes policy',
   'card.options.hint.content_conflict':
     'Pick one: the new version of this section, or the one you changed',
-  'card.instruct.title': 'Revise',
+  'card.instruct.title': 'Edit',
   // WP84: example tasks at the top of the instruct panel (pick one, do not type from scratch)
   'card.examples.title': 'Example tasks',
   'card.examples.hint':
@@ -6317,22 +6287,22 @@ const en: Table = {
   'risk.high': 'High risk',
   'action.approve': 'Approve',
   'action.reject': 'Reject',
-  'action.instruct': 'Revise',
+  'action.instruct': 'Edit',
   'action.snooze': 'Later',
   'action.open': 'Open',
   // WP100：按排版走的动词（表在 `@agentsws/deck` 的 `verbs.ts`）
   'verb.outbound.approve': 'Send',
   'verb.outbound.reject': "Don't send",
-  'verb.outbound.instruct': 'Revise',
+  'verb.outbound.instruct': 'Edit',
   'verb.change.approve': 'Approve',
   'verb.change.reject': 'Reject',
-  'verb.change.instruct': 'Revise',
+  'verb.change.instruct': 'Edit',
   'verb.publish.approve': 'Publish',
   'verb.publish.reject': 'Reject',
-  'verb.publish.instruct': 'Revise',
+  'verb.publish.instruct': 'Edit',
   'verb.money.approve': 'Approve',
   'verb.money.reject': 'Reject',
-  'verb.money.instruct': 'Revise',
+  'verb.money.instruct': 'Edit',
   'verb.choice.approve': 'This one',
   'verb.choice.reject': 'Neither',
   'verb.choice.instruct': "I'll say",
@@ -6341,22 +6311,22 @@ const en: Table = {
   'verb.variants.instruct': 'Give direction',
   'verb.aftermath.approve': 'Resume',
   'verb.aftermath.reject': 'Leave it off',
-  'verb.aftermath.instruct': 'Revise',
+  'verb.aftermath.instruct': 'Edit',
   'verb.person.approve': 'Let them in',
   'verb.person.reject': 'Decline',
-  'verb.person.instruct': 'Revise',
+  'verb.person.instruct': 'Edit',
   'verb.handoff.approve': 'Claim',
   'verb.handoff.reject': 'Not a support issue',
   'verb.handoff.instruct': 'Reassign',
   'verb.handoff.approve.account_transfer': 'Hand over as listed',
-  'verb.handoff.instruct.account_transfer': 'Revise',
+  'verb.handoff.instruct.account_transfer': 'Edit',
   'verb.handoff.reject.account_transfer': 'Not now',
   'verb.takeover.approve': 'Open browser',
   'verb.takeover.reject': 'Skip this step',
-  'verb.takeover.instruct': 'Revise',
+  'verb.takeover.instruct': 'Edit',
   'verb.policy.approve': 'Approve',
   'verb.policy.reject': 'Reject',
-  'verb.policy.instruct': 'Revise',
+  'verb.policy.instruct': 'Edit',
   'verb.money.approve.refund': 'Approve refund',
   'verb.money.approve.reship': 'Approve reship',
   'verb.money.approve.goodwill_credit': 'Approve credit',
@@ -6496,7 +6466,7 @@ const en: Table = {
   'channel.chat': 'Chat',
   'channel.system': 'System',
   'deck.progress': 'Card {index} of {total}',
-  'deck.keyboard': '→ approve · ← reject · ↑ later · ↓ revise',
+  'deck.keyboard': '→ approve · ← reject · ↑ later · ↓ edit',
   'deck.filter.all': 'All {n}',
   'deck.filter.waiting': 'Customer waiting {n}',
   'deck.filter.nobody': 'Nobody waiting {n}',
@@ -6852,7 +6822,7 @@ const en: Table = {
   'matter.route.switch': 'Switch to {role}',
   'matter.cards': '{count} cards open',
   'plan.adopt': 'Go with this',
-  'plan.adjust': "I'll change a few",
+  'plan.adjust': 'Edit',
   'plan.later': 'Later',
   'plan.hint': "It's only a suggestion — nothing is written until you adopt it.",
   'plan.empty': 'Nothing to adjust today.',
@@ -6886,7 +6856,7 @@ const en: Table = {
   'models.chip': 'No model',
   'models.banner.cta': 'Connect one →',
   'models.configured': 'Configured',
-  'models.empty': 'Nothing configured yet. Pick one below; stuck? Open its tutorial.',
+  'models.empty': 'Nothing configured yet. Pick one below; stuck? Click the book icon on its card.',
   // WP156 (36 §7): the one line on each provider card in "Add one"
   'models.vendor.deepseek': 'Direct in China, cheap, good enough; account sign-in or API key.',
   'models.vendor.openai-compatible': 'Any OpenAI-format service: Kimi, Qwen, GLM, local Ollama.',
@@ -8365,8 +8335,6 @@ const en: Table = {
   'scenes.officialDesktop.note':
     'Uses its own data and sign-in, separate from the official scene above.',
   'scenes.officialDesktop.opened': 'Opened the official desktop app.',
-  'help.dsh-scenes.title': 'Switching scenes',
-  'help.install-update.title': 'Installing and updating',
   'scenes.error': 'That did not work: {message}',
   // ── WP141 (docs/78 §1 #4, §2): the deck and the words on screen ─────────
   'kind.kol_campaign': 'Creator shortlist',
@@ -8398,7 +8366,7 @@ const en: Table = {
     'Noted: a card went to the boss — once approved, this becomes a rule.',
   'deck.receipt.reject': 'Noted: not doing this one, and your reason is kept for next time.',
   // WP414: Revise merges "Revise" and "Needs material"; Drop needs no reason; similar cards follow
-  'deck.revise.title': 'Revise',
+  'deck.revise.title': 'Edit',
   'deck.revise.hint':
     'Say what to change, or paste the material / link to use. AI rewrites it and shows you again',
   'deck.revise.placeholder': 'e.g. softer tone, no shipping promises; or paste an image / link',
@@ -8509,19 +8477,11 @@ const en: Table = {
   'help.open': 'Tutorial',
   'help.index': 'All tutorials',
   'help.missing': 'This tutorial has not been written yet.',
-  'help.agentsws-credits.title': 'Agents Workshop models and credits',
-  'help.model-deepseek.title': 'Connect DeepSeek (account sign-in / API key)',
-  'help.model-openai-compatible.title':
-    'Connect an OpenAI- or Anthropic-compatible service (Kimi, Ollama, Claude relays…)',
-  'help.model-bailian.title': 'Connect Alibaba Cloud Model Studio (which plan)',
-  'help.model-openai.title': 'Connect OpenAI / a ChatGPT subscription',
-  'help.model-anthropic.title': 'Connect Anthropic / a Claude subscription',
-  'help.model-google.title': 'Connect Google Gemini',
-  'help.browser.title': 'Let AI use a browser (four ways)',
-  'help.computer-use.title': 'Let AI operate this computer',
-  'help.search-data.title': 'Search data APIs',
-  'help.conn-shopify.title': 'Connect your Shopify store',
-  'help.shopify-cli.title': 'Install and sign in to Shopify CLI',
+  'help.needs_newer_app': 'Needs {requires} or later — not in your version yet',
+  'help.newer_online': 'This changed in a newer version; below is how it works in yours',
+  'help.update_hint': 'When “Update available” shows at the bottom left, click it to update',
+  'help.on_site': 'Open on the website',
+  'help.tag_new': 'New',
   'platform_cli.hint':
     'The site team uses it to pull your theme, push an unpublished copy for you to preview, and run the official Liquid check. Going live always waits for you.',
   'platform_cli.item.installed': 'Installed',
@@ -8583,20 +8543,7 @@ const en: Table = {
   'onboarding.platform_cli.ask': 'The site team will use {label}. Install it now?',
   'onboarding.platform_cli.go': 'Install now',
   'onboarding.platform_cli.later': 'You can also do it later from the Site Building page',
-  'help.conn-email.title': 'Connect a mailbox (any email via IMAP / SMTP)',
-  'help.conn-google.title': 'The Google connections',
-  'help.conn-meta.title': 'The Meta connections (Facebook / Instagram / Threads / WhatsApp)',
-  'help.conn-tiktok.title': 'The three TikTok connections',
-  'help.conn-x.title': 'The two X (Twitter) connections',
   // WP191（docs/86 §4）
-  'help.conn-linkedin.title': 'LinkedIn: the Company Page and the founder’s own profile',
-  'help.conn-community.title': 'Community bots: Reddit / Discord / Telegram',
-  'help.conn-marketing-logistics.title': 'Email marketing and shipment tracking',
-  'help.browser-extension.title': 'The “Agents Workshop assistant” browser extension',
-  'help.im-channels.title': 'Message channels: WeChat, WeCom, Feishu and DingTalk',
-  'help.chat-window.title': 'Website live chat (the chat window)',
-  'help.im-feishu.title': 'Feishu bot: create the app, turn on long connection, get credentials',
-  'help.im-dingtalk.title': 'DingTalk bot: create the app, turn on Stream, get credentials',
   'kind.computer_use': 'Use the computer',
   'category.computer_use': 'Use the computer',
   'verb.policy.approve.computer_use': 'Allow',
@@ -8612,7 +8559,7 @@ const en: Table = {
   'verb.review.approve': 'Plan tomorrow as suggested',
   'verb.review.reject': "I'll plan it",
   'verb.plan.approve': 'Adopt',
-  'verb.plan.instruct': 'Revise',
+  'verb.plan.instruct': 'Edit',
   'verb.manual_send.reject': 'Discard',
   'deck.dead_letter.reply_myself': 'I will reply from the mailbox myself',
   // ── WP219: reviewed content updates (docs/90) ──
@@ -8762,7 +8709,6 @@ const en: Table = {
   'credits.pricing.cached': "Can't reach the cloud right now; this is the last copy saved.",
   'credits.unit.image': 'per image',
   // WP173: Outbound · cold email
-  'help.b2b-sending-domain.title': 'Sending domain and health check for cold email',
   // WP317: Ads · creative pipeline
   'ads.creative.title': 'Creative pipeline',
   'ads.creative.hint':
@@ -9010,7 +8956,6 @@ const en: Table = {
   'free_chat.recall.title': 'Found these — click one to bring it back',
   'free_chat.recall.restore': 'Bring back',
   'free_chat.recall.restored': 'Back',
-  'help.archive.title': 'Archiving and finding chats and tasks',
 }
 
 // WP209：技能 / 知识分组的词条在自己的文件里（`i18n-library.ts`），这里并进来
@@ -9091,6 +9036,8 @@ const TABLES: Record<Lang, Table> = {
     ...SETTINGS_ZH,
     // WP476：「帮助改进工坊（匿名使用数据）」开关与第一次提示
     ...TELEMETRY_ZH,
+    // WP480：「数据放在哪」（更改位置 / 搬家进度）与同页两处屏幕用词
+    ...DATA_LOCATION_ZH,
     // WP426：设置 → 模型 整页重做（三块、状态标签、积分快用完）
     ...MODELS_ZH,
     // WP372：右上角横排图标、「⋮」与右侧面板五张卡
@@ -9162,6 +9109,7 @@ const TABLES: Record<Lang, Table> = {
     ...ASSISTANT_EN,
     ...SETTINGS_EN,
     ...TELEMETRY_EN,
+    ...DATA_LOCATION_EN,
     ...MODELS_EN,
     ...PANEL_EN,
     ...AMAZON_OPS_EN,

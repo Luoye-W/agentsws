@@ -3,7 +3,6 @@
  */
 export const OUTBOUND_ZH: Record<string, string> = {
   'rail.panel.outbound': '发出记录',
-  'help.sent-log.title': '发出记录，和把它写进你的表格',
   'outbound.badge': '{count} 条没写进记录去处',
   'outbound.empty': '还没有发出去的',
   'outbound.all': '全部渠道',
@@ -38,7 +37,6 @@ export const OUTBOUND_ZH: Record<string, string> = {
 
 export const OUTBOUND_EN: Record<string, string> = {
   'rail.panel.outbound': 'Sent log',
-  'help.sent-log.title': 'Sent log, and writing it into your own sheet',
   'outbound.badge': '{count} not written to your log sheets',
   'outbound.empty': 'Nothing sent yet',
   'outbound.all': 'All channels',

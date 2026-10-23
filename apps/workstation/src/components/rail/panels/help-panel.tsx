@@ -14,19 +14,22 @@
  * - 在岗位上：这个岗位的 → 通用；
  * - 哪儿都不在：通用。
  *
- * 哪篇归谁写在文章自己的 frontmatter 里（`lib/help.ts` 的 `HELP_SCOPES` 是镜像）。
+ * 哪篇归谁写在文章自己的 frontmatter 里；目录从本机服务来（官网拉回来的 + 随包的，私有 docs/113），
+ * 官网新加的一篇不用等发版也会出现在这里。新版才有的那几篇标「新版」。
  * 别的岗位的那几篇不删：顶上的搜索搜全部，最底下「全部 N 篇」一下全摊开。
  * 面板仍不 `scoped`（没有层切换）：范围跟着右栏算出来的那一层走，人不用在这里再选一次。
  */
+
+import type { HelpCatalogEntry } from '@agentsws/contracts'
 import { ChevronLeft, Search } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { HelpBody } from '@/components/help/help-body'
+import { useHelpCatalog } from '@/components/help/use-help'
 import type { RailScope } from '@/components/rail/rail-scope'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/lib/app-context'
-import { HELP_SLUGS, type HelpSlug, helpForContext, helpSlugOf } from '@/lib/help'
-import { translate } from '@/lib/i18n'
+import { type HelpSlug, helpForContext, helpSlugOf, searchHelp } from '@/lib/help'
 
 /** 右栏那一层 → 教程目录的上下文（职责层顺带它所属的岗位）。 */
 function contextOf(scope: RailScope | undefined): { role_id?: string; position_id?: string } {
@@ -37,16 +40,6 @@ function contextOf(scope: RailScope | undefined): { role_id?: string; position_i
       ...(scope.parent === undefined ? {} : { position_id: scope.parent.scope_id }),
     }
   return { position_id: scope.scope_id }
-}
-
-/** 搜索：中英两个标题都算（与 ⌘K 那一组同一条口径）。 */
-function searchHelp(query: string): HelpSlug[] {
-  const q = query.trim().toLowerCase()
-  return HELP_SLUGS.filter((slug) =>
-    `${translate('zh', `help.${slug}.title`)} ${translate('en', `help.${slug}.title`)} ${slug}`
-      .toLowerCase()
-      .includes(q),
-  )
 }
 
 export function HelpPanel({ address, scope }: RailPanelBodyProps): ReactNode {
@@ -94,15 +87,17 @@ function HelpIndex({
   const { t } = useApp()
   const [query, setQuery] = useState('')
   const [all, setAll] = useState(false)
-  const groups = helpForContext(contextOf(scope))
+  const items = useHelpCatalog()
+  const bySlug = new Map<string, HelpCatalogEntry>(items.map((i) => [i.slug, i]))
+  const groups = helpForContext(contextOf(scope), items)
   const sections: { key: string; title: string; slugs: HelpSlug[] }[] = all
-    ? [{ key: 'all', title: t('help.index'), slugs: [...HELP_SLUGS] }]
+    ? [{ key: 'all', title: t('help.index'), slugs: items.map((i) => i.slug) }]
     : [
         { key: 'role', title: t('help.ctx.role'), slugs: groups.role },
         { key: 'position', title: t('help.ctx.position'), slugs: groups.position },
         { key: 'general', title: t('help.ctx.general'), slugs: groups.general },
       ].filter((g) => g.slugs.length > 0)
-  const hits = query.trim() === '' ? undefined : searchHelp(query)
+  const hits = query.trim() === '' ? undefined : searchHelp(items, query)
   // 只有一组时不写组名（"通用"两个字挂在唯一一组上面只是噪音）
   const titled = sections.length > 1 || all
   const shown = sections.reduce((n, g) => n + g.slugs.length, 0)
@@ -118,7 +113,15 @@ function HelpIndex({
         onPick(slug)
       }}
     >
-      {t(`help.${slug}.title`)}
+      {bySlug.get(slug)?.title ?? slug}
+      {bySlug.get(slug)?.needs_newer_app === true ? (
+        <span
+          className="ml-1.5 rounded-ws-tag bg-ws-warn-bg px-1 text-ws-tiny text-ws-warn"
+          data-testid="help-new-tag"
+        >
+          {t('help.tag_new')}
+        </span>
+      ) : null}
     </button>
   )
 
@@ -163,7 +166,7 @@ function HelpIndex({
               {g.slugs.map(item)}
             </section>
           ))}
-          {all || shown === HELP_SLUGS.length ? null : (
+          {all || shown === items.length ? null : (
             <button
               type="button"
               data-testid="help-show-all"
@@ -172,7 +175,7 @@ function HelpIndex({
                 setAll(true)
               }}
             >
-              {t('help.show_all', { count: HELP_SLUGS.length })}
+              {t('help.show_all', { count: items.length })}
             </button>
           )}
         </>

@@ -1,4 +1,7 @@
 ---
+group: tools
+order: 360
+description: 「内容与博客」每篇文章发布前都会自动质检引用、市场版本和能不能被 AI 引用；没过的留在草稿、卡上指出哪一句不对，发出去永远要你点一下。
 positions: [web-ops, dtc-ops]
 roles: [dtc.content, dtc.seo]
 ---

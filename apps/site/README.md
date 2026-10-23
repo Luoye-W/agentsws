@@ -1,6 +1,6 @@
 # apps/site · 官网 agentsws.com
 
-Agents 工坊的官网。**只放公开页面**：首页、岗位、价格（公开价目）、下载、教程文档、更新日志、用户条款 / 隐私政策 / 退款政策、404。
+Agents 工坊的官网。**只放公开页面**：首页、岗位、价格（公开价目）、下载、教程文档（含按岗位的汇总页）、工坊笔记、更新日志、用户条款 / 隐私政策 / 退款政策、404。
 登录、账号、充值、用量、运营后台**一律不在这里**——官网上的「登录 / 积分与充值」只是跳 `https://cloud.agentsws.com` 的链接（那边在私有仓）。
 
 - 设计真源：内部设计稿（方向 A「纸与绿」，不在本仓）
@@ -16,7 +16,11 @@ Agents 工坊的官网。**只放公开页面**：首页、岗位、价格（公
 | `src/views/*.astro` | 各页；`src/pages/[...locale]/` 里每页一个薄壳（`locale` 为空 = 中文，`en` = 英文） |
 | `src/components/Mark.astro` | 品牌标记——一律出自 `@agentsws/brand`（集结 / 一变一队 / 呼吸 / 待机 wave-sheen），站点里不另写几何与参数 |
 | `src/lib/markdown.ts` | 安全 markdown → HTML（移植自工作台 `SafeMarkdown`：不解析 HTML、不加载图片、链接只认三种） |
-| `src/lib/help.ts` | 文档区：直接读仓库的 `docs/help/*.md`，目录顺序照工作台 `HELP_SLUGS` |
+| `src/lib/help.ts` | 文档区：直接读仓库的 `docs/help/*.md`，分组、顺序、摘要、归属读文章自己头上的元数据；`requires: next` 的用最新正式版时的文字（`src/lib/git.ts`） |
+| `src/lib/blog.ts` · `src/content/blog/` | 工坊笔记 `/blog/`（`<日期>-<slug>.md` + `.en.md`，写法见那个目录的 README）；一篇都没有时栏目与顶栏入口都不出 |
+| `src/lib/catalog.ts` · `src/lib/machine.ts` | 给软件与 AI 读的：`/help/index.json`（契约在 `@agentsws/contracts` 的 `help-index.ts`）、每篇 `.md` 纯文本、`/llms.txt`、`/llms-full.txt`（英文 `/en/llms-full.txt`）、`/changelog.md` |
+| `src/lib/hubs.ts` | 岗位汇总页 `/docs/roles/<岗位>/`（岗位 id 照「岗位」页） |
+| `src/lib/schema.ts` | 结构化数据（JSON-LD）：教程 TechArticle、笔记 BlogPosting、面包屑、首页 Organization + SoftwareApplication |
 | `src/lib/pricing.ts` · `src/data/pricing-build.ts` | 价目：构建时取 `GET https://cloud.agentsws.com/v1/pricing`，取不到用 `packages/stand-ins` 的样例并标「以控制台为准」 |
 | `src/data/downloads.json` | 下载清单的**兜底**那份：版本、平台、链接、sha256、大小（链接为 `null` 时页面显示「即将提供」）。构建时先取 `https://dl.agentsws.com/downloads.json`（发版流水线每次发版更新它，`src/data/downloads-build.ts`），取不到 / 不合格才用这份；首页「下载」按钮对 Windows 访客直接给最新安装包 |
 | `src/content/changelog/` | 更新日志，一条一个文件（`<日期>-<名字>.md` + `.en.md`），挑用户感受得到的变化写成人话（不写内部编号、不写客户名） |
@@ -54,6 +58,8 @@ Astro 默认的两处出网都关掉了（`scripts/astro.mjs`：匿名遥测 `AS
 3. 上线当天把 `src/config.ts` 的 `LEGAL_EFFECTIVE_DATE` 从 `{{EFFECTIVE_DATE}}` 改成当天日期，重新 build，再跑 `launch:check`（剩占位就红）；条款请律师过一遍；
 4. 打开 `wrangler.jsonc` 里 `routes` 那几行（agentsws.com 与 www 走 custom domain——这一步会建 DNS 记录）；
 5. `pnpm --filter @agentsws/site exec wrangler deploy`；
-6. 打开 https://agentsws.com/ 与 `/en/` 各点一遍，看 404、`/sitemap.xml`、`/robots.txt`。
+6. 打开 https://agentsws.com/ 与 `/en/` 各点一遍，看 404、`/sitemap.xml`、`/robots.txt`、`/llms.txt`、`/help/index.json`。
+
+**每次发版顺带部署一次官网**（私有 docs/113 决策 H）：发版前先 `node scripts/help-stamp-release.mjs <版本号>`，保证「最新正式版 = 官网教程」。笔记和纯改错字可以随时单独部署。改过名的教程（头上 `aliases`）构建时自动写进 `dist/_redirects`。
 
 回滚：`wrangler rollback`（静态资源同样按版本回退）。

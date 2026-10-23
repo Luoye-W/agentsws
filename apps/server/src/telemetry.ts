@@ -17,6 +17,12 @@
  * 5. **工作台的事件也从这里出门**（`ingest`）：posthog-js 的 `api_host` 是本机的 `/v1/telemetry`，同源——
  *    桌面壳的 CSP（`connect-src` 只许 self）不用放宽，局域网同事的浏览器也一样；浏览器一个外网请求都不发。
  *    收到的每一条在这里**再过一遍白名单**（不信前端那一遍），key 对不上的整批丢，再转给 `<地址>/batch/`。
+ *
+ * 6. **WP477（决策 1609）：四件关键事另报 GA4**（`app_first_open`、`setup_complete`、`first_task`、`daily_active`），
+ *    POST 到 `<地址>/mp/collect`，云上 Worker 转 Measurement Protocol。和上面同一个开关、同一个上报地址；
+ *    另外要云上 `/config` 说 `ga4: true`（Worker 配了 `GA4_API_SECRET`）才发。`client_id` 就是匿名设备号；
+ *    只带版本号、`market_region`（界面中文 → CN）与 GA4 要的会话两格。前三件一台电脑只发一次，`daily_active`
+ *    一天一次（本地日期）；发成功才记在 `telemetry.json`，发不出去下次再来。
  */
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -24,6 +30,10 @@ import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import {
   type EventEnvelope,
+  GA4_RELAY_PATH,
+  type Ga4AppEvent,
+  type Ga4RelayBody,
+  sanitizeGa4Event,
   sanitizeTelemetryProps,
   TELEMETRY_HOST_ENV,
   TELEMETRY_RELAY_PATH,
@@ -44,8 +54,8 @@ export interface Telemetry {
   update(patch: TelemetryPatch): Promise<TelemetryView>
   /** 事件日志的每一条都过一下（只看 `run.*`）。不抛、不等。 */
   onEvent(e: Pick<EventEnvelope, 'type' | 'actor' | 'correlation' | 'payload'>): void
-  /** 一张卡被定了。不抛、不等。 */
-  onCardDecided(item: { kind: string; state: string }): void
+  /** 一张卡被定了（WP477：带上卡挂在哪条职责上，内置的原样、别的记 `custom`）。不抛、不等。 */
+  onCardDecided(item: { kind: string; state: string; role_id?: string }): void
   /** 工作台（posthog-js）经本机转发的那几条路：解开、再过白名单、转给上报地址。不抛。 */
   ingest(input: TelemetryIngest): Promise<TelemetryIngestReply>
   /** 把手上攒的那一批发出去（测试与退出时用）。 */
@@ -92,12 +102,27 @@ interface Stored {
   enabled: boolean
   notice_seen: boolean
   install_id: string
+  /** WP477：工作台最近一次告诉的界面语言（决策 1600 用它算 `market_region`）。 */
+  lang?: 'zh' | 'en'
+  /** WP477：四件关键事哪件报过了（前三件记时间；`daily_active` 记最近报过的那个本地日期）。 */
+  ga4?: Partial<Record<Ga4AppEvent, string>>
 }
 
 interface RemoteConfig {
   key: string | null
   replay: boolean
+  /** WP477：云上配了 GA4 的 secret 没有（没配 = 四件关键事一件都不发）。 */
+  ga4: boolean
 }
+
+/** 这台电脑的本地日期（`daily_active` 一天一次按它算）。 */
+export function localDay(iso: string): string {
+  const d = new Date(iso)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+const GA4_MARK = /^[\dT:.Z+-]{10,40}$/
 
 /** `AGENTSWS_TELEMETRY_HOST` → 去掉末尾斜杠的 https 地址；没配、`off`、不是 http(s) 都当没有。 */
 export function telemetryHost(
@@ -133,6 +158,16 @@ function load(dir: string | undefined): Stored {
           typeof raw.install_id === 'string' && /^ins_[a-f0-9]{32}$/.test(raw.install_id)
             ? raw.install_id
             : fresh.install_id,
+        ...(raw.lang === 'zh' || raw.lang === 'en' ? { lang: raw.lang } : {}),
+        ...(raw.ga4 !== null && typeof raw.ga4 === 'object'
+          ? {
+              ga4: Object.fromEntries(
+                Object.entries(raw.ga4).filter(
+                  ([k, v]) => typeof v === 'string' && GA4_MARK.test(v) && /^[a-z_]{1,40}$/.test(k),
+                ),
+              ) as Partial<Record<Ga4AppEvent, string>>,
+            }
+          : {}),
       }
     } catch {
       // 读坏了回缺省（它只是偏好 + 一个随机号）
@@ -193,9 +228,9 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
           signal: AbortSignal.timeout(5000),
         })
         if (!res.ok) throw new Error(`config ${res.status}`)
-        const body = (await res.json()) as { key?: unknown; replay?: unknown }
+        const body = (await res.json()) as { key?: unknown; replay?: unknown; ga4?: unknown }
         const key = typeof body.key === 'string' && KEY_SHAPE.test(body.key) ? body.key : null
-        remote = { key, replay: body.replay === true }
+        remote = { key, replay: body.replay === true, ga4: body.ga4 === true }
         remoteAt = Date.now()
         return remote
       } catch {
@@ -209,6 +244,14 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
   }
 
   const view = async (): Promise<TelemetryView> => {
+    /*
+     * WP477：工作台每次打开都来问这一格（窗口回到前台、过了 10 分钟也会再问）——这就是「打开了」。
+     * 还不知道界面语言时先不报：工作台紧接着会把语言 PUT 过来，那一下（`update` 也回 `view()`）再报。
+     */
+    if (stored.lang !== undefined) {
+      milestone('app_first_open')
+      milestone('daily_active')
+    }
     const cfg = stored.enabled ? await remoteConfig() : undefined
     const active = stored.enabled && configured && host !== undefined && cfg?.key != null
     const account = options.accountId?.()
@@ -222,6 +265,7 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
         ? { client: { api_host: TELEMETRY_RELAY_PATH, key: cfg.key, replay: cfg.replay } }
         : {}),
       ...(account === undefined || account === '' ? {} : { account_id: account }),
+      ...(stored.lang === undefined ? {} : { lang: stored.lang }),
     }
   }
 
@@ -249,7 +293,7 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
     const account = options.accountId?.()
     const clean = sanitizeTelemetryProps(event, {
       ...props,
-      ...regionProps(lastLang),
+      ...regionProps(lastLang ?? stored.lang),
       shell: 'server',
       install_id: stored.install_id,
       ...(options.appVersion === undefined ? {} : { app_version: options.appVersion }),
@@ -271,7 +315,53 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
     if (queue.length >= BATCH_SIZE) void flush()
   }
 
+  // ── WP477：四件关键事 → GA4 ─────────────────────────
+  /** GA4 的会话号：这次进程起来的时间（秒）。 */
+  const sessionId = Math.floor((Date.parse(options.now()) || Date.now()) / 1000)
+  const ga4Pending = new Set<Ga4AppEvent>()
+  const ga4Inflight = new Set<Promise<void>>()
+
+  function milestone(name: Ga4AppEvent): void {
+    if (!configured || host === undefined || !stored.enabled) return
+    const mark = name === 'daily_active' ? localDay(options.now()) : options.now()
+    const sent = stored.ga4?.[name]
+    if (name === 'daily_active' ? sent === mark : sent !== undefined) return
+    if (ga4Pending.has(name)) return
+    ga4Pending.add(name)
+    const job = (async () => {
+      try {
+        const cfg = await remoteConfig()
+        if (cfg?.ga4 !== true || !stored.enabled) return
+        const region = telemetryMarketRegion(lastLang ?? stored.lang)
+        const event = sanitizeGa4Event(name, {
+          ...(options.appVersion === undefined ? {} : { app_version: options.appVersion }),
+          ...(region === undefined ? {} : { market_region: region }),
+          session_id: sessionId,
+          engagement_time_msec: 1,
+        })
+        if (event === null) return
+        const body: Ga4RelayBody = { client_id: stored.install_id, events: [event] }
+        const res = await doFetch(`${host}${GA4_RELAY_PATH}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!res.ok || !stored.enabled) return
+        stored = { ...stored, ga4: { ...stored.ga4, [name]: mark } }
+        save(options.dir, stored)
+      } catch {
+        // 发不出去：不记，下次再来
+      } finally {
+        ga4Pending.delete(name)
+      }
+    })()
+    ga4Inflight.add(job)
+    void job.finally(() => ga4Inflight.delete(job))
+  }
+
   const flush = async (): Promise<void> => {
+    if (ga4Inflight.size > 0) await Promise.all([...ga4Inflight])
     if (queue.length === 0) return
     const batch = queue
     queue = []
@@ -302,9 +392,16 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
     id: string | undefined,
     set: ReadonlySet<string> | undefined,
   ): string | undefined => (id === undefined ? undefined : set?.has(id) === true ? id : 'custom')
+  /** 「负责人」岗位是种出来的、没有 yml，但它是内置的。 */
+  const builtInPosition = (id: string | undefined): string | undefined =>
+    id === 'owner' ? id : builtIn(id, options.bundledPositionIds?.())
 
   const onEvent: Telemetry['onEvent'] = (e) => {
-    if (!configured || !stored.enabled || !e.type.startsWith('run.')) return
+    if (!configured || !stored.enabled) return
+    // WP477：首次设置走完（向导第 ④ 步建好了岗位）/ 第一次有任务跑成
+    if (e.type === 'onboarding.applied') milestone('setup_complete')
+    if (e.type === 'run.completed') milestone('first_task')
+    if (!e.type.startsWith('run.')) return
     try {
       const run_id = e.correlation.run_id ?? e.actor.run_id
       if (run_id === undefined) return
@@ -312,7 +409,7 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
       if (e.type === 'run.started') {
         const place = e.actor.kind === 'agent' ? options.placeOf?.(e.actor.id) : undefined
         const role_id = builtIn(place?.role_id, options.bundledRoleIds?.()) ?? 'unknown'
-        const position_id = builtIn(place?.position_id, options.bundledPositionIds?.())
+        const position_id = builtInPosition(place?.position_id)
         runs.set(run_id, {
           role_id,
           ...(position_id === undefined ? {} : { position_id }),
@@ -352,7 +449,12 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
 
   const onCardDecided: Telemetry['onCardDecided'] = (item) => {
     try {
-      capture('card_decided', { decision: decisionOf(item.state), card_kind: item.kind })
+      const role_id = builtIn(item.role_id, options.bundledRoleIds?.())
+      capture('card_decided', {
+        decision: decisionOf(item.state),
+        card_kind: item.kind,
+        ...(role_id === undefined ? {} : { role_id }),
+      })
     } catch {
       // 同上
     }
@@ -411,6 +513,14 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
         }
         // 决策 1600：market_region 只按 lang 算（中文 → CN，别的拿掉），不信工作台自己带的
         const { market_region: _given, ...rest } = clean
+        /*
+         * WP477：岗位模板 / 职责再按内置目录核一遍——不在目录里的（用户自建、从名字算出来的 id）一律 `custom`，
+         * 不信工作台那一遍。
+         */
+        if (typeof rest.role_id === 'string')
+          rest.role_id = builtIn(rest.role_id, options.bundledRoleIds?.())
+        if (typeof rest.position_template === 'string')
+          rest.position_template = builtInPosition(rest.position_template)
         if (typeof clean.lang === 'string') lastLang = clean.lang
         events.push({
           event: item.event,
@@ -436,6 +546,7 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
         ...stored,
         ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
         ...(patch.notice_seen === undefined ? {} : { notice_seen: patch.notice_seen }),
+        ...(patch.lang === 'zh' || patch.lang === 'en' ? { lang: patch.lang } : {}),
       }
       save(options.dir, stored)
       // 关了：手上没发出去的也一起扔掉

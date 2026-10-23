@@ -9,7 +9,7 @@
  * 前端报错由 `client-errors.ts` 顺手记（只有错误类名）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { TELEMETRY_KEY } from '@/components/settings/telemetry-setting'
 import { getTelemetrySettings, putTelemetrySettings, type TelemetrySettings } from '@/lib/api'
@@ -17,11 +17,29 @@ import { useApp } from '@/lib/app-context'
 import { useAppVersion } from '@/lib/app-version'
 import { useMode } from '@/lib/mode'
 import { buttonIdOf } from '@/lib/telemetry/buttons'
-import { applyTelemetry, track } from '@/lib/telemetry/client'
+import {
+  applyTelemetry,
+  cardRoleOf,
+  onTelemetryContext,
+  type TelemetryPageContext,
+  telemetryContextFor,
+  track,
+} from '@/lib/telemetry/client'
 import { routeTemplate } from '@/lib/telemetry/routes'
 
 const isDesktop = (): boolean =>
   (globalThis.window as unknown as { agentsws?: unknown } | undefined)?.agentsws !== undefined
+
+/** WP477：这几种页面的访问要等页面报上岗位 / 职责再记。 */
+const CONTEXT_ROUTES: ReadonlySet<string> = new Set([
+  '/positions/:id',
+  '/positions/:assignment/duties/:role_id',
+  '/matters/:id',
+  '/cards/:id',
+])
+const CONTEXT_WAIT_MS = 3000
+/** 一页最多算这么多秒（挂着不动的不算进来太多）。 */
+const PAGE_SECONDS_MAX = 1800
 
 export function TelemetryRoot(): ReactNode {
   const { lang } = useApp()
@@ -49,16 +67,67 @@ export function TelemetryRoot(): ReactNode {
     track('app_opened')
   }, [])
 
+  /*
+   * WP477（决策 1600 / 1609）：本机服务自己不知道界面语言——它记的和这里不一样就告诉它一次
+   * （它据此给 GA4 那几件关键事带 `market_region`）。每种语言每次打开最多说一次，不会来回打。
+   */
+  const queryClient = useQueryClient()
+  const toldLang = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (view.data === undefined || view.data.lang === lang || toldLang.current === lang) return
+    toldLang.current = lang
+    void putTelemetrySettings({ lang })
+      .then((next) => {
+        queryClient.setQueryData(TELEMETRY_KEY, next)
+      })
+      .catch(() => undefined)
+  }, [view.data, lang, queryClient])
+
+  /*
+   * 页面访问：按具体地址记（WP477：换一个岗位也算一次，报的仍是路由模板）。岗位 / 职责 / 事项 / 卡片页先等页面把
+   * 「哪个内置岗位、哪条内置职责」报上来再记（最多等一会儿，等不到就不带）。
+   */
   const location = useLocation()
   const route = routeTemplate(location)
+  const path = location.pathname
   useEffect(() => {
-    track('$pageview', { route })
-  }, [route])
+    let done = false
+    let viewedAt = 0
+    let ctx: TelemetryPageContext = {}
+    const fire = (): void => {
+      if (done) return
+      done = true
+      viewedAt = Date.now()
+      ctx = telemetryContextFor(path)
+      track('$pageview', { route })
+    }
+    const waits = CONTEXT_ROUTES.has(route)
+    const timer = waits ? setTimeout(fire, CONTEXT_WAIT_MS) : undefined
+    const off = waits
+      ? onTelemetryContext((p) => {
+          if (p === path) fire()
+        })
+      : () => undefined
+    if (!waits) fire()
+    return () => {
+      if (timer !== undefined) clearTimeout(timer)
+      off()
+      // 还没等到就离开了：照样记一次（不带岗位 / 职责）
+      fire()
+      // WP477：这一页看了多久（岗位 / 职责是打开那一刻的；新一页的不串进来）
+      track('page_left', {
+        route,
+        position_template: ctx.position_template,
+        role_id: ctx.role_id,
+        seconds: Math.min(PAGE_SECONDS_MAX, Math.round((Date.now() - viewedAt) / 1000)),
+      })
+    }
+  }, [path, route])
 
   useEffect(() => {
     const onClick = (e: MouseEvent): void => {
       const button_id = buttonIdOf(e.target)
-      if (button_id !== undefined) track('ui_click', { button_id })
+      if (button_id !== undefined) track('ui_click', { button_id, ...cardRoleOf(e.target) })
     }
     document.addEventListener('click', onClick, true)
     return () => {

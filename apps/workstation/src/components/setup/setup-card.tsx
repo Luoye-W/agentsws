@@ -10,7 +10,8 @@ import {
   type SetupField,
   type SetupRequestPayload,
 } from '@agentsws/contracts'
-import { type FormEvent, type ReactNode, useId } from 'react'
+import { type FormEvent, type ReactNode, useId, useRef } from 'react'
+import { useCardFootActions } from '@/components/deck/card-foot'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -87,6 +88,20 @@ export function SetupFieldsBody({
   const text = useFieldText(payload.target)
   const prefix = useId()
   const fields = payload.fields.filter((f) => !isSecretLikeSetupKey(f.key, f.label))
+  const form = useRef<HTMLFormElement>(null)
+  // WP478：「保存并接着做」并进卡底那一排（没有卡底时照旧画在表单下面）
+  const hosted = useCardFootActions([
+    {
+      key: 'setup-save',
+      label: t('setup.plan.save'),
+      primary: true,
+      disabled: saving,
+      testId: 'setup-fields-save',
+      onSelect: () => {
+        form.current?.requestSubmit()
+      },
+    },
+  ])
   const submit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault()
     const form = e.currentTarget
@@ -100,7 +115,7 @@ export function SetupFieldsBody({
     onSave(values)
   }
   return (
-    <form className="flex flex-col gap-2.5" data-testid="setup-fields" onSubmit={submit}>
+    <form ref={form} className="flex flex-col gap-2.5" data-testid="setup-fields" onSubmit={submit}>
       {payload.why === '' ? null : <p className="text-sm leading-6 text-ws-body">{payload.why}</p>}
       {fields.map((raw) => {
         const id = `${prefix}-${raw.key}`
@@ -130,11 +145,16 @@ export function SetupFieldsBody({
           </div>
         )
       })}
-      <div>
-        <Button type="submit" size="sm" disabled={saving} data-testid="setup-fields-save">
-          {t('setup.plan.save')}
-        </Button>
-      </div>
+      {hosted ? (
+        // 卡底那颗按的是这个（回车照样能交）
+        <button type="submit" hidden aria-hidden tabIndex={-1} />
+      ) : (
+        <div>
+          <Button type="submit" size="sm" disabled={saving} data-testid="setup-fields-save">
+            {t('setup.plan.save')}
+          </Button>
+        </div>
+      )}
     </form>
   )
 }

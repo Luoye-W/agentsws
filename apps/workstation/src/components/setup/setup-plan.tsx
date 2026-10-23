@@ -2,8 +2,8 @@
  * WP348（决策 887）：配置卡的卡面是**方案**，不是表单。
  *
  * - 「我打算这样设」：一格一行——AI 定的值 + 一句理由（来源可点开：哪条档案、哪个网页、哪个已连的账号）；
- *   查不到 / 不该 AI 猜的格子标「需要你填」。底下「就这样」（直接存、接着做）「改一下」（才展开表单，预填方案值）；
- *   「先不设」在卡底那一排。
+ *   查不到 / 不该 AI 猜的格子标「需要你填」。底下「就这样」（直接存、接着做）「修改」（才展开表单，预填方案值）；
+ *   WP478：这两颗和「先不设 / 稍后」并成卡底一排。
  * - 「我打算改成这样」：只列要改的几格（现值 → 新值 + 理由），其余不动；人点头才生效。
  *
  * 表单本身沿用 {@link SetupFieldsBody}（WP324），不另造。
@@ -17,7 +17,7 @@ import {
 } from '@agentsws/contracts'
 import { ArrowRight, ExternalLink } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { type FootAction, FootButtons, useCardFootActions } from '@/components/deck/card-foot'
 import { useApp } from '@/lib/app-context'
 import { SetupFieldsBody, useFieldText } from './setup-card'
 
@@ -133,7 +133,7 @@ export function SetupPlanBody({
   saving: boolean
   /** 「就这样」：方案原样存（决定里不带值，服务端用方案值）。 */
   onAccept: () => void
-  /** 「改一下」后保存：人改过的值为准。 */
+  /** 「修改」后保存：人改过的值为准。 */
   onSave: (values: Record<string, string>) => void
 }): ReactNode {
   const { t } = useApp()
@@ -149,6 +149,42 @@ export function SetupPlanBody({
     failed ||
     fields.some((f) => f.required && (f.suggested === undefined || f.suggested.trim() === ''))
   const steps = payload.steps ?? []
+  /*
+   * WP478：「就这样 / 修改」（展开表单后是「收起」）并进卡底那一排，和「先不设 / 稍后」一排；
+   * 没有卡底时照旧画在卡身里。必填空着时「就这样」点不了、「修改」成主按钮。
+   */
+  const actions: FootAction[] = editing
+    ? [
+        {
+          key: 'setup-plan-fold',
+          label: t('setup.plan.fold'),
+          testId: 'setup-plan-fold',
+          onSelect: () => {
+            setEditing(false)
+          },
+        },
+      ]
+    : [
+        {
+          key: 'setup-plan-accept',
+          label: t('setup.plan.accept'),
+          primary: !blocked,
+          disabled: saving || blocked,
+          testId: 'setup-plan-accept',
+          onSelect: onAccept,
+        },
+        {
+          key: 'setup-plan-edit',
+          label: t('setup.plan.edit'),
+          primary: blocked,
+          disabled: saving,
+          testId: 'setup-plan-edit',
+          onSelect: () => {
+            setEditing(true)
+          },
+        },
+      ]
+  const hosted = useCardFootActions(actions)
   if (editing)
     return (
       <div
@@ -163,16 +199,7 @@ export function SetupPlanBody({
           </p>
         ) : null}
         <SetupFieldsBody payload={{ ...payload, why: '' }} saving={saving} onSave={onSave} />
-        <div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setEditing(false)}
-            data-testid="setup-plan-fold"
-          >
-            {t('setup.plan.fold')}
-          </Button>
-        </div>
+        {hosted ? null : <FootButtons actions={actions} />}
       </div>
     )
   return (
@@ -202,25 +229,7 @@ export function SetupPlanBody({
           </ul>
         </details>
       )}
-      <div className="flex items-center gap-2 pt-1">
-        <Button
-          size="sm"
-          disabled={saving || blocked}
-          onClick={onAccept}
-          data-testid="setup-plan-accept"
-        >
-          {t('setup.plan.accept')}
-        </Button>
-        <Button
-          size="sm"
-          variant={blocked ? 'default' : 'outline'}
-          disabled={saving}
-          onClick={() => setEditing(true)}
-          data-testid="setup-plan-edit"
-        >
-          {t('setup.plan.edit')}
-        </Button>
-      </div>
+      {hosted ? null : <FootButtons actions={actions} />}
     </div>
   )
 }

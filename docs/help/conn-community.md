@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 190
+description: Reddit 要注册应用并写对 User-Agent，Discord 要建 Bot 邀请进服务器，Telegram 找 @BotFather 建机器人并设成群管理员；没连也能整理规则、攒草稿和审批。
 positions: [social-media, pr]
 roles: [social.reddit, social.discord, social.telegram-group, pr.reddit, pr.forums]
 ---
 # 社群机器人：Reddit / Discord / Telegram
 
-这篇讲社群运营用的三个连接：Reddit 版块、Discord 服务器、Telegram 群。三家规矩差别很大，先看表。
+Reddit 版块、Discord 服务器、Telegram 群各用一个连接：Reddit 要注册应用、写对 User-Agent，Discord 要建 Bot 邀进服务器，Telegram 要找 @BotFather 建机器人并设成群管理员。三家规矩差别很大，先看表。
 
 | 连接 | 一句话 | 要准备什么 |
 |---|---|---|

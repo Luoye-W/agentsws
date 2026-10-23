@@ -88,7 +88,7 @@ describe('WP442 催促卡', () => {
     decide.mockClear()
   })
 
-  it('卡面：你哪天发的、上一封开头、草稿；「发出」「修改」在卡身里，底下那排只有「再等等」「不用跟了」', () => {
+  it('卡面：你哪天发的、上一封开头、草稿；「发出」「修改」和「不用跟了」「再等等」并成卡底一排（WP478）', () => {
     renderWithProviders(
       <DeckCardView card={nudgeCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
     )
@@ -107,7 +107,8 @@ describe('WP442 催促卡', () => {
     const labels = within(bar)
       .getAllByRole('button')
       .map((b) => b.textContent)
-    expect(labels).toEqual(['不用跟了', '再等等'])
+    // WP478：卡身里的「发出 / 修改」并进卡底这一排
+    expect(labels).toEqual(['发出', '修改', '不用跟了', '再等等'])
   })
 
   it('对方说过哪天答复、第二次提醒：灰字照实写', () => {

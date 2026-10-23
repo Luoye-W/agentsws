@@ -15,6 +15,8 @@ export interface ChangelogEntry {
   title: string
   summary: string
   html: string
+  /** 去掉元数据的正文（`/changelog.md` 纯文本版与软件、AI 用）。 */
+  body: string
 }
 
 const NAME = /^(\d{4}-\d{2}-\d{2})-([a-z0-9-]+)\.md$/u
@@ -31,7 +33,14 @@ export function parseEntry(id: string, text: string, lang: Lang): ChangelogEntry
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) throw new Error(`${id}：date 不是 YYYY-MM-DD`)
   if (!data.title) throw new Error(`${id}：缺 title`)
   const doc = renderDoc(body, { lang, helpSlugs: [] })
-  return { id, date, title: data.title, summary: data.summary ?? doc.summary, html: doc.html }
+  return {
+    id,
+    date,
+    title: data.title,
+    summary: data.summary ?? doc.summary,
+    html: doc.html,
+    body,
+  }
 }
 
 /** 全部条目，新的在前；同一天按文件名排。 */

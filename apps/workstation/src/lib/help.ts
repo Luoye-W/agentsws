@@ -5,217 +5,87 @@
  * 随工作台一起打包（`import.meta.glob`），**离线也能看**；每篇一个 chunk，没打开就不下载。
  * 卡片上的「看教程」= 在右栏「教程」面板里打开 `agentsws://help/<slug>`。
  */
+
+import BUNDLED from 'virtual:agentsws-help'
+import {
+  HELP_GROUPS,
+  HELP_SITE_URL,
+  HELP_SLUG_PATTERN,
+  type HelpCatalogEntry,
+  readHelpArticle,
+} from '@agentsws/contracts'
 import type { Lang } from '@/lib/i18n'
 
 /**
- * 这一轮写了的教程（顺序 = 右栏「教程」目录的顺序）。
+ * 教程上官网（私有 docs/113，Luoye 10-22 定）起：**目录、标题、摘要、分组、顺序、归哪些岗位 / 职责全写在文章自己头上**
+ * （`docs/help/<slug>.md` 开头的 `group` / `order` / `description` / `positions` / `roles`），
+ * 构建时由 `vite.config.ts` 的 `helpContent()` 读成 `virtual:agentsws-help`——这里不再手抄
+ * `HELP_SLUGS` / `HELP_SCOPES` / 标题词条。
  *
- * 加一篇：`docs/help/` 里放中英两份 md（WP208：中文那份开头写 `positions` / `roles`，都空 = 通用），
- * 这里加一个 slug、`HELP_SCOPES` 照抄一行，i18n 加 `help.<slug>.title`。
- */
-export const HELP_SLUGS = [
-  'agentsws-credits',
-  'model-deepseek',
-  'model-openai-compatible',
-  'model-bailian',
-  'model-openai',
-  'model-anthropic',
-  // WP274：Google 一张卡（带生图）
-  'model-google',
-  'browser',
-  'computer-use',
-  'search-data',
-  // WP157：连接页（每类连接一篇，能合并的合并）
-  'conn-shopify',
-  // WP216：建站平台的官方 CLI（只给 Shopify 品牌；卡在连接页与建站岗位页）
-  'shopify-cli',
-  'conn-email',
-  'conn-google',
-  'conn-meta',
-  'conn-tiktok',
-  'conn-x',
-  // WP191（docs/86 §4）：社媒运营的 LinkedIn 那条
-  'conn-linkedin',
-  'conn-community',
-  'conn-marketing-logistics',
-  'browser-extension',
-  // WP157：消息渠道与网站聊天窗
-  'im-channels',
-  // WP211：飞书 / 钉钉建应用
-  'im-feishu',
-  'im-dingtalk',
-  'chat-window',
-  // WP173：开发信的发信域名（怎么买、怎么配、体检看什么）
-  'b2b-sending-domain',
-  // WP184：切换 dsh 场景（官方场景开在哪、用户自己装的官方桌面端）
-  'dsh-scenes',
-  // WP207：对话与任务的归档与找回（左栏三级「+」、状态小点、自动归档、AI 找回）
-  'archive',
-  // WP218：桌面版安装（Windows SmartScreen / Mac 右键打开）与应用内一键更新
-  'install-update',
-  // WP323：发出记录，和用说话把它写进你自己的表格（通用，不为哪一家表格单写）
-  'sent-log',
-  // WP335：AI 回答监测（看板怎么读、一条回答、关注设置）
-  'ai-answer-tracking',
-  // WP343：我的助理（随便聊 + 问全局 + 交代事情 + 记忆 + 替我答同事）
-  'my-assistant',
-  // WP381：网站体检（AI 爬虫、不开 JS 看得到吗、商品信息对不对得上、ChatGPT 购物、AI 带来的访问与成交）
-  'site-health',
-  // WP390：工坊服务（推荐、价目单 / 需求单、托管与验收、订单面板）
-  'workshop-services',
-  // WP447：六个新平台的广告报表怎么导出（拖进对话就能看数和体检）
-  'ads-export',
-  // WP449：发布前质检（引用核查、给别的市场的版本、「好不好被 AI 引用」、对比页）
-  'content-quality',
-] as const
-
-export type HelpSlug = (typeof HELP_SLUGS)[number]
-
-/**
- * WP208（Luoye 09-30）：一篇教程归哪些岗位 / 职责。
+ * 右栏平时显示的是本机服务挑好的那份目录（`GET /v1/help/catalog`：官网拉回来的 + 随包的，见
+ * `components/help/use-help.ts`）；这里的随包目录是它没回来时的退路（演示、单测、服务还没起好）。
  *
- * **真源是文章自己的 frontmatter**（`docs/help/<slug>.md` 开头 `positions: [...]` / `roles: [...]`，
- * 中文那份上写；英文那份跟着中文走）。这里是它的镜像：右栏要在**不下载文章**的前提下按上下文排目录，
- * 而文章是各自一个 chunk、点开才下（WP156）。两份对不上时 `test/help-context.test.tsx` 会红——
- * 加一篇教程时在文章头上写好，再照抄到这里。两个都空 = 通用（谁都看得到）。
+ * 加一篇：`docs/help/` 里放中英两份 md，中文那份头上写好元数据（写法见 CONTRIBUTING「教程怎么写」）。
  */
-export interface HelpScope {
-  positions: readonly string[]
-  roles: readonly string[]
+export type HelpSlug = string
+
+/** 随包目录的一条（中英两种标题 / 摘要都在）。 */
+export type BundledHelp = (typeof BUNDLED)[number]
+
+const groupRank = (g: string | undefined): number => {
+  const i = HELP_GROUPS.indexOf(g as (typeof HELP_GROUPS)[number])
+  return i < 0 ? HELP_GROUPS.length : i
 }
 
-export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
-  'agentsws-credits': { positions: [], roles: [] },
-  'model-deepseek': { positions: [], roles: [] },
-  'model-openai-compatible': { positions: [], roles: [] },
-  'model-bailian': { positions: [], roles: [] },
-  'model-openai': { positions: [], roles: [] },
-  'model-anthropic': { positions: [], roles: [] },
-  'model-google': { positions: [], roles: [] },
-  browser: {
-    positions: ['kol-marketing'],
-    roles: ['kol.youtube', 'kol.instagram', 'kol.tiktok', 'kol.facebook', 'kol.x', 'amz.support'],
-  },
-  'computer-use': { positions: [], roles: [] },
-  'search-data': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.seo'] },
-  'shopify-cli': { positions: ['site'], roles: ['site.shopify-theme'] },
-  'conn-shopify': {
-    positions: ['dtc-ops', 'web-ops', 'customer-care', 'site'],
-    roles: [
-      'dtc.store',
-      'dtc.store-config',
-      'dtc.catalog',
-      'dtc.support',
-      'site.shopify-build',
-      'site.shopify-theme',
-      'site.shopify-apps',
-    ],
-  },
-  'conn-email': {
-    positions: ['customer-care', 'kol-marketing', 'b2b', 'pr'],
-    roles: ['dtc.support', 'b2b.sales', 'b2b.outbound', 'pr.press'],
-  },
-  'conn-google': {
-    positions: ['web-ops', 'dtc-ops', 'ads', 'pr'],
-    roles: [
-      'ads.google',
-      'kol.youtube',
-      'social.youtube',
-      'dtc.analytics',
-      'dtc.seo',
-      'pr.monitoring',
-    ],
-  },
-  'conn-meta': {
-    positions: ['ads', 'social-media', 'kol-marketing'],
-    roles: [
-      'ads.meta',
-      'kol.instagram',
-      'kol.facebook',
-      'social.facebook',
-      'social.instagram',
-      'social.threads',
-      'social.whatsapp',
-      'social.facebook-group',
-    ],
-  },
-  'conn-tiktok': {
-    positions: ['ads', 'social-media', 'kol-marketing'],
-    roles: ['ads.tiktok', 'social.tiktok', 'kol.tiktok'],
-  },
-  'conn-x': {
-    positions: ['ads', 'social-media', 'kol-marketing'],
-    roles: ['ads.x', 'social.x', 'kol.x'],
-  },
-  'conn-linkedin': { positions: ['social-media'], roles: ['social.linkedin'] },
-  'conn-community': {
-    positions: ['social-media', 'pr'],
-    roles: ['social.reddit', 'social.discord', 'social.telegram-group', 'pr.reddit', 'pr.forums'],
-  },
-  'conn-marketing-logistics': {
-    positions: ['dtc-ops', 'web-ops', 'customer-care', 'site'],
-    roles: ['dtc.email-marketing', 'dtc.fulfillment', 'site.shopify-email', 'dtc.support'],
-  },
-  'browser-extension': {
-    positions: ['kol-marketing'],
-    roles: ['kol.youtube', 'kol.instagram', 'kol.tiktok', 'kol.facebook', 'kol.x'],
-  },
-  'im-channels': { positions: [], roles: [] },
-  // WP211：飞书 / 钉钉建应用（团队渠道，谁都可能要看）
-  'im-feishu': { positions: [], roles: [] },
-  'im-dingtalk': { positions: [], roles: [] },
-  'chat-window': { positions: ['customer-care'], roles: ['dtc.live-chat'] },
-  'b2b-sending-domain': { positions: ['b2b'], roles: ['b2b.outbound'] },
-  'dsh-scenes': { positions: [], roles: [] },
-  // WP207：通用（谁都看得到）
-  archive: { positions: [], roles: [] },
-  // WP218：通用
-  'install-update': { positions: [], roles: [] },
-  // WP323：通用
-  'sent-log': { positions: [], roles: [] },
-  'ai-answer-tracking': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.seo'] },
-  // WP343：通用
-  'my-assistant': { positions: [], roles: [] },
-  'site-health': {
-    positions: ['web-ops', 'site', 'dtc-ops'],
-    // WP448：主题也看技术体检（模板里的标签与速度交到它那里）
-    roles: ['dtc.store', 'site.shopify-build', 'site.shopify-theme', 'dtc.seo'],
-  },
-  'workshop-services': { positions: [], roles: [] },
-  'content-quality': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content', 'dtc.seo'] },
-  'ads-export': {
-    positions: ['ads'],
-    roles: [
-      'ads.microsoft',
-      'ads.pinterest',
-      'ads.reddit',
-      'ads.linkedin',
-      'ads.snapchat',
-      'ads.apple',
-    ],
-  },
+/** 随包的全部教程，按分组、组内 `order` 排好。 */
+export const BUNDLED_HELP: readonly BundledHelp[] = [...BUNDLED].sort(
+  (a, b) =>
+    groupRank(a.group) - groupRank(b.group) ||
+    (a.order ?? 1e9) - (b.order ?? 1e9) ||
+    a.slug.localeCompare(b.slug),
+)
+
+/** 随包的全部 slug（顺序 = 目录顺序）。 */
+export const BUNDLED_HELP_SLUGS: readonly HelpSlug[] = BUNDLED_HELP.map((h) => h.slug)
+
+/** 随包目录 → 和本机服务回的同一种形状（退路用）。 */
+export function bundledHelpCatalog(lang: Lang): HelpCatalogEntry[] {
+  return BUNDLED_HELP.map((h) => {
+    const entry: HelpCatalogEntry = {
+      kind: 'guide',
+      slug: h.slug,
+      lang,
+      title: h.title[lang],
+      description: h.description[lang],
+      positions: [...h.positions],
+      roles: [...h.roles],
+      source: 'bundled',
+      needs_newer_app: false,
+    }
+    if (h.group !== undefined) entry.group = h.group
+    if (h.order !== undefined) entry.order = h.order
+    if (h.requires !== undefined) entry.requires = h.requires
+    if (h.aliases !== undefined) entry.aliases = [...h.aliases]
+    return entry
+  })
 }
 
-/**
- * 文章开头那段 `---` 包着的元数据拿掉，并读出 `positions` / `roles`。
- *
- * 只认最简的写法（`key: [a, b]` 一行一个），与站点那边 `splitFrontmatter` 同一种。
- * 没有 frontmatter 的（英文那份）原样回，元数据两个空。
- */
-export function splitHelpFrontmatter(text: string): { meta: HelpScope; body: string } {
-  const m = /^---\n([\s\S]*?)\n---\n?/u.exec(text)
-  if (m === null) return { meta: { positions: [], roles: [] }, body: text }
-  const list = (key: string): string[] => {
-    const line = new RegExp(`^${key}:\\s*\\[(.*)\\]\\s*$`, 'mu').exec(m[1] ?? '')
-    return (line?.[1] ?? '')
-      .split(',')
-      .map((x) => x.trim().replace(/^['"]|['"]$/gu, ''))
-      .filter((x) => x !== '')
-  }
-  return {
-    meta: { positions: list('positions'), roles: list('roles') },
-    body: text.slice(m[0].length),
-  }
+/** 随包里有没有这一篇（卡片上「看教程」那几处用它判断要不要出链接）。 */
+export function isBundledHelp(slug: string): boolean {
+  return BUNDLED_HELP_SLUGS.includes(slug)
+}
+
+/** 一篇的标题（先看给的目录，再看随包的，都没有回 slug 本身）。 */
+export function helpTitle(
+  slug: HelpSlug,
+  lang: Lang,
+  items: readonly HelpCatalogEntry[] = [],
+): string {
+  return (
+    items.find((i) => i.slug === slug)?.title ??
+    BUNDLED_HELP.find((h) => h.slug === slug)?.title[lang] ??
+    slug
+  )
 }
 
 /**
@@ -225,10 +95,16 @@ export function splitHelpFrontmatter(text: string): { meta: HelpScope; body: str
  * - 在岗位上：这个岗位的 + 通用；
  * - 哪儿都不在：只有通用。
  *
- * 一篇只出现一次（在最具体的那一组里）；组内照 `HELP_SLUGS` 的顺序。其余的（别的岗位的）
- * 不在这里——搜索与「全部 N 篇」仍然看得到全部。
+ * 一篇只出现一次（在最具体的那一组里）；组内照目录的顺序。其余的（别的岗位的）
+ * 不在这里——搜索与「全部 N 篇」仍然看得到全部。只排教程（笔记、更新日志不进右栏）。
  */
-export function helpForContext(ctx: { role_id?: string; position_id?: string }): {
+export function helpForContext(
+  ctx: { role_id?: string; position_id?: string },
+  items: readonly Pick<
+    HelpCatalogEntry,
+    'slug' | 'kind' | 'positions' | 'roles'
+  >[] = bundledHelpCatalog('zh'),
+): {
   role: HelpSlug[]
   position: HelpSlug[]
   general: HelpSlug[]
@@ -236,18 +112,49 @@ export function helpForContext(ctx: { role_id?: string; position_id?: string }):
   const role: HelpSlug[] = []
   const position: HelpSlug[] = []
   const general: HelpSlug[] = []
-  for (const slug of HELP_SLUGS) {
-    const scope = HELP_SCOPES[slug]
-    if (ctx.role_id !== undefined && scope.roles.includes(ctx.role_id)) role.push(slug)
-    else if (ctx.position_id !== undefined && scope.positions.includes(ctx.position_id))
-      position.push(slug)
-    else if (scope.positions.length === 0 && scope.roles.length === 0) general.push(slug)
+  for (const item of items) {
+    if (item.kind !== 'guide') continue
+    if (ctx.role_id !== undefined && item.roles.includes(ctx.role_id)) role.push(item.slug)
+    else if (ctx.position_id !== undefined && item.positions.includes(ctx.position_id))
+      position.push(item.slug)
+    else if (item.positions.length === 0 && item.roles.length === 0) general.push(item.slug)
   }
   return { role, position, general }
 }
 
+/** 搜索：标题、摘要、slug 里有没有这几个字（只搜教程）；标题 / slug 里有的排前面。 */
+export function searchHelp(items: readonly HelpCatalogEntry[], query: string): HelpSlug[] {
+  const q = query.trim().toLowerCase()
+  if (q === '') return []
+  const guides = items.filter((i) => i.kind === 'guide')
+  const strong = guides.filter((i) => `${i.title} ${i.slug}`.toLowerCase().includes(q))
+  const weak = guides.filter((i) => !strong.includes(i) && i.description.toLowerCase().includes(q))
+  return [...strong, ...weak].map((i) => i.slug)
+}
+
+/** 本机服务目录里见过的（官网新加、随包里没有的）——正文里的 `help:` 互链也认它们。 */
+const seenOnline = new Set<string>()
+
+export function rememberHelpSlugs(slugs: readonly string[]): void {
+  for (const s of slugs) seenOnline.add(s)
+}
+
+/** 正文里的 `help:<slug>` 能不能做成链接：随包里有，或本机服务的目录里见过。 */
+export function isKnownHelp(slug: string): boolean {
+  return isBundledHelp(slug) || seenOnline.has(slug)
+}
+
+/**
+ * 写法像不像一篇教程的名字（`help:<slug>` 链接与 `agentsws://help/<slug>` 地址用它）。
+ * 官网新加的、随包里没有的也算——面板打开时由本机服务去取，真没有就照实说「还没写」。
+ */
 export function isHelpSlug(value: string): value is HelpSlug {
-  return (HELP_SLUGS as readonly string[]).includes(value)
+  return HELP_SLUG_PATTERN.test(value)
+}
+
+/** 官网上那一篇（中文在根下、英文加 `/en`；与官网 `docHref` 同一套网址）。 */
+export function helpSiteUrl(slug: HelpSlug, lang: Lang): string {
+  return `${HELP_SITE_URL}${lang === 'en' ? '/en' : ''}/docs/${slug}/`
 }
 
 /** 右栏认的资源地址（`registry.ts` 的 `matches` 用 `agentsws://help/*`）。 */
@@ -381,7 +288,7 @@ function loaderFor(slug: HelpSlug, lang: Lang): (() => Promise<string>) | undefi
 export async function loadHelpArticle(slug: HelpSlug, lang: Lang): Promise<string | undefined> {
   const load = loaderFor(slug, lang)
   // WP208：开头的元数据（归哪些岗位 / 职责）不是正文，不上页面
-  return load === undefined ? undefined : splitHelpFrontmatter(await load()).body
+  return load === undefined ? undefined : readHelpArticle(await load()).body
 }
 
 /** 只给测试用：打包进来的文章文件名（不带目录）。 */

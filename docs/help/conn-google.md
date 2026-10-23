@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 140
+description: Gmail、GA4、Search Console 和 Google Ads 用你自己的 Google Cloud 项目授权，YouTube 只要一把 API key；Google Alerts 免费不用申请，投递选 RSS 把链接贴回来就行。
 positions: [web-ops, dtc-ops, ads, pr]
 roles: [ads.google, kol.youtube, social.youtube, dtc.analytics, dtc.seo, pr.monitoring]
 ---
 # Google 家的几个连接
 
-这篇讲 Google 的六个连接各管什么、怎么接。前四个要用你自己的 Google Cloud 项目，最后一个 Google Alerts 什么都不用申请。
+Google 有六个连接：Gmail、GA4、Search Console 和 Google Ads 走你自己 Google Cloud 项目的授权，YouTube 只要一把 API key，最后一个 Google Alerts 免费、什么都不用申请。
 
 | 连接 | 一句话 | 要不要审核 / 花不花钱 |
 |---|---|---|

@@ -21,6 +21,7 @@ import { PageError } from '@/components/page-error'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ApiClientError, assignmentId, decide, getApproval, getPositions } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useTelemetryContext } from '@/lib/telemetry/context'
 import { matterUrl } from '@/lib/work'
 
 export function CardPage(): ReactNode {
@@ -39,6 +40,8 @@ export function CardPage(): ReactNode {
   })
   // 卡挂在哪条职责上：本人在那条职责上的分配就是这张卡的岗位（决定时带它）
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  // WP477：这张卡挂在哪条职责上
+  useTelemetryContext(item.data === undefined ? undefined : { role_id: item.data.role_id })
 
   const decision = useMutation({
     mutationFn: (input: { card: DeckCard; request: DeckDecideRequest }) =>

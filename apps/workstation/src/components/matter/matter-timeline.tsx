@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
+import { FootButton, useCardFootHost } from '@/components/deck/card-foot'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { focusEvidenceCard } from '@/components/deck/deck-focus'
 import { EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
@@ -1081,31 +1082,7 @@ export function InlineCard({
   if (isSetupCard(card))
     return (
       <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
-        <div className="ws-dcard max-w-[520px]" data-testid="matter-setup-card" data-card={card.id}>
-          <div className="ws-dcard-head">
-            <Plug aria-hidden className="size-3.5" />
-            {t(setupHeadKey(card))}
-          </div>
-          <div className="ws-dcard-body">
-            <p className="ws-dcard-title">{card.title}</p>
-            <SetupDeckBody card={card} />
-          </div>
-          {card.available_actions.includes('reject') ? (
-            <div className="ws-dcard-foot">
-              <Button
-                size="sm"
-                variant="secondary"
-                data-testid="matter-card-reject"
-                disabled={deciding}
-                onClick={() => {
-                  onDecide(card, 'reject')
-                }}
-              >
-                {deckActionLabel(card, 'reject', t)}
-              </Button>
-            </div>
-          ) : null}
-        </div>
+        <MatterSetupCard card={card} onDecide={onDecide} deciding={deciding} />
       </AiShell>
     )
   // WP418（审计 A3 / U7）：选主题卡在事项里也画成富卡（高级主题排第一、不能买也灰着列出原因），不是一排平铺按钮
@@ -1124,6 +1101,56 @@ export function InlineCard({
     <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
       <MatterDecisionCard card={card} onDecide={onDecide} deciding={deciding} />
     </AiShell>
+  )
+}
+
+/**
+ * 事项里的连接卡 / 配置卡（WP324）。WP478：卡身里的「就这样 / 修改」「保存并接着做」报到卡底，
+ * 和「先不设」并成一排（与岗位卡片流同一个规矩）。
+ */
+function MatterSetupCard({
+  card,
+  onDecide,
+  deciding,
+}: {
+  card: DeckCard
+  onDecide: (card: DeckCard, action: Exclude<DeckAction, 'open'>, option?: string) => void
+  deciding: boolean
+}): ReactNode {
+  const { t } = useApp()
+  const foot = useCardFootHost()
+  const reject = card.available_actions.includes('reject')
+  return (
+    <div className="ws-dcard max-w-[520px]" data-testid="matter-setup-card" data-card={card.id}>
+      <div className="ws-dcard-head">
+        <Plug aria-hidden className="size-3.5" />
+        {t(setupHeadKey(card))}
+      </div>
+      <div className="ws-dcard-body">
+        <p className="ws-dcard-title">{card.title}</p>
+        {foot.wrap(<SetupDeckBody card={card} />)}
+      </div>
+      {foot.lead.length === 0 && !reject ? null : (
+        <div className="ws-dcard-foot">
+          {foot.lead.map((a) => (
+            <FootButton key={a.key} action={a} />
+          ))}
+          {reject ? (
+            <button
+              type="button"
+              className="ws-btn ws-btn-secondary"
+              data-testid="matter-card-reject"
+              disabled={deciding}
+              onClick={() => {
+                onDecide(card, 'reject')
+              }}
+            >
+              {deckActionLabel(card, 'reject', t)}
+            </button>
+          ) : null}
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -513,6 +513,7 @@ export {
   type PersonUsageView,
 } from './routes/handoff.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
+export { type HelpPort, helpRoutes } from './routes/help.js'
 export { inboxRoutes } from './routes/inbox.js'
 export {
   type JoinActor,
@@ -574,6 +575,10 @@ export type {
   DiscoverModelsInput,
   ModelAiSourceView,
   ModelDefaultsView,
+  ModelEnableModelView,
+  ModelEnableNotice,
+  ModelEnableSourceView,
+  ModelEnableView,
   ModelImageUsing,
   ModelImageView,
   ModelListing,
@@ -592,6 +597,7 @@ export type {
   ModelVisionStatus,
   SaveModelProviderInput,
   SetModelDefaultsInput,
+  SetModelEnableInput,
   SetModelImageInput,
   SubscriptionLoginInput,
   SubscriptionLoginMethodName,

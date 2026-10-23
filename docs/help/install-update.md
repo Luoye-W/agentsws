@@ -1,4 +1,7 @@
 ---
+group: tools
+order: 290
+description: 到 agentsws.com/download 下载 Windows 或 M 系列 Mac 安装包；装好后自动检查新版本，Windows 点「重启并更新」一键更新，Mac 暂时下载新 .dmg 覆盖，数据都保留。
 positions: []
 roles: []
 ---

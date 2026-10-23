@@ -30,9 +30,16 @@ describe('只有公开页面', () => {
     expect(routes).toEqual(
       [
         '404.astro',
+        '[...locale]/blog/[slug].astro',
+        '[...locale]/blog/[slug].md.ts',
+        '[...locale]/blog/index.astro',
         '[...locale]/changelog.astro',
+        '[...locale]/changelog.md.ts',
         '[...locale]/docs/[slug].astro',
+        '[...locale]/docs/[slug].md.ts',
         '[...locale]/docs/index.astro',
+        '[...locale]/docs/roles/[role].astro',
+        '[...locale]/llms-full.txt.ts',
         '[...locale]/download.astro',
         '[...locale]/index.astro',
         '[...locale]/pricing.astro',
@@ -41,6 +48,8 @@ describe('只有公开页面', () => {
         '[...locale]/roles.astro',
         '[...locale]/terms.astro',
         'favicon.svg.ts',
+        'help/index.json.ts',
+        'llms.txt.ts',
         'robots.txt.ts',
         'sitemap.xml.ts',
       ].sort(),
@@ -50,9 +59,10 @@ describe('只有公开页面', () => {
   it('没有表单、输入框、密码框、Cookie 读写', () => {
     for (const f of code) {
       const text = readFileSync(f, 'utf8')
-      expect(text, f).not.toMatch(
-        /<form\b|<input\b|<textarea\b|type=["']password|document\.cookie/iu,
-      )
+      expect(text, f).not.toMatch(/<form\b|<input\b|<textarea\b|type=["']password/iu)
+      // WP477：唯一碰 Cookie 的是统计脚本——只在访客改成「不允许」时让 GA 的 `_ga*` 过期
+      if (f.endsWith(join('scripts', 'analytics.ts'))) continue
+      expect(text, f).not.toMatch(/document\.cookie/iu)
     }
   })
 

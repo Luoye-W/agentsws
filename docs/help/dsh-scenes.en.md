@@ -1,3 +1,6 @@
+---
+description: Click your name at the bottom left → Scenes, pick one and click Open. The full DeepSeek Harness ships with the installer, so other scenes need no extra install.
+---
 # Switching scenes
 
 Agents Workshop focuses on cross-border e-commerce and marketing. It is **one** scene inside DeepSeek Harness (dsh). To code, write, or do anything else, switch to another dsh scene — the installer already ships the full dsh, so **there is nothing else to install**.

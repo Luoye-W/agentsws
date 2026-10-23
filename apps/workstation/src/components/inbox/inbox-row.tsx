@@ -183,6 +183,8 @@ export function InboxRow({
       tabIndex={0}
       data-testid="inbox-row"
       data-id={item.id}
+      // WP477：这一行的卡挂在哪条职责上（使用数据按职责看；本机服务把非内置的记成 custom）
+      data-track-role={item.card?.role_id}
       data-type={item.type}
       data-urgency={item.urgency}
       data-selected={selected === true ? 'true' : undefined}

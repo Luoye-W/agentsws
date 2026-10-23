@@ -122,7 +122,7 @@ function pickSpecs(request: DesignRequest, questions: string[]): DesignSpec[] {
     questions.push('这条职责还没有规格表，尺寸得你来定。')
     return []
   }
-  questions.push(`需求单没写尺寸，先按「${fallback.zh}」来——不对的话在卡上改一下。`)
+  questions.push(`需求单没写尺寸，先按「${fallback.zh}」来——不对的话在卡上点「修改」。`)
   return [fallback]
 }
 

@@ -3,7 +3,12 @@
  * 已记录 / 没发出去 · 再填一次）、交给你发的社媒帖子。
  * WP445（决策 1322）：「发出去」卡不再在这里单出一块——它们和批过的那几条一起在上面「等你发」里（`panel-desk.tsx`）。
  */
-import type { PanelPost, PanelStage, PanelWrite } from '@agentsws/browser-action'
+import {
+  PANEL_DRAFT_MAX,
+  type PanelPost,
+  type PanelStage,
+  type PanelWrite,
+} from '@agentsws/browser-action'
 import { useState } from 'react'
 import { stageTone, writeLine, writeTone } from '@/lib/panel/format'
 import { SentBox } from './panel-desk'
@@ -12,7 +17,8 @@ import { PanelPosts, type PostActions } from './panel-posts'
 import { StageLine } from './panel-progress'
 
 export interface CardActions {
-  refill(job: string): Promise<string | undefined>
+  /** WP478：给了 `text` = 「修改」过，按改过的字再填。 */
+  refill(job: string, text?: string): Promise<string | undefined>
   /** WP467：「我发了，帮我记一下」（贴链接 / 认最近一条）。 */
   sent?(job: string, how: 'link' | 'latest', link?: string): Promise<string | undefined>
 }
@@ -58,6 +64,16 @@ export function WriteRow(props: {
     props.canAct &&
     props.actions.sent !== undefined
   const canRefill = w.state === 'failed' && w.can_refill === true && props.canAct
+  /** WP478：没发出去的那一条就地改字再填（和岗位页同一个规矩）；`undefined` = 没在改。 */
+  const [edit, setEdit] = useState<string | undefined>(undefined)
+  const refill = (text?: string): void => {
+    setBusy(true)
+    void props.actions.refill(w.job_id, text).then((m) => {
+      setMsg(m)
+      setBusy(false)
+      if (m === undefined) setEdit(undefined)
+    })
+  }
   return (
     <li className={`ws-write ws-write--${tone}`} data-testid="ws-write" data-state={w.state}>
       <div className="ws-write-top">
@@ -81,22 +97,29 @@ export function WriteRow(props: {
       {msg === undefined ? null : <small className="ws-bad-text">{msg}</small>}
       {canCopy || canSent || canRefill ? (
         <div className="ws-write-acts">
-          {canRefill ? (
-            <button
-              type="button"
-              className="ws-btn ws-btn--sm"
-              disabled={busy}
-              data-testid="ws-refill"
-              onClick={() => {
-                setBusy(true)
-                void props.actions.refill(w.job_id).then((m) => {
-                  setMsg(m)
-                  setBusy(false)
-                })
-              }}
-            >
-              再填一次
-            </button>
+          {canRefill && edit === undefined ? (
+            <>
+              <button
+                type="button"
+                className="ws-btn ws-btn--sm"
+                disabled={busy}
+                data-testid="ws-refill"
+                onClick={() => refill()}
+              >
+                再填一次
+              </button>
+              {w.text === undefined ? null : (
+                <button
+                  type="button"
+                  className="ws-btn ws-btn--sm"
+                  disabled={busy}
+                  data-testid="ws-refill-edit"
+                  onClick={() => setEdit(w.text ?? '')}
+                >
+                  修改
+                </button>
+              )}
+            </>
           ) : null}
           {canCopy ? (
             <button
@@ -118,6 +141,39 @@ export function WriteRow(props: {
               }
             />
           ) : null}
+        </div>
+      ) : null}
+      {canRefill && edit !== undefined ? (
+        <div className="ws-write-edit" data-testid="ws-refill-editor">
+          <textarea
+            className="ws-input ws-draft"
+            data-testid="ws-refill-text"
+            value={edit}
+            maxLength={PANEL_DRAFT_MAX}
+            aria-label="草稿"
+            rows={5}
+            onChange={(e) => setEdit(e.target.value)}
+          />
+          <div className="ws-write-acts">
+            <button
+              type="button"
+              className="ws-btn ws-btn--sm ws-btn--primary"
+              disabled={busy || edit.trim() === ''}
+              data-testid="ws-refill-save"
+              onClick={() => refill(edit)}
+            >
+              改好了，再填一次
+            </button>
+            <button
+              type="button"
+              className="ws-btn ws-btn--sm"
+              disabled={busy}
+              data-testid="ws-refill-cancel"
+              onClick={() => setEdit(undefined)}
+            >
+              取消
+            </button>
+          </div>
         </div>
       ) : null}
     </li>

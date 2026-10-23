@@ -1,0 +1,84 @@
+---
+/**
+ * WP477（决策 1609 / 1611 选 A）：官网统计——Google Analytics 4 + Consent Mode v2 + 底部一条小横幅。
+ *
+ * - 所有访客都先是「不存 Cookie」：`analytics_storage` / `ad_*` 一律 denied，GA 只做不存 Cookie 的粗计数；
+ * - 点「允许统计」才把 `analytics_storage` 改成 granted（广告类永远不开）；选择存在本机（localStorage），
+ *   页脚「统计设置」与隐私政策里的链接（`#consent`）能随时改主意；
+ * - 只在正式域名上加载 gtag（`GA4_HOSTS`），本机预览一个统计请求都不发；
+ * - 下载按钮、注册入口的点击报成固定事件名（`download_click`、`signup_click`），给「官网 → 下载」那段漏斗。
+ *
+ * 逻辑在 `../scripts/analytics.ts`；这里只放横幅（默认藏着，脚本认出「还没选过」才露出来）。
+ */
+import { GA4_HOSTS, GA4_MEASUREMENT_ID } from '../config.js'
+import { type Lang, localePath } from '../i18n/common.js'
+import { CONSENT } from '../i18n/consent.js'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = CONSENT[lang]
+---
+<div class="consent" data-consent data-ga-id={GA4_MEASUREMENT_ID} data-ga-hosts={GA4_HOSTS.join(',')} role="region" aria-label={t.label} hidden>
+  <p class="consent-text">{t.text} <a href={localePath('/privacy/', lang)}>{t.policy}</a></p>
+  <div class="consent-btns">
+    <button type="button" class="btn btn-ghost btn-sm" data-consent-choice="denied">{t.deny}</button>
+    <button type="button" class="btn btn-primary btn-sm" data-consent-choice="granted">{t.allow}</button>
+  </div>
+</div>
+<script>
+  import '../scripts/analytics.ts'
+</script>
+<style>
+  .consent {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    z-index: 60;
+    width: min(720px, calc(100vw - 32px));
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 12px 12px 18px;
+    border-radius: 14px;
+    background: var(--card);
+    color: var(--ink);
+    box-shadow:
+      var(--shadow),
+      inset 0 0 0 1px var(--line);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .consent[hidden] {
+    display: none;
+  }
+  .consent-text {
+    flex: 1;
+    margin: 0;
+    color: var(--muted);
+  }
+  .consent-text a {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .consent-btns {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  @media (max-width: 600px) {
+    .consent {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      padding: 14px;
+    }
+    .consent-btns .btn {
+      flex: 1;
+      justify-content: center;
+    }
+  }
+</style>

@@ -27,6 +27,7 @@ import {
   ContentConflictDialog,
   ContentDiffDialog,
 } from '@/components/content-updates/content-diff-dialog'
+import { useCardFootHost } from '@/components/deck/card-foot'
 import { DeckActionBar } from '@/components/deck/deck-action-bar'
 import { DeckCardBody } from '@/components/deck/deck-card-body'
 import { focusEvidenceCard } from '@/components/deck/deck-focus'
@@ -267,6 +268,8 @@ export function DeckCardView({
   const [option, setOption] = useState<string>('')
   /** WP278：「我要退出」点了，先问一句（框里列出会断开的个人连接）。 */
   const [leaving, setLeaving] = useState(false)
+  /** WP478：卡身里的按钮（方案卡「就这样 / 修改」……）报上来，和卡底那排并成一排。 */
+  const foot = useCardFootHost()
   const session = useQuery({
     queryKey: ['session'],
     queryFn: ensureSession,
@@ -375,6 +378,8 @@ export function DeckCardView({
     <div
       data-testid="deck-card"
       data-kind={card.kind}
+      // WP477：这张卡挂在哪条职责上（使用数据按职责看卡的通过 / 驳回；本机服务把非内置的记成 custom）
+      data-track-role={card.role_id}
       data-go-messages={goMessages ? 'true' : undefined}
       data-layout={card.layout}
       data-band={card.priority_band}
@@ -498,15 +503,17 @@ export function DeckCardView({
         )}
 
         {/* ③ 主体 —— WP96：按 card.layout 换十一种排版，见 deck-card-body.tsx */}
-        <DeckCardBody
-          card={card}
-          mode={mode}
-          option={option}
-          onOption={setOption}
-          onOpen={() => {
-            onOpen(card)
-          }}
-        />
+        {foot.wrap(
+          <DeckCardBody
+            card={card}
+            mode={mode}
+            option={option}
+            onOption={setOption}
+            onOpen={() => {
+              onOpen(card)
+            }}
+          />,
+        )}
 
         {/*
           ③ 外围芯片 —— WP98 收口：**最多三个**，只留与这次决定直接相关的
@@ -605,6 +612,7 @@ export function DeckCardView({
               disabled={busy === true}
               optionMissing={isQuestion && option === ''}
               onAction={act}
+              lead={foot.lead}
               {...(keys === undefined ? {} : { keys: deckKeys(card, t).map((k) => k.action) })}
               {...(isContentCard
                 ? {

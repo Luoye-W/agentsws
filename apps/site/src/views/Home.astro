@@ -27,6 +27,7 @@ import { ROLES } from '../i18n/roles.js'
 import Base from '../layouts/Base.astro'
 import { loadChangelog } from '../lib/changelog.js'
 import { emph, linkNames } from '../lib/locales.js'
+import { homeLd } from '../lib/schema.js'
 import '../styles/home.css'
 
 interface Props {
@@ -41,14 +42,18 @@ const tourShots: Record<string, { light: ImageMetadata; dark?: ImageMetadata; ba
   inbox: { light: inboxLight, dark: inboxDark, bar: t.tour.slides[0]?.tab ?? '' },
   calendar: { light: calendarLight, bar: t.tour.slides[1]?.tab ?? '' },
   role: { light: roleSupport, bar: roles[0]?.name ?? '' },
-  answer: { light: answerLight, dark: answerDark, bar: roles.find((r) => r.id === 'store')?.name ?? '' },
+  answer: {
+    light: answerLight,
+    dark: answerDark,
+    bar: roles.find((r) => r.id === 'store')?.name ?? '',
+  },
   home: { light: homeShot, dark: darkShot, bar: t.hero.frameBar },
 }
 const guideHref = (slug: string) => p(`/docs/${slug}/`)
 const logs = loadChangelog(lang).slice(0, 6)
 const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
 ---
-<Base lang={lang} path="/" title={t.meta.title} description={t.meta.description} og="home" announce>
+<Base lang={lang} path="/" title={t.meta.title} description={t.meta.description} og="home" announce jsonLd={homeLd(lang, t.meta.description)}>
   <section class="hero">
     <div class="wrap">
       <div>

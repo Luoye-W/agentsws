@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { LEGAL_EFFECTIVE_DATE } from '../src/config.js'
 import { PRICING } from '../src/i18n/pricing.js'
 import { CHANGELOG_DIR, changelogIds, loadChangelog } from '../src/lib/changelog.js'
-import { HELP_DIR, helpFile, helpSlugs, loadHelp, parseHelpSlugs } from '../src/lib/help.js'
+import { HELP_DIR, helpFile, helpSlugs, loadHelp, RESERVED_HELP_SLUGS } from '../src/lib/help.js'
 import { fillPlaceholders, LEGAL_PAGES, legalSource, loadLegal } from '../src/lib/legal.js'
 import { stripSourceComments } from '../src/lib/markdown.js'
 import { repoRoot } from '../src/lib/paths.js'
@@ -17,12 +17,36 @@ const root = repoRoot()
 describe('文档区 = docs/help 原文', () => {
   const slugs = helpSlugs(root)
 
-  it('目录顺序取自工作台 HELP_SLUGS（注释里的字不算）', () => {
-    expect(
-      parseHelpSlugs("export const HELP_SLUGS = [\n  'a',\n  // 'x' 注释\n  'b-c',\n] as const"),
-    ).toEqual(['a', 'b-c'])
+  it('目录顺序取自文章头上的 group / order；第一篇是「先看这篇」', () => {
     expect(slugs.length).toBeGreaterThanOrEqual(20)
     expect(slugs[0]).toBe('agentsws-credits')
+    const docs = slugs.map((s) => loadHelp(s, 'zh', root))
+    const rank = (g: string) => ['start', 'models', 'connect', 'channels', 'tools'].indexOf(g)
+    for (let i = 1; i < docs.length; i += 1) {
+      const a = docs[i - 1]
+      const b = docs[i]
+      if (a === undefined || b === undefined) continue
+      expect(rank(a.group) <= rank(b.group), `${a.slug} → ${b.slug}`).toBe(true)
+    }
+  })
+
+  it('每篇头上都写了 group、order，中英都写了一行 description（先给答案，不是「这篇讲…」）', () => {
+    for (const s of slugs) {
+      const zh = readFileSync(helpFile(s, 'zh', root), 'utf8')
+      expect(zh, s).toMatch(/^---\n(?:[\s\S]*\n)?group: (start|models|connect|channels|tools)\n/u)
+      expect(zh, s).toMatch(/\norder: \d+\n/u)
+      for (const lang of ['zh', 'en'] as const) {
+        const doc = loadHelp(s, lang, root)
+        expect(doc.description, `${s} ${lang}`).not.toBe('')
+        expect(doc.description, `${s} ${lang}`).not.toMatch(
+          /^(这篇讲|本文|How to |This (guide|page|article) )/u,
+        )
+      }
+    }
+  })
+
+  it('教程不能叫官网自己占用的名字', () => {
+    for (const r of RESERVED_HELP_SLUGS) expect(slugs).not.toContain(r)
   })
 
   it('每一篇都有中英两份，docs/help 里也没有目录漏掉的', () => {
@@ -136,7 +160,8 @@ describe('条款三页', () => {
     expect(privacy).toContain('默认留在你自己的电脑上')
     for (const who of ['Cloudflare', 'Waffo', '模型提供方', '数据接口提供方'])
       expect(privacy).toContain(who)
-    expect(privacy).toContain('不设任何 Cookie')
+    // WP477（决策 1611）：官网接了 GA——同意前不存 Cookie
+    expect(privacy).toContain('不存任何 Cookie')
     expect(refund).toContain('拒付')
     expect(refund).toContain('不向你追讨')
   })

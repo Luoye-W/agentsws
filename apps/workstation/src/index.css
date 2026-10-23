@@ -1028,6 +1028,24 @@
     font-size: 12px;
     color: var(--ws-faint);
   }
+  /* WP478：卡底按钮要一排——卡窄了（手机、收件箱第三栏）先把快捷键灰字收掉，按钮和「→」留在一行 */
+  .ws-dcard-foot {
+    container-type: inline-size;
+  }
+  @container (max-width: 520px) {
+    .ws-dcard-keys {
+      display: none;
+    }
+  }
+  /* 再窄（手机竖屏）：按钮收紧一点，主 + 三颗次按钮 + 「→」还排得下一行 */
+  @container (max-width: 340px) {
+    .ws-dcard-foot .ws-btn {
+      padding: 0 8px;
+    }
+    .ws-dcard-foot [data-testid="deck-action-bar"] {
+      gap: 6px;
+    }
+  }
   /* 对比块：现在 / 改成 */
   .ws-cmp {
     display: grid;

@@ -55,8 +55,8 @@ const QUIET: readonly DeckVerb[] = ['instruct', 'reject', 'snooze']
  *
  * | 排版 | 主 | 次 |
  * |---|---|---|
- * | `outbound` | 发送 | 改一下 / 不发 |
- * | `change` | 批准 | 改一下 / 驳回 |
+ * | `outbound` | 发送 | 修改 / 不发 |
+ * | `change` | 批准 | 修改 / 驳回 |
  * | `publish` | 批准发布 | 改时间 / 驳回 |
  * | `money` | 批准退款（按 kind 换：批准补发 / 批准发码 / 批准合作） | 改金额 / 驳回 |
  * | `choice` | 就这条 | 都不是 |

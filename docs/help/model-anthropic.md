@@ -1,4 +1,7 @@
 ---
+group: models
+order: 60
+description: 两条路：用已在付的 Claude Pro / Max 订阅在浏览器登录（仅个人版），或在 console.anthropic.com 建 API key 按量付费；已付 Claude 订阅就不用再买 API 额度。
 positions: []
 roles: []
 ---

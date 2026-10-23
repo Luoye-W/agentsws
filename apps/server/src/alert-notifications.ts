@@ -49,6 +49,8 @@ const URGENT_BY_KIND: Readonly<Record<string, (p: Record<string, unknown>) => bo
   // WP169 / WP294：只是告诉一声
   markets_store_sync: () => false,
   retired_model_swap: () => false,
+  // WP479：订阅 / API 有新模型——只是告诉一声，人自己去勾
+  new_models: () => false,
 }
 
 export function alertUrgent(card: DeckCard): boolean {

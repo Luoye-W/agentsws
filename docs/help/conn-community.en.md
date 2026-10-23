@@ -1,6 +1,9 @@
+---
+description: Reddit needs a registered app and a correct User-Agent, Discord a Bot invited to your server, Telegram a @BotFather bot made group admin. Drafts work without them.
+---
 # Community bots: Reddit / Discord / Telegram
 
-The three connections for community work: a Reddit subreddit, a Discord server and a Telegram group. Their rules differ a lot, so start with the table.
+Each community gets its own connection: Reddit needs a registered app and a correct User-Agent, Discord a Bot invited into your server, Telegram a bot from @BotFather made admin of your group. Their rules differ a lot, so start with the table.
 
 | Connection | In one line | What you need |
 |---|---|---|

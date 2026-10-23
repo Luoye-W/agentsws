@@ -5,7 +5,7 @@
  * | 钉的是什么 | 为什么 |
  * |---|---|
  * | 没配置 / 关了：SDK 那一块根本不加载，`track` 是空操作 | 没配 key 整套不发 |
- * | posthog-js 的每个自动采集开关都关着；录屏默认关、开了也遮住全部文字与输入 | 不靠 autocapture 抓文字 |
+ * | posthog-js 的自动采集开关都关着（autocapture 除外：WP477 开了、全遮，见 wp477-autocapture）；录屏默认关、开了也遮住全部文字与输入 | 不靠 autocapture 抓文字 |
  * | 真 SDK 生成的事件过 `before_send` 之后只剩白名单；地址只剩路由模板；`$set_once` 整段丢 | 信件 / 客户名 / 输入框内容 / 地址里的业务参数出不了门 |
  * | 路由模板表与 `App.tsx` 一一对应；按钮对照表里的 testid 真在源码里 | 不漏、不过期 |
  * | 设置开关 / 第一次提示 | 用户知情、可关 |
@@ -201,7 +201,7 @@ describe('WP476 关键按钮', () => {
 
 // ── SDK 配置与出门那一关 ──────────────────────────────
 describe('WP476 posthog-js 的开关', () => {
-  it('自动采集全关、不拉外部脚本、不要远程配置、录屏默认关；开了也遮住全部文字与输入', () => {
+  it('自动采集只开全遮的 autocapture、不拉外部脚本、不要远程配置、录屏默认关；开了也遮住全部文字与输入', () => {
     const cfg = posthogConfig(CLIENT, { ...SUPER, install_id: ACTIVE.install_id })
     expect(cfg).toMatchObject({
       // 同源的本机转发；浏览器里什么都不存，匿名号 = 这台机器的匿名设备号
@@ -210,7 +210,11 @@ describe('WP476 posthog-js 的开关', () => {
       disable_persistence: true,
       bootstrap: { distinctID: ACTIVE.install_id, isIdentifiedID: false },
       disable_compression: true,
-      autocapture: false,
+      // WP477（决策 1617 / 1618）：autocapture 开着、只记点 / 改 / 提交，字与属性全遮（见 wp477 那份测试）
+      autocapture: {
+        dom_event_allowlist: ['click', 'change', 'submit'],
+        capture_copied_text: false,
+      },
       capture_pageview: false,
       capture_pageleave: false,
       rageclick: false,

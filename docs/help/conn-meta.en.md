@@ -1,6 +1,9 @@
+---
+description: All seven Meta connections start with an app in the Meta developer dashboard, and most need review. Reading works once connected; posting waits for App Review.
+---
 # The Meta connections (Facebook / Instagram / Threads / WhatsApp)
 
-What each of the seven Meta connections does and how to set it up. They all start in the Meta developer dashboard, and most permissions **need review** — if you're not in a hurry, connect them last.
+All seven Meta connections start with an app in the Meta developer dashboard, and most permissions **need review**: reading works once connected, while posting and ad changes wait for approval — if you're not in a hurry, connect them last.
 
 | Connection | In one line | Review / cost |
 |---|---|---|

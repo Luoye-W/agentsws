@@ -1,3 +1,6 @@
+---
+description: Create an API key in Google AI Studio and add it to the Google Gemini card — Gemini for text, Nano Banana 2.1 for images. Billed by Google, no credits used.
+---
 # Connect Google Gemini
 
 Create an API key in Google AI Studio: text runs on Gemini, and image generation automatically uses Nano Banana 2.1 with the same key. You pay on your Google bill — **no Agents Workshop credits are used**.

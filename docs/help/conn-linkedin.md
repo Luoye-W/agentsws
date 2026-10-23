@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 180
+description: 老板本人号可自助开通发帖，公司主页要过 LinkedIn 的审核；批不下来时，到点的已批帖子会变成待办，你复制文案去发。工坊不抓取、不自动加人或私信。
 positions: [social-media]
 roles: [social.linkedin]
 ---
 # LinkedIn：公司主页与老板本人号
 
-这篇讲社媒运营里「LinkedIn」那条职责用的连接：怎么接、接不上的时候怎么办、它**不做**什么。
+老板本人号加上「Share on LinkedIn」就能自助发帖，公司主页要过 LinkedIn 的 Community Management API 审核；批不下来时排期、起草、审批照常，到点那条变成待办，你复制去发。
 
 | 连接 | 一句话 | 要不要审核 |
 |---|---|---|

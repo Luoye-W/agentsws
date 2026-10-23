@@ -232,7 +232,7 @@ export const MODE_EN: Record<string, string> = {
   'card.instruct.scope.global_rule@solo': 'Always do this',
   'deck.receipt.instruct.global_rule@solo':
     'Noted: a card is out — accept it and this becomes a rule.',
-  'deck.keyboard@solo': '→ approve · ← drop · ↑ later · ↓ revise',
+  'deck.keyboard@solo': '→ approve · ← drop · ↑ later · ↓ edit',
   'b2b.sales.approver.role_holder@solo': 'waiting for you',
   'b2b.sales.approver.scope_manager@solo': 'waiting for you',
   'b2b.sales.approver.owner@solo': 'waiting for you',
@@ -253,7 +253,7 @@ export const MODE_EN: Record<string, string> = {
   'card.instruct.scope.global_rule@peers': 'Always do this',
   'deck.receipt.instruct.global_rule@peers':
     'Noted: a card is out — accept it and this becomes a rule.',
-  'deck.keyboard@peers': '→ approve · ← drop · ↑ later · ↓ revise',
+  'deck.keyboard@peers': '→ approve · ← drop · ↑ later · ↓ edit',
   'b2b.sales.approver.role_holder@peers': 'waiting for you',
   'b2b.sales.approver.scope_manager@peers': 'waiting for you',
   'b2b.sales.approver.owner@peers': 'waiting for you',

@@ -1,3 +1,6 @@
+---
+description: Connect Kimi, Qwen, Zhipu, local Ollama or any OpenAI-format service with a base URL and a key, using a vision model. Claude relays use the Anthropic-compatible card.
+---
 # Connect an OpenAI- or Anthropic-compatible service (Kimi, Ollama, Claude relays…)
 
 Any service that speaks the "OpenAI format" works: Moonshot (Kimi), Qwen, Zhipu GLM, and Ollama running on this computer. Agents Workshop requires a model that **can see images**, so pick a vision / VL model.

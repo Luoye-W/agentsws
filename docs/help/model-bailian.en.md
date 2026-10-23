@@ -1,3 +1,6 @@
+---
+description: One Model Studio key calls both Qwen and DeepSeek. Pick the plan you bought — Token Plan, pay as you go or Coding Plan; keys and addresses don't cross over.
+---
 # Connect Alibaba Cloud Model Studio (which plan)
 
 One key calls both Qwen and DeepSeek, with a single bill — if you've used DeepSeek directly, you don't need a separate key from platform.deepseek.com.

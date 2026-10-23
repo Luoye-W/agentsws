@@ -23,6 +23,8 @@
  * 4. **正文是外部文本**。线程的 `text` 原样存、原样端出去，不在这一层改写，
  *    也不当指令读（21 §1 / 39）。
  */
+
+import { PANEL_DRAFT_MAX } from '@agentsws/browser-action'
 import type {
   CommunityMember,
   CommunityThread,
@@ -50,6 +52,9 @@ import { assignmentOf, body, intParam, ok, param, principalOf } from '../helpers
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 import type { SocialActor } from './social-types.js'
+
+/** WP478：「改好了，再填一次」带上改过的字（不带 = 原样再填）。 */
+const refillSchema = z.object({ text: z.string().max(PANEL_DRAFT_MAX).optional() }).strict()
 
 /* ── 鉴权元组：三个对象域各一把闸（31 §3.1 完整元组） ─────────────────── */
 
@@ -466,7 +471,12 @@ export interface SocialPort {
    * WP332（决策 762）：没发出去的那一条「再填一次」——同一份已批的草稿原样再交给插件，**不用重批**；
    * 人照样自己点发送。已经发出去 / 还在插件那边 / 没记下草稿的回 `conflict` + 一句人话。
    */
-  redditRefill?(actor: SocialActor, job_id: string): MaybePromise<RedditWriteView>
+  redditRefill?(
+    actor: SocialActor,
+    job_id: string,
+    /** WP478（只加）：岗位页上「修改」过——按改过的字交出去，这一条的草稿换成它。 */
+    edit?: { text?: string },
+  ): MaybePromise<RedditWriteView>
   /** WP332：收起岗位页那一行「没发出去」提醒（人看过了）。 */
   redditDismiss?(actor: SocialActor, job_id: string): MaybePromise<RedditWriteView>
 }
@@ -1300,10 +1310,21 @@ export function socialRoutes(): Route[] {
         params: [
           { name: 'job_id', in: 'path', required: true, description: '进度里那一条的 job_id' },
         ],
+        // WP478（只加）：可选 `text`——岗位页上「修改」过，按改过的字再填（草稿换成它）；不带 = 原样
+        body: refillSchema,
         returns: 'RedditWriteView',
       },
-      async (c, deps) =>
-        ok(c, await need(portOf(deps), 'redditRefill')(actorOf(c), param(c, 'job_id'))),
+      async (c, deps) => {
+        const input = await body(c, refillSchema)
+        return ok(
+          c,
+          await need(portOf(deps), 'redditRefill')(
+            actorOf(c),
+            param(c, 'job_id'),
+            input.text === undefined ? undefined : { text: input.text },
+          ),
+        )
+      },
     ),
     route(
       {

@@ -50,10 +50,8 @@ import {
   setPlatformKitPlatform,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { HELP_SLUGS, type HelpSlug } from '@/lib/help'
+import { isBundledHelp } from '@/lib/help'
 import { offerMirrorRetry, setNpmRegistry } from '@/lib/npm-registry-api'
-
-const isHelpSlug = (s: string): s is HelpSlug => (HELP_SLUGS as readonly string[]).includes(s)
 
 /** 一条可复制的命令（等宽、一键复制）。 */
 function CommandLine({ command, testId }: { command: string; testId: string }): React.ReactNode {
@@ -522,7 +520,7 @@ export function PlatformCliCard({
                 : `${t('platform_cli.hint')} ${t('platform_cli.degraded')}`
             }
           />
-          {isHelpSlug(spec.tutorial) ? <TutorialLink slug={spec.tutorial} /> : null}
+          {isBundledHelp(spec.tutorial) ? <TutorialLink slug={spec.tutorial} /> : null}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

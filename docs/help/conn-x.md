@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 170
+description: X API 是付费的（Basic 档起），能批量查粉丝数、发推和回复，发推要用户上下文的 OAuth；投放用的 X Ads API 是另一套授权，目前还没接。
 positions: [ads, social-media, kol-marketing]
 roles: [ads.x, social.x, kol.x]
 ---
 # X（Twitter）的两个连接
 
-这篇讲 X 的两个连接：查账号、发推用的 X API，和投放用的 X Ads API。**两者是两套授权**，买了一个管不到另一个。
+X 有两个连接：查账号、发推用的 X API（付费，Basic 档起），和投放用的 X Ads API。**两者是两套授权**，买了一个管不到另一个。
 
 | 连接 | 一句话 | 要不要审核 / 花不花钱 |
 |---|---|---|

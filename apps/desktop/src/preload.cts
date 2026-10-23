@@ -9,6 +9,9 @@ import type {
   BridgeInfo,
   DesktopBridge,
   DesktopCapture,
+  DesktopDataLocation,
+  DesktopDataMoveStatus,
+  DesktopDataTargetCheck,
   DesktopInstallOutcome,
   DesktopRestartChoice,
   DesktopRestartReadiness,
@@ -47,6 +50,13 @@ const CHANNELS = {
   sessionRenew: 'agentsws:session-renew',
   titleBarTheme: 'agentsws:title-bar-theme',
   captureWindow: 'agentsws:capture-window',
+  dataLocationGet: 'agentsws:data-location-get',
+  dataLocationChoose: 'agentsws:data-location-choose',
+  dataLocationCheckDefault: 'agentsws:data-location-check-default',
+  dataLocationMove: 'agentsws:data-location-move',
+  dataLocationChanged: 'agentsws:data-location-changed',
+  dataLocationDeleteOld: 'agentsws:data-location-delete-old',
+  dataLocationReveal: 'agentsws:data-location-reveal',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -155,6 +165,41 @@ const bridge: DesktopBridge = {
   // WP475：反馈框「附上截图」（只截工坊自己的窗口；回 base64，不经文件）
   captureWindow: (): Promise<DesktopCapture | null> =>
     ipcRenderer.invoke(CHANNELS.captureWindow) as Promise<DesktopCapture | null>,
+  // WP480：数据放在哪（个人档才有：服务进程归这台电脑上的壳管）。路径只从壳里来，页面只能说「刚才选的那个 / 默认位置」
+  ...(info.data_location !== true
+    ? {}
+    : {
+        dataLocation: {
+          get: (): Promise<DesktopDataLocation> =>
+            ipcRenderer.invoke(CHANNELS.dataLocationGet) as Promise<DesktopDataLocation>,
+          choose: (): Promise<DesktopDataTargetCheck | null> =>
+            ipcRenderer.invoke(
+              CHANNELS.dataLocationChoose,
+            ) as Promise<DesktopDataTargetCheck | null>,
+          checkDefault: (): Promise<DesktopDataTargetCheck> =>
+            ipcRenderer.invoke(
+              CHANNELS.dataLocationCheckDefault,
+            ) as Promise<DesktopDataTargetCheck>,
+          move: (to: 'chosen' | 'default'): Promise<DesktopDataMoveStatus> =>
+            ipcRenderer.invoke(
+              CHANNELS.dataLocationMove,
+              to === 'default' ? 'default' : 'chosen',
+            ) as Promise<DesktopDataMoveStatus>,
+          onChange: (listener: (status: DesktopDataMoveStatus) => void): (() => void) => {
+            const handler = (_event: unknown, status: DesktopDataMoveStatus): void => {
+              listener(status)
+            }
+            ipcRenderer.on(CHANNELS.dataLocationChanged, handler)
+            return () => {
+              ipcRenderer.removeListener(CHANNELS.dataLocationChanged, handler)
+            }
+          },
+          deleteOld: (): Promise<boolean> =>
+            ipcRenderer.invoke(CHANNELS.dataLocationDeleteOld) as Promise<boolean>,
+          reveal: (): Promise<boolean> =>
+            ipcRenderer.invoke(CHANNELS.dataLocationReveal) as Promise<boolean>,
+        },
+      }),
   // WP424：藏了系统标题栏才有这一项（页面据此给红绿灯 / 系统按钮留位置、设拖动区）
   ...(info.title_bar === undefined
     ? {}

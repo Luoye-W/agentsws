@@ -143,11 +143,20 @@ describe('WP362 (a) 模型面：订阅进下拉、能设默认、花费 0', () =
       // WP370：设置里的下拉与 AI 钮同一份数据，显示目录里的名字
       label: 'ChatGPT 订阅（GPT-5.5）',
     })
-    expect(view.choices.filter((c) => c.id.startsWith('openai-codex/'))).toHaveLength(3)
+    // WP479 + 决策 1626（B）：选择器只列勾上的；停在 5.x 的 Codex Spark 首次不勾（默认的 5.5 照勾）
+    expect(view.choices.filter((c) => c.id.startsWith('openai-codex/'))).toHaveLength(2)
     const chat = models.chatChoices().filter((c) => c.id.startsWith('openai-codex/'))
-    expect(chat.map((c) => c.id)).toEqual(CATALOG.map((m) => `openai-codex/${m.id}`))
-    expect(chat[0]).toMatchObject({ label: 'ChatGPT 订阅', official: false, vision: 'no' })
+    expect(chat.map((c) => c.id)).toEqual(['openai-codex/gpt-5.5', 'openai-codex/gpt-6-sol'])
+    expect(chat[0]).toMatchObject({ label: 'ChatGPT 订阅', official: false, vision: 'ok' })
     expect(chat[1]).toMatchObject({ vision: 'ok' })
+    // 没勾的照样在设置的勾选清单里，能勾上
+    const enable = await models.port.enabledModels?.(owner)
+    const sub = enable?.sources.find((x) => x.provider_id === 'openai-codex')
+    expect(sub?.models.map((m) => m.id)).toEqual(CATALOG.map((m) => m.id))
+    expect(sub?.models.find((m) => m.id === 'gpt-5.3-codex-spark')).toMatchObject({
+      enabled: false,
+      vision: 'no',
+    })
     expect(models.configured()).toBe(true)
     // 不是存下来的来源：「已配的」列表与设置快照里都没有（复制品牌不带走别人的订阅）
     expect((await models.port.providers(owner)).some((p) => p.id === 'openai-codex')).toBe(false)
@@ -211,7 +220,8 @@ describe('WP370 订阅那一组：目录名、自带联网、每个模型的思�
       withEfforts.map((m) => ({ ...m, ...('efforts' in m ? { efforts: [...m.efforts] } : {}) }))
     const { models, gateway } = modelsWith(port)
     const chat = models.chatChoices().filter((c) => c.id.startsWith('openai-codex/'))
-    expect(chat.map((c) => c.name)).toEqual(CATALOG.map((m) => m.name))
+    // WP479 + 决策 1626（B）：只列勾上的（Codex Spark 停在 5.x，首次不勾）
+    expect(chat.map((c) => c.name)).toEqual(['GPT-5.5', 'GPT-6 Sol'])
     expect(chat.every((c) => c.native_search === true)).toBe(true)
     const gpt55 = chat.find((c) => c.id === 'openai-codex/gpt-5.5')
     expect(gpt55?.context_window).toBe(272_000)

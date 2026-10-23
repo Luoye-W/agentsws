@@ -1,0 +1,51 @@
+---
+/** 一篇工坊笔记 `/blog/<slug>/`：标题、发表日、正文（安全渲染）、结构化数据 `BlogPosting`。 */
+import { GITHUB_URL, SITE_URL } from '../config.js'
+import { COMMON, type Lang, localePath } from '../i18n/common.js'
+import { PAGES } from '../i18n/pages.js'
+import Base from '../layouts/Base.astro'
+import { blogHref, blogPath } from '../lib/blog.js'
+import { siteCatalog } from '../lib/catalog.js'
+import { blogMdPath } from '../lib/machine.js'
+import { articleLd, breadcrumbs } from '../lib/schema.js'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+  slug: string
+}
+const { lang, slug } = Astro.props
+const t = PAGES[lang].blog
+const post = siteCatalog().notes[lang].find((p) => p.slug === slug)
+if (post === undefined) throw new Error(`没有这一篇笔记：${slug}`)
+const brand = COMMON[lang].brand
+const url = `${SITE_URL}${blogHref(slug, lang)}`
+const jsonLd = [
+  articleLd({
+    type: 'BlogPosting',
+    lang,
+    url,
+    title: post.title,
+    description: post.description,
+    published: post.date,
+    modified: post.updated > post.date ? post.updated : post.date,
+  }),
+  breadcrumbs([
+    { name: brand, url: `${SITE_URL}${localePath('/', lang)}` },
+    { name: t.eyebrow, url: `${SITE_URL}${localePath('/blog/', lang)}` },
+    { name: post.title, url },
+  ]),
+]
+---
+<Base lang={lang} path={`/blog/${slug}/`} title={`${post.title} · ${brand}`} description={post.description.slice(0, 160)} og="docs" current="blog" jsonLd={jsonLd} markdown={blogMdPath(slug, lang)} ogType="article">
+  <article class="post-main">
+    <div class="eyebrow"><a href={localePath('/blog/', lang)}>{t.eyebrow}</a></div>
+    <h1>{post.title}</h1>
+    <p class="doc-meta"><time datetime={post.date}>{t.published} {post.date}</time></p>
+    <div class="prose" set:html={post.html} />
+    <div class="doc-foot">
+      <a href={localePath('/blog/', lang)}>← {t.all}</a>
+      <a class="edit" href={`${GITHUB_URL}/blob/main/${blogPath(post.id, lang)}`} rel="noopener">{t.edit}</a>
+    </div>
+  </article>
+</Base>

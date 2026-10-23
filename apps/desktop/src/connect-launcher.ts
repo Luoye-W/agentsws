@@ -82,8 +82,11 @@ export async function pickConnectPort(input: {
 }
 
 export interface LocalConnectLauncherOptions {
-  /** 服务进程的数据目录（`AGENTSWS_DB_DIR`）——下载器按同一个目录放东西。 */
-  dataDir: string
+  /**
+   * 服务进程的数据目录（`AGENTSWS_DB_DIR`）——下载器按同一个目录放东西。
+   * WP480：数据能搬家，所以也可以给一个函数（每次用都现取）。
+   */
+  dataDir: string | (() => string)
   port: number
   /** 跑它的 node（与服务进程同一份：安装包自带的 Node 22）。 */
   nodeExec: string
@@ -135,7 +138,15 @@ export function createLocalConnectLauncher(
   options: LocalConnectLauncherOptions,
 ): LocalConnectLauncher {
   const { files, timers, clock } = options
-  const layout = localRuntimeLayout(options.dataDir)
+  const dataDirOf = (): string =>
+    typeof options.dataDir === 'function' ? options.dataDir() : options.dataDir
+  /** WP480：数据目录可能被搬走——每次用都按当前目录算（同一个目录就复用上一次算好的）。 */
+  let laidOut: { dir: string; layout: ReturnType<typeof localRuntimeLayout> } | undefined
+  const layoutNow = (): ReturnType<typeof localRuntimeLayout> => {
+    const dir = dataDirOf()
+    if (laidOut?.dir !== dir) laidOut = { dir, layout: localRuntimeLayout(dir) }
+    return laidOut.layout
+  }
   const log = options.logger.child('open-connector')
   const pollMs = options.pollMs ?? 2000
   const redact = options.redact ?? ((s: string) => s)
@@ -156,7 +167,7 @@ export function createLocalConnectLauncher(
       ...(proxied ? { NODE_USE_ENV_PROXY: '1' } : {}),
       ...hostEnv({
         port: options.port,
-        dataDir: layout.data,
+        dataDir: layoutNow().data,
         encryptionKey,
         adminToken,
         ...(trusted === undefined ? {} : { trustedHosts: trusted }),
@@ -175,11 +186,11 @@ export function createLocalConnectLauncher(
     backoff: options.backoff ?? { baseMs: 1000, maxMs: 30_000, jitter: 0.2 },
     ...(options.random === undefined ? {} : { random: options.random }),
     request: () => {
-      const dir = layout.versionDir(version ?? '0.0.0')
+      const dir = layoutNow().versionDir(version ?? '0.0.0')
       const host = join(dir, HOST_FILE)
       // 宿主脚本随我们的版本走：每次起之前覆盖写一遍（下载那一刻写的可能是老版本工作台写的）
       if (files.readText(host) !== HOST_SCRIPT) files.writeText(host, HOST_SCRIPT)
-      files.ensureDir(layout.data)
+      files.ensureDir(layoutNow().data)
       lastError = undefined
       return {
         command: options.nodeExec,
@@ -209,10 +220,10 @@ export function createLocalConnectLauncher(
       ...(lastError === undefined || s.state === 'running' ? {} : { last_error: lastError }),
     }
     try {
-      files.ensureDir(layout.root)
-      const tmp = `${layout.supervisor}.tmp`
+      files.ensureDir(layoutNow().root)
+      const tmp = `${layoutNow().supervisor}.tmp`
       files.writeText(tmp, `${JSON.stringify(file, null, 2)}\n`)
-      files.rename(tmp, layout.supervisor)
+      files.rename(tmp, layoutNow().supervisor)
     } catch (err) {
       log.warn('写不进监督者状态', { error: String(err) })
     }
@@ -221,15 +232,20 @@ export function createLocalConnectLauncher(
 
   /** 装好了而且程序文件真在（被人手删了就当没装，别去起一个不存在的东西）。 */
   const installed = (): string | undefined => {
-    const cur = parseCurrentFile(readJson(files, layout.current))
+    const cur = parseCurrentFile(readJson(files, layoutNow().current))
     if (cur === undefined) return undefined
-    const pkg = join(layout.versionDir(cur.version), 'node_modules', '@oomol-lab', 'open-connector')
+    const pkg = join(
+      layoutNow().versionDir(cur.version),
+      'node_modules',
+      '@oomol-lab',
+      'open-connector',
+    )
     return files.exists(join(pkg, 'package.json')) ? cur.version : undefined
   }
 
   const tick = (): void => {
     const want = installed()
-    const control = parseControlFile(readJson(files, layout.control))
+    const control = parseControlFile(readJson(files, layoutNow().control))
     const desired = control?.desired ?? 'run'
     const seq = control?.restart_seq ?? 0
     const state = sidecar.snapshot().state

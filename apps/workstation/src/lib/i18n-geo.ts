@@ -5,7 +5,6 @@
  * 界面少字：长说明进问号（`*.hint`）。**不写取数方式与批发商名**（memory 规则）。
  */
 export const GEO_ZH: Record<string, string> = {
-  'help.ai-answer-tracking.title': 'AI 回答监测',
   'geo.title': 'AI 回答监测',
   'geo.title.hint':
     '每周拿买家会问的问题去问各家 AI，看提没提到你、引没引你的站。数都按规则算，不经 AI 手。',
@@ -208,7 +207,6 @@ export const GEO_ZH: Record<string, string> = {
 }
 
 export const GEO_EN: Record<string, string> = {
-  'help.ai-answer-tracking.title': 'AI answer tracking',
   'geo.title': 'AI answer tracking',
   'geo.title.hint':
     'Every week we ask the AIs the questions buyers ask, and check whether they mention you or cite your site. All numbers are rule-based, not AI-made.',
@@ -402,7 +400,7 @@ export const GEO_EN: Record<string, string> = {
   'geo.metric.accuracy': 'Accuracy',
   'geo.advice.keep': 'Keep',
   'geo.advice.expand': 'Expand',
-  'geo.advice.modify': 'Modify',
+  'geo.advice.modify': 'Edit',
   'geo.advice.stop': 'Stop',
   'geo.card.cons.said': 'Says "{s}" → official "{o}"',
   'geo.card.cons.outdated': 'old wording',

@@ -411,7 +411,10 @@ export default defineBackground(() => {
             return
           }
           case 'panel-refill':
-            reply({ type: 'panel-act', ...(await panelRefillWrite(panelDeps, message.job)) })
+            reply({
+              type: 'panel-act',
+              ...(await panelRefillWrite(panelDeps, message.job, message.text)),
+            })
             return
           case 'open-options':
             void chrome.runtime.openOptionsPage().catch(() => undefined)

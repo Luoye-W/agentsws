@@ -1,3 +1,6 @@
+---
+description: Microsoft, Pinterest, Reddit, LinkedIn, Snapchat and Apple ads need no connection — export a report and drop it into the ads chat for spend, conversions and ROAS.
+---
 # How to export a report for me
 
 Microsoft, Pinterest, Reddit, LinkedIn, Snapchat and Apple ads **need no connection this phase**: click the platform's own Export button, then drop the downloaded file into the ads position's chat. The workshop reads spend, conversions and ROAS, states the currency, time zone and date range, and runs an account check-up.
