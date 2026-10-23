@@ -167,7 +167,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "314799aa72c815ccdf83387f9274ab49",
+  "source_digest": "386bc6c882daf3c6b6b4bfc75bab9d0f",
   "objects": [
     {
       "id": "ad",
@@ -1512,6 +1512,30 @@
         {
           "name": "payments",
           "type": "KolPayment[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "stage_source",
+          "type": "'import' | 'mail'",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "stage_evidence",
+          "type": "KolStageEvidence[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "import_note",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "import_key",
+          "type": "string",
           "sensitivity": "internal",
           "optional": true
         }
