@@ -1,14 +1,21 @@
 ---
 /**
- * 首页（照 docs/design/site/home.html 方向 A）：首屏 → 为什么（四级台阶）→ 岗位 → 三种用法（WP347）→ 怎么干活（WP344）→ 出卡审批
- * → 本地优先 → 别处收费这里免费 → 底座 → 价格 → 公开地做 → 常见问题 → 收尾。
- * 工作台截图由 `scripts/app-shots.mjs` 从演示世界重拍（WP344）。
+ * 首页（照 docs/design/site/home.html 方向 A；10-23 按界面优化定稿重排，私有 docs/117）：
+ * 首屏 → 一天怎么过（截图滑动）→ 岗位 → 几句话交代（按组点开）→ 出卡审批 → 接上 AI → 上网与浏览器
+ * → 本地优先（三种用法、别处收费点开）→ 为什么（四级台阶）→ 底座 → 公开地做 → 常见问题 → 收尾。
+ * 页面长度定住：以后加新功能只在「几句话交代」对应那组加一行（`HOME.how.groups`），不加新段。
+ * 工作台截图由 `scripts/app-shots.mjs` 从演示世界重拍。
  */
 import { Image } from 'astro:assets'
 import answerDark from '../assets/app/answer-dark.png'
 import answerLight from '../assets/app/answer-light.png'
+import calendarLight from '../assets/app/calendar-light.png'
 import darkShot from '../assets/app/home-dark.png'
 import homeShot from '../assets/app/home-light.png'
+import inboxDark from '../assets/app/inbox-dark.png'
+import inboxLight from '../assets/app/inbox-light.png'
+import onboardingAi from '../assets/app/onboarding-ai-card.png'
+import roleSupport from '../assets/app/role-support.png'
 import DownloadButton from '../components/DownloadButton.astro'
 import Hint from '../components/Hint.astro'
 import Icon from '../components/Icon.astro'
@@ -29,6 +36,15 @@ const { lang } = Astro.props
 const t = HOME[lang]
 const roles = ROLES[lang]
 const p = (x: string) => localePath(x, lang)
+/** 「一天怎么过」每张图：有深色的给一对，没有的深色下也用浅色那张 */
+const tourShots: Record<string, { light: ImageMetadata; dark?: ImageMetadata; bar: string }> = {
+  inbox: { light: inboxLight, dark: inboxDark, bar: t.tour.slides[0]?.tab ?? '' },
+  calendar: { light: calendarLight, bar: t.tour.slides[1]?.tab ?? '' },
+  role: { light: roleSupport, bar: roles[0]?.name ?? '' },
+  answer: { light: answerLight, dark: answerDark, bar: roles.find((r) => r.id === 'store')?.name ?? '' },
+  home: { light: homeShot, dark: darkShot, bar: t.hero.frameBar },
+}
+const guideHref = (slug: string) => p(`/docs/${slug}/`)
 const logs = loadChangelog(lang).slice(0, 6)
 const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
 ---
@@ -70,7 +86,208 @@ const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
     </div>
   </section>
 
-  <section class="sec why" id="why" aria-labelledby="why-h">
+  <section class="sec tour" id="tour" aria-labelledby="tour-h">
+    <div class="wrap">
+      <div class="center">
+        <div class="eyebrow">{t.tour.eyebrow}</div>
+        <h2 class="h2" id="tour-h">{t.tour.title}</h2>
+        <p class="sub">{t.tour.sub}</p>
+      </div>
+      <div class="slider" data-slider>
+        <div class="slider-tabs" role="tablist" aria-label={t.tour.eyebrow}>
+          {t.tour.slides.map((s, i) => <a class="slider-tab" role="tab" href={`#tour-${s.key}`} aria-selected={i === 0 ? 'true' : 'false'} data-go={i}>{s.tab}</a>)}
+        </div>
+        <div class="slides" data-track>
+          {t.tour.slides.map((s, i) => {
+            const shot = tourShots[s.key]
+            return (
+              <figure class="slide" id={`tour-${s.key}`}>
+                <div class="frame">
+                  <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span>{shot?.bar}</span></div>
+                  <div class="frame-img">
+                    {shot && <Image class:list={[{ 'only-light': shot.dark !== undefined }]} src={shot.light} alt={s.alt} width={1360} height={820} fit="cover" position="top" widths={[680, 1020, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 880px" loading={i === 0 ? 'eager' : 'lazy'} />}
+                    {shot?.dark && <Image class="only-dark" src={shot.dark} alt={s.alt} width={1360} height={820} fit="cover" position="top" widths={[680, 1020, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 880px" loading="lazy" />}
+                  </div>
+                </div>
+                <figcaption><b>{s.tab}</b>{s.p}</figcaption>
+              </figure>
+            )
+          })}
+        </div>
+        <div class="slider-nav">
+          <button type="button" class="slider-btn" data-step="-1" aria-label={t.tour.prev}>‹</button>
+          <span class="slider-dots" aria-hidden="true">{t.tour.slides.map(() => <i></i>)}</span>
+          <button type="button" class="slider-btn" data-step="1" aria-label={t.tour.next}>›</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="roles" aria-labelledby="roles-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.roles.eyebrow}</div>
+      <h2 class="h2" id="roles-h">{t.roles.title}</h2>
+      <p class="sub">{t.roles.sub}</p>
+      <ul class="roles">
+        {roles.map((r) => (
+          <li>
+            <a class="role" href={`${p('/roles/')}#${r.id}`}>
+              <div class="role-ic"><Icon name={r.icon} /></div>
+              <h3>{r.name}{r.isNew && <span class="new">{t.roles.newBadge}</span>}</h3>
+              <p>{r.line}</p>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p class="role-more">{t.roles.more}<a href={p('/roles/')}>{t.roles.moreLink}</a></p>
+    </div>
+  </section>
+
+  <section class="sec" id="how" aria-labelledby="how-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.how.eyebrow}</div>
+      <h2 class="h2" id="how-h">{t.how.title}</h2>
+      <p class="sub">{t.how.sub}</p>
+      <div class="feat-groups" data-tabs>
+        <div class="feat-tabs" role="tablist" aria-label={t.how.eyebrow}>
+          {t.how.groups.map((g, i) => <button type="button" class="feat-tab" role="tab" aria-selected={i === 0 ? 'true' : 'false'} aria-controls={`how-${g.key}`} data-tab={i}>{g.label}</button>)}
+        </div>
+        {t.how.groups.map((g) => (
+          <div class="feat-panel" id={`how-${g.key}`} role="tabpanel" aria-label={g.label} data-panel>
+            <h3 class="feat-label">{g.label}</h3>
+            <div class="feats">
+              {g.items.map((it) => (
+                <details class="feat">
+                  <summary><b>{it.h}</b><span>{it.p}</span></summary>
+                  <p>{it.more}{it.help !== '' && <> <a href={guideHref(it.help)}>{t.how.guide}</a></>}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="cards" aria-labelledby="cards-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.cards.eyebrow}</div>
+      <h2 class="h2" id="cards-h">{t.cards.title}</h2>
+      <p class="sub">{t.cards.sub}</p>
+      <ol class="rail" style="--n:5">
+        {t.cards.steps.map(([h, d], i) => (
+          <li class:list={['step', { on: i === 2 || i === 3 }]}><div class="n" aria-hidden="true">{i + 1}</div><h3>{h}</h3><p>{d}</p></li>
+        ))}
+      </ol>
+      <div class="deck">
+        {t.cards.deck.map((c, i) => (
+          <div class:list={['dcard', { sel: i === 1 }]}>
+            <div class="dcard-h"><span class:list={['chip', c.tone]}>{c.chip}</span><span class:list={['chip', i === 1 ? 'plain end' : 'warn']}>{c.due}</span></div>
+            <div class="dcard-b">
+              <h4>{c.title}</h4>
+              <div class="quote">{c.body}</div>
+            </div>
+            <div class="dcard-f" aria-hidden="true">{c.actions.map((a) => <span>{a}</span>)}</div>
+          </div>
+        ))}
+      </div>
+      <p class="never"><Icon name="shield" />{t.cards.never}</p>
+    </div>
+  </section>
+
+  <section class="sec" id="ai" aria-labelledby="ai-h">
+    <div class="wrap ai">
+      <div>
+        <div class="eyebrow">{t.ai.eyebrow}</div>
+        <h2 class="h2" id="ai-h">{t.ai.title}</h2>
+        <p class="sub">{t.ai.sub}</p>
+        <ul class="ai-opts">
+          {t.ai.options.map((o) => (
+            <li><a class:list={['ai-opt', { own: o.own }]} href={guideHref(o.help)}><b>{o.h}</b><span>{o.p}</span></a></li>
+          ))}
+        </ul>
+        <details class="ai-price" id="credits">
+          <summary>{t.ai.price.summary}</summary>
+          <p>{t.ai.price.p} <a href={p('/pricing/')}>{t.ai.price.link}</a></p>
+        </details>
+      </div>
+      <div class="frame ai-shot">
+        <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span>{t.ai.frameBar}</span></div>
+        <div class="frame-img"><Image src={onboardingAi} alt={t.ai.shotAlt} width={1408} height={952} widths={[704, 1056, 1408]} sizes="(max-width: 900px) calc(100vw - 40px), 620px" loading="lazy" /></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="web" aria-labelledby="web-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.web.eyebrow}</div>
+      <h2 class="h2" id="web-h">{t.web.title}</h2>
+      <p class="sub web-sub">{t.web.sub}</p>
+      <div class="feats feats-3">
+        {t.web.items.map((it) => (
+          <details class="feat">
+            <summary><b>{it.h}</b><span>{it.p}</span></summary>
+            <p>{it.more} <a href={guideHref(it.help)}>{t.web.guide}</a></p>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="local" aria-labelledby="local-h">
+    <div class="wrap">
+      <div class="local">
+        <div>
+          <div class="eyebrow">{t.local.eyebrow}</div>
+          <h2 class="h2" id="local-h">{t.local.title.map((l, i) => <>{l}{i === 0 && <br />}</>)}</h2>
+          <p class="sub">{t.local.sub}</p>
+        </div>
+        <div class="promises">
+          {t.local.promises.map((pr) => (
+            <div class="promise">
+              <div class="role-ic"><Icon name={pr.icon as 'laptop'} /></div>
+              <h3>{pr.h}{'hint' in pr && pr.hint !== undefined && <Hint text={pr.hint} />}</h3>
+              <p>{pr.p}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div class="more-rows">
+        <details class="more" id="modes">
+          <summary>{t.modes.summary}</summary>
+          <ol class="modes">
+            {t.modes.items.map((m) => (
+              <li class:list={['mode', `mode-${m.key}`]}>
+                <span class="mode-tag">{m.tag}</span>
+                <h3>{m.h}</h3>
+                <p>{m.p}</p>
+              </li>
+            ))}
+          </ol>
+          <p class="modes-grow"><Icon name="arrow" />{t.modes.grow}</p>
+        </details>
+        <details class="more" id="free">
+          <summary>{t.free.summary}</summary>
+          <p class="more-sub">{t.free.sub}</p>
+          <table class="cmp">
+            <thead><tr>{t.free.head.map((h) => <th scope="col">{h}</th>)}</tr></thead>
+            <tbody>
+              {t.free.rows.map(([k, them, us]) => (
+                <tr><th scope="row">{k}</th><td class="them">{them}</td><td class="us"><Icon name="check" />{us}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <p class="fine">{t.free.fine}</p>
+        </details>
+        <details class="more">
+          <summary>{t.local.usage[0]}</summary>
+          <p class="more-sub">{t.local.usage[1]}</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt why" id="why" aria-labelledby="why-h">
     <div class="wrap">
       <div class="center">
         <div class="eyebrow">{t.why.eyebrow}</div>
@@ -144,135 +361,6 @@ const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
     </div>
   </section>
 
-  <section class="sec sec-alt" id="roles" aria-labelledby="roles-h">
-    <div class="wrap center">
-      <div class="eyebrow">{t.roles.eyebrow}</div>
-      <h2 class="h2" id="roles-h">{t.roles.title}</h2>
-      <p class="sub">{t.roles.sub}</p>
-      <ul class="roles">
-        {roles.map((r) => (
-          <li>
-            <a class="role" href={`${p('/roles/')}#${r.id}`}>
-              <div class="role-ic"><Icon name={r.icon} /></div>
-              <h3>{r.name}{r.isNew && <span class="new">{t.roles.newBadge}</span>}</h3>
-              <p>{r.line}</p>
-            </a>
-          </li>
-        ))}
-      </ul>
-      <p class="role-more">{t.roles.more}<a href={p('/roles/')}>{t.roles.moreLink}</a></p>
-    </div>
-  </section>
-
-  <section class="sec" id="modes" aria-labelledby="modes-h">
-    <div class="wrap center">
-      <div class="eyebrow">{t.modes.eyebrow}</div>
-      <h2 class="h2" id="modes-h">{t.modes.title}</h2>
-      <p class="sub">{t.modes.sub}</p>
-      <ol class="modes">
-        {t.modes.items.map((m, i) => (
-          <li class:list={['mode', `mode-${m.key}`, { sel: i === 0 }]}>
-            <svg class="ppl" viewBox="0 0 120 64" aria-hidden="true">
-              {m.key === 'solo' && <g><circle class="me" cx="60" cy="22" r="9" /><path class="me" d="M45 52a15 15 0 0 1 30 0" /></g>}
-              {m.key === 'team' && <g>{[24, 60, 96].map((x) => <><circle class:list={[x === 60 ? 'me' : 'pal']} cx={x} cy="22" r="8" /><path class:list={[x === 60 ? 'me' : 'pal']} d={`M${x - 13} 50a13 13 0 0 1 26 0`} /></>)}<path class="link" d="M36 30h12M72 30h12" /></g>}
-              {m.key === 'company' && <g><path class="link" d="M60 21v10M30 31h60M30 31v9M60 31v9M90 31v9" /><circle class="me" cx="60" cy="12" r="7" />{[30, 60, 90].map((x) => <circle class="pal" cx={x} cy="48" r="7" />)}</g>}
-            </svg>
-            <span class="mode-tag">{m.tag}</span>
-            <h3>{m.h}</h3>
-            <p>{m.p}</p>
-          </li>
-        ))}
-      </ol>
-      <p class="modes-grow"><Icon name="arrow" />{t.modes.grow}</p>
-    </div>
-  </section>
-
-  <section class="sec sec-alt" id="how" aria-labelledby="how-h">
-    <div class="wrap center">
-      <div class="eyebrow">{t.how.eyebrow}</div>
-      <h2 class="h2" id="how-h">{t.how.title}</h2>
-      <p class="sub">{t.how.sub}</p>
-      <ul class="how">
-        {t.how.items.map((it) => (
-          <li class="promise">
-            <div class="role-ic"><Icon name={it.icon as 'globe'} /></div>
-            <h3>{it.h}</h3>
-            <p>{it.p}</p>
-          </li>
-        ))}
-      </ul>
-      <div class="frame how-shot">
-        <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span>{t.how.frameBar}</span></div>
-        <div class="frame-img">
-          <Image class="only-light" src={answerLight} alt={t.how.shotAlt} width={1360} height={820} fit="cover" position="top" widths={[680, 1020, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 960px" loading="lazy" />
-          <Image class="only-dark" src={answerDark} alt={t.how.shotAlt} width={1360} height={820} fit="cover" position="top" widths={[680, 1020, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 960px" loading="lazy" />
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="sec" id="cards" aria-labelledby="cards-h">
-    <div class="wrap center">
-      <div class="eyebrow">{t.cards.eyebrow}</div>
-      <h2 class="h2" id="cards-h">{t.cards.title}</h2>
-      <p class="sub">{t.cards.sub}</p>
-      <ol class="rail" style="--n:5">
-        {t.cards.steps.map(([h, d], i) => (
-          <li class:list={['step', { on: i === 2 || i === 3 }]}><div class="n" aria-hidden="true">{i + 1}</div><h3>{h}</h3><p>{d}</p></li>
-        ))}
-      </ol>
-      <div class="deck">
-        {t.cards.deck.map((c, i) => (
-          <div class:list={['dcard', { sel: i === 1 }]}>
-            <div class="dcard-h"><span class:list={['chip', c.tone]}>{c.chip}</span><span class:list={['chip', i === 1 ? 'plain end' : 'warn']}>{c.due}</span></div>
-            <div class="dcard-b">
-              <h4>{c.title}</h4>
-              <div class="quote">{c.body}</div>
-            </div>
-            <div class="dcard-f" aria-hidden="true">{c.actions.map((a) => <span>{a}</span>)}</div>
-          </div>
-        ))}
-      </div>
-      <p class="never"><Icon name="shield" />{t.cards.never}</p>
-    </div>
-  </section>
-
-  <section class="sec sec-alt" id="local" aria-labelledby="local-h">
-    <div class="wrap local">
-      <div>
-        <div class="eyebrow">{t.local.eyebrow}</div>
-        <h2 class="h2" id="local-h">{t.local.title.map((l, i) => <>{l}{i === 0 && <br />}</>)}</h2>
-        <p class="sub">{t.local.sub}</p>
-      </div>
-      <div class="promises">
-        {t.local.promises.map((pr) => (
-          <div class="promise">
-            <div class="role-ic"><Icon name={pr.icon as 'laptop'} /></div>
-            <h3>{pr.h}{'hint' in pr && pr.hint !== undefined && <Hint text={pr.hint} />}</h3>
-            <p>{pr.p}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  </section>
-
-  <section class="sec" id="free" aria-labelledby="free-h">
-    <div class="wrap center">
-      <div class="eyebrow">{t.free.eyebrow}</div>
-      <h2 class="h2" id="free-h">{t.free.title}</h2>
-      <p class="sub">{t.free.sub}</p>
-      <table class="cmp">
-        <thead><tr>{t.free.head.map((h) => <th scope="col">{h}</th>)}</tr></thead>
-        <tbody>
-          {t.free.rows.map(([k, them, us]) => (
-            <tr><th scope="row">{k}</th><td class="them">{them}</td><td class="us"><Icon name="check" />{us}</td></tr>
-          ))}
-        </tbody>
-      </table>
-      <p class="fine">{t.free.fine}</p>
-    </div>
-  </section>
-
   <section class="sec base" id="base" aria-labelledby="base-h">
     <div class="wrap">
       <div class="base-head">
@@ -290,10 +378,12 @@ const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
           <div class="lay harness"><span class="ln">{t.base.harness[0]}</span><p>{t.base.harness[1]}</p></div>
         </div>
         <div class="upd">
-          <h3>{t.base.updTitle} <span class="ar" aria-hidden="true">→</span> {t.base.updTitle2}</h3>
-          <ol class="tl">
-            {t.base.timeline.map(([d, h, s]) => <li><time datetime={d}>{d}</time><b>{h}</b><span>{s}</span></li>)}
-          </ol>
+          <details class="upd-more">
+            <summary><h3>{t.base.updTitle} <span class="ar" aria-hidden="true">→</span> {t.base.updTitle2} <span class="upd-n">{t.base.timeline.length}</span></h3></summary>
+            <ol class="tl">
+              {t.base.timeline.map(([d, h, s]) => <li><time datetime={d}>{d}</time><b>{h}</b><span>{s}</span></li>)}
+            </ol>
+          </details>
           <div class="oss">
             <p><b>{t.base.oss[0]}</b>{t.base.oss[1]}</p>
             <div class="cta-row" style="margin:0">
@@ -308,24 +398,6 @@ const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
 <span class="t-dim">  {t.base.term[1]}</span></pre>
           </div>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="sec sec-alt" id="credits" aria-labelledby="credits-h">
-    <div class="wrap center">
-      <div class="eyebrow">{t.credits.eyebrow}</div>
-      <h2 class="h2" id="credits-h">{t.credits.title}</h2>
-      <p class="sub">{t.credits.sub}</p>
-      <div class="plans">
-        {[t.credits.open, t.credits.paid].map((pl, i) => (
-          <div class:list={['plan', { sel: i === 1 }]}>
-            <div class="tag">{pl.tag}</div>
-            <div class="price">{pl.price}<small>{pl.unit}</small></div>
-            <ul>{pl.items.map((it) => <li><Icon name="check" />{it}</li>)}</ul>
-            <a class:list={['btn', i === 1 ? 'btn-primary' : 'btn-ghost']} href={i === 1 ? p('/pricing/') : p('/download/')}>{pl.cta}</a>
-          </div>
-        ))}
       </div>
     </div>
   </section>
@@ -347,8 +419,8 @@ const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
   <section class="sec sec-alt" id="faq" aria-labelledby="faq-h">
     <div class="wrap center">
       <h2 class="h2" id="faq-h">{t.faq.title}</h2>
-      <div class="faq">
-        {t.faq.items.map(([q, a], i) => <details open={i === 0}><summary>{q}</summary><p>{a}</p></details>)}
+      <div class="faq faq-2">
+        {t.faq.items.map(([q, a]) => <details><summary>{q}</summary><p>{a}</p></details>)}
       </div>
     </div>
   </section>
