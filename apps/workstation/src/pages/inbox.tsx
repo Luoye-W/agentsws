@@ -5,7 +5,7 @@
  * 批了两边一起消失）+ 拿不准归谁 / 只能你定的信。按要紧 / 今天 / 不急分三组（1500 甲）；上面筛选：全部 /
  * 等我批 / 只看信 + 岗位下拉（1501 甲）；右栏「等对方回」「收好的」；顶上今天的简报。
  *
- * 1505（甲 + 丁）：默认列表；页头分段切「一张一张」（`?mode=focus`），同一份数据。
+ * 1505：页头分段「列表 / 卡片」，同一份数据；Luoye 10-23 改为默认「卡片」（`?mode=list` 才是列表）。
  * 点一行在第三栏打开（外壳那一个第三栏；开不出来——单独渲染这一页时——就在页里画一栏）。
  * 「全部信」是原来的原件档案（`?view=all`），网站聊天是 `?source=chat`，都还是 `MessagesPage`
  * （`MessagesRoute` 在 `messages.tsx` 里按地址挑）。
@@ -54,7 +54,7 @@ export function InboxPage(): ReactNode {
   const inbox = useInbox()
   const open = useInboxOpen()
   const [params, setParams] = useSearchParams()
-  const mode: 'list' | 'focus' = params.get('mode') === 'focus' ? 'focus' : 'list'
+  const mode: 'list' | 'focus' = params.get('mode') === 'list' ? 'list' : 'focus' // Luoye 10-23：默认「卡片」
   const filter = filterOf(params)
   const pushed = useInboxNotice()
   const [local, setLocal] = useState<InboxNotice | undefined>()
@@ -169,7 +169,7 @@ export function InboxPage(): ReactNode {
             ]}
             onChange={(v) => {
               setInboxOpen(null)
-              setParam('mode', v === 'focus' ? 'focus' : undefined)
+              setParam('mode', v === 'list' ? 'list' : undefined)
             }}
           />
           <Link
@@ -205,7 +205,7 @@ export function InboxPage(): ReactNode {
               onNotice={say}
               onTodo={todo.record}
               onList={() => {
-                setParam('mode', undefined)
+                setParam('mode', 'list')
               }}
             />
           )}

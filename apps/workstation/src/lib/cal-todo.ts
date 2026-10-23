@@ -383,7 +383,7 @@ export function parseFace(raw: string | null | undefined): CalTodoFace | undefin
 
 /** 上次那一面；第一次（本机没记）是清单。 */
 export function loadFace(): CalTodoFace {
-  return parseFace(readString(CAL_TODO_FACE_KEY)) ?? 'list'
+  return parseFace(readString(CAL_TODO_FACE_KEY)) ?? 'calendar' // Luoye 10-23：默认日历
 }
 
 export function saveFace(face: CalTodoFace): void {

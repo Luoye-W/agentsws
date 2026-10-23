@@ -89,7 +89,7 @@ const row = (id: string): HTMLElement => {
 
 describe('收件箱「记成待办」（WP469）', () => {
   it('「⋯」第一项就是它（快捷键 T）；记完进「本周」、提示条能去看能撤销、那一行收起来', async () => {
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     await screen.findAllByTestId('inbox-row')
     fireEvent.click(within(row('mail:<t_shop@x>')).getByTestId('inbox-row-more'))
     const menu = await screen.findByTestId('inbox-row-menu')
@@ -143,7 +143,7 @@ describe('收件箱「记成待办」（WP469）', () => {
         origin: { inbox_item: 'card:ap_reply', card_id: 'ap_reply' },
       },
     ]
-    renderWithProviders(<InboxPage />, '/inbox')
+    renderWithProviders(<InboxPage />, '/inbox?mode=list')
     const recorded = await screen.findByTestId('inbox-row-recorded')
     expect(recorded.getAttribute('data-todo')).toBe('td_old')
   })
