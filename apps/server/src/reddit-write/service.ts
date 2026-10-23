@@ -234,9 +234,14 @@ export interface RedditWriteService {
   /**
    * WP332（决策 762）：没发出去的那一条「再填一次」——同一份已批的草稿原样再交给插件（新的一件活），
    * **不出新卡、不用重批**；人照样自己点发送。只有没发出去的、走插件的、记着草稿的才能再填。
+   *
+   * WP478（Luoye 10-23）：岗位页上先「修改」再「改好了，再填一次」——带 `edit.text` 时按改过的字交出去，
+   * 这一条的草稿就换成改过的（插件侧边栏看到的是同一段字；批的那一版记在 `draft_text`）。
+   * 和侧边栏「打开这一条」改字同一套：转纯文字（决策 1510）、过一遍外发检查、拼得出来才收。
    */
   refill(
     job_id: string,
+    edit?: { text?: string },
   ): Promise<{ ok: true; view: RedditWriteView } | { ok: false; message: string }>
   /** WP332：人看过、收起岗位页那一行提醒（这一条再填一次又没发出去时重新出）。 */
   dismiss(job_id: string): RedditWriteView | undefined
@@ -1005,7 +1010,7 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       )
     },
 
-    async refill(job_id) {
+    async refill(job_id, edit) {
       const entry = entries.find((e) => e.job_id === job_id)
       if (entry === undefined) return { ok: false, message: '找不到这一条。' }
       if (entry.state !== 'failed')
@@ -1016,13 +1021,36 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         }
       if (!canRefill(entry) || entry.write === undefined || entry.text === undefined)
         return { ok: false, message: '这一条没记下草稿，不能再填；从卡片流里重新起草一张。' }
+      // WP478：岗位页上改过字——按改过的交（转纯文字、过外发检查、拼得出来才收）
+      const edited = edit?.text === undefined ? undefined : redditPlainText(edit.text).trim()
+      if (edit?.text !== undefined && (edited === undefined || edited === ''))
+        return { ok: false, message: '改过的字是空的，没交出去。' }
+      const changed = edited !== undefined && edited !== entry.text
+      const text = changed ? edited : entry.text
+      if (changed) {
+        try {
+          redditWritePlan({ write: entry.write, text }, options.origin)
+        } catch (err) {
+          return { ok: false, message: err instanceof Error ? err.message : String(err) }
+        }
+        const scan = checkOutbound(
+          `${entry.write.kind === 'submit' ? entry.write.title : ''}\n${text}`,
+        )
+        if (!scan.ok) return { ok: false, message: replyBlockedReason(scan) }
+      }
       const queued = await toPlugin({
         write: entry.write,
-        text: entry.text,
+        text,
         approval_item_id: entry.approval_item_id,
         ...(entry.label === undefined ? {} : { label: entry.label }),
       })
       if (!queued.ok) return { ok: false, message: queued.why }
+      if (changed) {
+        entry.draft_text ??= entry.text
+        entry.text = text
+        entry.record = { ...entry.record, content: text }
+        entry.edited = true
+      }
       entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
       entry.job_id = queued.job.id
       entry.plan_v = WRITE_PLAN_VERSION

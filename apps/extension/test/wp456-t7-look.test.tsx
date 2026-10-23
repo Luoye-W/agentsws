@@ -212,6 +212,41 @@ describe('WP456-T7 · 交给插件之后的那几行', () => {
   })
 })
 
+describe('WP478 · 没发出去的那一条「修改」再填', () => {
+  const withText = { ...failed, text: 'Hi Carol, the original.' }
+
+  it('修改 → 摊开草稿，改好了再填一次：交的是改过的字', async () => {
+    const { sent } = await harness(snap({ cards: [], writes: [withText] }))
+    await click(q('ws-refill-edit'))
+    const box = q('ws-refill-text') as HTMLTextAreaElement
+    expect(box.value).toBe('Hi Carol, the original.')
+    // 改的时候那一行上不再出「再填一次」
+    expect(q('ws-refill')).toBeNull()
+    await setValue(box, 'Hi Carol, edited.')
+    await click(q('ws-refill-save'))
+    const m = sent.find((x) => x.type === 'panel-refill') as { job: string; text?: string }
+    expect(m).toMatchObject({ job: 'rdw_f', text: 'Hi Carol, edited.' })
+    expect(q('ws-refill-editor')).toBeNull()
+  })
+
+  it('取消：原样不动、不交；「再填一次」不带字', async () => {
+    const { sent } = await harness(snap({ cards: [], writes: [withText] }))
+    await click(q('ws-refill-edit'))
+    await setValue(q('ws-refill-text'), 'scratch')
+    await click(q('ws-refill-cancel'))
+    expect(sent.some((x) => x.type === 'panel-refill')).toBe(false)
+    await click(q('ws-refill'))
+    const m = sent.find((x) => x.type === 'panel-refill') as { text?: string }
+    expect(m.text).toBeUndefined()
+  })
+
+  it('没记下草稿的：没有「修改」', async () => {
+    await harness(snap({ cards: [] }))
+    expect(q('ws-refill')).not.toBeNull()
+    expect(q('ws-refill-edit')).toBeNull()
+  })
+})
+
 describe('WP456-T7 · 令牌只有生成的那一份', () => {
   const read = (p: string) => readFileSync(join(SRC, p), 'utf8')
 

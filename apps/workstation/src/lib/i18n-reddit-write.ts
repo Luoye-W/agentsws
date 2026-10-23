@@ -32,7 +32,13 @@ export const REDDIT_WRITE_ZH: Record<string, string> = {
   'redditw.notice.refill': '再填一次',
   'redditw.notice.refill.hint':
     '同一份批过的草稿再交给 Chrome 里的插件填好，你自己点发送。不用重批。',
-  'redditw.notice.dismiss': '收起',
+  // WP478（Luoye 10-23）：× 就是这一条不发了（收起，不再提醒）；「修改」就地改字再填
+  'redditw.notice.dismiss': '不发了',
+  'redditw.notice.dismiss.hint': '不发了：收起这一行，不再提醒',
+  'redditw.notice.edit': '修改',
+  'redditw.notice.edit.label': '要填进去的字',
+  'redditw.notice.edit.save': '改好了，再填一次',
+  'redditw.notice.edit.cancel': '取消',
   'redditw.notice.more': '还有 {n} 条',
   'redditw.notice.kind.reply': '回复（r/{sub}）',
   'redditw.notice.kind.comment': '回帖（r/{sub}）',
@@ -71,7 +77,12 @@ export const REDDIT_WRITE_EN: Record<string, string> = {
   'redditw.notice.refill': 'Fill again',
   'redditw.notice.refill.hint':
     'Hands the same approved draft to the helper in Chrome again. You click send yourself. No new approval needed.',
-  'redditw.notice.dismiss': 'Dismiss',
+  'redditw.notice.dismiss': 'Don’t post',
+  'redditw.notice.dismiss.hint': 'Don’t post: hide this line, no more reminders',
+  'redditw.notice.edit': 'Edit',
+  'redditw.notice.edit.label': 'Text to fill in',
+  'redditw.notice.edit.save': 'Done, fill again',
+  'redditw.notice.edit.cancel': 'Cancel',
   'redditw.notice.more': '{n} more',
   'redditw.notice.kind.reply': 'Reply (r/{sub})',
   'redditw.notice.kind.comment': 'Comment (r/{sub})',

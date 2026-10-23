@@ -5614,10 +5614,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           in_plugin: redditWrites?.inPlugin() ?? 0,
         }),
         // WP332（决策 762）：没发出去 → 岗位页「再填一次」（同一份已批草稿再交给插件，不用重批）
-        redditRefill: async (_actor, job_id) => {
+        // WP478：岗位页上「修改」过就带着改过的字（草稿换成它）
+        redditRefill: async (_actor, job_id, edit) => {
           if (redditWrites === undefined)
             throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
-          const out = await redditWrites.refill(job_id)
+          const out = await redditWrites.refill(job_id, edit)
           if (!out.ok) throw new ApiError('conflict', out.message)
           return out.view
         },

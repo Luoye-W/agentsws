@@ -349,15 +349,16 @@ export function panelPostAnswer(
   )
 }
 
-/** 没发出去的那一条再填一次。 */
+/** 没发出去的那一条再填一次（WP478：给了 `text` = 改过字再填，草稿换成它）。 */
 export function panelRefill(
   options: LocalClientOptions,
   job: string,
+  text?: string,
 ): Promise<LocalCallResult<PanelFillResult>> {
   return call<PanelFillResult>(
     options,
     `/v1/extension/panel/writes/${encodeURIComponent(job)}/refill`,
-    { method: 'POST', body: {} },
+    { method: 'POST', body: text === undefined ? {} : { text } },
   )
 }
 

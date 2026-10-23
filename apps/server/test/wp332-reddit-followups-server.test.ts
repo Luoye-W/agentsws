@@ -148,6 +148,32 @@ describe('WP332 没发出去 → 再填一次（不用重批）', () => {
     expect((await post(`/v1/social/reddit/writes/${view.job_id}/refill`)).status).toBe(409)
   })
 
+  it('WP478：岗位页「修改」过再填——带 text，交给插件的是改过的字，进度里的草稿也换成它', async () => {
+    const b = await brand()
+    await b.adsActions?.next(['reddit'], 0)
+    const text = 'Hi Alice, IVRA here. The anti-fog insert in the box helps a lot with glasses.'
+    const staged = await data<{ approval_item_id: string }>(
+      await post('/v1/social/reddit/stage', { target: replyTarget, text }),
+    )
+    await approve(staged.approval_item_id)
+    t += 125_000
+    await b.redditWrites.sweep()
+    const first = await openAwaiting(b)
+    b.adsActions?.result(first?.id as string, {
+      outcome: 'stopped',
+      message: '你点了停止，已停下。',
+      step: 6,
+      reads: {},
+    })
+    const edited = 'Hi Alice, IVRA here. Try the anti-fog insert that ships in the box.'
+    const res = await post(`/v1/social/reddit/writes/${first?.id}/refill`, { text: edited })
+    expect(res.status).toBe(200)
+    const view = await data<RedditWriteView>(res)
+    expect(view).toMatchObject({ state: 'awaiting', text: edited })
+    const again = await openAwaiting(b)
+    expect(again?.plan.allow.values).toEqual([edited])
+  })
+
   it('收起提醒；找不到那一条 404', async () => {
     const b = await brand()
     await b.adsActions?.next(['reddit'], 0)
