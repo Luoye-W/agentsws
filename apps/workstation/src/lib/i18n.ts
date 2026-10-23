@@ -20,6 +20,7 @@ import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { COMPETITOR_WATCH_EN, COMPETITOR_WATCH_ZH } from './i18n-competitor-watch'
 import { CONTENT_DIGEST_EN, CONTENT_DIGEST_ZH } from './i18n-content-digest'
 import { DATA_LOCATION_EN, DATA_LOCATION_ZH } from './i18n-data-location'
+import { EGO_EN, EGO_ZH } from './i18n-ego'
 import { EXT_INSTALL_EN, EXT_INSTALL_ZH } from './i18n-ext-install'
 import { EXT_ONBOARD_EN, EXT_ONBOARD_ZH } from './i18n-ext-onboard'
 import { FEEDBACK_EN, FEEDBACK_ZH } from './i18n-feedback'
@@ -9028,6 +9029,7 @@ const TABLES: Record<Lang, Table> = {
     // WP345：连接卡上「装插件」那一块（随工坊安装与更新）
     ...EXT_INSTALL_ZH,
     ...EXT_ONBOARD_ZH,
+    ...EGO_ZH,
     // WP342：外壳整理（账号菜单里的积分 / 两组入口 / 场景、输入框里的 AI 钮）
     ...SHELL_ZH,
     // WP343：「我的助理」（原随便聊 + 我的代理）
@@ -9105,6 +9107,7 @@ const TABLES: Record<Lang, Table> = {
     ...GEO_EN,
     ...EXT_INSTALL_EN,
     ...EXT_ONBOARD_EN,
+    ...EGO_EN,
     ...SHELL_EN,
     ...ASSISTANT_EN,
     ...SETTINGS_EN,

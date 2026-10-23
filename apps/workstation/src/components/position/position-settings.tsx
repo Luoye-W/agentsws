@@ -31,10 +31,12 @@ import {
   getPositionConnections,
   getRoleDefinition,
   getSchedules,
+  getWriteReview,
   type PositionConnectionItem,
   type PositionInstanceData,
   patchSchedule,
   type ScheduledTaskRow,
+  setWriteReview,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { actionLines, connectorLines, scopeLines, skillLines } from '@/lib/duty-capabilities'
@@ -548,6 +550,46 @@ export function MemoryLayers({
   )
 }
 
+/** WP483：岗位里有会往外发帖 / 回帖 / 找红人的职责，才摆「发之前让我看一眼」。 */
+const WRITES_OUT = /^(social|pr|kol)\./u
+
+/**
+ * WP483（决策 1660）：「发之前让我看一眼」（默认关）。关着：批了的帖子 / 回帖工坊在 ego 里填好就直接发；
+ * 开着：只填好、留页面给人点。按岗位记（用我在这个岗位上的任一条分配去读写）。
+ */
+function WriteReviewRow({ assignment }: { assignment: string }): ReactNode {
+  const { t } = useApp()
+  const client = useQueryClient()
+  const q = useQuery({
+    queryKey: ['write-review', assignment],
+    queryFn: () => getWriteReview(assignment),
+    retry: false,
+  })
+  const toggle = useMutation({
+    mutationFn: (on: boolean) => setWriteReview(on, assignment),
+    onSuccess: (v) => client.setQueryData(['write-review', assignment], v),
+  })
+  if (q.isError || q.data === undefined) return null
+  return (
+    <div
+      className="mt-2 flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2.5"
+      data-testid="settings-write-review"
+    >
+      <span className="flex items-center gap-1 text-sm">
+        {t('ego.review.label')}
+        <Hint text={t('ego.review.hint')} testId="settings-write-review-hint" />
+      </span>
+      <Switch
+        checked={q.data.review_before_send}
+        disabled={toggle.isPending}
+        aria-label={t('ego.review.label')}
+        data-testid="settings-write-review-switch"
+        onCheckedChange={(on) => toggle.mutate(on)}
+      />
+    </div>
+  )
+}
+
 export function PositionSettings({
   id,
   view,
@@ -632,6 +674,14 @@ export function PositionSettings({
                 : [{ role_id: r.role_id, assignment_id: r.my_assignment_id }],
             )}
           />
+          {(() => {
+            const writer = view.roles.find(
+              (r) => r.my_assignment_id !== undefined && WRITES_OUT.test(r.role_id),
+            )
+            return writer?.my_assignment_id === undefined ? null : (
+              <WriteReviewRow assignment={writer.my_assignment_id} />
+            )
+          })()}
         </section>
 
         <section data-testid="position-memory">

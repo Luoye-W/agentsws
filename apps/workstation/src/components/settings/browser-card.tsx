@@ -49,13 +49,13 @@ import {
   setBrowserSettings,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { useMode } from '@/lib/mode'
+import { EgoRecommend } from './ego-recommend'
 
 /**
  * WP463：ego 的官网（不给安装包直链：那条链接带版本参数、会变；官网自己按平台给）。
  * 我们不打包、不分发、不代下载 ego（docs/111 §3）。
  */
-const EGO_SITE = 'https://lite.ego.app/'
+const EGO_SITE = 'https://lite.ego.app/download'
 
 /** 桌面壳托盘里那条"打开工作用的浏览器"挑的端口（`apps/desktop`）。 */
 const DEFAULT_ENDPOINT = 'http://127.0.0.1:9333'
@@ -105,12 +105,10 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
     retry: false,
   })
   /*
-   * WP463：ego 那一项只在 ① 个人用法里出现（② 同事互联、③ 公司集体不出现），而且要服务端
-   * 说这一档允许（个人档）。出现时现探一次装没装（服务端跑一次 `ego-browser skill`，零点几秒），
-   * 探到了显示版本号。
+   * WP463 → WP483（决策 1659 改 1477）：ego 在个人 / 同事互联 / 公司三种用法里都出现、都推荐，只要服务端说这一档允许
+   * （服务跑在你这台电脑上）。出现时现探一次装没装（服务端跑一次 `ego-browser skill` + 真连一次）。
    */
-  const { solo } = useMode()
-  const egoShown = solo && settings.data?.ego_allowed !== undefined
+  const egoShown = settings.data?.ego_allowed !== undefined
   const ego = useQuery({
     queryKey: ['browser-ego', assignment],
     queryFn: () => getEgoBrowserStatus(assignment),
@@ -199,6 +197,8 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
     status?: React.ReactNode,
     /** WP463：能看见但选不了（ego 没装时）。 */
     disabled?: boolean,
+    /** WP483：名字旁边标「推荐」（ego）。 */
+    recommended?: boolean,
   ) => (
     <label
       className={`flex items-start gap-2 rounded-md border p-2.5 ${
@@ -220,6 +220,15 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
       <span className="flex flex-col gap-0.5">
         <span className="flex items-center gap-1 text-sm font-medium">
           {label}
+          {recommended === true ? (
+            <span
+              className="rounded-full bg-primary/10 px-1.5 text-xs font-normal text-primary"
+              data-slot="badge"
+              data-testid={`browser-mode-${value}-recommended`}
+            >
+              {t('ego.recommended')}
+            </span>
+          ) : null}
           <Hint text={note} />
         </span>
         {blocked === undefined ? null : (
@@ -241,6 +250,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
       data-testid="browser-ego-status"
     >
       {t('settings.browser.ego.version', { version: ego.data?.version ?? '?' })}
+      {view?.ego_default === true ? ` · ${t('ego.default')}` : ''}
     </span>
   ) : (
     <span
@@ -288,6 +298,33 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
           />
         </p>
         <SafetyNote text={t('settings.browser.safety')} />
+
+        {/* WP483（决策 1658）：主推 ego——没装给「去下载」，装了连不上说下一步，就绪一行 */}
+        {egoShown && view?.ego_allowed === true ? (
+          <EgoRecommend
+            status={ego.data}
+            checking={ego.isFetching}
+            onRecheck={() => {
+              void ego.refetch()
+              void client.invalidateQueries({ queryKey: ['browser-settings'] })
+            }}
+          />
+        ) : null}
+
+        {/* WP483：ego 排第一、标「推荐」 */}
+        {egoShown
+          ? option(
+              'ego',
+              t('settings.browser.ego'),
+              t('settings.browser.ego.note'),
+              view?.ego_allowed === true
+                ? undefined
+                : (view?.ego_blocked_reason ?? t('settings.browser.ego.blocked')),
+              egoStatus,
+              !egoInstalled,
+              true,
+            )
+          : null}
 
         {option('off', t('settings.browser.off'), t('settings.browser.off.note'))}
 
@@ -496,19 +533,6 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
             </Step>
           </div>
         ) : null}
-
-        {egoShown
-          ? option(
-              'ego',
-              t('settings.browser.ego'),
-              t('settings.browser.ego.note'),
-              view?.ego_allowed === true
-                ? undefined
-                : (view?.ego_blocked_reason ?? t('settings.browser.ego.blocked')),
-              egoStatus,
-              !egoInstalled,
-            )
-          : null}
 
         {probe === undefined ? null : (
           <p

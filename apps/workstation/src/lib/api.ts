@@ -2580,6 +2580,8 @@ export interface BrowserSettingsView extends BrowserSettings {
   /** WP463：同一条理由——ego 装在你那台电脑上。老服务进程没有这一格（当不允许）。 */
   ego_allowed?: boolean
   ego_blocked_reason?: string
+  /** WP483（决策 1658）：没选过、探到 ego → 按 ego 算（默认用 ego）。 */
+  ego_default?: boolean
 }
 
 /** WP463：这台机器上 ego 装没装、能不能跑（`GET /v1/settings/browser/ego`）。 */
@@ -2589,6 +2591,12 @@ export interface EgoBrowserStatus {
   ego_path?: string
   version?: string
   detail?: string
+  /** WP483：装好了之后真连一次的结果（老服务端没有）。 */
+  connected?: boolean
+  connect_detail?: string
+  /** WP483：连不上是因为工坊以管理员身份在跑（Windows）。 */
+  admin?: boolean
+  default_ego?: boolean
 }
 
 /** 现探一次 ego（服务端跑一次 `ego-browser skill`，零点几秒）。 */
@@ -4798,6 +4806,18 @@ export const setAutopilot = (
     body: { on },
     ...withAssignment(assignment),
   })
+
+/** WP483（决策 1660）：岗位上的「发之前让我看一眼」（默认关）。 */
+export interface WriteReviewSetting {
+  position_id: string
+  review_before_send: boolean
+}
+
+export const getWriteReview = (assignment?: string): Promise<WriteReviewSetting> =>
+  api('/v1/write-review', withAssignment(assignment))
+
+export const setWriteReview = (on: boolean, assignment?: string): Promise<WriteReviewSetting> =>
+  api('/v1/write-review', { method: 'PUT', body: { on }, ...withAssignment(assignment) })
 
 /** WP428：直接答的门槛「严格 / 适中 / 宽松」。 */
 export type ChatAutoAnswerStrictnessView = 'strict' | 'balanced' | 'loose'
