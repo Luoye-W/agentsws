@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 200
+description: Klaviyo、Shopify Email、AfterShip、17TRACK 四家都还没接上真调用；Klaviyo 和 AfterShip 的只读密钥表单已就位，面板上对应那块照实写「还没连」，不出编的数字。
 positions: [dtc-ops, web-ops, customer-care, site]
 roles: [dtc.email-marketing, dtc.fulfillment, site.shopify-email, dtc.support]
 ---
 # 邮件营销与物流追踪
 
-这篇讲邮件营销（Klaviyo、Shopify Email）和物流追踪（AfterShip、17TRACK）这四个连接。**四家现在都还没接上真调用**，下面照实写到了哪一步。
+邮件营销（Klaviyo、Shopify Email）和物流追踪（AfterShip、17TRACK）这四个连接**现在都还没接上真调用**：Klaviyo 与 AfterShip 的只读表单已经就位，另外两家排在它们后面。下面照实写到了哪一步。
 
 | 连接 | 一句话 | 现在到哪了 |
 |---|---|---|

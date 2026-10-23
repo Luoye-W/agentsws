@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 260
+description: 开发信建议用单独的发信域名，免得主域名信誉受损；在 DNS 配好 SPF、DKIM、DMARC，SPF 或 DKIM 没过就不发；每只邮箱头两周每天最多 20 封，之后 50 封。
 positions: [b2b]
 roles: [b2b.outbound]
 ---
 # 开发信的发信域名与体检
 
-这篇讲开发信为什么建议用单独的发信域名、怎么买怎么配，以及发信前那次「体检」看的是什么。
+开发信建议用和主站分开的发信域名（比如主站 `brand.com`、发信用 `trybrand.com`），在 DNS 里配好 SPF、DKIM、DMARC；发信前系统会做一次体检，SPF 或 DKIM 没过就不发。
 
 ## 为什么建议单独的域名
 

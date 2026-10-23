@@ -1,11 +1,15 @@
 ---
 /** 一篇教程：左边目录（全部教程）、中间正文（docs/help 原文，安全渲染）、右边本页目录。 */
-import { GITHUB_URL } from '../config.js'
-import type { Lang } from '../i18n/common.js'
+import { HELP_GROUPS } from '@agentsws/contracts'
+import { GITHUB_URL, SITE_URL } from '../config.js'
+import { COMMON, type Lang, localePath } from '../i18n/common.js'
 import { PAGES } from '../i18n/pages.js'
 import Base from '../layouts/Base.astro'
-import { HELP_DIR, helpGroup, helpSlugs, loadHelp } from '../lib/help.js'
+import { siteCatalog } from '../lib/catalog.js'
+import { helpPath } from '../lib/help.js'
+import { docMdPath } from '../lib/machine.js'
 import { docHref } from '../lib/markdown.js'
+import { articleLd, breadcrumbs } from '../lib/schema.js'
 import '../styles/pages.css'
 
 interface Props {
@@ -14,22 +18,47 @@ interface Props {
 }
 const { lang, slug } = Astro.props
 const t = PAGES[lang].docs
-const slugs = helpSlugs()
-const all = slugs.map((s) => loadHelp(s, lang))
+const all = siteCatalog().guides[lang]
 const doc = all.find((d) => d.slug === slug)
 if (doc === undefined) throw new Error(`没有这一篇教程：${slug}`)
-const i = slugs.indexOf(slug)
+const i = all.indexOf(doc)
 const prev = i > 0 ? all[i - 1] : undefined
 const next = i < all.length - 1 ? all[i + 1] : undefined
-const order = ['start', 'models', 'connect', 'channels', 'tools'] as const
-const source = `${GITHUB_URL}/blob/main/${HELP_DIR}/${lang === 'en' ? `${slug}.en.md` : `${slug}.md`}`
-const brand = lang === 'zh' ? 'Agents 工坊' : 'Agents Workshop'
+// 相关教程：同岗位的优先，再同一组的，最多三篇（不含上一篇 / 下一篇已经链到的）
+const shared = (d: (typeof all)[number]) =>
+  d.positions.filter((p) => doc.positions.includes(p)).length
+const related = all
+  .filter((d) => d !== doc && d !== prev && d !== next)
+  .map((d) => ({ d, score: shared(d) * 2 + (d.group === doc.group ? 1 : 0) }))
+  .filter((x) => x.score > 0)
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 3)
+  .map((x) => x.d)
+const source = `${GITHUB_URL}/blob/main/${helpPath(slug, lang)}`
+const brand = COMMON[lang].brand
+const url = `${SITE_URL}${docHref(slug, lang)}`
+const jsonLd = [
+  articleLd({
+    type: 'TechArticle',
+    lang,
+    url,
+    title: doc.title,
+    description: doc.description,
+    modified: doc.updated,
+    section: t.groups[doc.group],
+  }),
+  breadcrumbs([
+    { name: brand, url: `${SITE_URL}${localePath('/', lang)}` },
+    { name: t.eyebrow, url: `${SITE_URL}${localePath('/docs/', lang)}` },
+    { name: doc.title, url },
+  ]),
+]
 ---
-<Base lang={lang} path={`/docs/${slug}/`} title={`${doc.title} · ${brand}`} description={doc.summary.slice(0, 160)} og="docs" current="docs">
+<Base lang={lang} path={`/docs/${slug}/`} title={`${doc.title} · ${brand}`} description={doc.description.slice(0, 160)} og="docs" current="docs" jsonLd={jsonLd} markdown={docMdPath(slug, lang)} ogType="article">
   <div class="wrap doc-shell">
     <nav class="doc-nav" aria-label={t.all}>
-      {order.map((g) => {
-        const list = all.filter((d) => helpGroup(d.slug) === g)
+      {HELP_GROUPS.map((g) => {
+        const list = all.filter((d) => d.group === g)
         return list.length === 0 ? null : (
           <>
             <h2>{t.groups[g]}</h2>
@@ -41,7 +70,14 @@ const brand = lang === 'zh' ? 'Agents 工坊' : 'Agents Workshop'
     <article class="doc-main">
       <div class="eyebrow">{t.eyebrow}</div>
       <h1>{doc.title}</h1>
+      <p class="doc-meta"><time datetime={doc.updated}>{t.updated} {doc.updated}</time></p>
       <div class="prose" set:html={doc.html} />
+      {related.length > 0 && (
+        <aside class="doc-related" aria-label={t.related}>
+          <h2>{t.related}</h2>
+          <ul>{related.map((d) => <li><a href={docHref(d.slug, lang)}>{d.title}</a><p>{d.description}</p></li>)}</ul>
+        </aside>
+      )}
       <div class="doc-foot">
         {prev ? <a href={docHref(prev.slug, lang)}>← {t.prev}：{prev.title}</a> : <span />}
         {next ? <a href={docHref(next.slug, lang)}>{t.next}：{next.title} →</a> : <span />}

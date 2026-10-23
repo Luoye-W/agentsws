@@ -1,6 +1,9 @@
+---
+description: WeChat is a private line to your own assistant; WeCom, Feishu and DingTalk bots serve your team. Decisions are always made in the workstation, never in the chat app.
+---
 # Message channels: WeChat, WeCom, Feishu and DingTalk
 
-This covers two channels: WeChat lives in Settings → Notifications → WeChat reminders, the team bots in Settings → Chat channels. They are two different things: **WeChat is a private chat between you and your own assistant**; **the WeCom bot is the one for the team**.
+WeChat lives in Settings → Notifications → WeChat reminders, the team bots in Settings → Chat channels — and they are two different things: **WeChat is a private chat between you and your own assistant**; **the WeCom bot is the one for the team**.
 
 | Channel | Who uses it | What it does |
 |---|---|---|

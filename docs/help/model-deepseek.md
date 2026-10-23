@@ -1,4 +1,7 @@
 ---
+group: models
+order: 20
+description: 推荐用 DeepSeek 账号在浏览器登录一次，不用建 key、按账号余额扣；也可以在 DeepSeek 开放平台建 API key 按量计费。国内直连、便宜，没别的偏好就选它。
 positions: []
 roles: []
 ---

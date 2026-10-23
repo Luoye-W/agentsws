@@ -1,6 +1,9 @@
+---
+description: Founder-profile posting is self-serve; Company Page posting needs LinkedIn review. Until then, approved posts become copy-and-post to-dos. No scraping or auto-DMs.
+---
 # LinkedIn: the Company Page and the founder's own profile
 
-The connection behind the LinkedIn duty in Social Media: how to set it up, what happens when it can't publish, and what it **never** does.
+The founder's own profile can post right away with "Share on LinkedIn"; the Company Page needs LinkedIn's Community Management API review. Until that's approved, planning and approvals work as usual and due posts become to-dos for you to copy and post.
 
 | Connection | In one line | Review |
 |---|---|---|

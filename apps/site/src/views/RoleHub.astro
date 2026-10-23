@@ -1,0 +1,54 @@
+---
+/** 岗位汇总页 `/docs/roles/<岗位>/`（docs/113 §2.1）：这个岗位的教程 + 人人都用得到的。 */
+import { SITE_URL } from '../config.js'
+import { COMMON, type Lang, localePath } from '../i18n/common.js'
+import { PAGES } from '../i18n/pages.js'
+import Base from '../layouts/Base.astro'
+import { roleHub } from '../lib/hubs.js'
+import { docHref } from '../lib/markdown.js'
+import { breadcrumbs } from '../lib/schema.js'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+  role: string
+}
+const { lang, role } = Astro.props
+const t = PAGES[lang].docs
+const hub = roleHub(role, lang)
+if (hub === undefined) throw new Error(`没有这个岗位的教程：${role}`)
+const title = t.hub.title.replace('{role}', hub.role.name)
+const brand = COMMON[lang].brand
+const path = `/docs/roles/${role}/`
+const jsonLd = [
+  breadcrumbs([
+    { name: brand, url: `${SITE_URL}${localePath('/', lang)}` },
+    { name: t.eyebrow, url: `${SITE_URL}${localePath('/docs/', lang)}` },
+    { name: hub.role.name, url: `${SITE_URL}${localePath(path, lang)}` },
+  ]),
+]
+const groups = [
+  { title: t.hub.own, list: hub.own },
+  { title: t.hub.general, list: hub.general },
+]
+---
+<Base lang={lang} path={path} title={`${title} · ${brand}`} description={hub.role.line} og="docs" current="docs" jsonLd={jsonLd}>
+  <section class="page-hero" style="padding-bottom:88px">
+    <div class="wrap center">
+      <div class="eyebrow">{t.hub.eyebrow}</div>
+      <h1 class="page-h1">{title}</h1>
+      <p class="sub">{hub.role.line}</p>
+      <div class="doc-index">
+        {groups.map((g) => g.list.length === 0 ? null : (
+          <div>
+            <h2>{g.title}</h2>
+            <ul class="doc-cards">
+              {g.list.map((d) => <li><a href={docHref(d.slug, lang)}><h3>{d.title}</h3><p>{d.description}</p></a></li>)}
+            </ul>
+          </div>
+        ))}
+        <p><a href={localePath('/docs/', lang)}>← {t.hub.back}</a></p>
+      </div>
+    </div>
+  </section>
+</Base>

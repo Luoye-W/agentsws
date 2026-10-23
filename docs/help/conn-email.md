@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 130
+description: 在邮箱网页版打开 IMAP / SMTP 并生成授权码，把邮箱地址和授权码填进表单，服务器地址自动带出；要的是授权码，不是登录密码，也不用向任何平台申请。
 positions: [customer-care, kol-marketing, b2b, pr]
 roles: [dtc.support, b2b.sales, b2b.outbound, pr.press]
 ---
 # 连邮箱（任意邮箱 IMAP / SMTP）
 
-这篇讲怎么用一串「授权码」把任何一个邮箱接进来，让岗位能收信、发信。
+任何邮箱都能接：在邮箱里打开 IMAP / SMTP、生成一串「授权码」填进表单，岗位就能收信、发信，不用向任何平台申请。
 
 ## 任意邮箱（IMAP / SMTP）
 

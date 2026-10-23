@@ -1,3 +1,6 @@
+---
+description: Sign in once with your DeepSeek account (recommended, no key, paid from your balance) or paste an API key from the DeepSeek platform. Cheap and a good default.
+---
 # Connect DeepSeek (account sign-in / API key)
 
 Direct in mainland China, cheap and good enough — pick it if you have no other preference. There are two ways to connect; pick one:

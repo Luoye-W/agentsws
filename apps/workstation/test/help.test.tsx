@@ -2,7 +2,7 @@
  * WP156（36 §7 第三档）：**教程文章**——打包、渲染、右栏面板、卡片上的「看教程」。
  *
  * 四组：
- * 1. 每一篇都打包进来了（中英各一份），标题都有词条；
+ * 1. 每一篇都打包进来了（中英各一份），中英标题都从文章里读得出；
  * 2. 渲染（WP157 起合进 `safe-markdown.test.tsx`，与时间线同一份）；
  * 3. 卡片上点「看教程」→ 右栏「教程」面板打开那一篇；图标轨打开是目录；
  * 4. 没有右栏时（单张卡的单测）退回对话框，点了照样看得到。
@@ -16,14 +16,14 @@ import { RailStateProvider } from '@/components/rail/rail-state'
 import { resetPanelRegistry } from '@/components/rail/registry'
 import { RightRail } from '@/components/rail/right-rail'
 import {
+  BUNDLED_HELP_SLUGS,
   bundledHelpFiles,
   HELP_BY_VENDOR,
-  HELP_SLUGS,
   helpForContext,
   helpSlugOf,
+  helpTitle,
   loadHelpArticle,
 } from '@/lib/help'
-import { translate } from '@/lib/i18n'
 import { openRailPanel, renderWithProviders } from './helpers'
 
 vi.mock('@/lib/api', async () => ({
@@ -33,22 +33,22 @@ vi.mock('@/lib/api', async () => ({
 }))
 
 describe('打包', () => {
-  it('每一篇中英各一份都在包里，标题两种语言都有词条', () => {
+  it('每一篇中英各一份都在包里，中英标题都读得出（取自文章的一级标题）', () => {
     const files = bundledHelpFiles()
-    for (const slug of HELP_SLUGS) {
+    for (const slug of BUNDLED_HELP_SLUGS) {
       expect(files).toContain(`${slug}.md`)
       expect(files).toContain(`${slug}.en.md`)
-      expect(translate('zh', `help.${slug}.title`)).not.toBe(`help.${slug}.title`)
-      expect(translate('en', `help.${slug}.title`)).not.toBe(translate('zh', `help.${slug}.title`))
+      expect(helpTitle(slug, 'zh')).not.toBe(slug)
+      expect(helpTitle(slug, 'en')).not.toBe(helpTitle(slug, 'zh'))
     }
   })
 
   it('厂商 → 教程的对照表只指向写了的那几篇', () => {
-    for (const slug of Object.values(HELP_BY_VENDOR)) expect(HELP_SLUGS).toContain(slug)
+    for (const slug of Object.values(HELP_BY_VENDOR)) expect(BUNDLED_HELP_SLUGS).toContain(slug)
   })
 
   it('按语言取；每篇都以一个一级标题开头、带编号步骤', async () => {
-    for (const slug of HELP_SLUGS) {
+    for (const slug of BUNDLED_HELP_SLUGS) {
       const zh = await loadHelpArticle(slug, 'zh')
       const en = await loadHelpArticle(slug, 'en')
       expect(zh?.startsWith('# ')).toBe(true)
@@ -59,9 +59,10 @@ describe('打包', () => {
     }
   })
 
-  it('地址认得出 slug；认不得的回 undefined', () => {
+  it('地址认得出 slug（官网新加、随包里没有的也认，面板打开时去取）；写法不对的回 undefined', () => {
     expect(helpSlugOf('agentsws://help/browser')).toBe('browser')
-    expect(helpSlugOf('agentsws://help/nope')).toBeUndefined()
+    expect(helpSlugOf('agentsws://help/brand-new')).toBe('brand-new')
+    expect(helpSlugOf('agentsws://help/Bad_Slug')).toBeUndefined()
     expect(helpSlugOf('agentsws://file/browser')).toBeUndefined()
     expect(helpSlugOf(undefined)).toBeUndefined()
   })
@@ -82,7 +83,9 @@ describe('右栏「教程」面板', () => {
       '/settings',
     )
     const link = screen.getByTestId('tutorial-link')
-    expect(link.textContent).toBe('看教程')
+    // Luoye 10-23：书本图标，名字在 aria-label / 悬停提示里
+    expect(link.textContent).toBe('')
+    expect(link.getAttribute('aria-label')).toBe('看教程')
     fireEvent.click(link)
     const panel = await screen.findByTestId('help-panel')
     expect(panel.getAttribute('data-slug')).toBe('browser')
@@ -118,7 +121,7 @@ describe('右栏「教程」面板', () => {
       helpForContext({}).general.length,
     )
     fireEvent.click(screen.getByTestId('help-show-all'))
-    expect(screen.getAllByTestId('help-index-item')).toHaveLength(HELP_SLUGS.length)
+    expect(screen.getAllByTestId('help-index-item')).toHaveLength(BUNDLED_HELP_SLUGS.length)
   })
 })
 
@@ -144,7 +147,7 @@ describe('没有右栏时', () => {
         </AppProvider>
       </QueryClientProvider>,
     )
-    expect(screen.getByTestId('tutorial-link').textContent).toBe('Tutorial')
+    expect(screen.getByTestId('tutorial-link').getAttribute('aria-label')).toBe('Tutorial')
     fireEvent.click(screen.getByTestId('tutorial-link'))
     const dialog = await screen.findByRole('dialog')
     expect((await within(dialog).findByTestId('help-article')).textContent).toContain(
@@ -177,7 +180,7 @@ describe('⌘K 里搜教程（WP157）', () => {
       </RailStateProvider>,
     )
     const rows = await screen.findAllByTestId('command-help')
-    expect(rows.map((r) => r.getAttribute('data-slug'))).toEqual([...HELP_SLUGS])
+    expect(rows.map((r) => r.getAttribute('data-slug'))).toEqual([...BUNDLED_HELP_SLUGS])
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '百炼' } })
     await waitFor(() => {
       expect(screen.getAllByTestId('command-help').map((r) => r.getAttribute('data-slug'))).toEqual(

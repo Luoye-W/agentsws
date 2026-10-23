@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 210
+description: Chrome 插件「红人助手」随 Agents 工坊一起装好、自动更新，在扩展页开开发者模式加载一次即可；之后在 YouTube、Instagram、TikTok 页面上一键体检红人并收进红人库。
 positions: [kol-marketing]
 roles: [kol.youtube, kol.instagram, kol.tiktok, kol.facebook, kol.x]
 ---
 # 浏览器插件「红人助手」
 
-这篇讲 Chrome 插件「Agents 工坊 · 红人助手」：它在 YouTube / Instagram / TikTok 的页面上给红人做即时体检，你点一下就把这个人收进当前品牌的红人库。
+Chrome 插件「Agents 工坊 · 红人助手」不在应用商店里，随工坊一起装好、跟着更新：它在 YouTube / Instagram / TikTok 的页面上给红人做即时体检，你点一下就把这个人收进当前品牌的红人库。
 
 ## 它能做什么、不能做什么
 

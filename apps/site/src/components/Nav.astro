@@ -1,23 +1,27 @@
 ---
 import { accountUrl, GITHUB_URL } from '../config.js'
 import { COMMON, type Lang, localePath } from '../i18n/common.js'
+import { siteCatalog } from '../lib/catalog.js'
 import Icon from './Icon.astro'
 import Mark from './Mark.astro'
 
 interface Props {
   lang: Lang
   path: string
-  current?: 'roles' | 'pricing' | 'docs' | 'changelog' | 'download' | undefined
+  current?: 'roles' | 'pricing' | 'docs' | 'blog' | 'changelog' | 'download' | undefined
 }
 const { lang, path, current } = Astro.props
+// 工坊笔记（docs/113 §2）：一篇已发表的都没有时不出这一项
+const hasNotes = siteCatalog().notes[lang].length > 0
 const c = COMMON[lang].nav
 const other: Lang = lang === 'zh' ? 'en' : 'zh'
 const links = [
   { key: 'roles', href: localePath('/roles/', lang), label: c.roles },
   { key: 'pricing', href: localePath('/pricing/', lang), label: c.pricing },
   { key: 'docs', href: localePath('/docs/', lang), label: c.docs },
+  ...(hasNotes ? [{ key: 'blog', href: localePath('/blog/', lang), label: c.blog }] : []),
   { key: 'changelog', href: localePath('/changelog/', lang), label: c.changelog },
-] as const
+]
 ---
 <header class="nav">
   <div class="wrap">

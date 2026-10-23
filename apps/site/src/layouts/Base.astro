@@ -6,6 +6,7 @@ import { ASSEMBLE_TOTAL_MS, liveMarkCss, SPLIT_TOTAL_MS } from '@agentsws/brand'
 import Footer from '../components/Footer.astro'
 import Nav from '../components/Nav.astro'
 import { COMMON, type Lang, localePath } from '../i18n/common.js'
+import { type JsonLd, ldScript } from '../lib/schema.js'
 import { absolute, alternates, type OgKey, ogImage } from '../lib/seo.js'
 import '../styles/site.css'
 
@@ -17,9 +18,15 @@ interface Props {
   description: string
   og: OgKey
   /** 顶栏哪一项高亮。 */
-  current?: 'roles' | 'pricing' | 'docs' | 'changelog' | 'download'
+  current?: 'roles' | 'pricing' | 'docs' | 'blog' | 'changelog' | 'download'
   announce?: boolean
   noindex?: boolean
+  /** 结构化数据（docs/113 §6.1）。 */
+  jsonLd?: readonly JsonLd[]
+  /** 这一页的纯文本版（带语言前缀的站内路径，`/docs/x.md`）：给 AI 一个直达的链接。 */
+  markdown?: string
+  /** og:type（文章页用 `article`）。 */
+  ogType?: 'website' | 'article'
 }
 const {
   lang,
@@ -30,6 +37,9 @@ const {
   current,
   announce = false,
   noindex = false,
+  jsonLd = [],
+  markdown,
+  ogType = 'website',
 } = Astro.props
 const c = COMMON[lang]
 const canonical = absolute(localePath(path, lang))
@@ -49,7 +59,7 @@ const other: Lang = lang === 'zh' ? 'en' : 'zh'
     <meta name="theme-color" content="#0E100F" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={ogType} />
     <meta property="og:site_name" content={c.brand} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -63,6 +73,8 @@ const other: Lang = lang === 'zh' ? 'en' : 'zh'
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={image} />
+    {markdown && <link rel="alternate" type="text/markdown" href={markdown} />}
+    {jsonLd.map((d) => <script type="application/ld+json" is:inline set:html={ldScript(d)} />)}
     <script is:inline>
       try{var t=localStorage.getItem('aw-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}
     </script>

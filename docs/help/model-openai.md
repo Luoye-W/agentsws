@@ -1,4 +1,7 @@
 ---
+group: models
+order: 50
+description: 两条路：用已在付的 ChatGPT Plus / Pro 订阅以设备码登录（仅个人版），或在 platform.openai.com 建 API key 按 token 付费；已付 ChatGPT 订阅就不用再买 API 额度。
 positions: []
 roles: []
 ---

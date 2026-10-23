@@ -1,6 +1,9 @@
+---
+description: Send cold email from a separate domain to protect your main one. Set up SPF, DKIM and DMARC; nothing goes out until SPF and DKIM pass.
+---
 # Sending domain and health check for cold email
 
-Why we recommend a separate sending domain for cold email, how to set one up, and what the pre-send health check looks at.
+Send cold email from a separate domain (say `trybrand.com` next to `brand.com`) and add SPF, DKIM and DMARC records; the pre-send health check holds every email until SPF and DKIM pass.
 
 ## Why a separate domain
 

@@ -4,7 +4,7 @@
  * - 岗位与职责：一个岗位一行，整行点开看详情；行上只有一颗**次按钮**（请同事一起做），
  *   改名 / 加减职责 / 合并 / 拆出 / 移动 / 删掉都进「⋯」；删掉红字、点了要确认；
  * - 「⋯」菜单里按 Esc 只收菜单，不把外面的设置弹窗一起关了；
- * - 「看教程」全站一种样子（灰字 + 下划线，`ws-link-muted`，不再是绿字带书本）；
+ * - 「看教程」全站一种样子：Luoye 10-23 起是灰色书本图标 + 悬停提示「看教程」（取代 T6 的灰字下划线）；
  * - 列表行右边那个问号：悬停是介绍、点开是教程（一个问号代替「ⓘ + 看教程」两颗）。
  */
 import { fireEvent, screen, within } from '@testing-library/react'
@@ -151,12 +151,14 @@ describe('「⋯」菜单', () => {
 })
 
 describe('「看教程」与问号', () => {
-  it('「看教程」是灰字 + 下划线（ws-link-muted），不带书本图标', () => {
+  it('「看教程」是灰色书本图标 + 悬停提示（Luoye 10-23），不是绿字', () => {
     renderWithProviders(<TutorialLink slug="conn-email" />)
     const link = screen.getByTestId('tutorial-link')
-    expect(link.className).toContain('ws-link-muted')
+    expect(link.className).toContain('text-ws-muted-fg')
     expect(link.className).not.toContain('text-primary')
-    expect(link.querySelector('svg')).toBeNull()
+    expect(link.querySelector('svg')).not.toBeNull()
+    expect(link.textContent).toBe('')
+    expect(link.getAttribute('aria-label')).toBe('看教程')
   })
 
   it('一个问号：悬停是介绍（读屏也念「点开看教程」），点开是教程', async () => {

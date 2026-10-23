@@ -1,10 +1,13 @@
 ---
+group: connect
+order: 110
+description: 在「设置 → 账号连接」的 Shopify 卡上点「连接 Shopify」，用店主账号在 Shopify 授权页点安装就连上了；不用建开发者应用，也不用填密钥。
 positions: [dtc-ops, web-ops, customer-care, site]
 roles: [dtc.store, dtc.store-config, dtc.catalog, dtc.support, site.shopify-build, site.shopify-theme, site.shopify-apps]
 ---
 # 连 Shopify 店铺
 
-这篇讲怎么把你的 Shopify 店接进 Agents 工坊。
+先登录 Agents 工坊账号，再在「设置 → 账号连接」的 Shopify 卡上点「连接 Shopify」，用店主账号在 Shopify 授权页点安装就连上了；不用建开发者应用，也不用填密钥。
 
 ## 一键连接（推荐）
 

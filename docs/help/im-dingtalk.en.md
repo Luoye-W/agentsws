@@ -1,3 +1,6 @@
+---
+description: Create an internal DingTalk app with a Stream-mode robot, enter its Client ID and Secret in Settings → Chat channels, and have each colleague link once.
+---
 # DingTalk bot: create the app, turn on Stream, get credentials
 
 The DingTalk bot is **for your team**: a colleague DMs the bot or @-mentions it in a group, and it asks **that person's own assistant**, as that person — so everyone only sees what they are allowed to see.

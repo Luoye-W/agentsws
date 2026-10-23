@@ -71,6 +71,7 @@ export * from './genui.js'
 export * from './genui-host.js'
 export * from './genui-reply.js'
 export * from './geo-quality.js'
+export * from './help-index.js'
 // WP164：托管实例对外的状态形状（从 packages/hosted 挪来）
 export * from './hosted.js'
 // WP165（docs/83 §2）：托管实例的容器环境变量契约（云上写、容器里的 apps/server 读）

@@ -1,3 +1,6 @@
+---
+description: Link an Agents Workshop account to use models without keys, paid in credits (1 credit = ¥1, US$1 buys 7). New accounts get 5 credits; your own keys cost nothing.
+---
 # Agents Workshop models and credits
 
 Don't want to sign up with each provider and copy keys around? Use Agents Workshop's models: **no key, no other sign-ups** — link an Agents Workshop account once, pay in credits, and switch back to your own keys any time. New accounts get 5 credits.

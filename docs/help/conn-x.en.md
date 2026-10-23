@@ -1,6 +1,9 @@
+---
+description: The X API is paid (Basic tier and up) for follower lookups, posting and replies; posting needs user-context OAuth. The X Ads API is separate and not connected yet.
+---
 # The two X (Twitter) connections
 
-X's two connections: the X API for looking up accounts and posting, and the X Ads API for ads. **They're two separate authorizations** — paying for one doesn't cover the other.
+X has two connections: the paid X API (Basic tier and up) for looking up accounts and posting, and the X Ads API for ads. **They're two separate authorizations** — paying for one doesn't cover the other.
 
 | Connection | In one line | Review / cost |
 |---|---|---|

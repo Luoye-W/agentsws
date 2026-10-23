@@ -1,5 +1,7 @@
 /**
- * WP156（36 §7 第三档）：卡片上的「看教程」小链接。
+ * WP156（36 §7 第三档）：卡片上的「看教程」——Luoye 10-23 起是一个**书本图标**（悬停提示「看教程」）。
+ *
+ * 在设置弹窗里（{@link TutorialOpensSite}）点它：系统浏览器打开官网那一篇（右栏在弹窗后面，看不到）。
  *
  * 卡片上不再铺步骤清单、成段介绍与外链——那些进了教程文章（`docs/help/<slug>.md`）。
  * 点这个链接在**右栏「教程」面板**里打开那一篇（`agentsws://help/<slug>`，走注册表的
@@ -8,13 +10,14 @@
  * 右栏不在（单测里只渲染一张卡、没有 `AppShell`）时 `openAddress` 回假——
  * 那时退回在当前位置弹一个对话框显示同一篇，人照样看得到，不会点了没反应。
  */
-import { CircleHelp } from 'lucide-react'
-import { lazy, type ReactNode, Suspense, useState } from 'react'
+import { BookOpen, CircleHelp } from 'lucide-react'
+import { createContext, lazy, type ReactNode, Suspense, useContext, useState } from 'react'
+import { openExternal } from '@/components/connections/bridge'
 import { useRailState } from '@/components/rail/rail-state'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useApp } from '@/lib/app-context'
-import { type HelpSlug, helpAddress } from '@/lib/help'
+import { type HelpSlug, helpAddress, helpSiteUrl, helpTitle } from '@/lib/help'
 import { cn } from '@/lib/utils'
 
 const HelpArticleLazy = lazy(async () => {
@@ -27,6 +30,53 @@ const HelpBody = lazy(async () => {
   return { default: m.HelpBody }
 })
 
+/**
+ * Luoye 10-23：设置是盖在页面上的大弹窗，右栏开在它后面被挡住——**设置里的「看教程」一律跳官网那一篇**
+ * （系统默认浏览器，中英按界面语言）。设置弹窗用 {@link TutorialOpensSite} 包一层就行。
+ */
+const OpensSite = createContext(false)
+
+export function TutorialOpensSite({ children }: { children: ReactNode }): ReactNode {
+  return <OpensSite.Provider value>{children}</OpensSite.Provider>
+}
+
+/** 书本图标 + 悬停提示（Luoye 10-23：全站「看教程」不再是文字链接）。 */
+function BookButton({
+  tip,
+  slug,
+  className,
+  onClick,
+}: {
+  tip: string
+  slug: string
+  className?: string | undefined
+  onClick: () => void
+}): ReactNode {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-slot="tutorial-link"
+            data-testid="tutorial-link"
+            data-slug={slug}
+            aria-label={tip}
+            className={cn(
+              'inline-flex size-6 shrink-0 items-center justify-center rounded-md text-ws-muted-fg transition-colors hover:bg-ws-hover hover:text-ws-ink focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2',
+              className,
+            )}
+            onClick={onClick}
+          >
+            <BookOpen aria-hidden className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{tip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 export function TutorialLink({
   slug,
   className,
@@ -34,33 +84,29 @@ export function TutorialLink({
 }: {
   slug: HelpSlug
   className?: string
-  /** 默认「看教程」；个别地方要说得更具体（"三个方案怎么选"）。 */
+  /** 悬停提示，默认「看教程」；个别地方要说得更具体（"三个方案怎么选"）。 */
   label?: string
 }): ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const rail = useRailState()
+  const toSite = useContext(OpensSite)
   const [fallback, setFallback] = useState(false)
   return (
     <>
-      <button
-        type="button"
-        data-slot="tutorial-link"
-        data-testid="tutorial-link"
-        data-slug={slug}
-        // WP456-T6（§2.6 第 10 条）：「看教程」是次要动作——全站一种样子：灰字 + 下划线（`ws-link-muted`），
-        // 不再是绿字带书本图标（模型页是灰的、连接页是绿的，两样）
-        className={cn('ws-link-muted inline-flex shrink-0 items-center text-xs', className)}
+      <BookButton
+        tip={label ?? t('help.open')}
+        slug={slug}
+        className={className}
         onClick={() => {
-          if (!rail.openAddress(helpAddress(slug))) setFallback(true)
+          if (toSite) openExternal(helpSiteUrl(slug, lang))
+          else if (!rail.openAddress(helpAddress(slug))) setFallback(true)
         }}
-      >
-        {label ?? t('help.open')}
-      </button>
+      />
       {fallback ? (
         <Dialog open onOpenChange={setFallback}>
           <DialogContent className="max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{t(`help.${slug}.title`)}</DialogTitle>
+              <DialogTitle>{helpTitle(slug, lang)}</DialogTitle>
             </DialogHeader>
             <Suspense fallback={null}>
               <HelpBody slug={slug} />
@@ -89,20 +135,14 @@ export function InlineGuideLink({
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button
-        type="button"
-        data-slot="tutorial-link"
-        data-testid="tutorial-link"
-        data-slug=""
-        // WP456-T6（§2.6 第 10 条）：「看教程」是次要动作——全站一种样子：灰字 + 下划线（`ws-link-muted`），
-        // 不再是绿字带书本图标（模型页是灰的、连接页是绿的，两样）
-        className={cn('ws-link-muted inline-flex shrink-0 items-center text-xs', className)}
+      <BookButton
+        tip={t('help.open')}
+        slug=""
+        className={className}
         onClick={() => {
           setOpen(true)
         }}
-      >
-        {t('help.open')}
-      </button>
+      />
       {open ? (
         <Dialog open onOpenChange={setOpen}>
           <DialogContent className="max-h-[80vh] overflow-y-auto">
@@ -143,8 +183,9 @@ export function TutorialHint({
   testId?: string
   className?: string
 }): ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const rail = useRailState()
+  const toSite = useContext(OpensSite)
   const [open, setOpen] = useState<'article' | 'guide' | null>(null)
   const about = (text ?? '').replace(/\*\*/g, '').trim()
   const action = slug !== undefined || guide !== undefined
@@ -168,7 +209,9 @@ export function TutorialHint({
               onClick={(e) => {
                 e.preventDefault()
                 if (slug !== undefined) {
-                  if (!rail.openAddress(helpAddress(slug))) setOpen('article')
+                  // Luoye 10-23：设置弹窗里跳官网那一篇（右栏在弹窗后面看不到）
+                  if (toSite) openExternal(helpSiteUrl(slug, lang))
+                  else if (!rail.openAddress(helpAddress(slug))) setOpen('article')
                 } else if (guide !== undefined) setOpen('guide')
               }}
             >
@@ -188,7 +231,7 @@ export function TutorialHint({
           <DialogContent className="max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                {open === 'article' && slug !== undefined ? t(`help.${slug}.title`) : guide?.title}
+                {open === 'article' && slug !== undefined ? helpTitle(slug, lang) : guide?.title}
               </DialogTitle>
             </DialogHeader>
             <Suspense fallback={null}>

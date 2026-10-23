@@ -1,4 +1,7 @@
 ---
+group: tools
+order: 330
+description: 网站体检每周一自动跑、只读不改：查 AI 爬虫进不进得来、不开 JS 看不看得到价格库存、商品信息各处是否一致、能否进 ChatGPT 购物，并做技术体检。
 positions: [web-ops, site, dtc-ops]
 roles: [dtc.store, site.shopify-build, site.shopify-theme, dtc.seo]
 ---

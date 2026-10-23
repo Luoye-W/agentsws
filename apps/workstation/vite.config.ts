@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readHelpArticle } from '@agentsws/contracts'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
@@ -131,11 +132,78 @@ function bundledPackages(): Plugin {
   }
 }
 
+/** 教程上官网（私有 docs/113 §4.4）：随包那份教程的源头（仓库的 `docs/help`）。 */
+const HELP_DIR = here('../../docs/help')
+const HELP_VIRTUAL = 'virtual:agentsws-help'
+/** 构建产物里的随包教程原文（本机服务读它：断网、官网打不开时用，「查工坊帮助」也搜它）。 */
+export const HELP_SNAPSHOT_FILE = 'help-snapshot.json'
+
+function helpFiles(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const f of readdirSync(HELP_DIR)
+    .filter((x) => x.endsWith('.md'))
+    .sort())
+    out[f] = readFileSync(resolvePath(HELP_DIR, f), 'utf8')
+  return out
+}
+
+/**
+ * 教程上官网（私有 docs/113 §4）：
+ *
+ * - `virtual:agentsws-help`：随包那份教程的**目录**（标题、摘要、分组、顺序、归属，全从文章头上读）——
+ *   不再在工作台里手抄 `HELP_SLUGS` / `HELP_SCOPES` / 标题词条。正文仍是 `lib/help.ts` 里按篇懒加载的。
+ * - 构建时把全部原文收进 `dist/help-snapshot.json`，给本机服务用。
+ */
+function helpContent(): Plugin {
+  const resolved = `\0${HELP_VIRTUAL}`
+  return {
+    name: 'agentsws-help-content',
+    resolveId(id) {
+      return id === HELP_VIRTUAL ? resolved : null
+    },
+    load(id) {
+      if (id !== resolved) return null
+      const files = helpFiles()
+      for (const f of Object.keys(files)) this.addWatchFile(resolvePath(HELP_DIR, f))
+      const list = Object.keys(files)
+        .filter((f) => !f.endsWith('.en.md'))
+        .map((f) => {
+          const slug = f.slice(0, -3)
+          const zh = readHelpArticle(files[f] ?? '')
+          const enText = files[`${slug}.en.md`]
+          const en = enText === undefined ? zh : readHelpArticle(enText)
+          return {
+            slug,
+            title: { zh: zh.meta.title ?? slug, en: en.meta.title ?? zh.meta.title ?? slug },
+            description: {
+              zh: zh.meta.description ?? '',
+              en: en.meta.description ?? zh.meta.description ?? '',
+            },
+            ...(zh.meta.group === undefined ? {} : { group: zh.meta.group }),
+            ...(zh.meta.order === undefined ? {} : { order: zh.meta.order }),
+            positions: zh.meta.positions,
+            roles: zh.meta.roles,
+            ...(zh.meta.requires === undefined ? {} : { requires: zh.meta.requires }),
+            ...(zh.meta.aliases.length === 0 ? {} : { aliases: zh.meta.aliases }),
+          }
+        })
+      return `export default ${JSON.stringify(list)}\n`
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: HELP_SNAPSHOT_FILE,
+        source: `${JSON.stringify({ schema: 1, files: helpFiles() })}\n`,
+      })
+    },
+  }
+}
+
 /** 服务进程只听回环口；开发时把 /v1 代到它上面，构建产物由它自己在 / 托管。 */
 const API = process.env.AGENTSWS_API ?? 'http://127.0.0.1:4317'
 
 export default defineConfig({
-  plugins: [genuiShims(), react(), tailwindcss(), bundledPackages()],
+  plugins: [genuiShims(), react(), tailwindcss(), bundledPackages(), helpContent()],
   resolve: {
     alias: [
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },

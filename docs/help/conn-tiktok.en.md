@@ -1,6 +1,9 @@
+---
+description: TikTok's Research API (creators), Content Posting API (videos) and Business API (ads) each need a separate application, taking days to weeks. Ads isn't connected yet.
+---
 # The three TikTok connections
 
-TikTok's three connections: the Research API for creators, the Content Posting API for publishing videos, and the Business API for ads. All three are **application-based**, and **each is applied for separately**.
+TikTok has three connections — the Research API for creators, the Content Posting API for publishing videos, and the Business API for ads. All three are **application-based**, and **each is applied for separately**: approval for one doesn't cover the others.
 
 | Connection | In one line | Review / cost |
 |---|---|---|

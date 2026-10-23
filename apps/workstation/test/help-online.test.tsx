@@ -1,0 +1,165 @@
+/**
+ * 教程上官网（私有 docs/113 §4.3–4.4）：右栏「教程」读本机服务的目录与正文——
+ * 官网新加的一篇不用发版就出现；新版才有的标「新版」；版本对不上时顶上一行；本机服务没回来用随包的。
+ */
+import type { HelpArticleView, HelpCatalogView } from '@agentsws/contracts'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
+import { RailStateProvider } from '@/components/rail/rail-state'
+import { resetPanelRegistry } from '@/components/rail/registry'
+import { RightRail } from '@/components/rail/right-rail'
+import { bundledHelpCatalog } from '@/lib/help'
+import { openRailPanel, renderWithProviders } from './helpers'
+
+const api = vi.hoisted(() => ({
+  catalog: vi.fn<(lang: string) => Promise<HelpCatalogView>>(),
+  article: vi.fn<(slug: string, lang: string) => Promise<HelpArticleView>>(),
+}))
+
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
+  listCatalog: async () => [],
+  listOrganizations: async () => [],
+  getHelpCatalog: api.catalog,
+  getHelpArticle: api.article,
+}))
+
+const ONLINE_ONLY = {
+  kind: 'guide' as const,
+  slug: 'brand-new',
+  lang: 'zh' as const,
+  title: '官网刚写的一篇',
+  description: '不用发版就看得到',
+  url: 'https://agentsws.com/docs/brand-new/',
+  positions: [],
+  roles: [],
+  group: 'start' as const,
+  order: 1,
+  requires: '0.2.1-beta.9',
+  source: 'online' as const,
+  needs_newer_app: true,
+}
+
+beforeEach(() => {
+  resetPanelRegistry()
+  ensureBuiltinPanels()
+  api.catalog.mockResolvedValue({
+    lang: 'zh',
+    app_version: '0.2.1-beta.8',
+    items: [ONLINE_ONLY, ...bundledHelpCatalog('zh')],
+  })
+})
+
+async function openHelp(): Promise<void> {
+  renderWithProviders(
+    <RailStateProvider>
+      <RightRail />
+    </RailStateProvider>,
+  )
+  await openRailPanel('help')
+}
+
+describe('右栏「教程」读本机服务', () => {
+  it('官网新加的一篇出现在目录里，新版才有的标「新版」；点开顶上一行版本提示 + 在官网打开', async () => {
+    api.article.mockResolvedValue({
+      ...ONLINE_ONLY,
+      markdown: '# 官网刚写的一篇\n\n正文\n',
+      newer_online: false,
+    })
+    await openHelp()
+    const item = await screen.findByText('官网刚写的一篇')
+    const row = item.closest('[data-testid="help-index-item"]') as HTMLElement
+    expect(within(row).getByTestId('help-new-tag').textContent).toBe('新版')
+    fireEvent.click(row)
+    const note = await screen.findByTestId('help-version-note')
+    expect(note.textContent).toBe('0.2.1-beta.9 起才有，你这版还没有')
+    expect(screen.getByTestId('help-on-site')).toBeDefined()
+    expect((await screen.findByTestId('help-article')).textContent).toContain('正文')
+    expect(api.article).toHaveBeenCalledWith('brand-new', 'zh')
+  })
+
+  it('给的是随包那份、官网讲的是新版：顶上一句「新版里这部分变了」', async () => {
+    api.article.mockResolvedValue({
+      ...bundledHelpCatalog('zh')[0],
+      kind: 'guide',
+      slug: 'agentsws-credits',
+      lang: 'zh',
+      title: '积分',
+      description: '',
+      positions: [],
+      roles: [],
+      source: 'bundled',
+      needs_newer_app: false,
+      newer_online: true,
+      markdown: '# 积分\n\n这版的说法\n',
+    })
+    await openHelp()
+    const rows = await screen.findAllByTestId('help-index-item')
+    fireEvent.click(rows.find((r) => r.dataset.slug === 'agentsws-credits') as HTMLElement)
+    expect((await screen.findByTestId('help-version-note')).textContent).toContain(
+      '新版里这部分变了',
+    )
+  })
+
+  it('本机服务没回来：目录与正文都用随包的', async () => {
+    api.catalog.mockRejectedValue(new Error('down'))
+    api.article.mockRejectedValue(new Error('down'))
+    await openHelp()
+    const rows = await screen.findAllByTestId('help-index-item')
+    expect(rows.map((r) => r.dataset.slug)).not.toContain('brand-new')
+    fireEvent.click(rows.find((r) => r.dataset.slug === 'computer-use') as HTMLElement)
+    await waitFor(() => {
+      expect(screen.getByTestId('help-article').textContent).toContain('Cua Driver')
+    })
+    expect(screen.queryByTestId('help-version-note')).toBeNull()
+  })
+})
+
+describe('Luoye 10-23 三条', () => {
+  it('设置弹窗里的「看教程」：系统浏览器打开官网那一篇（中英按界面语言），不开右栏', async () => {
+    const bridge = await import('@/components/connections/bridge')
+    const open = vi.spyOn(bridge, 'openExternal').mockImplementation(() => undefined)
+    const { TutorialLink, TutorialOpensSite } = await import('@/components/help/tutorial-link')
+    renderWithProviders(
+      <RailStateProvider>
+        <TutorialOpensSite>
+          <TutorialLink slug="conn-email" />
+        </TutorialOpensSite>
+        <RightRail />
+      </RailStateProvider>,
+    )
+    fireEvent.click(screen.getByTestId('tutorial-link'))
+    expect(open).toHaveBeenCalledWith('https://agentsws.com/docs/conn-email/')
+    expect(screen.queryByTestId('help-panel')).toBeNull()
+  })
+
+  it('设置里列表行的问号（点开是教程）也跳官网', async () => {
+    const bridge = await import('@/components/connections/bridge')
+    const open = vi.spyOn(bridge, 'openExternal').mockImplementation(() => undefined)
+    const { TutorialHint, TutorialOpensSite } = await import('@/components/help/tutorial-link')
+    renderWithProviders(
+      <TutorialOpensSite>
+        <TutorialHint slug="model-deepseek" text="介绍" testId="hint-x" />
+      </TutorialOpensSite>,
+    )
+    fireEvent.click(screen.getByTestId('hint-x'))
+    expect(open).toHaveBeenCalledWith('https://agentsws.com/docs/model-deepseek/')
+  })
+
+  it('右栏正文开头的元数据一律拿掉（CRLF / BOM 的文件也是）', async () => {
+    api.article.mockResolvedValue({
+      ...ONLINE_ONLY,
+      needs_newer_app: false,
+      markdown:
+        '﻿---\r\npositions: [kol-marketing]\r\nroles: [kol.youtube]\r\n---\r\n# 浏览器\r\n\r\n正文\r\n',
+      newer_online: false,
+    })
+    await openHelp()
+    fireEvent.click(await screen.findByText('官网刚写的一篇'))
+    const article = await screen.findByTestId('help-article')
+    expect(article.textContent).toContain('正文')
+    expect(article.textContent).not.toContain('positions')
+    expect(article.textContent).not.toContain('---')
+  })
+})

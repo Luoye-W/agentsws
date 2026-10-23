@@ -1,6 +1,9 @@
+---
+description: Allow your site and paste the embed code before </body>. Free hosting covers 200 conversations a month; a 30-credit monthly add-on answers while you're offline.
+---
 # Website live chat (the chat window)
 
-This covers the chat window you install on your website: its look, where the embed code goes, how to choose among the three relay options, and how to “teach the AI” inside visitor conversations.
+Installing the website chat window takes three steps: set its look, list your site under Allowed websites, and paste the embed code before `</body>` on every page. Free official hosting (200 conversations a month) is the default, and you can “teach the AI” right inside visitor conversations.
 
 Where: **visitor conversations** are under Messages → “Website chat” (next to your mailboxes); the **widget settings** (look, embed code, relay) are in Settings → Chat channels → “Website chat widget” (⌘, opens Settings).
 

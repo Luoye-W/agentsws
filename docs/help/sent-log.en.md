@@ -1,3 +1,6 @@
+---
+description: Everything Agents Workshop sends is logged automatically in the Sent log panel and can be exported as CSV. Say one line to also write it into your own online sheet.
+---
 # Sent log, and writing it into your own sheet
 
 Everything Agents Workshop sends for you — posts, comments, replies, emails, messages — is logged automatically: where it went, what it said, who approved it, and when. When someone replies to us later, the reply is attached to that row.

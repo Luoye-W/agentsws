@@ -1,4 +1,7 @@
 ---
+group: tools
+order: 230
+description: 在飞书开放平台建企业自建应用、加机器人和三项消息权限，把 App ID、App Secret 填进「设置 → 消息渠道」，再开长连接并发布；不用公网地址，每人绑一次账号。
 positions: []
 roles: []
 ---

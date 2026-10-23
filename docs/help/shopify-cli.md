@@ -1,4 +1,7 @@
 ---
+group: tools
+order: 120
+description: 在建站岗位页或「设置 → 账号连接」的 Shopify CLI 卡上点「一键安装」，再点「登录 Shopify」在浏览器里自己登录；不用开终端、不用装 Node，只有 Shopify 店需要。
 positions: [site]
 roles: [site.shopify-theme]
 ---

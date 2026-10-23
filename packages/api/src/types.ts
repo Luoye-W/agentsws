@@ -98,6 +98,7 @@ import type { FreeChatPort } from './routes/free-chat.js'
 import type { GenuiImageHostsPort } from './routes/genui-image-hosts.js'
 import type { HandoffPort } from './routes/handoff.js'
 import type { ReconcilePort } from './routes/health.js'
+import type { HelpPort } from './routes/help.js'
 import type { JoinPort } from './routes/join.js'
 import type { KolPort } from './routes/kol.js'
 import type { MeetingsPort } from './routes/meetings.js'
@@ -1136,6 +1137,11 @@ export interface GatewayDeps {
    * 只有本机档装配；没装配时 `/v1/dsh-scenes*` 回 not_implemented。
    */
   dshScenes?: DshScenesPort
+  /**
+   * 教程上官网（私有 docs/113）：右栏「教程」的目录与正文（官网拉回来的 / 随包的）。
+   * 没装配时 `/v1/help/*` 回 not_implemented。
+   */
+  help?: HelpPort
   /**
    * WP155（docs/81）：搜索数据接口（连接页那一行 + SERP / AI 问答探测）。按品牌取。
    * 没装配时 `/v1/search-data*` 回 not_implemented。

@@ -45,6 +45,8 @@ export function ogImage(key: OgKey, lang: Lang): string {
 export interface SitemapPage {
   /** 不带语言前缀的路径（`/pricing/`）。 */
   path: string
+  /** 最后修改日（`YYYY-MM-DD`）；中英各自的（docs/113 §6.1）。 */
+  lastmod?: Partial<Record<Lang, string>>
 }
 
 /** sitemap.xml：每页一条中文、一条英文，互相用 xhtml:link 标 hreflang。 */
@@ -53,9 +55,11 @@ export function sitemapXml(pages: readonly SitemapPage[]): string {
     const alts = alternates(p.path)
       .map((a) => `<xhtml:link rel="alternate" hreflang="${a.hreflang}" href="${a.href}"/>`)
       .join('')
-    return (['zh', 'en'] as const).map(
-      (lang) => `<url><loc>${absolute(localePath(p.path, lang))}</loc>${alts}</url>`,
-    )
+    return (['zh', 'en'] as const).map((lang) => {
+      const mod = p.lastmod?.[lang]
+      const last = mod === undefined ? '' : `<lastmod>${mod}</lastmod>`
+      return `<url><loc>${absolute(localePath(p.path, lang))}</loc>${last}${alts}</url>`
+    })
   })
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join('\n')}\n</urlset>\n`
 }

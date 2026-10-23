@@ -1,3 +1,6 @@
+---
+description: Pick one in Settings → Web & computer → Browser — off, your signed-in Chrome (the usual choice), a separate Chrome, or your everyday browser. Off means no web access.
+---
 # Let AI use a browser (four ways)
 
 Some work only exists on a web page (a YouTube channel page, Amazon Seller Central). "Settings → Web & computer → Browser" says which browser the workstation uses. **Leave it off and no role can open a page at all.**

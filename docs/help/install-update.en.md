@@ -1,3 +1,6 @@
+---
+description: Download for Windows or Apple-silicon Macs at agentsws.com/download. It checks for updates itself — one click on Windows, a new .dmg on Mac. Your data stays.
+---
 # Installing and updating
 
 Agents Workshop is a desktop app for Windows and Mac (Apple silicon, M-series). Once installed, it checks for new versions by itself. When one is out, you update with one click: no re-downloading, no uninstalling.

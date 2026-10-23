@@ -1,0 +1,3 @@
+# 教程与官网文章一律 LF：Windows 上检出成 CRLF 时，文章头的元数据曾原样露在右栏（10-23）
+docs/help/*.md text eol=lf
+apps/site/src/content/**/*.md text eol=lf

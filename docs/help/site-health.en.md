@@ -1,3 +1,6 @@
+---
+description: A read-only weekly check — can AI crawlers get in, do prices and stock show without JavaScript, does product info match everywhere, are you ready for ChatGPT shopping.
+---
 # Site health: can AI read your store?
 
 Shoppers increasingly ask AI "which one, how much, can I return it". Whether the AI gets it right starts with three things: **can it get into your site, can it read the key facts, and do your listings agree with each other**. Site health runs every Monday morning, or click the refresh icon ("Run check now") at the top right of a report block.

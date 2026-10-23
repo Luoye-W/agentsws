@@ -1,3 +1,6 @@
+---
+description: Chats and tasks archive after 3 quiet days by default (1–30 days or never in Settings), and nothing is deleted. Restore from Archived, search with ⌘K, or ask AI.
+---
 # Archiving and finding chats and tasks
 
 The chats and tasks **in progress** for each duty live in the Chats card of the side panel (the panel icon at the far top right of the window opens and closes it; it is open by default on position, duty and task pages): the Chats card lists that duty’s chats (on a position page, all of them grouped by duty). When nobody touches one for a few days, it is tucked away (archived) so the list only shows what is active. Archiving **deletes nothing**: messages, summary, memory and card history all stay, and you can bring it back any time.

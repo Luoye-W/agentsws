@@ -1,4 +1,7 @@
 ---
+group: tools
+order: 80
+description: 在「设置 → 上网与操作电脑 → 浏览器」四选一：不开、连你已登录的 Chrome（平常用这个）、独立的 Chrome、你正在用的浏览器；不配就没有岗位能开网页，密码始终你自己输。
 positions: [kol-marketing]
 roles: [kol.youtube, kol.instagram, kol.tiktok, kol.facebook, kol.x, amz.support]
 ---

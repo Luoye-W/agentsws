@@ -1,3 +1,6 @@
+---
+description: Assistant, at the top of the sidebar, chats, checks what every position is doing and hands tasks to the right one. It never changes anything external on its own.
+---
 # Assistant: chat, or hand things off
 
 "Assistant" at the top of the sidebar works like the chat box on ChatGPT or Claude. The old "Chat" and "My agent" are now this one entry.
