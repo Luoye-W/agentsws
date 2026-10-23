@@ -4,7 +4,7 @@
  * 界面少字：一行一句，细节进问号。
  */
 export const DATA_LOCATION_ZH: Record<string, string> = {
-  'dataloc.title': '数据放在哪',
+  'dataloc.title': '数据存放位置',
   'dataloc.desc': '工坊的数据库、附件和备份都在这个文件夹里',
   'dataloc.hint':
     '换位置时工坊会先备份，再把整个文件夹搬过去、逐个文件核对，搬完用新位置重新启动。浏览器设置、浏览器插件和本机加密钥匙不在这里，不跟着搬。',
@@ -77,7 +77,7 @@ export const DATA_LOCATION_ZH: Record<string, string> = {
 }
 
 export const DATA_LOCATION_EN: Record<string, string> = {
-  'dataloc.title': 'Where your data lives',
+  'dataloc.title': 'Data folder location',
   'dataloc.desc': 'The database, attachments and backups are all in this folder',
   'dataloc.hint':
     'When you change it, Agents Workshop backs up first, moves the whole folder, checks every file, then restarts from the new place. Browser settings, the browser extension and this computer’s encryption key stay where they are.',

@@ -284,7 +284,6 @@ export function DataLocationSetting(): ReactNode {
                       : status.copied_bytes
                 }
                 max={status.step === 'verify' ? status.files_total : status.total_bytes}
-                label={t('dataloc.title')}
               />
               <p className="mt-2 text-ws-muted-fg">{t('dataloc.running.note')}</p>
             </div>
