@@ -291,7 +291,8 @@ export function useConnectionsStatus({ scope }: RailPanelBodyProps): CardStatus 
     }
   // WP419 / WP420（自查 A5 / U1 / S10）：要插件的这一层，插件没配对 / 后台没在插件里连上，不许说「都连好了」
   // （连接卡里插件那几行由 WP420 的 `ExtensionRows` 列，这里只给一句话 + 红点）
-  if (ext !== undefined && !ext.paired)
+  // WP493：ego 能做全部时插件只是备用，不算「要处理」
+  if (ext !== undefined && ext.plugin_backup !== true && !ext.paired)
     return {
       summary: t('conncard.summary.ext_install'),
       dot: 'alert',

@@ -7571,6 +7571,10 @@ export interface ExtensionNeedsView {
   snoozed: boolean
   /** WP416：「要你处理」里还开着的装插件连接卡（有就不在岗位页顶上再出一张）。 */
   connect_card_id?: string
+  /** WP493：这几样 ego 能做（`uses` / `steps` 里已去掉）。 */
+  ego_covers?: BrowserExtensionUseView[]
+  /** WP493：要插件做的几样 ego 全能做——插件只是备用（不催装、连接卡上显示「备用」）。 */
+  plugin_backup?: boolean
 }
 
 export const getExtensionNeeds = (

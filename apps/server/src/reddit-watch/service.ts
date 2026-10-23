@@ -135,6 +135,14 @@ export interface RedditWatchOptions {
   pace?: Pace
   /** `sweepNow` 等插件交回时怎么等（测试给假的）。 */
   sleep?(ms: number): Promise<void>
+  /**
+   * WP493（决策 1718）：ego 这会儿能不能替插件读（选了 ego / 默认 ego、探得到、连得上）。为真时：
+   * 只读活交给 ego（`next({ via: 'ego' })` 来领），插件只是备用——插件来问不发活、也不改「插件那一侧」的状态；
+   * 不催配对插件、不要求「插件里连 Reddit」。不给 = 老样子（只有插件）。
+   */
+  egoReady?(): boolean
+  /** WP493：排进来一件新活（ego 那一边据此马上来领，不等下一次轮询）。 */
+  onQueued?(): void
 }
 
 export interface RedditWatchAssembly {
@@ -174,8 +182,10 @@ export interface RedditWatchAssembly {
   sweepNow(options?: { timeoutMs?: number; pollMs?: number }): Promise<RedditWatchRun>
   /** 一周汇总（不给窗口 = 本周日 00:00 到现在；`GET /v1/reddit-watch/digest`）。 */
   digest(window?: { since: Iso8601; until: Iso8601 }): RedditWatchDigest
-  /** 插件来领活（`connected` = 插件里连上 Reddit 了）。 */
-  next(input: { connected: boolean }): RedditReadNextResponse
+  /**
+   * 插件来领活（`connected` = 插件里连上 Reddit 了）。WP493：`via: 'ego'` = ego 替插件来领（ego 能用时插件来问不发活）。
+   */
+  next(input: { connected: boolean; via?: 'ego' }): RedditReadNextResponse
   /** 插件交回；不是在等的那一件回 `undefined`。 */
   result(id: string, input: RedditReadResultInput): Promise<{ accepted: true } | undefined>
   /** WP329：新出的要回的几条。回注销函数。 */
@@ -281,6 +291,8 @@ export const PATROL_SETUP_MIGRATION_KEY = 'migrated:wp410'
 export const PATROL_STATE_ROLES: readonly string[] = ['social.reddit', 'pr.reddit']
 
 interface ExtState {
+  /** WP493：最近一次来领活的是 ego（不是插件）。 */
+  via?: 'ego'
   seen_at?: Iso8601
   reddit_connected?: boolean
   user?: string
@@ -348,7 +360,20 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     const k = sub.toLowerCase()
     store.setKv(ws, 'sub_clocks', { ...all, [k]: { ...all[k], ...patch } })
   }
-  const setJob = (j: JobRec | undefined): void => store.setKv(ws, 'job', j ?? null)
+  const setJob = (j: JobRec | undefined): void => {
+    store.setKv(ws, 'job', j ?? null)
+    // WP493：ego 那一边马上来领（等这一拍的同步活做完）
+    if (j?.status === 'queued' && options.onQueued !== undefined)
+      queueMicrotask(() => safely(() => options.onQueued?.()))
+  }
+  /** WP493：ego 替插件读（插件是备用）。 */
+  const viaEgo = (): boolean => {
+    try {
+      return options.egoReady?.() === true
+    } catch {
+      return false
+    }
+  }
 
   const emit = (type: string, payload: Record<string, unknown>): void => {
     try {
@@ -412,7 +437,8 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   }
   const sessionNeed = (state: 'not_connected' | 'reauth'): ConnectNeed => ({
     kind: REDDIT_SESSION_NEED_KIND,
-    name: 'Chrome 里的 Reddit 品牌号',
+    // WP493：ego 替插件读时，要登录的是 ego 里的 Reddit
+    name: viaEgo() ? 'ego 里的 Reddit 品牌号' : 'Chrome 里的 Reddit 品牌号',
     required: true,
     state,
   })
@@ -548,6 +574,12 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
   /** 插件这会儿能不能读（不能就说为什么）。 */
   const pluginReady = (): { ok: true } | { ok: false; why: string } => {
     const e = ext()
+    if (viaEgo()) {
+      // ego 能用：只有上次在 ego 里读到「没登录 / 号不对」才算读不了
+      if (e.via === 'ego' && (e.outcome === 'not_logged_in' || e.outcome === 'wrong_user'))
+        return { ok: false, why: 'ego 里的 Reddit 没登录品牌号' }
+      return { ok: true }
+    }
     if (e.seen_at === undefined) return { ok: false, why: '插件还没配对' }
     if (e.reddit_connected !== true) return { ok: false, why: '插件里还没连接 Reddit' }
     if (nowMs() - ms(e.seen_at) > EXT_FRESH_MS)
@@ -844,13 +876,15 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
     reads: RedditReadRequest[],
   ): Promise<void> => {
     const e = ext()
-    if (e.seen_at === undefined) {
+    // WP493：ego 能用就交给 ego，不催配对插件、不要求「插件里连 Reddit」
+    if (viaEgo()) {
+      // 落到下面排活
+    } else if (e.seen_at === undefined) {
       for (const p of want)
         setPart(run, p, { status: 'needs_connection', message: '插件还没配对。' })
       await askConnect(EXTENSION_NEED, SESSION_WHY)
       return
-    }
-    if (e.reddit_connected !== true) {
+    } else if (e.reddit_connected !== true) {
       for (const p of want)
         setPart(run, p, { status: 'needs_connection', message: '插件里还没连接 Reddit。' })
       await askConnect(sessionNeed('not_connected'), SESSION_WHY)
@@ -1161,7 +1195,13 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
       ...(res.user === undefined ? {} : { user: res.user }),
       note: res.outcome === 'done' ? '' : res.message,
     })
-    if (loginLike) await askConnect(sessionNeed('reauth'), `${res.message} ${SESSION_WHY}`)
+    if (loginLike)
+      await askConnect(
+        sessionNeed('reauth'),
+        viaEgo()
+          ? `${res.message} 在 ego 里登录 Reddit 品牌号就行。`
+          : `${res.message} ${SESSION_WHY}`,
+      )
     finishIfDone(run)
   }
 
@@ -1200,6 +1240,11 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
 
   const sessionReady = (): boolean | undefined => {
     const e = ext()
+    // WP493：ego 能用——上次在 ego 里读到没登录：人可能已经登好了，信人；别的都算好了
+    if (viaEgo())
+      return e.via === 'ego' && (e.outcome === 'not_logged_in' || e.outcome === 'wrong_user')
+        ? undefined
+        : true
     if (e.seen_at === undefined) return false
     if (e.reddit_connected !== true) return false
     // 上次读到「没登录 / 号不对」：人可能已经登好了，读之前不知道——人点「接着做」就信人
@@ -1486,8 +1531,39 @@ export function createRedditWatch(options: RedditWatchOptions): RedditWatchAssem
 
   /* ── 插件那一侧 ─────────────────────────────────────────────────── */
   const next: RedditWatchAssembly['next'] = (input) => {
-    const before = sessionReady()
-    setExt({ seen_at: options.now(), reddit_connected: input.connected })
+    // WP493：ego 替插件读时，插件来问只是「备用在线」：不发活、不改状态（免得插件的「没连 Reddit」盖掉 ego 的）
+    if (input.via !== 'ego' && viaEgo()) return { retry_after_ms: 60_000 }
+    // ego 第一次来领 = 「刚连上」（与插件刚连上 Reddit 同样处理）
+    const before = input.via === 'ego' ? ext().via === 'ego' : sessionReady()
+    const { via: lastVia, user, outcome, note, ...rest } = ext()
+    if (input.via === 'ego')
+      // 上次是插件读的：插件那一侧的号 / 结局不算 ego 的
+      store.setKv(ws, 'ext', {
+        ...rest,
+        ...(lastVia === 'ego'
+          ? {
+              ...(user === undefined ? {} : { user }),
+              ...(outcome === undefined ? {} : { outcome }),
+              ...(note === undefined ? {} : { note }),
+            }
+          : {}),
+        via: 'ego',
+        seen_at: options.now(),
+        reddit_connected: true,
+      } satisfies ExtState)
+    else
+      store.setKv(ws, 'ext', {
+        ...rest,
+        ...(lastVia === 'ego'
+          ? {}
+          : {
+              ...(user === undefined ? {} : { user }),
+              ...(outcome === undefined ? {} : { outcome }),
+              ...(note === undefined ? {} : { note }),
+            }),
+        seen_at: options.now(),
+        reddit_connected: input.connected,
+      } satisfies ExtState)
     // 刚连上：缺连接停着的那几块不用等一小时，马上再来一轮
     if (before === false && input.connected) {
       const p = parts()
