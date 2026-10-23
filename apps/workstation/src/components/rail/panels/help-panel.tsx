@@ -116,7 +116,7 @@ function HelpIndex({
       {bySlug.get(slug)?.title ?? slug}
       {bySlug.get(slug)?.needs_newer_app === true ? (
         <span
-          className="ml-1.5 rounded bg-ws-warn-bg px-1 text-[10px] text-ws-warn"
+          className="ml-1.5 rounded-ws-tag bg-ws-warn-bg px-1 text-ws-tiny text-ws-warn"
           data-testid="help-new-tag"
         >
           {t('help.tag_new')}
