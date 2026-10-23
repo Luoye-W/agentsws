@@ -511,7 +511,7 @@ describe('WP25 §C 模型面板：填 key（零泄漏）', () => {
     state.providers = [ACTIVE]
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    await user.click(await screen.findByRole('button', { name: '改' }))
+    await user.click(await screen.findByRole('button', { name: '修改' }))
     const form = await screen.findByTestId('model-form')
     const input = within(form).getByLabelText('API key')
     expect((input as HTMLInputElement).required).toBe(false)
@@ -568,7 +568,7 @@ describe('WP281 模型面板不再出现数据驻留', () => {
     state.providers = [ACTIVE]
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    await screen.findByRole('button', { name: '改' })
+    await screen.findByRole('button', { name: '修改' })
     expect(screen.queryByTestId('model-residency-select')).toBeNull()
     const cards = await screen.findAllByTestId('model-template')
     await user.click(within(cards[2] as HTMLElement).getByText('填 API key'))
@@ -873,7 +873,7 @@ describe('WP42 §1 模型名从接口拉', () => {
     ]
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    await user.click(await screen.findByText('改'))
+    await user.click(await screen.findByText('修改'))
     const form = await screen.findByTestId('model-form')
     fireEvent.mouseDown(within(form).getByTestId('model-dropdown-toggle'))
     expect(within(form).getByTestId('model-list').querySelectorAll('[role="option"]')).toHaveLength(
@@ -1013,7 +1013,7 @@ describe('WP42 §4 「编号」折进「高级」', () => {
     state.providers = [ACTIVE]
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    await user.click(await screen.findByText('改'))
+    await user.click(await screen.findByText('修改'))
     const form = await screen.findByTestId('model-form')
     expect(within(form).queryByTestId('model-advanced')).toBeNull()
   })

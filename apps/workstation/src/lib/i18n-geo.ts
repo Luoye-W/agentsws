@@ -143,7 +143,7 @@ export const GEO_ZH: Record<string, string> = {
   'geo.card.competitors': '竞品：{names}',
   'geo.card.cost': '每月约 {m} 积分（Claude 约 {c}）',
   'geo.card.cost_plain': '每月约 {m} 积分',
-  'geo.card.edit': '改',
+  'geo.card.edit': '修改',
   'geo.card.edit.done': '改好了，就这样',
   'geo.card.edit.cancel': '不改了',
   'geo.card.rivals.answers': '{n} 条回答里出现',

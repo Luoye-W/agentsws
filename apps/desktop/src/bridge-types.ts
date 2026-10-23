@@ -83,6 +83,11 @@ export interface DesktopBridge {
    * 旧壳与远程档没有这一项：先判空（没有就不出那一行）。
    */
   dataLocation?: DesktopDataLocationBridge
+  /**
+   * WP481（决策 1632）：右栏（第三栏）开着时主窗口向右加宽它那么宽、关掉缩回；放不下（最大化 / 全屏 /
+   * 右边没地方）回 `overlay`，页面改成浮层盖在中栏右侧。只有主窗口有；旧壳没有这一项——页面一律用浮层。
+   */
+  sidePane?: DesktopSidePaneBridge
 }
 
 /** WP480：现在的数据位置。 */
@@ -193,6 +198,14 @@ export interface DesktopTitleBarBridge {
   readonly style: 'inset' | 'overlay'
   /** 工作台换了深 / 浅色：Windows 叠加按钮那一块跟着换底色（Mac 上是空操作，回 false）。 */
   setTheme(theme: 'light' | 'dark'): Promise<boolean>
+}
+
+/**
+ * WP481：右栏要多宽（页面 CSS 像素；`null` = 收起）。幂等：页面重载后再说一遍也对得上。
+ * 回 `widened`（窗口加宽了，并排）/ `overlay`（放不下，盖上去）/ `none`（收着）。
+ */
+export interface DesktopSidePaneBridge {
+  sync(width: number | null): Promise<'widened' | 'overlay' | 'none'>
 }
 
 /** WP361：开机自启（读 / 写系统登录项；真源是壳的配置）。 */
@@ -362,6 +375,8 @@ export const BRIDGE_CHANNELS = {
   dataLocationChanged: 'agentsws:data-location-changed',
   dataLocationDeleteOld: 'agentsws:data-location-delete-old',
   dataLocationReveal: 'agentsws:data-location-reveal',
+  /** WP481 */
+  sidePane: 'agentsws:side-pane',
 } as const
 
 export interface BridgeInfo {
@@ -371,4 +386,6 @@ export interface BridgeInfo {
   title_bar?: 'inset' | 'overlay'
   /** WP480：这台电脑上的服务进程归壳管（个人档）——才有「数据放在哪」。 */
   data_location?: boolean
+  /** WP481：主窗口——右栏开着时能向右加宽（`sidePane`）。 */
+  side_pane?: boolean
 }

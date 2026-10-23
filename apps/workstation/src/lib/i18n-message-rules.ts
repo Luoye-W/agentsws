@@ -65,7 +65,7 @@ export const MESSAGE_RULES_ZH: Record<string, string> = {
   'message_rules.apply_past.hint':
     '默认只管以后进来的。勾上会给过去 30 天命中的信打标签、收成通知、记到表里；不交岗位、不响铃、不起草。',
   'message_rules.build': '建',
-  'message_rules.save': '改',
+  'message_rules.save': '修改',
   'message_rules.edit': '修改',
   'message_rules.drop': '不要',
   'message_rules.built': '规则建好了，下一封就按它办',
@@ -186,7 +186,7 @@ export const MESSAGE_RULES_EN: Record<string, string> = {
   'message_rules.apply_past.hint':
     'By default it only handles mail from now on. Ticked, matching mail from the last 30 days gets labelled, filed as notice and recorded; nothing is handed over, no bell, no drafts.',
   'message_rules.build': 'Create',
-  'message_rules.save': 'Change',
+  'message_rules.save': 'Edit',
   'message_rules.edit': 'Edit',
   'message_rules.drop': 'Drop',
   'message_rules.built': 'Rule created — the next mail follows it',

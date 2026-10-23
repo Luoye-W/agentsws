@@ -90,6 +90,8 @@ describe('bridge-types', () => {
       dataLocationChanged: 'agentsws:data-location-changed',
       dataLocationDeleteOld: 'agentsws:data-location-delete-old',
       dataLocationReveal: 'agentsws:data-location-reveal',
+      // WP481：右栏开着时窗口向右加宽
+      sidePane: 'agentsws:side-pane',
     })
   })
 

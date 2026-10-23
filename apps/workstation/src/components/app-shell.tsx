@@ -53,7 +53,6 @@ import {
 } from '@/components/conversations/actions'
 import { CountBadge } from '@/components/design'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { FeedbackButton } from '@/components/feedback/feedback-button'
 import { FeedbackHost } from '@/components/feedback/feedback-host'
 import { useInbox } from '@/components/inbox/inbox-model'
 import { useSiteChatUnread } from '@/components/messages/site-chat'
@@ -183,6 +182,8 @@ function PositionNav({
           className="flex min-w-0 items-center gap-2 rounded-[6px] py-1.5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="nav-position"
           data-position={instance.position_id}
+          // WP481：左栏收窄后长名字截断，悬停看全名
+          title={name}
           aria-expanded={open}
           onKeyDown={(e) => {
             if ((e.key === 'ArrowRight' && !open) || (e.key === 'ArrowLeft' && open)) {
@@ -258,6 +259,7 @@ function PositionNav({
                       )
                     }
                     data-testid="nav-duty"
+                    title={r.role_name}
                   >
                     <span className="truncate">{r.role_name}</span>
                   </NavLink>
@@ -615,11 +617,13 @@ export function AppShell({
           WP71：左栏**钉在视口上**（`sticky` + `h-screen`）。
           账号块在最下面，而主区经常比一屏长——不钉住的话它会跟着页面滚走，
           "最下面"就成了"文档的最下面"，滚三屏才见得到。
+          WP481（决策 1634，Luoye 10-23「左栏的宽度可以稍微缩小一点」）：展开时 240 → 208（收窄约 13%，落在 8px 档上），
+          长名字截断、悬停看全名；收成图标列（52）不变。
         */}
               <aside
                 className={cn(
                   'sticky top-0 flex h-screen shrink-0 flex-col border-r border-ws-line bg-sidebar',
-                  iconRail ? 'w-[52px] items-center px-2 pb-3' : 'w-60 p-3',
+                  iconRail ? 'w-[52px] items-center px-2 pb-3' : 'w-52 p-3',
                 )}
                 data-testid="sidebar"
                 data-collapsed={iconRail ? 'true' : undefined}
@@ -804,6 +808,7 @@ export function AppShell({
                               to={`/positions/${p.position_id}`}
                               className={navClass}
                               data-testid="nav-position"
+                              title={p.role_name}
                             >
                               <PositionIcon position_id={p.position_id} role_ids={[p.role_id]} />
                               <span className="truncate">{p.role_name}</span>
@@ -854,15 +859,14 @@ export function AppShell({
                   {iconRail ? null : <BrandSwitcher />}
                   {/* WP218：账号区正上方——有新版本时才出现（桌面壳里），点一下就更新 */}
                   {iconRail ? null : <UpdateButton />}
-                  {/* WP475：用户名旁一颗「反馈」；收成图标列时叠在头像上面 */}
-                  <div
-                    className={cn('flex items-center gap-1', iconRail && 'flex-col-reverse')}
-                    data-testid="rail-account-row"
-                  >
+                  {/*
+                    WP481（决策 1634）：「反馈」不再单独一颗按钮，收进点头像 / 名字弹出的个人菜单（「反馈」「我的反馈」）；
+                    ⌘K 照旧搜得到。
+                  */}
+                  <div className="flex items-center" data-testid="rail-account-row">
                     <div className={cn('min-w-0', !iconRail && 'flex-1')}>
                       <AccountBlock {...(me === undefined ? {} : { me })} compact={iconRail} />
                     </div>
-                    <FeedbackButton />
                   </div>
                 </div>
               </aside>
@@ -994,7 +998,7 @@ export function AppShell({
                 />
               )}
 
-              {/* WP475：反馈框（左下角按钮、⌘K「反馈」、铃铛 ?feedback=mine 都打开它） */}
+              {/* WP475：反馈框（个人菜单「反馈 / 我的反馈」、⌘K「反馈」、铃铛 ?feedback=mine 都打开它） */}
               <FeedbackHost />
 
               <CommandPalette

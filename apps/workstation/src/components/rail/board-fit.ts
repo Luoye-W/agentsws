@@ -12,6 +12,12 @@
  *   （或窗口窄于 900）时，第三栏改成**盖在中栏上**（带遮罩，点外面 / × 收起），不再挤中栏。
  *
  * 宽度从外壳量（`shell-body` 那一块 = 窗口 − 左栏，ResizeObserver），量不到时（单测、没有外壳）当作放得下。
+ *
+ * WP481（决策 1632，Luoye 10-23「不要挤压中栏宽度」）：第三栏**一律不挤中栏**——
+ * - 桌面壳能把窗口向右加宽（`lib/side-pane-window.ts` 回 `widened`）：窗口多出来的那一截就是第三栏，并排，
+ *   中栏宽度和开之前一样；看板宽度按「窗口 − 第三栏」算（不然窗口变宽看板跟着变宽，中栏反倒窄了）。
+ *   人把窗口拖窄了、并排后核心区保不住最小宽度，照旧改成盖上去。
+ * - 放不下（最大化 / 全屏 / 右边没地方）、浏览器里、老壳（`overlay`）：第三栏从右侧滑出、盖在中栏右侧，中栏不重排。
  */
 import { createContext, useContext } from 'react'
 
@@ -63,19 +69,24 @@ export function columnsLayout({
   size,
   third,
   narrow,
+  docking = 'widened',
 }: {
   size: ShellSize
   third: number | null
   /** 窗口窄于 900（媒体查询给的；量不到宽度时靠它）。 */
   narrow: boolean
+  /**
+   * WP481：窗口为第三栏加宽了没有（`widened` = 加宽了，可以并排；`overlay` = 没加宽——浏览器里、老壳、
+   * 最大化 / 全屏 / 右边没地方——第三栏一律盖上去，不挤中栏）。
+   */
+  docking?: 'widened' | 'overlay'
 }): ColumnsLayout {
   const viewport = size.viewport > 0 ? size.viewport : size.body
-  const boardWidth = boardWidthAt(viewport)
   if (size.body <= 0) {
     return {
       board: true,
-      boardWidth,
-      overlay: third !== null && narrow,
+      boardWidth: boardWidthAt(viewport),
+      overlay: third !== null && (narrow || docking === 'overlay'),
       third: 0,
       core: 0,
     }
@@ -83,8 +94,13 @@ export function columnsLayout({
   const docked = third === null ? 0 : thirdDockedWidth(third, viewport)
   const overlay =
     third !== null &&
-    (narrow || viewport < THIRD_OVERLAY_BELOW || size.body - docked < CORE_MIN_WIDTH)
+    (docking === 'overlay' ||
+      narrow ||
+      viewport < THIRD_OVERLAY_BELOW ||
+      size.body - docked < CORE_MIN_WIDTH)
   const taken = third !== null && !overlay ? docked : 0
+  // 看板按「窗口 − 并排的第三栏」定宽：窗口为第三栏加宽了，看板不跟着变宽
+  const boardWidth = boardWidthAt(viewport - taken)
   const board = size.body - taken - boardWidth >= CORE_MIN_WIDTH
   return {
     board,

@@ -1,5 +1,5 @@
 /**
- * WP475（决策 1591、1592）：左下角「反馈」——按钮打开反馈框；一句话必填、类型默认「问题」；
+ * WP475（决策 1591、1592）：左下角「反馈」——按钮打开反馈框（WP481 起收进个人菜单「反馈」「我的反馈」）；一句话必填、类型默认「问题」；
  * 附上诊断信息默认勾、能展开看、能取消；联系方式默认账号邮箱；桌面壳里一键截窗口（框先收起再截）、
  * 预览能删；浏览器里粘贴图片；云不通时说「已保存，联网后自动发出」；我的反馈：状态与回复、看过了清未读；
  * 铃铛带过来的 `?feedback=mine` 打开我的反馈；⌘K 里搜得到「反馈」。
@@ -63,8 +63,7 @@ vi.mock('@/lib/feedback', async () => {
 })
 
 const { FeedbackHost } = await import('@/components/feedback/feedback-host')
-const { FeedbackButton } = await import('@/components/feedback/feedback-button')
-const { openFeedback } = await import('@/lib/feedback')
+const { AccountBlock } = await import('@/components/account-block')
 
 const DIAG = {
   app_version: '0.2.1-beta.5',
@@ -91,10 +90,16 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** WP481：「反馈」在个人菜单里——点头像 / 名字，再点「反馈」。 */
+function feedbackItem(which: 'account-feedback' | 'account-feedback-mine' = 'account-feedback') {
+  fireEvent.click(screen.getByTestId('account-toggle'))
+  return screen.getByTestId(which)
+}
+
 function shell(route = '/inbox'): void {
   renderWithProviders(
     <>
-      <FeedbackButton />
+      <AccountBlock />
       <FeedbackHost />
     </>,
     route,
@@ -102,9 +107,9 @@ function shell(route = '/inbox'): void {
 }
 
 describe('入口与反馈框', () => {
-  it('左下角按钮打开；一句话必填；类型默认问题；联系方式默认账号邮箱；诊断信息默认勾、能展开看', async () => {
+  it('个人菜单「反馈」打开；一句话必填；类型默认问题；联系方式默认账号邮箱；诊断信息默认勾、能展开看', async () => {
     shell()
-    const button = screen.getByTestId('feedback-button')
+    const button = feedbackItem()
     expect(button.getAttribute('title')).toContain('告诉我们')
     fireEvent.click(button)
     const send = await screen.findByTestId('feedback-send')
@@ -135,7 +140,7 @@ describe('入口与反馈框', () => {
 
   it('发出去：带上类型、联系方式、诊断与否；成功说「收到了」、表单清空', async () => {
     shell()
-    fireEvent.click(screen.getByTestId('feedback-button'))
+    fireEvent.click(feedbackItem())
     fireEvent.change(await screen.findByTestId('feedback-message'), {
       target: { value: '收件箱点开是空白' },
     })
@@ -159,7 +164,7 @@ describe('入口与反馈框', () => {
   it('云不通：说「已保存，联网后自动发出」', async () => {
     state.delivered = false
     shell()
-    fireEvent.click(screen.getByTestId('feedback-button'))
+    fireEvent.click(feedbackItem())
     fireEvent.change(await screen.findByTestId('feedback-message'), {
       target: { value: '断网了' },
     })
@@ -180,7 +185,7 @@ describe('入口与反馈框', () => {
       captureWindow,
     }
     shell()
-    fireEvent.click(screen.getByTestId('feedback-button'))
+    fireEvent.click(feedbackItem())
     fireEvent.change(await screen.findByTestId('feedback-message'), {
       target: { value: '按钮错位' },
     })
@@ -213,7 +218,7 @@ describe('入口与反馈框', () => {
 
   it('浏览器里：没有一键截图，粘贴一张图就附上', async () => {
     shell()
-    fireEvent.click(screen.getByTestId('feedback-button'))
+    fireEvent.click(feedbackItem())
     await screen.findByTestId('feedback-message')
     expect(screen.queryByTestId('feedback-shot-capture')).toBeNull()
     expect(screen.getByTestId('feedback-shot-pick').getAttribute('title')).toContain('粘贴')
@@ -261,9 +266,8 @@ describe('我的反馈', () => {
       ],
     }
     shell()
-    act(() => {
-      openFeedback('mine')
-    })
+    // WP481：个人菜单里的「我的反馈」
+    fireEvent.click(feedbackItem('account-feedback-mine'))
     const items = await screen.findAllByTestId('feedback-mine-item')
     expect(items).toHaveLength(2)
     expect(items[0]?.textContent).toContain('已修')
