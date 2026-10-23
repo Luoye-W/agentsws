@@ -890,6 +890,22 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/creator-capture:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@types/jsdom':
+        specifier: ^21.1.7
+        version: 21.1.7
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.2
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
+
   packages/credentials-openconnector:
     dependencies:
       '@agentsws/contracts':

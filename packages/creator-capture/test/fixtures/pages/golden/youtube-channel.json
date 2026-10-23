@@ -1,0 +1,149 @@
+{
+  "page": "youtube-channel",
+  "capture": {
+    "creator": {
+      "platform": "youtube",
+      "externalId": "UCdeskFIXTURE0000000001",
+      "handle": "@deskfixture",
+      "name": "Desk Fixture",
+      "avatarUrl": "https://yt3.example/avatar-deskfixture.png",
+      "bannerUrl": "https://yt3.example/banner-deskfixture.png",
+      "followersText": "123K subscribers",
+      "followers": 123000,
+      "videoCount": 231,
+      "avgViews": 32500,
+      "country": "Germany",
+      "links": [
+        {
+          "title": "Shop",
+          "url": "https://shop.example/deskfixture"
+        },
+        {
+          "title": "Instagram",
+          "url": "https://www.instagram.com/deskfixture"
+        },
+        {
+          "title": "All my links",
+          "url": "https://linktr.ee/deskfixture"
+        }
+      ],
+      "recentItems": [
+        {
+          "title": "The ultimate desk setup guide",
+          "viewsText": "39K views",
+          "views": 39000,
+          "publishedText": "2 days ago",
+          "publishedAt": "2026-10-21T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "Custom keyboards for beginners",
+          "viewsText": "27K views",
+          "views": 27000,
+          "publishedText": "9 days ago",
+          "publishedAt": "2026-10-14T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "My desk lighting plan",
+          "viewsText": "31K views",
+          "views": 31000,
+          "publishedText": "16 days ago",
+          "publishedAt": "2026-10-07T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "Budget vs flagship keyboard",
+          "viewsText": "45K views",
+          "views": 45000,
+          "publishedText": "23 days ago",
+          "publishedAt": "2026-09-30T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "Cable management in one hour",
+          "viewsText": "22K views",
+          "views": 22000,
+          "publishedText": "30 days ago",
+          "publishedAt": "2026-09-23T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "A week of desk changes",
+          "viewsText": "18K views",
+          "views": 18000,
+          "publishedText": "37 days ago",
+          "publishedAt": "2026-09-16T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "Monitor arms compared",
+          "viewsText": "26K views",
+          "views": 26000,
+          "publishedText": "44 days ago",
+          "publishedAt": "2026-09-09T08:00:00.000Z",
+          "publishedPrecision": "day"
+        },
+        {
+          "title": "Standing desk, six months later",
+          "viewsText": "52K views",
+          "views": 52000,
+          "publishedText": "51 days ago",
+          "publishedAt": "2026-09-02T08:00:00.000Z",
+          "publishedPrecision": "day"
+        }
+      ],
+      "regularity": {
+        "status": "regular",
+        "avgIntervalDays": 7,
+        "note": "Fairly regular · about every 7 days"
+      },
+      "pageUrl": "https://www.youtube.com/@deskfixture/videos",
+      "bio": "Desk setups and keyboard reviews. New video every Wednesday.",
+      "joinedDate": "Mar 3, 2021",
+      "totalViews": 1234567,
+      "businessEmail": "biz@deskfixture.example"
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "youtube",
+        "handle": "@deskfixture",
+        "external_id": "UCdeskFIXTURE0000000001",
+        "display_name": "Desk Fixture",
+        "avatar_url": "https://yt3.example/avatar-deskfixture.png",
+        "followers": 123000,
+        "avg_views": 32500,
+        "video_count": 231,
+        "bio": "Desk setups and keyboard reviews. New video every Wednesday.",
+        "public_contacts": [
+          {
+            "kind": "business",
+            "value": "biz@deskfixture.example"
+          },
+          {
+            "kind": "website",
+            "value": "https://shop.example/deskfixture",
+            "label": "Shop"
+          },
+          {
+            "kind": "social",
+            "value": "https://www.instagram.com/deskfixture",
+            "label": "Instagram"
+          },
+          {
+            "kind": "website",
+            "value": "https://linktr.ee/deskfixture",
+            "label": "All my links"
+          }
+        ],
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "page_url": "https://www.youtube.com/@deskfixture/videos",
+        "source": "channel_page"
+      }
+    ]
+  ],
+  "content_observations": [],
+  "bio_link_observations": []
+}

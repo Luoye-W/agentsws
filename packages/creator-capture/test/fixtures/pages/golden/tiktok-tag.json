@@ -1,0 +1,161 @@
+{
+  "page": "tiktok-tag",
+  "capture": {
+    "list": {
+      "target": {
+        "platform": "tiktok",
+        "pageType": "search",
+        "sourceQuery": "https://www.tiktok.com/tag/mealprep"
+      },
+      "candidates": [
+        {
+          "key": "mealprepmama",
+          "externalId": "mealprepmama",
+          "handle": "mealprepmama",
+          "url": "https://www.tiktok.com/@mealprepmama",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "7444444444444444441",
+              "url": "https://www.tiktok.com/@mealprepmama/video/7444444444444444441",
+              "viewsText": "2.4M"
+            },
+            {
+              "contentId": "7444444444444444443",
+              "url": "https://www.tiktok.com/@mealprepmama/video/7444444444444444443",
+              "viewsText": "51.3K"
+            }
+          ]
+        },
+        {
+          "key": "gymchef",
+          "externalId": "gymchef",
+          "handle": "gymchef",
+          "url": "https://www.tiktok.com/@gymchef",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "7444444444444444442",
+              "url": "https://www.tiktok.com/@gymchef/video/7444444444444444442",
+              "viewsText": "880K"
+            }
+          ]
+        },
+        {
+          "key": "lunchboxlee",
+          "externalId": "lunchboxlee",
+          "handle": "lunchboxlee",
+          "url": "https://www.tiktok.com/@lunchboxlee",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "7444444444444444444",
+              "url": "https://www.tiktok.com/@lunchboxlee/video/7444444444444444444",
+              "viewsText": "12K"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "tiktok",
+        "handle": "mealprepmama",
+        "external_id": "mealprepmama",
+        "page_url": "https://www.tiktok.com/@mealprepmama",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.tiktok.com/@mealprepmama",
+        "source": "search_results",
+        "source_page": "hashtag",
+        "source_query": "https://www.tiktok.com/tag/mealprep"
+      },
+      {
+        "channel": "tiktok",
+        "handle": "gymchef",
+        "external_id": "gymchef",
+        "page_url": "https://www.tiktok.com/@gymchef",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.tiktok.com/@gymchef",
+        "source": "search_results",
+        "source_page": "hashtag",
+        "source_query": "https://www.tiktok.com/tag/mealprep"
+      },
+      {
+        "channel": "tiktok",
+        "handle": "lunchboxlee",
+        "external_id": "lunchboxlee",
+        "page_url": "https://www.tiktok.com/@lunchboxlee",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.tiktok.com/@lunchboxlee",
+        "source": "search_results",
+        "source_page": "hashtag",
+        "source_query": "https://www.tiktok.com/tag/mealprep"
+      }
+    ]
+  ],
+  "content_observations": [
+    {
+      "channel": "tiktok",
+      "content_external_id": "7444444444444444441",
+      "content_type": "video",
+      "url": "https://www.tiktok.com/@mealprepmama/video/7444444444444444441",
+      "stats": {
+        "views": 2400000
+      },
+      "author": {
+        "external_id": "mealprepmama",
+        "handle": "mealprepmama"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/tag/mealprep"
+    },
+    {
+      "channel": "tiktok",
+      "content_external_id": "7444444444444444443",
+      "content_type": "video",
+      "url": "https://www.tiktok.com/@mealprepmama/video/7444444444444444443",
+      "stats": {
+        "views": 51300
+      },
+      "author": {
+        "external_id": "mealprepmama",
+        "handle": "mealprepmama"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/tag/mealprep"
+    },
+    {
+      "channel": "tiktok",
+      "content_external_id": "7444444444444444442",
+      "content_type": "video",
+      "url": "https://www.tiktok.com/@gymchef/video/7444444444444444442",
+      "stats": {
+        "views": 880000
+      },
+      "author": {
+        "external_id": "gymchef",
+        "handle": "gymchef"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/tag/mealprep"
+    },
+    {
+      "channel": "tiktok",
+      "content_external_id": "7444444444444444444",
+      "content_type": "video",
+      "url": "https://www.tiktok.com/@lunchboxlee/video/7444444444444444444",
+      "stats": {
+        "views": 12000
+      },
+      "author": {
+        "external_id": "lunchboxlee",
+        "handle": "lunchboxlee"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/tag/mealprep"
+    }
+  ],
+  "bio_link_observations": []
+}

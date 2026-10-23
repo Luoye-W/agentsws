@@ -1,0 +1,135 @@
+{
+  "page": "instagram-search",
+  "capture": {
+    "list": {
+      "target": {
+        "platform": "instagram",
+        "pageType": "search",
+        "sourceQuery": "https://www.instagram.com/explore/search/keyword/?q=mealprep"
+      },
+      "candidates": [
+        {
+          "key": "prep.daily",
+          "externalId": "prep.daily",
+          "handle": "prep.daily",
+          "url": "https://www.instagram.com/prep.daily/",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "CfixSrc0001",
+              "url": "https://www.instagram.com/reel/CfixSrc0001/",
+              "contentType": "reel"
+            }
+          ]
+        },
+        {
+          "key": "kitchenjane",
+          "externalId": "kitchenjane",
+          "handle": "kitchenjane",
+          "url": "https://www.instagram.com/kitchenjane/",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "CfixSrc0002",
+              "url": "https://www.instagram.com/p/CfixSrc0002/",
+              "contentType": "post"
+            }
+          ]
+        },
+        {
+          "key": "greenbowl",
+          "externalId": "greenbowl",
+          "handle": "greenbowl",
+          "url": "https://www.instagram.com/greenbowl/",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "CfixSrc0004",
+              "url": "https://www.instagram.com/p/CfixSrc0004/",
+              "contentType": "post"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "instagram",
+        "handle": "prep.daily",
+        "external_id": "prep.daily",
+        "page_url": "https://www.instagram.com/prep.daily/",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.instagram.com/prep.daily/",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "https://www.instagram.com/explore/search/keyword/?q=mealprep"
+      },
+      {
+        "channel": "instagram",
+        "handle": "kitchenjane",
+        "external_id": "kitchenjane",
+        "page_url": "https://www.instagram.com/kitchenjane/",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.instagram.com/kitchenjane/",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "https://www.instagram.com/explore/search/keyword/?q=mealprep"
+      },
+      {
+        "channel": "instagram",
+        "handle": "greenbowl",
+        "external_id": "greenbowl",
+        "page_url": "https://www.instagram.com/greenbowl/",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.instagram.com/greenbowl/",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "https://www.instagram.com/explore/search/keyword/?q=mealprep"
+      }
+    ]
+  ],
+  "content_observations": [
+    {
+      "channel": "instagram",
+      "content_external_id": "CfixSrc0001",
+      "content_type": "reel",
+      "url": "https://www.instagram.com/reel/CfixSrc0001/",
+      "stats": {},
+      "author": {
+        "external_id": "prep.daily",
+        "handle": "prep.daily"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/explore/search/keyword/?q=mealprep"
+    },
+    {
+      "channel": "instagram",
+      "content_external_id": "CfixSrc0002",
+      "content_type": "post",
+      "url": "https://www.instagram.com/p/CfixSrc0002/",
+      "stats": {},
+      "author": {
+        "external_id": "kitchenjane",
+        "handle": "kitchenjane"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/explore/search/keyword/?q=mealprep"
+    },
+    {
+      "channel": "instagram",
+      "content_external_id": "CfixSrc0004",
+      "content_type": "post",
+      "url": "https://www.instagram.com/p/CfixSrc0004/",
+      "stats": {},
+      "author": {
+        "external_id": "greenbowl",
+        "handle": "greenbowl"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/explore/search/keyword/?q=mealprep"
+    }
+  ],
+  "bio_link_observations": []
+}

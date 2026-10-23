@@ -1,0 +1,191 @@
+{
+  "page": "instagram-tag",
+  "capture": {
+    "list": {
+      "target": {
+        "platform": "instagram",
+        "pageType": "search",
+        "sourceQuery": "https://www.instagram.com/explore/tags/mealprep/"
+      },
+      "candidates": [
+        {
+          "key": "kitchenjane",
+          "externalId": "kitchenjane",
+          "handle": "kitchenjane",
+          "url": "https://www.instagram.com/kitchenjane/",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "CfixTag0001",
+              "url": "https://www.instagram.com/p/CfixTag0001/",
+              "contentType": "post"
+            },
+            {
+              "contentId": "CfixTag0004",
+              "url": "https://www.instagram.com/p/CfixTag0004/",
+              "contentType": "post"
+            }
+          ]
+        },
+        {
+          "key": "gymchef",
+          "externalId": "gymchef",
+          "handle": "gymchef",
+          "url": "https://www.instagram.com/gymchef/",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "CfixTag0002",
+              "url": "https://www.instagram.com/reel/CfixTag0002/",
+              "contentType": "reel"
+            }
+          ]
+        },
+        {
+          "key": "bento.lab",
+          "externalId": "bento.lab",
+          "handle": "bento.lab",
+          "url": "https://www.instagram.com/bento.lab/",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "CfixTag0005",
+              "url": "https://www.instagram.com/p/CfixTag0005/",
+              "contentType": "post"
+            }
+          ]
+        },
+        {
+          "key": "prep.daily",
+          "externalId": "prep.daily",
+          "handle": "prep.daily",
+          "url": "https://www.instagram.com/prep.daily/",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "CfixTag0006",
+              "url": "https://www.instagram.com/reel/CfixTag0006/",
+              "contentType": "reel"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "instagram",
+        "handle": "kitchenjane",
+        "external_id": "kitchenjane",
+        "page_url": "https://www.instagram.com/kitchenjane/",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.instagram.com/kitchenjane/",
+        "source": "search_results",
+        "source_page": "hashtag",
+        "source_query": "https://www.instagram.com/explore/tags/mealprep/"
+      },
+      {
+        "channel": "instagram",
+        "handle": "gymchef",
+        "external_id": "gymchef",
+        "page_url": "https://www.instagram.com/gymchef/",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.instagram.com/gymchef/",
+        "source": "search_results",
+        "source_page": "hashtag",
+        "source_query": "https://www.instagram.com/explore/tags/mealprep/"
+      },
+      {
+        "channel": "instagram",
+        "handle": "bento.lab",
+        "external_id": "bento.lab",
+        "page_url": "https://www.instagram.com/bento.lab/",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.instagram.com/bento.lab/",
+        "source": "search_results",
+        "source_page": "hashtag",
+        "source_query": "https://www.instagram.com/explore/tags/mealprep/"
+      },
+      {
+        "channel": "instagram",
+        "handle": "prep.daily",
+        "external_id": "prep.daily",
+        "page_url": "https://www.instagram.com/prep.daily/",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.instagram.com/prep.daily/",
+        "source": "search_results",
+        "source_page": "hashtag",
+        "source_query": "https://www.instagram.com/explore/tags/mealprep/"
+      }
+    ]
+  ],
+  "content_observations": [
+    {
+      "channel": "instagram",
+      "content_external_id": "CfixTag0001",
+      "content_type": "post",
+      "url": "https://www.instagram.com/p/CfixTag0001/",
+      "stats": {},
+      "author": {
+        "external_id": "kitchenjane",
+        "handle": "kitchenjane"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/explore/tags/mealprep/"
+    },
+    {
+      "channel": "instagram",
+      "content_external_id": "CfixTag0004",
+      "content_type": "post",
+      "url": "https://www.instagram.com/p/CfixTag0004/",
+      "stats": {},
+      "author": {
+        "external_id": "kitchenjane",
+        "handle": "kitchenjane"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/explore/tags/mealprep/"
+    },
+    {
+      "channel": "instagram",
+      "content_external_id": "CfixTag0002",
+      "content_type": "reel",
+      "url": "https://www.instagram.com/reel/CfixTag0002/",
+      "stats": {},
+      "author": {
+        "external_id": "gymchef",
+        "handle": "gymchef"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/explore/tags/mealprep/"
+    },
+    {
+      "channel": "instagram",
+      "content_external_id": "CfixTag0005",
+      "content_type": "post",
+      "url": "https://www.instagram.com/p/CfixTag0005/",
+      "stats": {},
+      "author": {
+        "external_id": "bento.lab",
+        "handle": "bento.lab"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/explore/tags/mealprep/"
+    },
+    {
+      "channel": "instagram",
+      "content_external_id": "CfixTag0006",
+      "content_type": "reel",
+      "url": "https://www.instagram.com/reel/CfixTag0006/",
+      "stats": {},
+      "author": {
+        "external_id": "prep.daily",
+        "handle": "prep.daily"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.instagram.com/explore/tags/mealprep/"
+    }
+  ],
+  "bio_link_observations": []
+}

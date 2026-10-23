@@ -1,0 +1,189 @@
+{
+  "page": "youtube-watch-related",
+  "capture": {
+    "content": null,
+    "list": {
+      "target": {
+        "platform": "youtube",
+        "pageType": "watch_related",
+        "sourceQuery": "https://www.youtube.com/watch?v=SeedVideo01",
+        "videoId": "SeedVideo01"
+      },
+      "candidates": [
+        {
+          "key": "@deskcraft",
+          "externalId": "UCfixtureDeskCraft00001",
+          "handle": "@deskcraft",
+          "displayName": "Desk Craft",
+          "url": "https://www.youtube.com/@deskcraft",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "RailVid0001",
+              "url": "https://www.youtube.com/watch?v=RailVid0001",
+              "title": "Standing desk mistakes I made for 3 years",
+              "viewsText": "412K",
+              "durationText": "14:05",
+              "publishedText": "2 months ago"
+            },
+            {
+              "contentId": "RailVid0002",
+              "url": "https://www.youtube.com/watch?v=RailVid0002",
+              "title": "The desk setup that fixed my back",
+              "viewsText": "1.1M",
+              "durationText": "21:17",
+              "publishedText": "1 year ago"
+            }
+          ]
+        },
+        {
+          "key": "@cableguy",
+          "externalId": "UCfixtureCableGuy000001",
+          "handle": "@cableguy",
+          "displayName": "Cable Guy",
+          "url": "https://www.youtube.com/@cableguy",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "RailVid0003",
+              "url": "https://www.youtube.com/watch?v=RailVid0003",
+              "title": "Under-desk cable trays, ranked",
+              "viewsText": "38K",
+              "durationText": "9:48",
+              "publishedText": "3 weeks ago"
+            }
+          ]
+        },
+        {
+          "key": "@catvideos",
+          "externalId": "UCfixtureCatVideos00001",
+          "handle": "@catvideos",
+          "displayName": "Cat Videos",
+          "url": "https://www.youtube.com/@catvideos",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "RailVid0006",
+              "url": "https://www.youtube.com/watch?v=RailVid0006",
+              "title": "Funny cats compilation 2026",
+              "viewsText": "9.4M",
+              "durationText": "10:01",
+              "publishedText": "8 years ago"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "youtube",
+        "handle": "@deskcraft",
+        "external_id": "UCfixtureDeskCraft00001",
+        "display_name": "Desk Craft",
+        "page_url": "https://www.youtube.com/@deskcraft",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.youtube.com/@deskcraft",
+        "source": "search_results",
+        "source_page": "watch_related",
+        "source_query": "https://www.youtube.com/watch?v=SeedVideo01"
+      },
+      {
+        "channel": "youtube",
+        "handle": "@cableguy",
+        "external_id": "UCfixtureCableGuy000001",
+        "display_name": "Cable Guy",
+        "page_url": "https://www.youtube.com/@cableguy",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.youtube.com/@cableguy",
+        "source": "search_results",
+        "source_page": "watch_related",
+        "source_query": "https://www.youtube.com/watch?v=SeedVideo01"
+      },
+      {
+        "channel": "youtube",
+        "handle": "@catvideos",
+        "external_id": "UCfixtureCatVideos00001",
+        "display_name": "Cat Videos",
+        "page_url": "https://www.youtube.com/@catvideos",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.youtube.com/@catvideos",
+        "source": "search_results",
+        "source_page": "watch_related",
+        "source_query": "https://www.youtube.com/watch?v=SeedVideo01"
+      }
+    ]
+  ],
+  "content_observations": [
+    {
+      "channel": "youtube",
+      "content_external_id": "RailVid0001",
+      "content_type": "video",
+      "title": "Standing desk mistakes I made for 3 years",
+      "url": "https://www.youtube.com/watch?v=RailVid0001",
+      "stats": {
+        "views": 412000
+      },
+      "author": {
+        "external_id": "UCfixtureDeskCraft00001",
+        "handle": "@deskcraft",
+        "name": "Desk Craft"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/watch?v=SeedVideo01"
+    },
+    {
+      "channel": "youtube",
+      "content_external_id": "RailVid0002",
+      "content_type": "video",
+      "title": "The desk setup that fixed my back",
+      "url": "https://www.youtube.com/watch?v=RailVid0002",
+      "stats": {
+        "views": 1100000
+      },
+      "author": {
+        "external_id": "UCfixtureDeskCraft00001",
+        "handle": "@deskcraft",
+        "name": "Desk Craft"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/watch?v=SeedVideo01"
+    },
+    {
+      "channel": "youtube",
+      "content_external_id": "RailVid0003",
+      "content_type": "video",
+      "title": "Under-desk cable trays, ranked",
+      "url": "https://www.youtube.com/watch?v=RailVid0003",
+      "stats": {
+        "views": 38000
+      },
+      "author": {
+        "external_id": "UCfixtureCableGuy000001",
+        "handle": "@cableguy",
+        "name": "Cable Guy"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/watch?v=SeedVideo01"
+    },
+    {
+      "channel": "youtube",
+      "content_external_id": "RailVid0006",
+      "content_type": "video",
+      "title": "Funny cats compilation 2026",
+      "url": "https://www.youtube.com/watch?v=RailVid0006",
+      "stats": {
+        "views": 9400000
+      },
+      "author": {
+        "external_id": "UCfixtureCatVideos00001",
+        "handle": "@catvideos",
+        "name": "Cat Videos"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/watch?v=SeedVideo01"
+    }
+  ],
+  "bio_link_observations": []
+}

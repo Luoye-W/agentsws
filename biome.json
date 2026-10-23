@@ -22,7 +22,13 @@
       "!apps/desktop/vendor",
       "!apps/extension/build",
       "!apps/extension/.wxt",
-      "!apps/extension/src/ui/tokens.css"
+      "!apps/extension/src/ui/tokens.css",
+      "!packages/creator-capture/src/kol",
+      "!packages/creator-capture/src/collectors",
+      "!packages/creator-capture/src/page-script.generated.ts",
+      "!packages/creator-capture/test/kol",
+      "!packages/creator-capture/test/collectors",
+      "!packages/creator-capture/test/helpers"
     ]
   },
   "formatter": {

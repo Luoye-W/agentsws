@@ -1,0 +1,70 @@
+{
+  "page": "linktree",
+  "capture": {
+    "bio_link": {
+      "platform": "linktree",
+      "slug": "deskfixture",
+      "sourceUrl": "https://linktr.ee/deskfixture",
+      "links": [
+        {
+          "title": "My shop",
+          "url": "https://shop.example/deskfixture"
+        },
+        {
+          "title": "Gear list",
+          "url": "https://gear.example/deskfixture"
+        }
+      ],
+      "socialLinks": [
+        {
+          "type": "INSTAGRAM",
+          "url": "https://www.instagram.com/deskfixture"
+        },
+        {
+          "type": "TIKTOK",
+          "url": "https://www.tiktok.com/@deskfixture"
+        }
+      ],
+      "emails": [
+        "biz@deskfixture.example"
+      ],
+      "bio": "Desk setups and keyboards.",
+      "displayName": "Desk Fixture",
+      "avatarUrl": "https://ugc.example/avatar-deskfixture.png"
+    }
+  },
+  "observation_batches": [],
+  "content_observations": [],
+  "bio_link_observations": [
+    {
+      "platform": "linktree",
+      "slug": "deskfixture",
+      "source_url": "https://linktr.ee/deskfixture",
+      "links": [
+        {
+          "title": "My shop",
+          "url": "https://shop.example/deskfixture"
+        },
+        {
+          "title": "Gear list",
+          "url": "https://gear.example/deskfixture"
+        }
+      ],
+      "social_links": [
+        {
+          "type": "INSTAGRAM",
+          "url": "https://www.instagram.com/deskfixture"
+        },
+        {
+          "type": "TIKTOK",
+          "url": "https://www.tiktok.com/@deskfixture"
+        }
+      ],
+      "emails": [
+        "biz@deskfixture.example"
+      ],
+      "bio": "Desk setups and keyboards.",
+      "captured_at": "2026-10-23T08:00:00.000Z"
+    }
+  ]
+}

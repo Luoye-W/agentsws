@@ -1,0 +1,263 @@
+{
+  "target": {
+    "platform": "tiktok",
+    "pageType": "search",
+    "sourceQuery": "https://www.tiktok.com/search?q=meal%20prep"
+  },
+  "candidates": [
+    {
+      "key": "mealprepmama",
+      "externalId": "mealprepmama",
+      "handle": "mealprepmama",
+      "url": "https://www.tiktok.com/@mealprepmama",
+      "source": "video_attribution",
+      "displayName": "Meal Prep Mama",
+      "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-mealprepmama.jpeg",
+      "videos": [
+        {
+          "contentId": "7411111111111111111",
+          "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111111",
+          "title": "5 lunches for $20 #mealprep",
+          "viewsText": "36.1K"
+        },
+        {
+          "contentId": "7411111111111111112",
+          "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111112",
+          "title": "Sunday prep, zero stress",
+          "viewsText": "102K"
+        }
+      ]
+    },
+    {
+      "key": "gymchef",
+      "externalId": "gymchef",
+      "handle": "gymchef",
+      "url": "https://www.tiktok.com/@gymchef",
+      "source": "video_attribution",
+      "displayName": "Gym Chef",
+      "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-gymchef.jpeg",
+      "videos": [
+        {
+          "contentId": "7422222222222222221",
+          "url": "https://www.tiktok.com/@gymchef/video/7422222222222222221",
+          "title": "High-protein bento in 10 min",
+          "viewsText": "1.2M"
+        }
+      ]
+    },
+    {
+      "key": "bentobox.lab",
+      "externalId": "bentobox.lab",
+      "handle": "bentobox.lab",
+      "url": "https://www.tiktok.com/@bentobox.lab",
+      "source": "video_attribution",
+      "displayName": "Bento Box Lab",
+      "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-bentobox.lab.jpeg",
+      "videos": [
+        {
+          "contentId": "7433333333333333331",
+          "url": "https://www.tiktok.com/@bentobox.lab/photo/7433333333333333331",
+          "viewsText": "8,904",
+          "contentType": "post"
+        }
+      ]
+    },
+    {
+      "key": "prepwithpri",
+      "externalId": "prepwithpri",
+      "handle": "prepwithpri",
+      "url": "https://www.tiktok.com/@prepwithpri",
+      "source": "channel_result",
+      "subscriberCountText": "48.2K",
+      "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-prepwithpri.jpeg"
+    }
+  ],
+  "offered": {
+    "views": true,
+    "subscribers": true
+  },
+  "evidence": [
+    {
+      "total": 2,
+      "shorts": 0,
+      "longform": 2,
+      "topViewsText": "102K"
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1,
+      "topViewsText": "1.2M"
+    },
+    {
+      "total": 1,
+      "shorts": 0,
+      "longform": 1,
+      "topViewsText": "8,904"
+    },
+    null
+  ],
+  "bands": {
+    "relevant": 0,
+    "suspect": 0,
+    "irrelevant": 0,
+    "unscored": 4
+  },
+  "filters": [
+    {
+      "prefs": {},
+      "hidden": 0,
+      "unknown": 0,
+      "visibleKeys": [
+        "mealprepmama",
+        "gymchef",
+        "bentobox.lab",
+        "prepwithpri"
+      ],
+      "items": [
+        {
+          "externalId": "mealprepmama",
+          "handle": "mealprepmama",
+          "displayName": "Meal Prep Mama",
+          "url": "https://www.tiktok.com/@mealprepmama",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-mealprepmama.jpeg",
+          "videos": [
+            {
+              "contentId": "7411111111111111111",
+              "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111111",
+              "title": "5 lunches for $20 #mealprep",
+              "viewsText": "36.1K"
+            },
+            {
+              "contentId": "7411111111111111112",
+              "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111112",
+              "title": "Sunday prep, zero stress",
+              "viewsText": "102K"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "gymchef",
+          "handle": "gymchef",
+          "displayName": "Gym Chef",
+          "url": "https://www.tiktok.com/@gymchef",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-gymchef.jpeg",
+          "videos": [
+            {
+              "contentId": "7422222222222222221",
+              "url": "https://www.tiktok.com/@gymchef/video/7422222222222222221",
+              "title": "High-protein bento in 10 min",
+              "viewsText": "1.2M"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "bentobox.lab",
+          "handle": "bentobox.lab",
+          "displayName": "Bento Box Lab",
+          "url": "https://www.tiktok.com/@bentobox.lab",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-bentobox.lab.jpeg",
+          "videos": [
+            {
+              "contentId": "7433333333333333331",
+              "url": "https://www.tiktok.com/@bentobox.lab/photo/7433333333333333331",
+              "viewsText": "8,904",
+              "contentType": "post"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "prepwithpri",
+          "handle": "prepwithpri",
+          "url": "https://www.tiktok.com/@prepwithpri",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-prepwithpri.jpeg",
+          "subscriberCountText": "48.2K",
+          "rawSignals": {
+            "listCaptureSource": "channel_result"
+          }
+        }
+      ],
+      "chunks": [
+        4
+      ]
+    },
+    {
+      "prefs": {
+        "minViewsText": "50K"
+      },
+      "hidden": 1,
+      "unknown": 1,
+      "visibleKeys": [
+        "mealprepmama",
+        "gymchef",
+        "prepwithpri"
+      ],
+      "items": [
+        {
+          "externalId": "mealprepmama",
+          "handle": "mealprepmama",
+          "displayName": "Meal Prep Mama",
+          "url": "https://www.tiktok.com/@mealprepmama",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-mealprepmama.jpeg",
+          "videos": [
+            {
+              "contentId": "7411111111111111111",
+              "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111111",
+              "title": "5 lunches for $20 #mealprep",
+              "viewsText": "36.1K"
+            },
+            {
+              "contentId": "7411111111111111112",
+              "url": "https://www.tiktok.com/@mealprepmama/video/7411111111111111112",
+              "title": "Sunday prep, zero stress",
+              "viewsText": "102K"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "gymchef",
+          "handle": "gymchef",
+          "displayName": "Gym Chef",
+          "url": "https://www.tiktok.com/@gymchef",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-gymchef.jpeg",
+          "videos": [
+            {
+              "contentId": "7422222222222222221",
+              "url": "https://www.tiktok.com/@gymchef/video/7422222222222222221",
+              "title": "High-protein bento in 10 min",
+              "viewsText": "1.2M"
+            }
+          ],
+          "rawSignals": {
+            "listCaptureSource": "video_attribution"
+          }
+        },
+        {
+          "externalId": "prepwithpri",
+          "handle": "prepwithpri",
+          "url": "https://www.tiktok.com/@prepwithpri",
+          "avatarUrl": "https://p16-sign.tiktokcdn.com/fixture-avatar-prepwithpri.jpeg",
+          "subscriberCountText": "48.2K",
+          "rawSignals": {
+            "listCaptureSource": "channel_result"
+          }
+        }
+      ],
+      "chunks": [
+        3
+      ]
+    }
+  ]
+}

@@ -1,0 +1,188 @@
+{
+  "page": "youtube-search",
+  "capture": {
+    "list": {
+      "target": {
+        "platform": "youtube",
+        "pageType": "search",
+        "sourceQuery": "standing desk"
+      },
+      "candidates": [
+        {
+          "key": "@deskcraft",
+          "externalId": "@deskcraft",
+          "handle": "@deskcraft",
+          "displayName": "Desk Craft",
+          "url": "https://www.youtube.com/@deskcraft",
+          "avatarUrl": "https://yt3.ggpht.com/fixture-deskcraft=s88",
+          "subscriberCountText": "312K subscribers",
+          "videoCountText": "418 videos",
+          "source": "channel_result",
+          "videos": [
+            {
+              "contentId": "DeskVid0001",
+              "url": "https://www.youtube.com/watch?v=DeskVid0001",
+              "title": "I tried 5 standing desks so you don't have to",
+              "viewsText": "1.2M views",
+              "durationText": "18:42"
+            },
+            {
+              "contentId": "DeskShort01",
+              "url": "https://www.youtube.com/shorts/DeskShort01",
+              "title": "Desk hack in 30 seconds",
+              "viewsText": "86K views",
+              "isShort": true
+            }
+          ]
+        },
+        {
+          "key": "@cableguy",
+          "externalId": "@cableguy",
+          "handle": "@cableguy",
+          "displayName": "Cable Guy",
+          "url": "https://www.youtube.com/@cableguy",
+          "avatarUrl": "https://yt3.ggpht.com/fixture-cableguy=s68",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "CableVid001",
+              "url": "https://www.youtube.com/watch?v=CableVid001",
+              "title": "Cable management for people who hate cable management",
+              "viewsText": "9.4K views"
+            }
+          ]
+        },
+        {
+          "key": "UCfixtureHomeOffice0001",
+          "externalId": "UCfixtureHomeOffice0001",
+          "displayName": "Home Office Lab",
+          "url": "https://www.youtube.com/channel/UCfixtureHomeOffice0001",
+          "source": "video_attribution",
+          "videos": [
+            {
+              "contentId": "OfficeVid01",
+              "url": "https://www.youtube.com/watch?v=OfficeVid01",
+              "title": "Home office tour 2026",
+              "viewsText": "240K views"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "observation_batches": [
+    [
+      {
+        "channel": "youtube",
+        "handle": "@deskcraft",
+        "external_id": "@deskcraft",
+        "display_name": "Desk Craft",
+        "page_url": "https://www.youtube.com/@deskcraft",
+        "avatar_url": "https://yt3.ggpht.com/fixture-deskcraft=s88",
+        "followers_text": "312K subscribers",
+        "followers": 312000,
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.youtube.com/@deskcraft",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "standing desk"
+      },
+      {
+        "channel": "youtube",
+        "handle": "@cableguy",
+        "external_id": "@cableguy",
+        "display_name": "Cable Guy",
+        "page_url": "https://www.youtube.com/@cableguy",
+        "avatar_url": "https://yt3.ggpht.com/fixture-cableguy=s68",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.youtube.com/@cableguy",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "standing desk"
+      },
+      {
+        "channel": "youtube",
+        "handle": "UCfixtureHomeOffice0001",
+        "external_id": "UCfixtureHomeOffice0001",
+        "display_name": "Home Office Lab",
+        "page_url": "https://www.youtube.com/channel/UCfixtureHomeOffice0001",
+        "observed_at": "2026-10-23T08:00:00.000Z",
+        "url": "https://www.youtube.com/channel/UCfixtureHomeOffice0001",
+        "source": "search_results",
+        "source_page": "search",
+        "source_query": "standing desk"
+      }
+    ]
+  ],
+  "content_observations": [
+    {
+      "channel": "youtube",
+      "content_external_id": "DeskVid0001",
+      "content_type": "video",
+      "title": "I tried 5 standing desks so you don't have to",
+      "url": "https://www.youtube.com/watch?v=DeskVid0001",
+      "stats": {
+        "views": 1200000
+      },
+      "author": {
+        "external_id": "@deskcraft",
+        "handle": "@deskcraft",
+        "name": "Desk Craft"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/results?search_query=standing%20desk"
+    },
+    {
+      "channel": "youtube",
+      "content_external_id": "DeskShort01",
+      "content_type": "video",
+      "title": "Desk hack in 30 seconds",
+      "url": "https://www.youtube.com/shorts/DeskShort01",
+      "stats": {
+        "views": 86000
+      },
+      "author": {
+        "external_id": "@deskcraft",
+        "handle": "@deskcraft",
+        "name": "Desk Craft"
+      },
+      "orientation": "portrait",
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/results?search_query=standing%20desk"
+    },
+    {
+      "channel": "youtube",
+      "content_external_id": "CableVid001",
+      "content_type": "video",
+      "title": "Cable management for people who hate cable management",
+      "url": "https://www.youtube.com/watch?v=CableVid001",
+      "stats": {
+        "views": 9400
+      },
+      "author": {
+        "external_id": "@cableguy",
+        "handle": "@cableguy",
+        "name": "Cable Guy"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/results?search_query=standing%20desk"
+    },
+    {
+      "channel": "youtube",
+      "content_external_id": "OfficeVid01",
+      "content_type": "video",
+      "title": "Home office tour 2026",
+      "url": "https://www.youtube.com/watch?v=OfficeVid01",
+      "stats": {
+        "views": 240000
+      },
+      "author": {
+        "external_id": "UCfixtureHomeOffice0001",
+        "name": "Home Office Lab"
+      },
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.youtube.com/results?search_query=standing%20desk"
+    }
+  ],
+  "bio_link_observations": []
+}

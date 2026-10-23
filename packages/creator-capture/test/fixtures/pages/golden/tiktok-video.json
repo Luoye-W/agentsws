@@ -1,0 +1,57 @@
+{
+  "page": "tiktok-video",
+  "capture": {
+    "content": {
+      "platform": "tiktok",
+      "contentId": "7000000000000000209",
+      "contentType": "video",
+      "title": "Ten-minute lunch for the whole week #mealprep",
+      "url": "https://www.tiktok.com/@lunchfixture/video/7000000000000000209",
+      "thumbnailUrl": "https://p16.example/cover-209.jpeg",
+      "views": 184000,
+      "likes": 12300,
+      "comments": 410,
+      "shares": 95,
+      "publishedAt": "2026-09-10T00:26:40.000Z",
+      "orientation": "portrait",
+      "durationSeconds": 42,
+      "author": {
+        "externalId": "7000000000000000101",
+        "handle": "lunchfixture",
+        "name": "Lunch Fixture",
+        "followers": 256000,
+        "profileUrl": "https://www.tiktok.com/@lunchfixture"
+      },
+      "pageUrl": "https://www.tiktok.com/@lunchfixture/video/7000000000000000209"
+    }
+  },
+  "observation_batches": [],
+  "content_observations": [
+    {
+      "channel": "tiktok",
+      "content_external_id": "7000000000000000209",
+      "content_type": "video",
+      "title": "Ten-minute lunch for the whole week #mealprep",
+      "url": "https://www.tiktok.com/@lunchfixture/video/7000000000000000209",
+      "thumbnail_url": "https://p16.example/cover-209.jpeg",
+      "published_at": "2026-09-10T00:26:40.000Z",
+      "stats": {
+        "views": 184000,
+        "likes": 12300,
+        "comments": 410,
+        "shares": 95
+      },
+      "author": {
+        "external_id": "7000000000000000101",
+        "handle": "lunchfixture",
+        "name": "Lunch Fixture",
+        "followers": 256000
+      },
+      "orientation": "portrait",
+      "duration_seconds": 42,
+      "captured_at": "2026-10-23T08:00:00.000Z",
+      "source_url": "https://www.tiktok.com/@lunchfixture/video/7000000000000000209"
+    }
+  ],
+  "bio_link_observations": []
+}
