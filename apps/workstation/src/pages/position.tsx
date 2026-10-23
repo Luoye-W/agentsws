@@ -401,7 +401,7 @@ export function PositionPage(): React.ReactNode {
       {/* WP261：店铺管理 / 整站搭建 / 网页模板所在的岗位「授权管理商品和页面」——WP288 起只在出问题时出 */}
       <ShopAdminBanner duties={duties} />
       {/* WP332（决策 762）：社媒岗位上 Reddit 那一条没发出去 → 一行提醒 +「再填一次」；正常时不画 */}
-      <RedditWriteNotice duties={duties} />
+      <RedditWriteNotice duties={duties} position={id} />
       {/* WP340：巡查抓到命中告警词的 → 一行「优先」提醒（同一条只一次）；没有就不画 */}
       <RedditWatchAlertNotice duties={duties} />
       {/* WP317（决策 629）：投放岗位上素材流水线的快捷入口（点进 Google / Meta 职责页那一块） */}
