@@ -32,6 +32,7 @@ import {
   MAX_CREATOR_LIMIT,
   MIN_AUDIT_SAMPLES,
   type Pricing,
+  sanitizePublicContacts,
 } from '@agentsws/contracts'
 import { SAMPLE_PRICING_CATALOG } from './pricing-sample.js'
 import { type StandInWallet, StandInWalletError } from './wallet.js'
@@ -111,12 +112,28 @@ export class KolPublicStandIn {
         (typeof o.posts_30d !== 'number' || typeof o.engagement_rate !== 'number')
       )
         throw new StandInKolError('invalid_input', 'posts_30d 与 engagement_rate 要是数。')
+      /*
+       * WP487（决策 1661 补）：主页上公开的联系方式——与云上同一条「拒而不改」（不是筛完的样子就整批拒）；
+       * 邮箱收进联系方式（库里还没有时），观察行里不留这一格。
+       */
+      const { public_contacts: contacts, ...bare } = o
+      if (contacts !== undefined) {
+        const clean = sanitizePublicContacts(contacts)
+        if (JSON.stringify(clean) !== JSON.stringify(contacts))
+          throw new StandInKolError(
+            'invalid_input',
+            'public_contacts 不合格：只收主页上公开的邮箱或 http(s) 链接；带账号密码、通向私信 / 收件箱 / 登录页、带凭据参数的不收。',
+          )
+      }
       const key = keyOf(o.channel, o.handle)
       const before = this.cards.get(key)
       const handle = o.handle.replace(/^@/u, '').toLowerCase()
       const rows = this.observationRows.get(key) ?? []
-      rows.push({ ...o, handle, source })
+      rows.push({ ...bare, handle, source })
       this.observationRows.set(key, rows)
+      const email = contacts?.find((c) => !c.value.includes('://'))?.value
+      const gotEmail = email !== undefined && !this.contacts.has(key)
+      if (gotEmail) this.contacts.set(key, { email, source })
       this.cards.set(key, {
         channel: o.channel,
         handle,
@@ -128,7 +145,7 @@ export class KolPublicStandIn {
         source,
         observations: rows.length,
         confidence: before?.confidence ?? 0.5,
-        has_contact: before?.has_contact ?? false,
+        has_contact: gotEmail || (before?.has_contact ?? false),
         updated_at: this.now(),
         ...(o.language === undefined ? {} : { language: o.language }),
         ...(o.region === undefined ? {} : { region: o.region }),

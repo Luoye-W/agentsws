@@ -85,6 +85,13 @@ export interface PublicCreatorObservation {
   region?: string
   /** 类目（自由词，最多 {@link MAX_CATEGORIES} 个）。 */
   categories?: string[]
+  /**
+   * WP487（决策 1661 补）：红人**主页上公开写着的**联系方式——公开邮箱、网站、其它平台主页、
+   * 商务合作入口、经纪 / 代理联系。只收 {@link PublicContactLink} 那三格，最多
+   * {@link MAX_PUBLIC_CONTACTS} 条；私信内容、账号凭据、用户自己的数据没有一格能落进来。
+   * 发出去之前先过 {@link sanitizePublicContacts}（本机那一跳就过，云端再按同一套规矩判一次）。
+   */
+  public_contacts?: PublicContactLink[]
   /** 这份资料**被看到**的时刻（不是被写进库的时刻）。 */
   observed_at: Iso8601
 }
@@ -99,8 +106,154 @@ export const PUBLIC_OBSERVATION_FIELDS = [
   'language',
   'region',
   'categories',
+  // WP487（决策 1661 补，只加）：主页上公开的联系方式
+  'public_contacts',
   'observed_at',
 ] as const satisfies readonly (keyof PublicCreatorObservation)[]
+
+/**
+ * WP487（决策 1661 补）：主页上公开的一条联系方式是哪一种。
+ *
+ * - `email`：主页 / 简介 / 「关于」里公开写着的邮箱；
+ * - `website`：个人或品牌官网、link-in-bio 页；
+ * - `social`：同一个人在别的平台的主页；
+ * - `business`：商务合作入口（「For business inquiries」后面那个邮箱或表单链接）；
+ * - `agent`：经纪 / 代理公司的联系（邮箱或链接）。
+ */
+export type PublicContactKind = 'email' | 'website' | 'social' | 'business' | 'agent'
+
+export const PUBLIC_CONTACT_KINDS: readonly PublicContactKind[] = [
+  'email',
+  'website',
+  'social',
+  'business',
+  'agent',
+]
+
+/** 一条公开联系方式。**就这三格**——没有「从哪个私信里看到的」这种东西。 */
+export interface PublicContactLink {
+  kind: PublicContactKind
+  /** 邮箱（小写）或 `https://` / `http://` 链接（去掉了 `#…` 与跟踪参数）。 */
+  value: string
+  /** 页面上写在它旁边的那几个字（「Business inquiries」「Managed by …」），最多 {@link PUBLIC_CONTACT_LABEL_MAX} 字。 */
+  label?: string
+}
+
+/** 一条公开联系方式的字段白名单（云端逐键比对，多一个键整批拒）。 */
+export const PUBLIC_CONTACT_FIELDS = [
+  'kind',
+  'value',
+  'label',
+] as const satisfies readonly (keyof PublicContactLink)[]
+
+/** 一条观察最多带几条公开联系方式。 */
+export const MAX_PUBLIC_CONTACTS = 10
+/** 一条联系方式的值最长多少字符。 */
+export const PUBLIC_CONTACT_VALUE_MAX = 300
+/** 旁边那几个字最长多少字。 */
+export const PUBLIC_CONTACT_LABEL_MAX = 60
+
+const PUBLIC_EMAIL_RE = /^[^\s@<>()[\],;:"']+@[^\s@.<>()[\],;:"']+(\.[^\s@.<>()[\],;:"']+)+$/
+
+/** 只是跟踪用的参数：去掉，不算这条链接的一部分。 */
+const TRACKING_PARAM_RE =
+  /^(utm_[a-z_]*|fbclid|gclid|dclid|msclkid|igsh|igshid|si|ref|ref_src|ref_url|feature|_t|_r|mc_cid|mc_eid)$/i
+
+/**
+ * 像是凭据 / 会话的参数名。链接上带了它就**整条不收**——一条带着登录令牌的「网站」
+ * 不是红人的公开联系方式，是谁的会话被抄下来了。
+ */
+const CREDENTIAL_PARAM_RE =
+  /(token|secret|passw|pwd|session|signature|apikey|api_key|access_key|credential|jwt|bearer|cookie)|^(auth|code|key|sid|sig|otp|login|state|nonce)$/i
+
+/**
+ * 私信 / 收件箱这一类**私人页面**的路径。红人主页上不会公开挂一条通向别人收件箱的链接；
+ * 出现了就是把谁自己的私信页抄进来了——不收。（`m.me/<name>`、`wa.me/<号码>` 这种「给我发消息」的
+ * 公开入口不在这里：那是主页上公开挂的商务入口。）
+ */
+const PRIVATE_PATH_RE =
+  /\/(direct|messages|message|inbox|chat|conversations?|dm|dms|notifications|settings|account|login|signin|sign-in|oauth|checkpoint)(\/|$)/i
+
+/** 邮箱：小写、形状对才算；`mailto:` 前缀与 `?subject=…` 去掉。 */
+function publicEmailOf(raw: string): string | undefined {
+  const bare =
+    raw
+      .replace(/^mailto:/i, '')
+      .split('?')[0]
+      ?.trim()
+      .toLowerCase() ?? ''
+  return bare.length <= 254 && PUBLIC_EMAIL_RE.test(bare) ? bare : undefined
+}
+
+/** 链接：只要 http(s)、不带账号密码、不通向私信页、不带凭据参数；去掉 `#…` 与跟踪参数。 */
+function publicUrlOf(raw: string): string | undefined {
+  let url: URL
+  try {
+    url = new URL(raw.trim())
+  } catch {
+    return undefined
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+  if (url.username !== '' || url.password !== '') return undefined
+  if (!url.hostname.includes('.')) return undefined
+  if (PRIVATE_PATH_RE.test(url.pathname)) return undefined
+  const keep = new URLSearchParams()
+  for (const [k, v] of url.searchParams) {
+    if (CREDENTIAL_PARAM_RE.test(k)) return undefined
+    if (!TRACKING_PARAM_RE.test(k)) keep.append(k, v)
+  }
+  url.hash = ''
+  const query = keep.toString()
+  url.search = query === '' ? '' : `?${query}`
+  const out = url.toString()
+  return out.length <= PUBLIC_CONTACT_VALUE_MAX ? out : undefined
+}
+
+/**
+ * WP487（决策 1661 补）：一串「主页上公开的联系方式」→ 能上云的那几条。
+ *
+ * 纯函数、同一份规矩两边用：本机服务在转发前用它**筛**（不合格的那条丢掉，别的照送），
+ * 云端用它**判**（筛完和原样不一样 = 这一批不合格，整批拒）。规矩：
+ *
+ * 1. 只认 {@link PUBLIC_CONTACT_KINDS} 那五种；每条只留 `kind` / `value` / `label`（别的键一律不带）；
+ * 2. `email` 必须是邮箱；`website` / `social` 必须是 http(s) 链接；`business` / `agent` 两样都行；
+ * 3. 链接上带账号密码、通向私信 / 收件箱 / 登录页、或带像凭据的参数（token、session、key…）——**整条不收**；
+ *    `#…` 与 `utm_*` 这类跟踪参数去掉；
+ * 4. 同一种同一个值只留一条，最多 {@link MAX_PUBLIC_CONTACTS} 条。
+ */
+export function sanitizePublicContacts(raw: unknown): PublicContactLink[] {
+  if (!Array.isArray(raw)) return []
+  const out: PublicContactLink[] = []
+  const seen = new Set<string>()
+  for (const one of raw) {
+    if (out.length >= MAX_PUBLIC_CONTACTS) break
+    if (one === null || typeof one !== 'object' || Array.isArray(one)) continue
+    const r = one as Record<string, unknown>
+    const kind = PUBLIC_CONTACT_KINDS.find((k) => k === r.kind)
+    if (kind === undefined || typeof r.value !== 'string') continue
+    const text = r.value.trim()
+    if (text === '' || text.length > PUBLIC_CONTACT_VALUE_MAX) continue
+    const looksMail =
+      /^mailto:/i.test(text) || (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text) && text.includes('@'))
+    let value: string | undefined
+    if (kind === 'email') value = publicEmailOf(text)
+    else if (kind === 'website' || kind === 'social')
+      value = looksMail ? undefined : publicUrlOf(text)
+    else value = looksMail ? publicEmailOf(text) : publicUrlOf(text)
+    if (value === undefined) continue
+    const key = `${kind}|${value}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const label =
+      typeof r.label === 'string'
+        ? Array.from(r.label.replace(/\s+/g, ' ').trim())
+            .slice(0, PUBLIC_CONTACT_LABEL_MAX)
+            .join('')
+        : ''
+    out.push({ kind, value, ...(label === '' ? {} : { label }) })
+  }
+  return out
+}
 
 /** 一条观察最多带几个类目。 */
 export const MAX_CATEGORIES = 8

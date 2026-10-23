@@ -13,6 +13,13 @@
 import type { Platform } from './snapshot.js'
 
 /** 一条观测。字段就是这几个——正文、评论、私信一个都没有。 */
+/** WP487：主页上公开的一条联系方式（与 `@agentsws/contracts` 的 `PublicContactLink` 同形）。 */
+export interface PublicContactInput {
+  kind: 'email' | 'website' | 'social' | 'business' | 'agent'
+  value: string
+  label?: string
+}
+
 export interface ExtensionObservationInput {
   channel: Platform
   handle: string
@@ -29,6 +36,8 @@ export interface ExtensionObservationInput {
   bio?: string
   /** 用户显式点过「收下这个邮箱」才有。 */
   contact?: { kind: 'email' | 'dm' | 'phone' | 'form'; value: string; source?: string }
+  /** WP487（决策 1661 补）：主页上公开写着的联系方式（本机服务筛过再备份上云）。 */
+  public_contacts?: PublicContactInput[]
   observed_at: string
   page_url?: string
   source: 'channel_page' | 'content_page' | 'search_results'

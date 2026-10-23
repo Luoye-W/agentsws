@@ -239,6 +239,92 @@ export function diffAddition(before: string | undefined, after: string): string 
 }
 
 /**
+ * WP487（决策 1679）：「只删了几个字」最多删多少字（不算空白，按码点）。再多就不是「删几个字」，
+ * 是改写了一段——照旧按「改成了什么」学。
+ */
+export const SMALL_DELETION_MAX_CHARS = 40
+/** 一次修改里最多删几处还算「只删了几个字」。 */
+export const SMALL_DELETION_MAX_SPANS = 3
+/** 规则版兜底那一句的开头（「删掉了『DM us』」）。夜里模型提炼过的就不再是这个开头。 */
+export const DELETION_RULE_PREFIX = '删掉了'
+
+/** 词元：一个汉字一个；拉丁词 / 数字连着算一个；空白连着算一个；标点一个一个。 */
+const TOKEN_RE = /\p{Script=Han}|[\p{L}\p{N}_'’-]+|\s+|[^\s\p{L}\p{N}]/gu
+const EDGE_RE = /^[\s\p{P}\p{S}]+|[\s\p{P}\p{S}]+$/gu
+const HAS_WORD_RE = /[\p{L}\p{N}]/u
+/** 前后去掉相同部分之后，中间那一截超过这么多词元就不比了（不会是「删几个字」）。 */
+const DIFF_MAX_TOKENS = 600
+
+/**
+ * WP487（决策 1679）：改后是不是**只是把原文删掉了几个字**——是就回删掉的那几段（去掉两头的空白与标点），
+ * 不是（加了字、改了字、删得太多、删的只是空白标点）回 `undefined`。纯函数。
+ *
+ * 做法：按词元比（前后相同的先剥掉，中间做最长公共子序列）；改后多出来的只许是空白。
+ */
+export function smallDeletion(before: string, after: string): string[] | undefined {
+  const a = before.match(TOKEN_RE) ?? []
+  const b = after.match(TOKEN_RE) ?? []
+  let start = 0
+  while (start < a.length && start < b.length && a[start] === b[start]) start += 1
+  let endA = a.length
+  let endB = b.length
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA -= 1
+    endB -= 1
+  }
+  const midA = a.slice(start, endA)
+  const midB = b.slice(start, endB)
+  if (midA.length === 0 || midA.length > DIFF_MAX_TOKENS || midB.length > DIFF_MAX_TOKENS)
+    return undefined
+  // 最长公共子序列（中间那一截，很短）
+  const n = midA.length
+  const m = midB.length
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
+  for (let i = n - 1; i >= 0; i -= 1)
+    for (let j = m - 1; j >= 0; j -= 1)
+      (dp[i] as number[])[j] =
+        midA[i] === midB[j]
+          ? ((dp[i + 1] as number[])[j + 1] as number) + 1
+          : Math.max((dp[i + 1] as number[])[j] as number, (dp[i] as number[])[j + 1] as number)
+  const spans: string[] = []
+  let current = ''
+  let i = 0
+  let j = 0
+  const flush = (): void => {
+    const t = current.replace(EDGE_RE, '')
+    if (t !== '') spans.push(t)
+    current = ''
+  }
+  while (i < n || j < m) {
+    if (i < n && j < m && midA[i] === midB[j]) {
+      flush()
+      i += 1
+      j += 1
+    } else if (
+      j < m &&
+      (i >= n || ((dp[i] as number[])[j + 1] as number) > ((dp[i + 1] as number[])[j] as number))
+    ) {
+      // 改后多出来的：只许是空白（删字时顺手并掉的空格），别的就不是「只删」
+      if (!/^\s+$/u.test(midB[j] as string)) return undefined
+      j += 1
+    } else {
+      current += midA[i] as string
+      i += 1
+    }
+  }
+  flush()
+  const words = spans.filter((t) => HAS_WORD_RE.test(t))
+  if (words.length === 0 || words.length > SMALL_DELETION_MAX_SPANS) return undefined
+  const size = words.reduce((sum, t) => sum + Array.from(t.replace(/\s+/gu, '')).length, 0)
+  return size <= SMALL_DELETION_MAX_CHARS ? words : undefined
+}
+
+/** 规则版兜底那一句：「删掉了『DM us』」（几处就几对书名号）。 */
+export function deletionRuleText(spans: readonly string[]): string {
+  return `${DELETION_RULE_PREFIX}${spans.map((t) => `『${clean(t)}』`).join('')}`
+}
+
+/**
  * 规则版抽取。同步、纯函数：同样的入参永远同样的产物。
  */
 export function extractLessons(input: ExtractInput): ExtractedLesson[] {
@@ -272,7 +358,30 @@ export function extractLessons(input: ExtractInput): ExtractedLesson[] {
       )
     }
     // ② 编辑差异 → 改法
-    if (d.edit_diff !== undefined && clean(d.edit_diff.after ?? '') !== '') {
+    //    WP487（决策 1679）：只删了几个字（删掉「DM us」）→ 一条「别写」：规则版先写「删掉了『DM us』」，
+    //    夜里有模型就提炼成一句人话规矩（`refine.ts`），没模型就停在这一句
+    const deleted =
+      d.edit_diff?.before === undefined || clean(d.edit_diff.after ?? '') === ''
+        ? undefined
+        : smallDeletion(d.edit_diff.before, d.edit_diff.after ?? '')
+    if (d.edit_diff !== undefined && deleted !== undefined) {
+      const text = deletionRuleText(deleted)
+      out.push(
+        build(input, {
+          text,
+          kind: 'anti_example',
+          signal: 'edit_diff',
+          strength: 'strong',
+          evidence: {
+            ...ev(text, 'edit_diff', {
+              ...(d.edit_diff.before === undefined ? {} : { before: clip(d.edit_diff.before) }),
+              after: clip(d.edit_diff.after ?? ''),
+            }),
+            deleted,
+          },
+        }),
+      )
+    } else if (d.edit_diff !== undefined && clean(d.edit_diff.after ?? '') !== '') {
       const added = diffAddition(d.edit_diff.before, d.edit_diff.after ?? '')
       if (added !== '') {
         out.push(

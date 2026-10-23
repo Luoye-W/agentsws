@@ -1,19 +1,71 @@
 /**
  * 页面快照 → 上报给本机服务的那一条（WP119 定论 2）。
  *
- * 这个文件是**白名单的落点**：快照里有的格子比这里多（`links`、`recent_items`、
+ * 这个文件是**白名单的落点**：快照里有的格子比这里多（`recent_items`、
  * `total_views`），它们留在页面上给体检与「复制一行」用，**不往上报**。
  * 多报一格没有坏处这句话是错的：本机服务那一侧是 `.strict()`，多一个键整批拒，
  * 于是"往上报的字段"只能在这一个函数里增加，而增加时必然要改这里的注释。
  *
- * 联系方式那一格**只在用户显式收下时才有**：调用方要显式传 `contact`，
+ * 联系方式那一格（`contact`）**只在用户显式收下时才有**：调用方要显式传 `contact`，
  * 而不是从快照里自动带过去。页面上读到一个邮箱与用户决定收下它，是两件事。
+ *
+ * WP487（决策 1661 补）：主页上**公开写着的**联系方式随观测一起报（`public_contacts`）——外链
+ * （官网 / link-in-bio / 别的平台主页）与「关于」里用户点开看到的那个商务邮箱。本机服务再筛一遍
+ * （私信页、带凭据的链接丢掉）才备份上云；与 ego 那条路（`record_creator_observations`）同一个形状。
  */
 
 import type { BulkCandidate } from './bulk.js'
 import type { CreatorHealth } from './health.js'
 import type { CreatorSnapshot } from './snapshot.js'
-import type { ExtensionObservationInput } from './wire.js'
+import type { ExtensionObservationInput, PublicContactInput } from './wire.js'
+
+/** 这些域名上的外链算「别的平台主页」，其余算网站。 */
+const SOCIAL_HOSTS = [
+  'youtube.com',
+  'youtu.be',
+  'instagram.com',
+  'tiktok.com',
+  'x.com',
+  'twitter.com',
+  'facebook.com',
+  'threads.net',
+  'twitch.tv',
+  'linkedin.com',
+  'pinterest.com',
+  'snapchat.com',
+  'reddit.com',
+  'discord.gg',
+  'discord.com',
+  'weibo.com',
+  'xiaohongshu.com',
+  'bilibili.com',
+  'douyin.com',
+]
+
+/** 一条外链 → 一条公开联系方式（`mailto:` 算邮箱；认不出的不报）。 */
+export function publicContactOfLink(href: string): PublicContactInput | undefined {
+  if (/^mailto:/i.test(href)) return { kind: 'email', value: href }
+  let host: string
+  try {
+    host = new URL(href).hostname.toLowerCase().replace(/^www\./, '')
+  } catch {
+    return undefined
+  }
+  const social = SOCIAL_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))
+  return { kind: social ? 'social' : 'website', value: href }
+}
+
+/** 快照里主页上公开的联系方式（外链 + 用户点开看到的商务邮箱），最多 10 条。 */
+export function publicContactsOf(snapshot: CreatorSnapshot): PublicContactInput[] {
+  const out: PublicContactInput[] = []
+  if (snapshot.business_email !== undefined)
+    out.push({ kind: 'business', value: snapshot.business_email })
+  for (const href of snapshot.links) {
+    const one = publicContactOfLink(href)
+    if (one !== undefined) out.push(one)
+  }
+  return out.slice(0, 10)
+}
 
 export function creatorObservation(
   snapshot: CreatorSnapshot,
@@ -34,6 +86,9 @@ export function creatorObservation(
     ...(snapshot.country === undefined ? {} : { country: snapshot.country }),
     ...(snapshot.bio === undefined ? {} : { bio: snapshot.bio }),
     ...(options.contact === undefined ? {} : { contact: options.contact }),
+    ...(publicContactsOf(snapshot).length === 0
+      ? {}
+      : { public_contacts: publicContactsOf(snapshot) }),
     observed_at: snapshot.observed_at,
     page_url: snapshot.page_url,
     source: 'channel_page',

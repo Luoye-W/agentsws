@@ -78843,6 +78843,12 @@ export interface operations {
               value: string
               source?: string
             }
+            public_contacts?: {
+              /** @enum {string} */
+              kind: 'email' | 'website' | 'social' | 'business' | 'agent'
+              value: string
+              label?: string
+            }[]
             observed_at: string
             page_url?: string
             /** @enum {string} */
