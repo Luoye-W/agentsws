@@ -284,7 +284,12 @@ export interface SocialServiceOptions {
    */
   reddit?: Pick<
     SocialPort,
-    'redditDraft' | 'redditStage' | 'redditWrites' | 'redditRefill' | 'redditDismiss'
+    | 'redditDraft'
+    | 'redditStage'
+    | 'redditWrites'
+    | 'redditRefill'
+    | 'redditDismiss'
+    | 'redditRevise'
   >
 }
 
@@ -730,6 +735,10 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     ...(options.reddit?.redditDismiss === undefined
       ? {}
       : { redditDismiss: options.reddit.redditDismiss }),
+    // WP491：「修改」= 还原成当初那张审核卡
+    ...(options.reddit?.redditRevise === undefined
+      ? {}
+      : { redditRevise: options.reddit.redditRevise }),
 
     accounts: (_actor, filter) => ({
       rows: store.accounts(

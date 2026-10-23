@@ -38,6 +38,7 @@ import type {
   RedditOfficialBrowserStatus,
   RedditStageInput,
   RedditStageResult,
+  RedditWriteRevised,
   RedditWriteView,
   SocialAccount,
   SocialChannel,
@@ -479,6 +480,11 @@ export interface SocialPort {
   ): MaybePromise<RedditWriteView>
   /** WP332：收起岗位页那一行「没发出去」提醒（人看过了）。 */
   redditDismiss?(actor: SocialActor, job_id: string): MaybePromise<RedditWriteView>
+  /**
+   * WP491：没发出去的那一条「修改」——还原成当初那张审核卡（工坊卡片流里，带上次的字），人改字、批了按选路发；
+   * 提醒条那一行收起。已经发出去 / 还在发 / 没记下草稿的回 `conflict` + 一句人话。
+   */
+  redditRevise?(actor: SocialActor, job_id: string): MaybePromise<RedditWriteRevised>
 }
 
 /* ── 装配 ─────────────────────────────────────────────────────────────── */
@@ -1325,6 +1331,25 @@ export function socialRoutes(): Route[] {
           ),
         )
       },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit/writes/:job_id/revise',
+        operationId: 'reviseRedditWrite',
+        summary:
+          'WP491：没发出去的 Reddit 写「修改」——还原成当初那张审核卡（新开一项、记着原项），人在卡上改字、批了按选路发',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        params: [
+          { name: 'job_id', in: 'path', required: true, description: '进度里那一条的 job_id' },
+        ],
+        returns: 'RedditWriteRevised',
+      },
+      async (c, deps) =>
+        ok(c, await need(portOf(deps), 'redditRevise')(actorOf(c), param(c, 'job_id'))),
     ),
     route(
       {

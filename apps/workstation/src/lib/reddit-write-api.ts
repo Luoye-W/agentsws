@@ -14,8 +14,8 @@ export const listRedditWrites = (assignment: string): Promise<RedditWritesList> 
   api('/v1/social/reddit/writes', { assignment })
 
 /**
- * 决策 762：同一份已批的草稿再交给插件（不用重批）。
- * WP478：给了 `text` = 岗位页上「修改」过，按改过的字再填（这一条的草稿换成它）。
+ * 决策 762：同一份已批的草稿再发一次（不用重批）。WP491：按出卡同一个选路（ego 能用走 ego，不能用交给插件）。
+ * `text`（WP478）岗位页不再用（「修改」改成还原原卡），接口仍收。
  */
 export const refillRedditWrite = (
   assignment: string,
@@ -33,6 +33,16 @@ export const dismissRedditWrite = (
   job_id: string,
 ): Promise<import('@agentsws/contracts').RedditWriteView> =>
   api(`/v1/social/reddit/writes/${encodeURIComponent(job_id)}/dismiss`, {
+    method: 'POST',
+    assignment,
+  })
+
+/** WP491：「修改」= 没发出去的那一条还原成当初那张审核卡（卡片流里改字、批）。 */
+export const reviseRedditWrite = (
+  assignment: string,
+  job_id: string,
+): Promise<import('@agentsws/contracts').RedditWriteRevised> =>
+  api(`/v1/social/reddit/writes/${encodeURIComponent(job_id)}/revise`, {
     method: 'POST',
     assignment,
   })

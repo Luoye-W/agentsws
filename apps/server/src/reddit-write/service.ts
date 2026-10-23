@@ -68,6 +68,7 @@ import type {
   RedditWriteSource,
   RedditWriteTarget,
   RedditWriteView,
+  RoleId,
   WorkspaceId,
   WriteRoute,
 } from '@agentsws/contracts'
@@ -158,7 +159,8 @@ export interface RedditWriteServiceOptions {
   clock: Clock
   /** WP338（决策 783）：每天 / 每周几条由用户自己设（默认不限）；到了就不出卡、照实说。 */
   limits?: Pick<RedditLimits, 'check' | 'note'>
-  approvals: Pick<ApprovalBus, 'create'>
+  /** WP491：`get` 给了，「修改」还原卡时照原卡的那一份（依据、版规、检查）还原；不给就按进度里记的拼一张。 */
+  approvals: Pick<ApprovalBus, 'create'> & Partial<Pick<ApprovalBus, 'get'>>
   emit(type: string, actor: string, payload: Record<string, unknown>): void
   /** 品牌名（提示词里用）。 */
   brand(): string
@@ -224,6 +226,11 @@ export interface RedditWriteServiceOptions {
 export interface RedditEgo {
   /** ego 这会儿能不能用（个人运行档 + 浏览器选了 ego / 默认 ego + 探得到）。 */
   available(): boolean
+  /**
+   * WP491：用户要不要 ego（浏览器选了 ego / 默认 ego、本机档）——不管这会儿探不探得到。
+   * 要、但这会儿用不了 → 退插件时照实说一句；不要（选了别的浏览器）→ 悄悄走插件。不给 = 按 `available()`。
+   */
+  wanted?(): boolean
   /** 跑一次（写 / 读回）。Space 名、ego 路径由注入方补。 */
   run(cfg: Omit<EgoWriteScriptConfig, 'space'> & { space?: string }): Promise<EgoWriteResult>
   /** 发起人岗位上「发之前让我看一眼」开没开（默认关）。 */
@@ -284,7 +291,23 @@ export interface RedditWriteService {
   refill(
     job_id: string,
     edit?: { text?: string },
+    /**
+     * WP491：走哪条路。`auto`（默认，岗位页）= 与出卡同一个规则：ego 能用就工坊自己在 ego 里发，用不了退插件并照实说一句；
+     * `plugin` = 人在插件侧边栏里点的，就交给插件。
+     */
+    opts?: { route?: 'auto' | 'plugin' },
   ): Promise<{ ok: true; view: RedditWriteView } | { ok: false; message: string }>
+  /**
+   * WP491（Luoye 10-23）：岗位页上「修改」——没发出去的那一条还原成当初那张审核卡（同一个卡面、在工坊卡片流里，
+   * 带上次的字、写到哪、标题），人在卡上改字、批 → 按当时的选路发；卡上「不发了」= 不发。新开一项（`links.supersedes`
+   * 指向原项、`payload.revises` 记原来那一条），提醒条那一行收起。
+   */
+  revise(
+    actor: SocialActor,
+    job_id: string,
+  ): Promise<
+    { ok: true; approval_item_id: string; route?: WriteRoute } | { ok: false; message: string }
+  >
   /** WP332：人看过、收起岗位页那一行提醒（这一条再填一次又没发出去时重新出）。 */
   dismiss(job_id: string): RedditWriteView | undefined
   /**
@@ -385,6 +408,36 @@ export const redditLink = (path: string | undefined): string | undefined =>
     : /^https?:/iu.test(path)
       ? path
       : `https://www.reddit.com${path.startsWith('/') ? '' : '/'}${path}`
+
+/** WP491：进度里记的那一条 → 写到哪（原卡不是 Reddit「发出去」卡时，「修改」按它拼一张）。 */
+function targetOfEntry(e: RedditWriteEntry): RedditWriteTarget {
+  const r = e.record as OutboundRecordInput & {
+    thread_title?: string
+    counterpart?: string
+    counterpart_text?: string
+  }
+  const base = {
+    subreddit: e.subreddit,
+    ...(r.thread_title === undefined ? {} : { post_title: r.thread_title }),
+    ...(r.counterpart === undefined ? {} : { parent_author: r.counterpart }),
+    ...(r.counterpart_text === undefined ? {} : { parent_text: r.counterpart_text }),
+    ...(e.source === undefined ? {} : { source: e.source }),
+  }
+  const w = e.write
+  switch (w?.kind) {
+    case 'reply':
+      return { ...base, kind: 'reply', parent_fullname: w.parent, permalink: w.permalink }
+    case 'comment':
+      return {
+        ...base,
+        kind: 'comment',
+        parent_fullname: w.post,
+        ...(w.permalink === undefined ? {} : { permalink: w.permalink }),
+      }
+    default:
+      return { ...base, kind: 'submit' }
+  }
+}
 
 /**
  * 落盘那一份。WP445 起不再写 `direct_fallback`（决策 1324 删了程序直发）与 `site`（决策 1323 一律新版）；
@@ -870,6 +923,21 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
     }
   }
 
+  /**
+   * WP491：「再填一次」/「修改」后批了，走哪条路——与出卡同一个规则：用户要 ego（或 ego 这会儿就能用）→ `ego`
+   * （这会儿用不了就退插件，照实说一句）；选了别的浏览器 / 没装 ego 那一路 → 插件。
+   */
+  const retryRoute = (): 'ego' | undefined =>
+    options.ego !== undefined && (options.ego.available() || options.ego.wanted?.() === true)
+      ? 'ego'
+      : undefined
+
+  /** WP491：「修改」还原出来的卡批了——新那一条接着记原来那几件活（留痕连续）。 */
+  const carried = (approval_item_id: string): Partial<Pick<RedditWriteEntry, 'previous_jobs'>> => {
+    const old = entries.find((e) => e.revised_to === approval_item_id)
+    return old === undefined ? {} : { previous_jobs: [...(old.previous_jobs ?? []), old.job_id] }
+  }
+
   const send = async (input: RedditSendInput): Promise<RedditWriteResult> => {
     const plan = (() => {
       try {
@@ -887,6 +955,9 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       queued_at: now(),
       ...(input.source === undefined ? {} : { source: input.source }),
       record: input.record,
+      ...(input.assignment_id === undefined ? {} : { assignment_id: input.assignment_id }),
+      ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
+      ...carried(input.approval_item_id),
     }
     /*
      * WP483（决策 1658 / 1660）：出卡时定了走 ego、这会儿 ego 也能用 → 工坊自己在 ego 里发（后台跑，结局回写这一条）。
@@ -905,8 +976,6 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
           text: input.text,
           ...(input.title === undefined ? {} : { title: input.title }),
           ...(input.label === undefined ? {} : { label: input.label }),
-          ...(input.assignment_id === undefined ? {} : { assignment_id: input.assignment_id }),
-          ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
           plan_v: WRITE_PLAN_VERSION,
         }
         entries.push(entry)
@@ -1368,7 +1437,10 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         record,
         ...(target.source === undefined ? {} : { source: target.source }),
         label: item.title,
-        ...(p.route === 'ego' ? { route: 'ego' as const } : {}),
+        // WP491：「修改」还原出来的卡——批的这一刻再按选路定（ego 要、用不了就退插件说一句）
+        ...(p.route === 'ego' || (isRecord(p.revises) && retryRoute() === 'ego')
+          ? { route: 'ego' as const }
+          : {}),
         ...(item.proposer.assignment_id === undefined
           ? {}
           : { assignment_id: String(item.proposer.assignment_id) }),
@@ -1407,18 +1479,24 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
       )
     },
 
-    async refill(job_id, edit) {
+    async refill(job_id, edit, opts) {
       const entry = entries.find((e) => e.job_id === job_id)
       if (entry === undefined) return { ok: false, message: '找不到这一条。' }
       if (entry.state !== 'failed')
         return {
           ok: false,
           message:
-            entry.state === 'sent' ? '这一条已经发出去了。' : '这一条还在插件那边，等它做完。',
+            entry.state === 'sent'
+              ? '这一条已经发出去了。'
+              : entry.via === 'ego'
+                ? '这一条工坊正在 ego 里发，等它做完。'
+                : '这一条还在插件那边，等它做完。',
         }
+      if (entry.revised_to !== undefined)
+        return { ok: false, message: '这一条已经还原成卡了：在卡上改字、批。' }
       if (!canRefill(entry) || entry.write === undefined || entry.text === undefined)
         return { ok: false, message: '这一条没记下草稿，不能再填；从卡片流里重新起草一张。' }
-      // WP478：岗位页上改过字——按改过的交（转纯文字、过外发检查、拼得出来才收）
+      // WP478：改过字——按改过的交（转纯文字、过外发检查、拼得出来才收）。插件侧边栏里还在用
       const edited = edit?.text === undefined ? undefined : redditPlainText(edit.text).trim()
       if (edit?.text !== undefined && (edited === undefined || edited === ''))
         return { ok: false, message: '改过的字是空的，没交出去。' }
@@ -1435,13 +1513,32 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         )
         if (!scan.ok) return { ok: false, message: replyBlockedReason(scan) }
       }
-      const queued = await toPlugin({
-        write: entry.write,
-        text,
-        approval_item_id: entry.approval_item_id,
-        ...(entry.label === undefined ? {} : { label: entry.label }),
-      })
-      if (!queued.ok) return { ok: false, message: queued.why }
+      /*
+       * WP491（Luoye 10-23）：再填一次与出卡同一个选路——ego 能用就工坊自己在 ego 里填好、点发送（1659：不留最后一步给人）；
+       * 用不了才退插件，要 ego 的照实说一句。WP483 时这里写死交给插件，Windows 上插件没开就像「没反应」。
+       * 人在插件侧边栏里点的（`route: 'plugin'`）照旧交给插件。
+       */
+      const egoNow = opts?.route !== 'plugin' && options.ego?.available() === true
+      const egoNote =
+        opts?.route !== 'plugin' && !egoNow && retryRoute() === 'ego'
+          ? egoWriteSentence({ state: 'unavailable' })
+          : undefined
+      let jobId: string
+      if (egoNow) jobId = nextId('rde')
+      else {
+        const queued = await toPlugin({
+          write: entry.write,
+          text,
+          approval_item_id: entry.approval_item_id,
+          ...(entry.label === undefined ? {} : { label: entry.label }),
+        })
+        if (!queued.ok)
+          return {
+            ok: false,
+            message: egoNote === undefined ? queued.why : `${egoNote}；也没交到插件：${queued.why}`,
+          }
+        jobId = queued.job.id
+      }
       if (changed) {
         entry.draft_text ??= entry.text
         entry.text = text
@@ -1449,29 +1546,176 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
         entry.edited = true
       }
       entry.previous_jobs = [...(entry.previous_jobs ?? []), entry.job_id]
-      entry.job_id = queued.job.id
+      entry.job_id = jobId
       entry.plan_v = WRITE_PLAN_VERSION
-      // WP483：ego 那一路没发成的，再填一次交给插件
-      entry.via = 'extension'
-      // WP432：再填一次也是「等你在插件里打开」
-      entry.state = 'awaiting'
       entry.queued_at = now()
       entry.refills = (entry.refills ?? 0) + 1
       delete entry.finished_at
       delete entry.outcome
       delete entry.dismissed
-      if (extensionReady()) delete entry.message
-      else entry.message = OPEN_IN_PLUGIN_OFFLINE
+      delete entry.route_note
+      if (egoNow) {
+        // 上一趟 ego 的进度（交给人的 Space、读回的次数）不接着用：这是新的一趟
+        delete entry.ego
+        entry.via = 'ego'
+        entry.route = 'ego'
+        entry.state = 'queued'
+        entry.message = '工坊正在 ego 里发'
+      } else {
+        entry.via = 'extension'
+        delete entry.route
+        // WP432：交给插件的也是「等你在插件里打开」
+        entry.state = 'awaiting'
+        if (egoNote !== undefined) {
+          entry.route_note = egoNote
+          entry.message = egoNote
+        } else if (extensionReady()) delete entry.message
+        else entry.message = OPEN_IN_PLUGIN_OFFLINE
+      }
       save()
-      awaiting(entry)
       options.emit('reddit.write_refilled', 'system', {
         approval_item_id: entry.approval_item_id,
         job_id: entry.job_id,
         kind: entry.kind,
         refills: entry.refills,
+        route: egoNow ? 'ego' : 'plugin',
+        ...(egoNote === undefined ? {} : { note: egoNote }),
       })
+      if (egoNow) egoWrite(entry)
+      else awaiting(entry)
       const view = service.writes().find((w) => w.job_id === entry.job_id)
       return view === undefined ? { ok: false, message: '找不到这一条。' } : { ok: true, view }
+    },
+
+    async revise(actor, job_id) {
+      const entry = entries.find((e) => e.job_id === job_id)
+      if (entry === undefined) return { ok: false, message: '找不到这一条。' }
+      if (entry.revised_to !== undefined) return { ok: true, approval_item_id: entry.revised_to }
+      if (entry.state !== 'failed')
+        return {
+          ok: false,
+          message: entry.state === 'sent' ? '这一条已经发出去了。' : '这一条还在发，等它做完。',
+        }
+      const write = entry.write
+      if (!canRefill(entry) || write === undefined || entry.text === undefined)
+        return { ok: false, message: '这一条没记下草稿，不能还原成卡；从卡片流里重新起草一张。' }
+      // 原卡是 Reddit「发出去」卡就照它还原（依据、版规、检查都在）；社媒回帖卡 / 公关帖批出来的按进度里记的拼
+      const orig = await options.approvals.get?.(entry.approval_item_id).catch(() => undefined)
+      const op = ((): Record<string, unknown> | undefined => {
+        if (orig === undefined || !isRedditWriteCard(orig)) return undefined
+        const fp = finalPayload(orig)
+        return isRecord(fp) ? fp : isRecord(orig.payload) ? orig.payload : undefined
+      })()
+      const target =
+        op !== undefined && isRecord(op.reddit)
+          ? (op.reddit as unknown as RedditWriteTarget)
+          : targetOfEntry(entry)
+      const title = write.kind === 'submit' ? write.title : undefined
+      const sub = subOf(target.subreddit)
+      const role_id = (orig?.role_id ?? entry.record.role_id ?? actor.role_id) as RoleId
+      const ref: ObjectRef = orig?.subject.object ?? {
+        type: String(role_id).startsWith('pr.') ? 'external_post' : 'community_thread',
+        id: `reddit:${target.parent_fullname ?? `r/${sub}`}`,
+      }
+      const asked = await options.reviewer?.(actor, write.kind).catch(() => undefined)
+      const reviewer = asked !== undefined && asked.person !== actor.person_id ? asked : undefined
+      // 出卡同一个规则：ego 这会儿能用 → 卡上「批准并发出」，批了工坊自己在 ego 里发；主管先批的照旧
+      const route: WriteRoute | undefined =
+        reviewer === undefined && options.ego?.available() === true ? 'ego' : undefined
+      const { route: _route, desk: _desk, revises: _revises, ...rest } = op ?? {}
+      const payload: RedditWritePayload & { to: ObjectRef } = {
+        ...(rest as Partial<RedditWritePayload>),
+        form: REDDIT_WRITE_FORM,
+        channel: 'reddit',
+        channel_label: `Reddit · r/${sub}`,
+        reddit: target,
+        to: ref,
+        body: { text: entry.text, ...(title === undefined ? {} : { subject: title }) },
+        ...(op === undefined && target.parent_author !== undefined
+          ? { author: target.parent_author }
+          : {}),
+        ...(op === undefined && (target.parent_text ?? target.post_title) !== undefined
+          ? { in_reply_to: (target.parent_text ?? target.post_title ?? '').slice(0, 300) }
+          : {}),
+        desk: 'workshop',
+        ...(route === undefined ? {} : { route }),
+        revises: { approval_item_id: entry.approval_item_id, job_id: entry.job_id },
+      }
+      const item = await options.approvals.create({
+        workspace_id: ws,
+        schema_version: 1,
+        kind: 'outbound_draft',
+        role_id,
+        subject: {
+          object: ref,
+          ...(orig?.subject.matter_id === undefined ? {} : { matter_id: orig.subject.matter_id }),
+        },
+        dedupe_key: `${ws}:reddit_write:${ref.id}:${nextId('d')}`,
+        title:
+          orig !== undefined && isRedditWriteCard(orig)
+            ? orig.title
+            : (entry.label ?? titleOf(target, title)),
+        summary: (title ?? entry.text).slice(0, 120),
+        payload,
+        evidence: {
+          source_events: [],
+          run_id: `run_reddit_${nextId('r')}`,
+          provenance: { seen: [ref] },
+          precheck: {},
+        },
+        proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
+        // 决策 663：Reddit 写永远逐条人批
+        automation: {
+          level_at_creation: 'L1',
+          auto_approved: false,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients:
+            reviewer === undefined ? [{ person: actor.person_id, via: 'role_holder' }] : [reviewer],
+          rule:
+            reviewer === undefined
+              ? 'role_holder'
+              : reviewer.via === 'owner'
+                ? 'owner'
+                : 'scope_manager',
+          escalation: { after_hours: 24, business_hours: true, chain: [], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+        context: {
+          thread_participants: [ref.id],
+          gates: [
+            {
+              gate: 'commitment_scan' as const,
+              status: 'pass' as const,
+              ruleset_hash: 'support-core/commitment',
+              evidence: { hits: 0 },
+            },
+          ],
+        },
+        links: { supersedes: entry.approval_item_id },
+      })
+      if (item.state === 'blocked')
+        return {
+          ok: false,
+          message: `没还原成卡：前置检查没过（${Object.entries(item.evidence.precheck)
+            .filter(([, v]) => v !== 'ok')
+            .map(([k]) => k)
+            .join('、')}）`,
+        }
+      entry.revised_to = item.id
+      entry.dismissed = true
+      save()
+      options.emit('reddit.write_revised', actor.person_id, {
+        approval_item_id: entry.approval_item_id,
+        job_id: entry.job_id,
+        kind: entry.kind,
+        revised_to: item.id,
+        ...(route === undefined ? {} : { route }),
+      })
+      return { ok: true, approval_item_id: item.id, ...(route === undefined ? {} : { route }) }
     },
 
     async open(job_id, edit) {
@@ -1718,7 +1962,10 @@ export function createRedditWriteService(options: RedditWriteServiceOptions): Re
           ...(message === undefined ? {} : { message }),
           ...(e.outcome === undefined || e.state !== 'failed' ? {} : { outcome: e.outcome }),
           ...(e.label === undefined ? {} : { label: e.label }),
-          ...(e.state === 'failed' && canRefill(e) ? { can_refill: true } : {}),
+          ...(e.state === 'failed' && canRefill(e) && e.revised_to === undefined
+            ? { can_refill: true }
+            : {}),
+          ...(e.revised_to === undefined ? {} : { revised_to: e.revised_to }),
           ...(e.refills === undefined || e.refills === 0 ? {} : { refills: e.refills }),
           ...(e.dismissed === true ? { dismissed: true } : {}),
           ...(e.link === undefined ? {} : { link: e.link }),

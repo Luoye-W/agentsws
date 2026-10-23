@@ -110,6 +110,8 @@ export interface BrowserSettingsAssembly {
    * 本机档、探得到才有；别的情况（用户选了别的浏览器 = 选了插件路）回 `undefined`。走缓存，每次发之前都问。
    */
   egoWritePath(): string | undefined
+  /** WP491：用户要不要 ego 那一路（浏览器设置 / 默认是 ego、本机档）——不管这会儿探不探得到。 */
+  egoWanted(): boolean
 }
 
 /** CDP 的 endpoint 只允许 http(s) / ws(s)，且不能带空白（上游 provider 的同一条口径）。 */
@@ -373,6 +375,9 @@ export function createBrowserSettings(options: BrowserSettingsOptions): BrowserS
       if (effective().mode !== 'ego' || !egoAllowed()) return undefined
       const found = egoDetection(false)
       return found.ok ? found.path : undefined
+    },
+    egoWanted() {
+      return effective().mode === 'ego' && egoAllowed()
     },
     egoStatus() {
       if (!egoAllowed()) {

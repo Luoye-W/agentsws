@@ -207,6 +207,11 @@ export interface RedditWritePayload {
    * 批了工坊自己在 ego 里填好、点发送、读回；ego 跑失败就退插件「等你发」。没有这一格 = 插件路（老卡也是）。
    */
   route?: WriteRoute
+  /**
+   * WP491：岗位页上「修改」一条没发出去的写——还原成这张卡重新审（新开一项，`links.supersedes` 指向原项）。
+   * 批了按当时的选路发（ego 能用走 ego，不能用退插件并说一句）；新那一条写接着记原来那几件活（`previous_jobs`）。
+   */
+  revises?: { approval_item_id: string; job_id: string }
 }
 
 /**
@@ -293,6 +298,15 @@ export interface RedditWriteView {
   route?: WriteRoute
   /** WP483：ego 没发成、退回插件 / 被平台拦停下时那一句（事项里照实说）。 */
   route_note?: string
+  /** WP491：人点了「修改」，这一条还原成卡重新审了（新卡的 id）；提醒条不再出这一行。 */
+  revised_to?: string
+}
+
+/** WP491：「修改」的回包——还原出来的那张卡。 */
+export interface RedditWriteRevised {
+  approval_item_id: string
+  /** 卡在工坊里批了之后走哪条路（`ego` = 工坊在 ego 里发；没有 = 插件）。 */
+  route?: WriteRoute
 }
 
 /** `GET /v1/social/reddit/writes` 的回包。 */

@@ -499,7 +499,7 @@ import {
 import { createEconomicsService } from './economics.js'
 import { detectEgoBrowser } from './ego-browser.js'
 import { probeEgoConnection } from './ego-write/runner.js'
-import { createEgoWriter, materializeMedia } from './ego-write/writer.js'
+import { createEgoWriter, type EgoWriter, materializeMedia } from './ego-write/writer.js'
 import { createEmailAutoReply, type EmailAutoReply } from './email-auto-reply.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 import { createExecutionFallback, resolveExecutionMode } from './execution/fallback.js'
@@ -1697,6 +1697,11 @@ export interface ServerOptions {
    */
   socialFetch?: SocialFetch
   /**
+   * WP491：发帖 / 回帖走 ego 的那只手（测试 / 截图塞一个按剧本回结果的假 ego，不起 ego、不碰真网站）。
+   * 生产不传，按浏览器设置探本机的 `ego-browser`。
+   */
+  egoWriter?: EgoWriter & { wanted?(): boolean }
+  /**
    * WP386：信息监控拉 feed 的那一跳（测试 / 演示塞录好的 feed，不联网）。生产不传，走全局 fetch。
    */
   feedFetch?: AlertsTransport['fetch']
@@ -2534,10 +2539,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * WP483（决策 1658 / 1660）：发帖 / 回帖走 ego 的那只手（Reddit 写、社媒发帖 / 回帖共用）。
    * 能不能用每次现问浏览器设置（选了 ego，或没选过、默认 ego）+ 探测（缓存 30 秒）。
    */
-  const egoWriter = createEgoWriter({
-    // `AGENTSWS_EGO_WRITE=off`：开发 / 联调时整条 ego 发帖路关掉（一律插件路），免得开发机上的 ego 去碰真网站
-    egoPath: () => (env.AGENTSWS_EGO_WRITE === 'off' ? undefined : browserSettings.egoWritePath()),
-  })
+  const egoWriter: EgoWriter =
+    options.egoWriter ??
+    createEgoWriter({
+      // `AGENTSWS_EGO_WRITE=off`：开发 / 联调时整条 ego 发帖路关掉（一律插件路），免得开发机上的 ego 去碰真网站
+      egoPath: () =>
+        env.AGENTSWS_EGO_WRITE === 'off' ? undefined : browserSettings.egoWritePath(),
+    })
+  /** WP491：用户要不要 ego（要、但这会儿用不了 → 退插件时照实说一句）。 */
+  const egoWanted = (): boolean =>
+    options.egoWriter?.wanted?.() ??
+    (env.AGENTSWS_EGO_WRITE !== 'off' && browserSettings.egoWanted())
   /*
    * WP144（docs/80）：电脑操控——**一台机器一份**，理由与浏览器设置逐字相同（操作的是
    * 这台电脑本身，与卖哪个品牌无关）。驱动装在数据目录下（不进 PATH）；只有本机档给。
@@ -5751,6 +5763,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           if (!out.ok) throw new ApiError('conflict', out.message)
           return out.view
         },
+        // WP491：「修改」= 还原成当初那张审核卡（工坊卡片流里），批了按选路发
+        redditRevise: async (actor, job_id) => {
+          if (redditWrites === undefined)
+            throw new ApiError('not_implemented', '这个服务进程没有装 Reddit 写。')
+          const out = await redditWrites.revise(actor, job_id)
+          if (!out.ok) throw new ApiError('conflict', out.message)
+          return {
+            approval_item_id: out.approval_item_id,
+            ...(out.route === undefined ? {} : { route: out.route }),
+          }
+        },
         redditDismiss: (_actor, job_id) => {
           const view = redditWrites?.dismiss(job_id)
           if (view === undefined) throw new ApiError('not_found', '找不到这一条。')
@@ -6633,6 +6656,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP483（决策 1658 / 1660）：ego 能用就走 ego（批了工坊自己在 ego 里发）；跑失败退插件
       ego: {
         available: () => egoWriter.available(),
+        // WP491：要 ego、这会儿用不了 → 退插件时照实说一句
+        wanted: egoWanted,
         run: (cfg) => egoWriter.run(cfg),
         reviewFirst: (who) => reviewFirstFor(ws, who),
       },

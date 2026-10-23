@@ -1,6 +1,8 @@
 /**
  * WP332（决策 762）：社媒岗位页「没发出去」提醒条——只在出问题时出；一条写一行（原因照实一句）；
  * 「再填一次」/ 收起；没有社媒职责、全都正常时一个字都不画。
+ * WP491：「修改」= 还原成原来那张审核卡（卡片流里翻到它），不再就地改字；「再填一次」点了就有「在发…」、
+ * 接着显示走哪条路（ego / 插件）。
  */
 import type { RedditWriteView } from '@agentsws/contracts'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
@@ -30,15 +32,22 @@ const row = (
 
 const state = {
   rows: [] as RedditWriteView[],
-  refill: vi.fn(async (..._a: unknown[]) => ({})),
+  refill: vi.fn(async (..._a: unknown[]): Promise<unknown> => ({})),
+  revise: vi.fn(async (..._a: unknown[]): Promise<unknown> => ({ approval_item_id: 'ap_9' })),
   dismiss: vi.fn(async (..._a: unknown[]) => ({})),
+  jump: vi.fn((..._a: unknown[]) => {}),
 }
 
 vi.mock('@/lib/reddit-write-api', () => ({
   REDDIT_WRITES_KEY: ['reddit-writes'],
   listRedditWrites: async () => ({ rows: state.rows }),
   refillRedditWrite: (...a: unknown[]) => state.refill(...a),
+  reviseRedditWrite: (...a: unknown[]) => state.revise(...a),
   dismissRedditWrite: (...a: unknown[]) => state.dismiss(...a),
+}))
+
+vi.mock('@/components/reports/position-bridge', () => ({
+  requestCardJump: (...a: unknown[]) => state.jump(...a),
 }))
 
 const duties = [
@@ -48,8 +57,11 @@ const duties = [
 
 beforeEach(() => {
   state.rows = []
-  state.refill.mockClear()
+  state.refill.mockReset()
+  state.refill.mockImplementation(async () => ({}))
+  state.revise.mockClear()
   state.dismiss.mockClear()
+  state.jump.mockClear()
 })
 
 describe('WP332 没发出去提醒条', () => {
@@ -64,43 +76,84 @@ describe('WP332 没发出去提醒条', () => {
     expect(rows[0]?.textContent).toContain('没发出去：回复 alice（Reddit · r/ivraxr）')
     expect(rows[0]?.textContent).toContain('你点了停止')
     fireEvent.click(screen.getByTestId('reddit-write-refill'))
-    await waitFor(() => expect(state.refill).toHaveBeenCalledWith('asg_reddit', 'rdw_1', undefined))
+    await waitFor(() => expect(state.refill).toHaveBeenCalledWith('asg_reddit', 'rdw_1'))
     fireEvent.click(screen.getByTestId('reddit-write-dismiss'))
     await waitFor(() => expect(state.dismiss).toHaveBeenCalledWith('asg_reddit', 'rdw_1'))
   })
 
-  it('WP478 修改：就地摊开草稿，改好了再填一次 → 交的是改过的字', async () => {
+  it('WP491 修改：还原成原来那张卡（卡片流里翻到它），不再就地改字', async () => {
     state.rows = [row({ text: '原来的草稿' })]
-    renderWithProviders(<RedditWriteNotice duties={duties} />)
-    fireEvent.click(await screen.findByTestId('reddit-write-edit'))
-    const box = screen.getByTestId('reddit-write-edit-text') as HTMLTextAreaElement
-    expect(box.value).toBe('原来的草稿')
-    // 编辑时那一行上不再出「再填一次」（按钮一排：改好了，再填一次 + 取消）
-    expect(screen.queryByTestId('reddit-write-refill')).toBeNull()
-    fireEvent.change(box, { target: { value: '改过的草稿' } })
-    fireEvent.click(screen.getByTestId('reddit-write-edit-save'))
-    await waitFor(() =>
-      expect(state.refill).toHaveBeenCalledWith('asg_reddit', 'rdw_1', '改过的草稿'),
-    )
-    await waitFor(() => expect(screen.queryByTestId('reddit-write-editor')).toBeNull())
-  })
-
-  it('WP478 修改后取消：原样不动、不交；× 写「不发了」', async () => {
-    state.rows = [row({ text: '原来的草稿' })]
-    renderWithProviders(<RedditWriteNotice duties={duties} />)
-    fireEvent.click(await screen.findByTestId('reddit-write-edit'))
-    fireEvent.change(screen.getByTestId('reddit-write-edit-text'), { target: { value: '乱改' } })
-    fireEvent.click(screen.getByTestId('reddit-write-edit-cancel'))
-    expect(screen.queryByTestId('reddit-write-editor')).toBeNull()
+    renderWithProviders(<RedditWriteNotice duties={duties} position="pos_social" />)
+    const edit = await screen.findByTestId('reddit-write-edit')
+    expect(edit.getAttribute('title')).toContain('原来那张卡')
+    fireEvent.click(edit)
+    await waitFor(() => expect(state.revise).toHaveBeenCalledWith('asg_reddit', 'rdw_1'))
+    await waitFor(() => expect(state.jump).toHaveBeenCalledWith('pos_social', 'ap_9'))
+    expect(screen.queryByTestId('reddit-write-edit-text')).toBeNull()
     expect(state.refill).not.toHaveBeenCalled()
-    // 再点修改：还是原来的字
-    fireEvent.click(screen.getByTestId('reddit-write-edit'))
-    expect((screen.getByTestId('reddit-write-edit-text') as HTMLTextAreaElement).value).toBe(
-      '原来的草稿',
-    )
     const x = screen.getByTestId('reddit-write-dismiss')
     expect(x.getAttribute('aria-label')).toBe('不发了')
     expect(x.getAttribute('title')).toContain('不再提醒')
+  })
+
+  it('WP491 再填一次：点了按钮进「在发…」，之后那一行说正在 ego 里发；发出去了照实变', async () => {
+    state.rows = [row({ text: '原来的草稿' })]
+    let finish: (v: unknown) => void = () => {}
+    state.refill.mockImplementation(
+      () =>
+        new Promise((r) => {
+          finish = r
+        }),
+    )
+    renderWithProviders(<RedditWriteNotice duties={duties} />)
+    fireEvent.click(await screen.findByTestId('reddit-write-refill'))
+    await waitFor(() => expect(screen.getByTestId('reddit-write-refill').textContent).toBe('在发…'))
+    expect(screen.getByTestId('reddit-write-edit')).toHaveProperty('disabled', true)
+    const going = row({
+      job_id: 'rde_2',
+      state: 'queued',
+      route: 'ego',
+      message: '工坊正在 ego 里发',
+      outcome: undefined,
+      refills: 1,
+    })
+    state.rows = [going]
+    finish(going)
+    const line = await screen.findByTestId('reddit-write-going')
+    expect(line.getAttribute('data-route')).toBe('ego')
+    expect(line.textContent).toBe('正在 ego 里发：回复 alice（Reddit · r/ivraxr）')
+    expect(screen.queryByTestId('reddit-write-notice-row')).toBeNull()
+  })
+
+  it('WP491 再填一次落到插件（ego 用不了）：那一行说交给插件了，带那一句原因', async () => {
+    state.rows = [row()]
+    const going = row({
+      job_id: 'rdw_2',
+      state: 'awaiting',
+      outcome: undefined,
+      message: 'ego 这会儿用不了，这一次改交给插件',
+      route_note: 'ego 这会儿用不了，这一次改交给插件',
+    })
+    state.refill.mockImplementation(async () => {
+      state.rows = [going]
+      return going
+    })
+    renderWithProviders(<RedditWriteNotice duties={duties} />)
+    fireEvent.click(await screen.findByTestId('reddit-write-refill'))
+    const line = await screen.findByTestId('reddit-write-going')
+    expect(line.getAttribute('data-route')).toBe('plugin')
+    expect(line.textContent).toBe('回复 alice（Reddit · r/ivraxr） · ego 这会儿用不了，这一次改交给插件')
+    expect(line.textContent).toContain('ego 这会儿用不了')
+  })
+
+  it('WP491 再填一次失败：照实一句原因', async () => {
+    state.rows = [row()]
+    state.refill.mockImplementation(async () => {
+      throw new Error('Reddit 还没接上')
+    })
+    renderWithProviders(<RedditWriteNotice duties={duties} />)
+    fireEvent.click(await screen.findByTestId('reddit-write-refill'))
+    expect((await screen.findByTestId('reddit-write-error')).textContent).toBe('Reddit 还没接上')
   })
 
   it('WP478 没记下草稿的：没有「修改」，只有「再填一次」', async () => {
