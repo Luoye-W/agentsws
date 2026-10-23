@@ -48,7 +48,7 @@ const BLOBS: BlobLocationLike = {
   reachable: true,
 }
 
-function fakeBridge(view: Partial<DataLocationLike> = {}) {
+function fakeBridge(view: Partial<DataLocationLike> = {}, opts: { oldShell?: boolean } = {}) {
   let listener: ((s: DataMoveStatusLike) => void) | undefined
   let next: DataTargetCheckLike | null = CHECK_OK
   const bridge: DataLocationBridgeLike = {
@@ -59,7 +59,7 @@ function fakeBridge(view: Partial<DataLocationLike> = {}) {
       bytes: 300 * 1024 ** 2,
       files: 420,
       status: { state: 'idle' as const },
-      blobs: BLOBS,
+      ...(opts.oldShell === true ? {} : { blobs: BLOBS }),
       ...view,
     })),
     choose: vi.fn(async () => next),
@@ -125,7 +125,7 @@ describe('两格：数据库 / 大文件', () => {
   })
 
   it('旧壳没给 blobs：只有一格，和 WP480 一样', async () => {
-    const f = fakeBridge({ blobs: undefined })
+    const f = fakeBridge({}, { oldShell: true })
     w.agentsws = { dataLocation: f.bridge }
     renderWithProviders(<DataLocationSetting />)
     await screen.findByTestId('data-location-path')
@@ -164,7 +164,7 @@ describe('两格：数据库 / 大文件', () => {
     const f = fakeBridge()
     f.nextCheck({
       ...CHECK_OK,
-      kind: undefined,
+      kind: 'database',
       chosen: 'Z:\\库',
       target: 'Z:\\库',
       warnings: ['network'],
