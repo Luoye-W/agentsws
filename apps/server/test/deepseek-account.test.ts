@@ -638,13 +638,14 @@ describe('WP134 (b) 整条路：官方模块 + 服务进程现有端口的回调
     expect(row?.models).toEqual(['deepseek-flash', 'deepseek-v4-pro', 'deepseek-v5-preview'])
     expect(row?.last_listing?.ok).toBe(true)
     const defaults = (await api('/v1/models/defaults')) as { choices: { id: string }[] }
+    // WP479 + 决策 1626（B）：下拉只列勾上的；同一家最新一代是 v5，停在 v4 的 pro 首次不勾
     expect(defaults.choices.map((c) => c.id)).toEqual(
       expect.arrayContaining([
         'deepseek-account/deepseek-flash',
-        'deepseek-account/deepseek-v4-pro',
         'deepseek-account/deepseek-v5-preview',
       ]),
     )
+    expect(defaults.choices.some((c) => c.id === 'deepseek-account/deepseek-v4-pro')).toBe(false)
     expect(defaults.choices.some((c) => c.id.endsWith('/deepseek-v9'))).toBe(false)
 
     // 令牌守卫：不在任何 /v1 响应、我们的库、事件日志、控制台、平台请求体里
