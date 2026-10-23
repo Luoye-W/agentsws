@@ -46,6 +46,7 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { type ColumnsLayout, columnsLayout, useShellSize } from '@/components/rail/board-fit'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
+import { useOverlayOutsideClick } from '@/components/rail/overlay-dismiss'
 import { useOpenBrowserOnHandover } from '@/components/rail/panels/search-handover'
 import { RailCards } from '@/components/rail/rail-cards'
 import { railPageKind } from '@/components/rail/rail-layout'
@@ -581,6 +582,7 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
    * WP437：并排之后核心内容区连最小宽度都保不住（或窗口窄于 900）时，改成盖在中栏上，点遮罩 / × 收起。
    * WP481（决策 1632）：**不挤中栏**——只有窗口为它向右加宽了才并排；不然（浏览器里、最大化 / 全屏、右边没地方）
    * 从右侧滑出、盖在中栏右侧（带阴影，点外面 / Esc 收起），中栏不重排。等壳回话那一下先不画。
+   * WP485：「点外面」只算点中栏空白处；点中栏的行 / 按钮照常生效，不先收浮层。
    */
   const overlay = cols.overlay
   const pending = cols.mode === 'pending'
@@ -598,6 +600,19 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
       globalThis.removeEventListener?.('keydown', onKey)
     }
   }, [overlay, definition, pending, rail])
+  /*
+   * WP485（决策 1672）：浮层不再拿一层透明底整块挡住中栏——点中栏的行 / 按钮照常生效（开第三栏的直接换成那一件，
+   * 普通按钮浮层不收）；只有点中栏空白处才收起（`overlay-dismiss.ts`）。
+   */
+  const frameRef = useRef<HTMLDivElement | null>(null)
+  useOverlayOutsideClick({
+    enabled: overlay && definition !== undefined && !pending,
+    frame: frameRef,
+    openKey: `${rail.open ?? ''}|${rail.address ?? ''}`,
+    onDismiss: () => {
+      rail.show(null)
+    },
+  })
   const resize = (
     <button
       type="button"
@@ -618,53 +633,40 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
   )
   const panel =
     definition === undefined || pending ? null : (
-      <>
-        {overlay ? (
-          // 点外面收起：一层透明的接点击的底（不压暗中栏），顶栏照旧点得到
-          <button
-            type="button"
-            aria-label={t('rail.close')}
-            data-testid="rail-scrim"
-            className="fixed inset-x-0 top-11 bottom-0 z-40 cursor-default bg-transparent"
-            onClick={() => {
+      <div
+        ref={frameRef}
+        className={cn(
+          'flex shrink-0 border-l border-ws-line bg-ws-paper',
+          overlay
+            ? 'fixed top-11 right-0 bottom-0 z-40 shadow-2xl duration-200 animate-in slide-in-from-right motion-reduce:animate-none'
+            : 'sticky top-11 z-40 h-[calc(100vh-2.75rem)]',
+        )}
+        // 并排时最多占窗口的一半；浮层最多盖到离左边 3rem（中栏露一截，知道下面还有东西）
+        style={
+          overlay
+            ? { width, maxWidth: 'calc(100vw - 3rem)' }
+            : { width, maxWidth: '50vw', minWidth: 300 }
+        }
+        data-testid="rail-panel-frame"
+        data-panel={definition.id}
+        data-layout={overlay ? 'overlay' : 'docked'}
+        data-board={workPage ? (cols.board ? 'shown' : 'hidden') : undefined}
+      >
+        {resize}
+        <div className="min-w-0 flex-1">
+          <RailPanel
+            title={t(definition.label)}
+            {...(scoped && scope !== undefined ? { scope } : {})}
+            tier={ctx.tier}
+            onClose={() => {
               rail.show(null)
             }}
-          />
-        ) : null}
-        <div
-          className={cn(
-            'flex shrink-0 border-l border-ws-line bg-ws-paper',
-            overlay
-              ? 'fixed top-11 right-0 bottom-0 z-40 shadow-2xl duration-200 animate-in slide-in-from-right motion-reduce:animate-none'
-              : 'sticky top-11 z-40 h-[calc(100vh-2.75rem)]',
-          )}
-          // 并排时最多占窗口的一半；浮层最多盖到离左边 3rem（中栏露一截，知道下面还有东西）
-          style={
-            overlay
-              ? { width, maxWidth: 'calc(100vw - 3rem)' }
-              : { width, maxWidth: '50vw', minWidth: 300 }
-          }
-          data-testid="rail-panel-frame"
-          data-panel={definition.id}
-          data-layout={overlay ? 'overlay' : 'docked'}
-          data-board={workPage ? (cols.board ? 'shown' : 'hidden') : undefined}
-        >
-          {resize}
-          <div className="min-w-0 flex-1">
-            <RailPanel
-              title={t(definition.label)}
-              {...(scoped && scope !== undefined ? { scope } : {})}
-              tier={ctx.tier}
-              onClose={() => {
-                rail.show(null)
-              }}
-              testId={`rail-panel-${definition.id}`}
-            >
-              {content}
-            </RailPanel>
-          </div>
+            testId={`rail-panel-${definition.id}`}
+          >
+            {content}
+          </RailPanel>
         </div>
-      </>
+      </div>
     )
 
   // WP437：看板回来了（宽度够了）或这一页没有看板，临时一眼自己收
