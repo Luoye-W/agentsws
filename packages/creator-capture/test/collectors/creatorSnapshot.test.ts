@@ -1,8 +1,8 @@
-/** 移植自 agentsws-extension `test/contents/creatorSnapshot.test.ts` @ 57fca9c（决策 1739 A：采集器测试随采集器一起搬；只改 import 路径）。 */
+/** 移植自 agentsws-extension `test/contents/creatorSnapshot.test.ts` @ 57fca9c（决策 1739 A：采集器测试随采集器一起搬；只改 import 路径；注释里点名的真实频道换成泛称）。 */
 /**
  * Upload cadence, and the bug that made it necessary (0.9.19).
  *
- * Owner opened @zeeksteryt — fifty videos, plainly one a week — and the panel
+ * Owner opened a real weekly channel — fifty videos, plainly one a week — and the panel
  * said "更新不规律（间隔约 0-183 天）". Nothing was wrong with the statistics.
  * The dates were wrong: YouTube writes "4 days ago" for this week, "3 weeks
  * ago" for this month, and "N months ago" for everything older, so forty of

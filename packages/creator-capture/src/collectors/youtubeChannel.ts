@@ -1,4 +1,4 @@
-/** 移植自 agentsws-extension `src/contents/utils/youtubeChannel.ts` @ 57fca9c（源自 KOLAgents 旧插件 d25b877）。决策 1739 A：只搬采集器与指标算法；开源仓这一份只改 import 路径（与注释里点名私有插件 / 模板的几个词），本体逐字不动。 */
+/** 移植自 agentsws-extension `src/contents/utils/youtubeChannel.ts` @ 57fca9c（源自 KOLAgents 旧插件 d25b877）。决策 1739 A：只搬采集器与指标算法；开源仓这一份只改 import 路径（与注释里点名私有插件 / 模板的几个词、点名一个真实频道与它 id 的那一句），本体逐字不动。 */
 /** 移植自 KOLAgents 浏览器插件（Browser Extension - Influencer Assistant） `src/contents/utils/youtubeChannel.ts` @ d25b877。 */
 import {
   assessUploadRegularity,
@@ -132,8 +132,8 @@ function findChannelName(trustMeta: boolean) {
  * describing the PREVIOUS channel for a while. Everything in there is a
  * different creator during that window, and none of it looks stale.
  *
- * This is not hypothetical: the public library holds a capture of @tuann_lee
- * (real id UC9ToDNiiWr_OHI81tTYLdOg) stored under UCldnLLYMXEISsAtGEV7UPzQ,
+ * This is not hypothetical: the public library held a capture of one real
+ * channel (its own UC… id) stored under a different channel's UC… id,
  * with that other channel's join date and lifetime views, because the name
  * and follower count came from the fresh header while the identity came from
  * the stale <head>. The header name is the fresh source, so require the two
