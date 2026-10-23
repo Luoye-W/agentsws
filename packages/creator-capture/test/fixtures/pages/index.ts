@@ -3,7 +3,11 @@
  * 列表页借 `../lists/` 那几张（WP130 时随私有插件一起写的夹具）。`url` 是这张假页面冒充的地址。
  */
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+/** 包根目录（按本文件位置算，不靠 cwd：仓根跑全量时 cwd 是仓根；传字符串给 fileURLToPath，jsdom 换掉了全局 URL）。 */
+const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 
 export interface FakePage {
   /** 一个短名字（测试名、截图名、真 ego 跑的路径都用它）。 */
@@ -13,8 +17,8 @@ export interface FakePage {
   kind: 'creator' | 'content' | 'bio_link' | 'list'
 }
 
-const PAGES_DIR = join(process.cwd(), 'test/fixtures/pages')
-const LISTS_DIR = join(process.cwd(), 'test/fixtures/lists')
+const PAGES_DIR = join(PKG_ROOT, 'test/fixtures/pages')
+const LISTS_DIR = join(PKG_ROOT, 'test/fixtures/lists')
 
 export const FAKE_PAGES: readonly FakePage[] = [
   { name: 'youtube-channel', file: 'pages/youtube-channel.html', url: 'https://www.youtube.com/@deskfixture/videos', kind: 'creator' },

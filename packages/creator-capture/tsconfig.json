@@ -3,8 +3,6 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    // 移植来的算法 / 采集器在旧插件与私有插件里都是这两条关着编的；决策 1739 A 的规矩是**本体不改**，
-    // 为两条编译口味去改几百行算分代码，每一处都是一次对不上拍的风险——所以只在这个包里关这两条。
     "exactOptionalPropertyTypes": false,
     "noUncheckedIndexedAccess": false,
     "lib": ["ES2022", "DOM", "DOM.Iterable"]

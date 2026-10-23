@@ -11,17 +11,21 @@
  * 真浏览器里的那一半由 `scripts/e2e-wp496-ego-capture.mts`（真 ego × 本机假页面）验。
  */
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 import type { PageCapture } from '../../src/page/capture.js'
 import { creatorCapturePageExpression } from '../../src/page-script.js'
 import { ingestPlanOf } from '../../src/wire/plan.js'
 import { FAKE_PAGES, fakePageHtml } from '../fixtures/pages/index.js'
 
+/** 包根目录（按本文件位置算，不靠 cwd：仓根跑全量时 cwd 是仓根；传字符串给 fileURLToPath，jsdom 换掉了全局 URL）。 */
+const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
+
 declare const jsdom: { reconfigure(o: { url: string }): void }
 
 const FIXED = Date.parse('2026-10-23T08:00:00.000Z')
-const GOLDEN_DIR = join(process.cwd(), 'test/fixtures/pages/golden')
+const GOLDEN_DIR = join(PKG_ROOT, 'test/fixtures/pages/golden')
 
 beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'innerText', {

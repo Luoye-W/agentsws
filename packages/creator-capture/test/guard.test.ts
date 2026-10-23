@@ -4,10 +4,14 @@
  * 移植来的每个文件第一行写着出处。
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const SRC = join(process.cwd(), 'src')
+/** 包根目录（按本文件位置算，不靠 cwd：仓根跑全量时 cwd 是仓根；传字符串给 fileURLToPath，jsdom 换掉了全局 URL）。 */
+const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+const SRC = join(PKG_ROOT, 'src')
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name)

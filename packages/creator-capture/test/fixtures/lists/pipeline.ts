@@ -12,8 +12,12 @@
  *   阈值筛选（固定两档）→ 每行变成上报条目 → 按 20 条分块。
  */
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { JSDOM } from 'jsdom'
+
+/** 包根目录（按本文件位置算，不靠 cwd：仓根跑全量时 cwd 是仓根；传字符串给 fileURLToPath，jsdom 换掉了全局 URL）。 */
+const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 
 /* 旧仓与新仓的模块形状相同；这里只描述流水线用到的那几个函数。 */
 // biome-ignore lint/suspicious/noExplicitAny: 两个仓库的类型对象不是同一个，只比运行时输出
@@ -67,8 +71,8 @@ const SEED_TOPICS = ['standing desk', 'desk setup', 'cable']
 /** 两档阈值：不设 / 设「播放 ≥ 5 万」。 */
 const THRESHOLDS = [{}, { minViewsText: '50K' }]
 
-/** 夹具目录（vitest 在 jsdom 环境里 `import.meta.url` 不是 file:，按仓根拼）。 */
-export const FIXTURE_DIR = join(process.cwd(), 'test/fixtures/lists')
+/** 夹具目录。 */
+export const FIXTURE_DIR = join(PKG_ROOT, 'test/fixtures/lists')
 
 export function fixturePath(file: string): string {
   return join(FIXTURE_DIR, file)

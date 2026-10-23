@@ -12,6 +12,10 @@
  * | `metrics.ts` | 快照 → 面板上那几块算出来的数 | 新写（只调上面的算法） |
  *
  * 不在这里的：面板 / 设置页 / 任何界面、插件框架、浏览器存储、发请求、面板文案——那些只在私有插件里。
+ *
+ * 编译口味：`tsconfig.json` 里关了 `exactOptionalPropertyTypes` / `noUncheckedIndexedAccess`——移植来的算法 / 采集器
+ * 在旧插件与私有插件里都是这两条关着编的；决策 1739 A 的规矩是本体不改，为两条编译口味去改几百行算分代码，
+ * 每一处都是一次对不上拍的风险，所以只在这个包里关。（注释不能留在 tsconfig 里：开源仓边界守卫按严格 JSON 读它。）
  */
 
 export type { ListCaptureTarget } from './collectors/listCaptureTarget.js'
