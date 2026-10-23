@@ -266,16 +266,19 @@ async function main() {
         await page.waitForTimeout(500)
         const layout = await frame.getAttribute('data-layout')
         const boardOpen = (await page.getByTestId('rail-board').count()) === 1
+        // WP481（决策 1632）：浏览器里第三栏一律是盖在中栏上的浮层，看板不让位（收着时在就还在）
         const expect = {
-          wide: { layout: 'docked', board: true },
-          medium: { layout: 'docked', board: false },
+          wide: { layout: 'overlay', board: true },
+          medium: { layout: 'overlay', board: true },
           narrow: { layout: 'overlay', board: false },
         }[name]
         check(
           layout === expect.layout && boardOpen === expect.board,
-          `${name}（${viewport.width}）第三栏开着：${expect.layout === 'docked' ? '并排' : '盖在中栏上'}，看板${expect.board ? '还在' : '让位（自动隐藏）'}`,
+          `${name}（${viewport.width}）第三栏开着：${expect.layout === 'docked' ? '并排' : '盖在中栏上'}，看板${expect.board ? '还在' : '自动隐藏'}`,
         )
-        if (name === 'medium') {
+        if (name === 'narrow') {
+          await page.keyboard.press('Escape')
+          await page.waitForTimeout(300)
           await page.getByTestId('board-peek').click()
           check(await visible(page.getByTestId('rail-board-peek')), '看一眼：看板浮在内容上')
           await page.mouse.click(200, 400)
