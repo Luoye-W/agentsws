@@ -31,7 +31,9 @@ export const DATA_LOCATION_ZH: Record<string, string> = {
 
   'dataloc.warn.cloud_sync':
     '这是网盘同步文件夹。同步软件改动数据库文件时可能把数据弄坏，最好换一个不同步的文件夹。',
-  'dataloc.warn.network': '这是网络盘（NAS / 共享盘）。断网或 NAS 关机时，工坊打不开。',
+  // 决策 1647（B）：网络盘上放数据库的风险多说半句（只在数据库那一格）
+  'dataloc.warn.network':
+    '这是网络盘（NAS / 共享盘）。断网或 NAS 关机时，工坊打不开。网络盘上的数据库更容易损坏，记得开着备份。',
 
   'dataloc.problem.title': '这个文件夹不能用',
   'dataloc.problem.same_place': '数据现在就在这里。',
@@ -66,6 +68,33 @@ export const DATA_LOCATION_ZH: Record<string, string> = {
   'dataloc.failed.start_failed': '用新位置没能启动。',
   'dataloc.failed.busy': '已经在搬了。',
   'dataloc.failed.unknown': '出了点意外。',
+
+  // WP482：数据库与大文件分开放
+  'dataloc.desc.split': '数据库建议放本机；附件、录音这些大文件可以放 NAS 或外置硬盘',
+  'dataloc.hint.split':
+    '换位置时工坊会暂停，把那一格的文件夹搬过去、逐个文件核对，搬完用新位置重新启动。浏览器设置、浏览器插件和本机加密钥匙不在这里，不跟着搬。',
+  'dataloc.db.label': '数据库',
+  'dataloc.db.hint': '库文件、设置和备份。小，但要快，建议放本机硬盘。',
+  'dataloc.blobs.label': '大文件',
+  'dataloc.blobs.hint':
+    '附件、录音、图片、上传的原件。占地方，可以放 NAS 或外置硬盘；那边连不上时工坊照常用，只是这些文件暂时打不开。',
+  'dataloc.blobs.default_tag': '默认位置（和数据库放在一起）',
+  'dataloc.blobs.unreachable':
+    '现在连不上（硬盘没插或 NAS 断网），附件和录音暂时打不开，别的照常用。',
+  'dataloc.blobs.confirm.title': '把大文件搬到这里？',
+  'dataloc.blobs.confirm.reset_title': '把大文件搬回默认位置？',
+  'dataloc.blobs.confirm.safety': '旧位置的大文件留 7 天再删。',
+  'dataloc.confirm.includes_blobs': '大文件现在和数据库放在一起，会一起搬过去。',
+  'dataloc.blobs.warn.network': '这是网络盘（NAS / 共享盘）。断网时附件打不开。',
+  'dataloc.blobs.problem.same_place': '大文件现在就在这里。',
+  'dataloc.blobs.problem.inside_current': '它在数据库的文件夹里面，换一个外面的文件夹。',
+  'dataloc.problem.source_missing': '现在放大文件的地方连不上，接好之后再搬。',
+  'dataloc.blobs.done': '大文件已搬到 {path}',
+  'dataloc.blobs.old': '旧位置的大文件留到 {date}，到时自动删除',
+  'dataloc.blobs.old.deleted': '旧位置的大文件已删除',
+  'blobloc.unreachable': '大文件存放的位置现在连不上：{path}',
+  'blobloc.retry': '再试一次',
+  'storage.blobs.unreachable': '现在连不上',
 
   // 同一页的两处屏幕用词
   'storage.ago.today': '今天 {time}',
@@ -106,7 +135,7 @@ export const DATA_LOCATION_EN: Record<string, string> = {
   'dataloc.warn.cloud_sync':
     'This is a cloud-synced folder. Sync apps can corrupt database files while they change — a folder that isn’t synced is safer.',
   'dataloc.warn.network':
-    'This is a network drive (NAS / share). Agents Workshop can’t open when the network or NAS is down.',
+    'This is a network drive (NAS / share). Agents Workshop can’t open when the network or NAS is down. Databases on network drives are more easily damaged — keep backups on.',
 
   'dataloc.problem.title': 'This folder can’t be used',
   'dataloc.problem.same_place': 'Your data is already here.',
@@ -144,6 +173,37 @@ export const DATA_LOCATION_EN: Record<string, string> = {
   'dataloc.failed.start_failed': 'Couldn’t start from the new location.',
   'dataloc.failed.busy': 'A move is already running.',
   'dataloc.failed.unknown': 'Something unexpected happened.',
+
+  'dataloc.desc.split':
+    'Keep the database on this computer; large files like attachments and recordings can live on a NAS or external drive',
+  'dataloc.hint.split':
+    'Changing a location pauses Agents Workshop, moves that folder, checks every file, then restarts from the new place. Browser settings, the browser extension and this computer’s encryption key stay where they are.',
+  'dataloc.db.label': 'Database',
+  'dataloc.db.hint':
+    'Database files, settings and backups. Small but needs to be fast — keep it on this computer.',
+  'dataloc.blobs.label': 'Large files',
+  'dataloc.blobs.hint':
+    'Attachments, recordings, images and uploaded originals. They take space and can live on a NAS or external drive; if it’s unreachable, everything else keeps working.',
+  'dataloc.blobs.default_tag': 'Default (with the database)',
+  'dataloc.blobs.unreachable':
+    'Can’t reach it right now (drive unplugged or NAS offline). Attachments and recordings won’t open; everything else works.',
+  'dataloc.blobs.confirm.title': 'Move large files here?',
+  'dataloc.blobs.confirm.reset_title': 'Move large files back to the default location?',
+  'dataloc.blobs.confirm.safety': 'The old copy of the large files is kept for 7 days.',
+  'dataloc.confirm.includes_blobs':
+    'Large files are currently stored with the database and will move along with it.',
+  'dataloc.blobs.warn.network':
+    'This is a network drive (NAS / share). Attachments won’t open when the network is down.',
+  'dataloc.blobs.problem.same_place': 'Your large files are already here.',
+  'dataloc.blobs.problem.inside_current': 'It is inside the database folder — pick one outside it.',
+  'dataloc.problem.source_missing':
+    'The current large-file location can’t be reached. Reconnect it first.',
+  'dataloc.blobs.done': 'Large files moved to {path}',
+  'dataloc.blobs.old': 'The old copy of the large files is kept until {date}, then deleted',
+  'dataloc.blobs.old.deleted': 'Old copy of the large files deleted',
+  'blobloc.unreachable': 'The large-file location can’t be reached right now: {path}',
+  'blobloc.retry': 'Try again',
+  'storage.blobs.unreachable': 'can’t be reached right now',
 
   'storage.ago.today': 'Today {time}',
   'storage.ago.yesterday': 'Yesterday {time}',
