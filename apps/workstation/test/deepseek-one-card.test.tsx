@@ -276,10 +276,10 @@ describe('WP152「已配的」：老数据里两条都在', () => {
     const rows = screen.getAllByTestId('model-row')
     expect(rows.map((r) => r.getAttribute('data-id'))).toEqual(['deepseek'])
     expect(rows[0]?.textContent).toContain('DeepSeek 官方 · 官方 API 接口连接')
-    expect(within(rows[0] as HTMLElement).queryByText('改')).toBeTruthy()
+    expect(within(rows[0] as HTMLElement).queryByText('修改')).toBeTruthy()
     const account = await screen.findByTestId('model-row-account')
     expect(account.getAttribute('data-id')).toBe('deepseek-account')
-    expect(within(account).queryByText('改')).toBeNull()
+    expect(within(account).queryByText('修改')).toBeNull()
   })
 })
 

@@ -86,7 +86,7 @@ describe('违规宣称规则（按市场分组）', () => {
   it('改理由：点小铅笔 → 改字 → 保存', async () => {
     renderWithProviders(<ClaimRulesSection />)
     const row = await screen.findByTestId('claim-rule-abs_zh_best')
-    await userEvent.click(within(row).getByRole('button', { name: '改' }))
+    await userEvent.click(within(row).getByRole('button', { name: '修改' }))
     const inputs = within(row).getAllByRole('textbox')
     await userEvent.clear(inputs[1] as HTMLElement)
     await userEvent.type(inputs[1] as HTMLElement, '入门款别写最好')

@@ -42,7 +42,7 @@ export function RuleProposalView({
   name: string
   plain: string
   trial: MessageRuleTrial
-  /** 改一条已有的规则（按钮写「改」）。 */
+  /** 改一条已有的规则（按钮写「修改」）。 */
   editing?: boolean
   positions?: readonly MessagePositionOption[] | undefined
   busy?: boolean
