@@ -8,7 +8,10 @@
  *   `claude-opus-4-5` 与老式的 `claude-3-opus` 同一条（`claude-opus`），`deepseek-v4-flash` 是 `deepseek-flash`。
  * - **最新**：同一条里版本号最大的那一个；版本一样时，不带日期的别名（跟着上游升级）优先，都带日期取最近的。
  *   认不出版本号的模型自己一条，算它自己最新。
- * - **首次默认勾**：每条只勾最新那一版；**正在用的**（默认、按用途选的、某件事选着的）即使旧也勾上。
+ * - **最新一代**（决策 1626 选 B，Luoye 10-23）：同一家（系列名第一段，`gpt`、`claude`、`deepseek`）里
+ *   所有线的最大主版本号就是「最新一代」（夹具里是 6）；一条线的最新版还停在旧一代（GPT-5.5、5.6 Terra、
+ *   5.3 Codex Spark）就不算最新。认不出版本号的线不参与比较、照算最新。
+ * - **首次默认勾**：最新一代里每条线最新那一版；**正在用的**（默认、按用途选的、某件事选着的）即使旧也勾上。
  *
  * 纯函数，单测直接测（夹具就是 Luoye 截图里那一串 ChatGPT 订阅模型）。
  */
@@ -118,12 +121,40 @@ export function latestPerSeries(ids: readonly string[]): string[] {
   return ids.filter((id) => keep.has(id))
 }
 
-/** 首次连接（或老用户升级后第一次）默认勾哪些：每条线最新那一版 + 正在用的。顺序照目录。 */
+/** 一家 = 系列名的第一段（`gpt-luna` → `gpt`，`claude-opus` → `claude`）。 */
+function familyOf(key: string): string {
+  return key.split('-')[0] ?? key
+}
+
+/**
+ * 决策 1626（B）：只留**最新一代**里每条线最新那一版（顺序照传进来的）。
+ * 同一家里各条线最新版的最大主版本号 = 最新一代；主版本号比它小的线整条不算。认不出版本号的照留。
+ */
+export function latestGeneration(ids: readonly string[]): string[] {
+  const latest = latestPerSeries(ids)
+  const top = new Map<string, number>()
+  const info = new Map<string, ModelSeries>()
+  for (const id of latest) {
+    const s = seriesOf(id)
+    info.set(id, s)
+    const major = s.version[0]
+    if (major === undefined) continue
+    const fam = familyOf(s.key)
+    top.set(fam, Math.max(top.get(fam) ?? major, major))
+  }
+  return latest.filter((id) => {
+    const s = info.get(id) as ModelSeries
+    const major = s.version[0]
+    return major === undefined || major >= (top.get(familyOf(s.key)) ?? major)
+  })
+}
+
+/** 首次连接（或老用户升级后第一次）默认勾哪些：最新一代里每条线最新那一版 + 正在用的。顺序照目录。 */
 export function defaultEnabledModels(
   catalog: readonly string[],
   inUse: ReadonlySet<string> = new Set(),
 ): string[] {
-  const latest = new Set(latestPerSeries(catalog))
+  const latest = new Set(latestGeneration(catalog))
   return catalog.filter((m) => latest.has(m) || inUse.has(m))
 }
 

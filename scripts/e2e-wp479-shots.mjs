@@ -5,7 +5,7 @@
  * 全程不跑补全。
  *
  * 1. 起一个全新的本机服务进程（临时数据目录），登录；停掉，放一条假的订阅登录记录；
- * 2. 再起：第一次算默认勾选（每条线最新那一版）→ 停掉，把 `models.json` 里 GPT-6.1 Sol 抹成「还没见过」
+ * 2. 再起：第一次算默认勾选（最新一代每条线最新那一版 + 正在用的）→ 停掉，把 `models.json` 里 GPT-6.1 Sol 抹成「还没见过」
  *    （等于目录刚多了一个新模型）；
  * 3. 再起：铃铛里一条「ChatGPT 订阅有新模型：GPT-6.1 Sol」→ 点它到设置 → 模型，订阅那一行自己展开、标「新」；
  *    助理输入框的模型选择器只列勾上的。浅 / 深各拍一套。
@@ -162,15 +162,8 @@ async function main() {
   check(sub?.models.length === 9, '订阅目录 9 个')
   check(
     JSON.stringify(ticked) ===
-      JSON.stringify([
-        'gpt-5.3-codex-spark',
-        'gpt-5.5',
-        'gpt-5.6-terra',
-        'gpt-6-astra',
-        'gpt-6-luna',
-        'gpt-6.1-sol',
-      ]),
-    '每条线只勾最新那一版',
+      JSON.stringify(['gpt-5.5', 'gpt-6-astra', 'gpt-6-luna', 'gpt-6.1-sol']),
+    '只勾最新一代（6）每条线最新那一版 + 默认的 5.5（决策 1626 选 B）',
   )
   await stop(child)
   const modelsJson = findModelsJson(dataDir)

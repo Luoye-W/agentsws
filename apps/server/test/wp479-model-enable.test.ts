@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultEnabledModels,
   freshModels,
+  latestGeneration,
   latestPerSeries,
   type ModelEnableEntry,
   noteNewModels,
@@ -85,13 +86,37 @@ describe('每条线最新那一版', () => {
   })
 })
 
+describe('最新一代（决策 1626 选 B）', () => {
+  it('截图那一串：一家最新一代是 6，只勾 6 Astra、6 Luna、6.1 Sol；停在 5.x 的线（Codex Spark、5.5、5.6 Terra）不勾', () => {
+    expect(latestGeneration(CHATGPT)).toEqual(['gpt-6-astra', 'gpt-6-luna', 'gpt-6.1-sol'])
+    expect(defaultEnabledModels(CHATGPT)).toEqual(['gpt-6-astra', 'gpt-6-luna', 'gpt-6.1-sol'])
+  })
+
+  it('按家分开算；认不出版本号的线照算最新', () => {
+    expect(
+      latestGeneration([
+        'claude-3-haiku-20240307',
+        'claude-opus-4-5',
+        'claude-sonnet-4-6',
+        'deepseek-chat',
+        'deepseek-v4-flash',
+        'gpt-4o-2024-08-06',
+      ]),
+    ).toEqual([
+      'claude-opus-4-5',
+      'claude-sonnet-4-6',
+      'deepseek-chat',
+      'deepseek-v4-flash',
+      'gpt-4o-2024-08-06',
+    ])
+  })
+})
+
 describe('首次默认勾', () => {
   it('正在用的旧模型照样勾上（升级后跑着的不断）', () => {
-    expect(defaultEnabledModels(CHATGPT, new Set(['gpt-5.6-sol']))).toEqual([
-      'gpt-5.3-codex-spark',
+    expect(defaultEnabledModels(CHATGPT, new Set(['gpt-5.6-sol', 'gpt-5.5']))).toEqual([
       'gpt-5.5',
       'gpt-5.6-sol',
-      'gpt-5.6-terra',
       'gpt-6-astra',
       'gpt-6-luna',
       'gpt-6.1-sol',

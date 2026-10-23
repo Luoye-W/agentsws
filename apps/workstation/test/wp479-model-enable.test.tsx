@@ -1,7 +1,7 @@
 /**
  * WP479（决策 1625）：设置 → 模型 里每个已连接来源「模型 N/M」那一行。
  *
- * - ChatGPT 订阅登上了：一行「模型 5/9」，点开是全部可用模型（勾选框 + 名字 + 「不能看图」+「新」）；
+ * - ChatGPT 订阅登上了：一行「模型 3/9」，点开是全部可用模型（勾选框 + 名字 + 「不能看图」+「新」）；
  * - 勾 / 取消一个 → 整份勾选发给服务端（默认那个取消不了）；「全选最新」把每条线最新那一版勾上；
  * - 铃铛点进来（`#models-openai-codex`）：那一个来源自己展开；打开这一页就告诉服务端「看过了」，
  *   这一次打开期间「新」照样标着。
@@ -56,15 +56,12 @@ const row = (
 ): ModelEnableModelView => ({ id, name, enabled: false, vision: 'ok', ...extra })
 
 const MODELS: ModelEnableModelView[] = [
-  row('gpt-5.3-codex-spark', 'GPT-5.3 Codex Spark', {
-    enabled: true,
-    latest: true,
-    vision: 'no',
-  }),
-  row('gpt-5.5', 'GPT-5.5', { enabled: true, latest: true, locked: 'default' }),
+  // 决策 1626 选 B：只有最新一代（6）每条线最新那一版算「最新」；停在 5.x 的线不算、首次也不勾
+  row('gpt-5.3-codex-spark', 'GPT-5.3 Codex Spark', { vision: 'no' }),
+  row('gpt-5.5', 'GPT-5.5', { enabled: true, locked: 'default' }),
   row('gpt-5.6-luna', 'GPT-5.6 Luna'),
   row('gpt-5.6-sol', 'GPT-5.6 Sol'),
-  row('gpt-5.6-terra', 'GPT-5.6 Terra', { enabled: true, latest: true }),
+  row('gpt-5.6-terra', 'GPT-5.6 Terra'),
   row('gpt-6-astra', 'GPT-6 Astra', { enabled: true, latest: true }),
   row('gpt-6-luna', 'GPT-6 Luna', { enabled: true, latest: true }),
   row('gpt-6-sol', 'GPT-6 Sol'),
@@ -147,24 +144,17 @@ describe('WP479 纯函数', () => {
     expect(toggled(MODELS, 'gpt-6-sol')).toContain('gpt-6-sol')
     expect(toggled(MODELS, 'gpt-6-astra')).not.toContain('gpt-6-astra')
   })
-  it('全选最新：每条线最新那一版加上，已经勾的不动', () => {
-    expect(withLatest(MODELS)).toEqual([
-      'gpt-5.3-codex-spark',
-      'gpt-5.5',
-      'gpt-5.6-terra',
-      'gpt-6-astra',
-      'gpt-6-luna',
-      'gpt-6.1-sol',
-    ])
+  it('全选最新：最新一代每条线最新那一版加上，已经勾的不动', () => {
+    expect(withLatest(MODELS)).toEqual(['gpt-5.5', 'gpt-6-astra', 'gpt-6-luna', 'gpt-6.1-sol'])
   })
 })
 
 describe('WP479 设置 → 模型：订阅那一行的勾选清单', () => {
-  it('「模型 5/9」带「新」；点开：名字、不能看图、新；默认那个取消不了', async () => {
+  it('「模型 3/9」带「新」；点开：名字、不能看图、新；默认那个取消不了', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel assignment="asg_owner" />, '/settings/models')
     const toggle = await screen.findByTestId('model-enable-toggle')
-    expect(toggle.textContent).toContain('模型 5/9')
+    expect(toggle.textContent).toContain('模型 3/9')
     expect(within(toggle).getByTestId('model-enable-toggle-new')).toBeTruthy()
     // 打开这一页 = 看过了（这一次照样标着）
     await waitFor(() => expect(state.seen).toBe(1))
@@ -193,20 +183,13 @@ describe('WP479 设置 → 模型：订阅那一行的勾选清单', () => {
     await waitFor(() => expect(state.saved).toHaveLength(1))
     expect(state.saved[0]).toEqual({
       provider_id: 'openai-codex',
-      enabled: [
-        'gpt-5.3-codex-spark',
-        'gpt-5.5',
-        'gpt-5.6-terra',
-        'gpt-6-astra',
-        'gpt-6-luna',
-        'gpt-6-sol',
-      ],
+      enabled: ['gpt-5.5', 'gpt-6-astra', 'gpt-6-luna', 'gpt-6-sol'],
     })
     await user.click(await screen.findByTestId('model-enable-latest'))
     await waitFor(() => expect(state.saved).toHaveLength(2))
     expect(state.saved[1]?.enabled).toContain('gpt-6.1-sol')
     await waitFor(() =>
-      expect(screen.getByTestId('model-enable-toggle').textContent).toContain('模型 7/9'),
+      expect(screen.getByTestId('model-enable-toggle').textContent).toContain('模型 5/9'),
     )
   })
 

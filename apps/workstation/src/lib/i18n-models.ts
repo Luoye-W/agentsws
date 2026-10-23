@@ -62,7 +62,7 @@ export const MODELS_ZH: Record<string, string> = {
   'models.enable.toggle': '模型 {on}/{all}',
   'models.enable.toggle.hint': '勾上的才出现在模型选择里。有新模型会在铃铛里提醒。',
   'models.enable.latest': '全选最新',
-  'models.enable.latest.hint': '每个系列勾上最新那一版（已经勾的不动）。',
+  'models.enable.latest.hint': '勾上最新一代里每个系列的最新版（已经勾的不动）。',
   'models.enable.search': '搜模型…',
   'models.enable.new': '新',
   'models.enable.locked.default': '默认 / 按用途在用，取消不了。先在下面换掉默认。',
@@ -130,7 +130,7 @@ export const MODELS_EN: Record<string, string> = {
     'Only checked models show up in model pickers. New models are announced in the bell.',
   'models.enable.latest': 'Select latest',
   'models.enable.latest.hint':
-    'Check the newest version in each series (keeps what is already checked).',
+    'Check the newest version of each series in the latest generation (keeps what is already checked).',
   'models.enable.search': 'Search models…',
   'models.enable.new': 'New',
   'models.enable.locked.default': 'Used as default / for a purpose. Change the default first.',

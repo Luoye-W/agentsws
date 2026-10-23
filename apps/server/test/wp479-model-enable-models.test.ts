@@ -90,20 +90,18 @@ const subIds = (ids: string[]): string[] =>
   ids.filter((id) => id.startsWith('openai-codex/')).map((id) => id.slice('openai-codex/'.length))
 
 describe('WP479 首次默认勾 + 选择器只列勾上的', () => {
-  it('每条线只勾最新；事项选着的旧模型（5.6 Sol）照样勾上', async () => {
+  it('只勾最新一代（6）每条线最新那一版（决策 1626 选 B）；默认的 5.5、事项选着的 5.6 Sol 照样勾上', async () => {
     const { models } = setup({ matters: ['openai-codex/gpt-5.6-sol'] })
     expect(subIds(models.chatChoices().map((c) => c.id))).toEqual([
-      'gpt-5.3-codex-spark',
       'gpt-5.5',
       'gpt-5.6-sol',
-      'gpt-5.6-terra',
       'gpt-6-astra',
       'gpt-6-luna',
       'gpt-6.1-sol',
     ])
     // 默认模型下拉与 AI 钮同一份
     const defaults = await models.port.defaults(owner)
-    expect(subIds(defaults.choices.map((c) => c.id))).toHaveLength(7)
+    expect(subIds(defaults.choices.map((c) => c.id))).toHaveLength(5)
     const view = await models.port.enabledModels?.(owner)
     const sub = view?.sources.find((s) => s.provider_id === 'openai-codex')
     expect(sub?.group).toBe('subscription')
@@ -119,7 +117,11 @@ describe('WP479 首次默认勾 + 选择器只列勾上的', () => {
       name: 'GPT-6.1 Sol',
       vision: 'ok',
     })
-    expect(sub?.models.find((m) => m.id === 'gpt-5.3-codex-spark')?.vision).toBe('no')
+    expect(sub?.models.find((m) => m.id === 'gpt-5.3-codex-spark')).toMatchObject({
+      enabled: false,
+      vision: 'no',
+    })
+    expect(sub?.models.find((m) => m.id === 'gpt-5.6-terra')?.latest).toBeUndefined()
     // 第一次建的那份不算新
     expect(sub?.models.some((m) => m.fresh === true)).toBe(false)
   })

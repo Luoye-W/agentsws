@@ -134,7 +134,7 @@ import { deepseekThinkingOf } from './deepseek-thinking.js'
 import {
   defaultEnabledModels,
   freshModels,
-  latestPerSeries,
+  latestGeneration,
   type ModelEnableEntry,
   noteNewModels,
   pendingNotice,
@@ -3062,7 +3062,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     const locked = lockedModels(c)
     const matters = matterModelsOf(c.id)
     const fresh = new Set(freshModels(known, entry))
-    const latest = new Set(latestPerSeries(known))
+    // 「全选最新」与首次默认勾同一口径（决策 1626 选 B：只算最新一代）
+    const latest = new Set(latestGeneration(known))
     const models: ModelEnableModelView[] = known.map((m) => {
       const name = choiceFacts(c, m).name
       const lock = locked.get(m)
