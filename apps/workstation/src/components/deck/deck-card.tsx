@@ -59,6 +59,7 @@ import { contentUpdatesAddress, isContentDigestPayload } from '@/lib/content-dig
 import { formatDateTime } from '@/lib/format'
 import { recordText, tOr } from '@/lib/humanize'
 import { cn } from '@/lib/utils'
+import { matterTarget } from '@/lib/work'
 
 export interface DeckDecideRequest {
   /**「打开」不是一次决定（它只是进入事项），所以这里不出现 */
@@ -331,6 +332,11 @@ export function DeckCardView({
   const isContentCard =
     (card.kind === 'content_update' || card.kind === 'content_conflict') &&
     typeof contentPayload.item_id === 'string'
+  /** WP100：一下动作两半——把这张卡交给详情面板，再把那一格打开。 */
+  const openDetails = (): void => {
+    focusEvidenceCard(card)
+    rail.show('evidence')
+  }
   const act = (action: DeckAction): void => {
     if (action === 'open' && isContentCard) {
       setCompare(true)
@@ -339,6 +345,11 @@ export function DeckCardView({
     // WP406：岗位更新卡的「挑着看」开第三栏（这张卡没有事项可进）
     if (action === 'open' && isContentDigestPayload(card.detail.payload)) {
       rail.openAddress(contentUpdatesAddress(card.detail.payload.position_id))
+      return
+    }
+    // WP486：没有事项可进（也不是上面那几种就地开的卡）——→ 打开右栏「详情」，不再是点了没反应的死按钮
+    if (action === 'open' && matterTarget(card) === undefined) {
+      openDetails()
       return
     }
     if (action === 'open') {
@@ -452,16 +463,7 @@ export function DeckCardView({
             走 WP95 的公开注册路 `show('evidence')`，注册层一个字不碰。
           */}
           {/* WP277：通知卡不是要人凭证据拍板的——不出「证据 N」；WP278：交出发起人 / 请你一起做也是 */}
-          {peerNotice || peerOffer ? null : (
-            <EvidencePill
-              lines={evidence}
-              onOpen={() => {
-                // WP100：一下动作两半——把这张卡交给证据面板，再把那一格打开
-                focusEvidenceCard(card)
-                rail.show('evidence')
-              }}
-            />
-          )}
+          {peerNotice || peerOffer ? null : <EvidencePill lines={evidence} onOpen={openDetails} />}
           {/*
             WP456-T3（§2.6 第 13 条）：头一行右边只留「证据 N」——原来最后那个「AI」角标（谁提的）去掉，
             谁提的点卡面在详情里写（`CardDetail`）。
@@ -664,7 +666,13 @@ export function DeckCardView({
           它不是第四个动作，是出口——点它离开队列，进这件事的详情 / 工作线程。
         */}
         <GoButton
-          label={t('deck.go')}
+          label={
+            isContentCard ||
+            isContentDigestPayload(card.detail.payload) ||
+            matterTarget(card) !== undefined
+              ? t('deck.go')
+              : t('deck.go.details')
+          }
           onClick={() => {
             act('open')
           }}

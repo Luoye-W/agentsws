@@ -29,7 +29,18 @@ export interface LessonEvidence {
   at: Iso8601
   run_id?: RunId
   approval_item_id?: string
+  /** WP486：这一次是哪种纠正（「不要 + 理由」/ 改了字 / 指导）。没有 = 早于 WP486 的证据，按 lesson 的 signal 算。 */
+  signal?: LessonSignal
+  /**
+   * WP486：改了字的那一次——原来那一版与人改成的那一版（各截到 {@link EVIDENCE_TEXT_MAX} 字）。
+   * 详情面板逐条列「原来是什么 / 你改成了什么」要用；只有 `edit_diff` 才有。
+   */
+  before?: string
+  after?: string
 }
+
+/** WP486：证据里原文 / 改后各留多少字（详情面板上读得完就行，不存整封信）。 */
+export const EVIDENCE_TEXT_MAX = 400
 
 /** 这条 lesson 该落到哪个技能的哪一段。 */
 export interface AppliesTo {

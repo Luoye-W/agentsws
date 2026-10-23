@@ -384,8 +384,11 @@ export interface DeckDetail {
 export interface ProjectContext {
   now: Iso8601
   position_id: PositionId
-  /** ObjectRef → 人话（服务端补；前端不猜、也不查库） */
-  label?: (ref: ObjectRef) => string | undefined
+  /**
+   * ObjectRef → 人话（服务端补；前端不猜、也不查库）。
+   * WP486：`null` = 以本人身份不让看（卡上说「还有 N 条你无权查看」）；`undefined` = 起不了名字（不算无权）。
+   */
+  label?: (ref: ObjectRef) => string | null | undefined
   /** 15 §2 的 risk_class 在账本上；投影时由宿主给，缺省按 kind 推 */
   riskClass?: (item: ApprovalItem) => RiskClass | undefined
   /** 契约的 ApprovalItem 没有 snooze 计数器（见交付报告的契约建议） */

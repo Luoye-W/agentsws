@@ -281,7 +281,12 @@ describe('⑪ 策略卡', () => {
 describe('全类共用的头与脚', () => {
   it('每张卡右下角都有 → 圆钮，点它进这件事', async () => {
     const onOpen = vi.fn()
-    const card = layoutCard('change', { kind: 'staged_change' }, { before: 1, after: 2 })
+    // WP486：有事项的卡 → 进事项；没有事项的打开「详情」（见 wp486-go-button.test.tsx）
+    const card = layoutCard(
+      'change',
+      { kind: 'staged_change', matter_id: 'mat_1' },
+      { before: 1, after: 2 },
+    )
     renderCard(card, onOpen)
     await userEvent.click(screen.getByTestId('ws-go'))
     expect(onOpen).toHaveBeenCalledWith(card)

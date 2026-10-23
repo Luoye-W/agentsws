@@ -595,7 +595,8 @@ export function evidenceChipsOf(item: ApprovalItem, ctx?: ProjectContext): DeckE
  * 实体芯片：订单 / 客户 / 事实卡…，**带展示名**，另起一行（37 §1 第 5 行）。
  *
  * 29 §2 的 enrichment 在这里落地：`ctx.label` 是以本人身份查出来的展示名，返回
- * `undefined` 就是「这个人看不到这条」——那条 ref 直接丢掉，只在 `dropped` 上记个数。
+ * `null` 就是「这个人看不到这条」——那条 ref 直接丢掉，只在 `dropped` 上记个数。
+ * WP486：返回 `undefined` 只是「起不了名字」，不出芯片、**不算无权**。
  * 先给再脱敏是 19 §3 明令禁止的那种做法。
  */
 export function entityChipsOf(
@@ -620,10 +621,14 @@ export function entityChipsOf(
     if (seenKeys.has(key)) continue
     seenKeys.add(key)
     const label = ctx.label?.(ref)
-    if (label === undefined || label === '') {
+    // WP486：`null` 才是「以本人身份查过、不让看」——只有它记进「还有 N 条你无权查看」。
+    // 查不到展示名（`undefined` / 空串：这类对象宿主不会起名字，比如技能、或本地数据源压根不起名）
+    // 不是没权限：不出芯片，也不吓人说「无权」（Luoye 10-23：本人在个人模式下看自己的卡出了这句）
+    if (label === null) {
       dropped += 1
       continue
     }
+    if (label === undefined || label === '') continue
     if (chips.length < MAX_ENTITY_CHIPS) chips.push({ type: ref.type, id: ref.id, label })
   }
   return { chips, dropped }
@@ -819,7 +824,8 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   // 展示名查不到就**没有客户标签**——退成 `cus_anna` 正是 37 §1 要删掉的那种裸 id。
   const customer =
     (to === undefined ? undefined : ctx.label?.(to)) ??
-    (subject.type === 'customer' ? ctx.label?.(subject) : undefined)
+    (subject.type === 'customer' ? ctx.label?.(subject) : undefined) ??
+    undefined
   const channel =
     CHANNEL_OF[str(payload.channel) ?? ''] ??
     (kind === 'system_alert' || kind === 'digest' ? 'system' : undefined)
@@ -828,7 +834,9 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   const matter_id = item.subject.matter_id ?? item.subject.work_item_id
   const todo_id = item.subject.todo_id
   const matter_label =
-    matter_id === undefined ? undefined : ctx.label?.({ type: 'work_item', id: matter_id })
+    matter_id === undefined
+      ? undefined
+      : (ctx.label?.({ type: 'work_item', id: matter_id }) ?? undefined)
   // WP232：收件人待定的草稿（系统不发，人复制去发）——与 txn 的 `isManualSendDraft` 同一判据
   const manualSend =
     kind === 'outbound_draft' && payload.manual_send === true && payload.to === undefined

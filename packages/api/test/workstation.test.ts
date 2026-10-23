@@ -605,7 +605,7 @@ describe('37 §1 合并：同族同型同渠道折成一张', () => {
   })
 })
 
-describe('29 §2 enrichment：ObjectRef → 展示名，查不到就丢并留 note', () => {
+describe('29 §2 enrichment：ObjectRef → 展示名，查不到就不出芯片（WP486：不算无权）', () => {
   it('查得到的进实体芯片；查不到的丢掉并记数；证据芯片里一个裸 id 都没有', async () => {
     const h = await harness()
     h.approvals.seed(
@@ -654,7 +654,8 @@ describe('29 §2 enrichment：ObjectRef → 展示名，查不到就丢并留 no
     expect(card).toBeDefined()
     // 只有 cus_anna 有展示名（MemoryWorkstation.label）；订单 / 事实卡 / thread 全丢掉
     expect(card?.entity_chips).toEqual([{ type: 'customer', id: 'cus_anna', label: 'Anna Meyer' }])
-    expect(card?.detail.enrichment.dropped_refs).toBeGreaterThan(0)
+    // WP486：起不了名字 ≠ 无权查看——本人看自己的卡不该出「还有 N 条你无权查看」
+    expect(card?.detail.enrichment.dropped_refs).toBe(0)
     expect(JSON.stringify(card?.evidence_chips)).not.toMatch(/fact_|cus_|run_|ord_/)
     // run id 只进详情
     expect(card?.detail.run_id).toBe('run_demo_42')

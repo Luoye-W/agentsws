@@ -222,7 +222,7 @@ export default function UiKitPage(): ReactNode {
       <div className="grid gap-8 md:grid-cols-2">
         <Section title="决定卡外壳">
           <DecisionCard>
-            <DecisionCardHead end={<span className="ws-link-muted">证据 3</span>}>
+            <DecisionCardHead end={<span className="ws-link-muted">详情 3</span>}>
               <CategoryTag>售后 · 退款</CategoryTag>
               <StatusPill tone="warn">等你批</StatusPill>
             </DecisionCardHead>
