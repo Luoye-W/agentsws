@@ -17,6 +17,7 @@ import {
   AssistantNoteActions,
   isAssistantNote,
 } from '@/components/knowledge/assistant-note-actions'
+import { CardStageSelect } from '@/components/knowledge/stage-select'
 import type { KnowledgeCardRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import {
@@ -104,9 +105,8 @@ export function KnowledgeRow({
             {scopeName === undefined ? scopeLabel(s, [], t) : scopeName(s)}
           </WsTag>
         ))}
-        {card.stage === undefined || card.stage === 'both' ? null : (
-          <WsTag>{t(`knowledge.stage.${card.stage}`)}</WsTag>
-        )}
+        {/* WP488（决策 1682）：范围就地改（公共 / 售前 / 售后） */}
+        <CardStageSelect card={card} />
         <WsTag data-slot="status">{t(`knowledge.origin.${origin}`)}</WsTag>
         <StatusPill tone={STATUS_TONE[status]}>{t(`knowledge.status.${status}`)}</StatusPill>
       </div>

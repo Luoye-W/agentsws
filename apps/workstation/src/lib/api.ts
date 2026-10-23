@@ -33,6 +33,8 @@ import type {
   HelpArticleView,
   HelpCatalogView,
   HelpKind,
+  KnowledgeLearnEstimate,
+  KnowledgeLearnJob,
   MarketsSource,
   Matter,
   MatterEvent,
@@ -4676,6 +4678,52 @@ export const resolveKnowledgeRecheck = (
   api<unknown>(`/v1/knowledge/rechecks/${encodeURIComponent(id)}/resolve`, {
     method: 'POST',
     body: { resolution },
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/* ── WP488（决策 1680 / 1681 / 1682 / 1686）：学一遍 + 改范围 ─────────────────── */
+
+export type KnowledgeStageId = 'both' | 'presales' | 'postsales'
+
+export interface KnowledgeLearnInput {
+  source: 'email' | 'website'
+  months?: number
+  urls?: string[]
+}
+
+export const estimateKnowledgeLearn = (
+  input: KnowledgeLearnInput,
+  assignment?: string,
+): Promise<KnowledgeLearnEstimate> =>
+  api<KnowledgeLearnEstimate>('/v1/knowledge/learn/estimate', {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const startKnowledgeLearn = (
+  input: KnowledgeLearnInput,
+  assignment?: string,
+): Promise<KnowledgeLearnJob> =>
+  api<KnowledgeLearnJob>('/v1/knowledge/learn', {
+    method: 'POST',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const listKnowledgeLearnJobs = (assignment?: string): Promise<KnowledgeLearnJob[]> =>
+  api<KnowledgeLearnJob[]>('/v1/knowledge/learn/jobs', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const setKnowledgeCardStage = (
+  id: string,
+  stage: KnowledgeStageId,
+  assignment?: string,
+): Promise<KnowledgeCardRow> =>
+  api<KnowledgeCardRow>(`/v1/knowledge/cards/${encodeURIComponent(id)}/stage`, {
+    method: 'POST',
+    body: { stage },
     ...(assignment === undefined ? {} : { assignment }),
   })
 

@@ -91,6 +91,8 @@ export function brandKnowledgeCards(
       sensitivity: 'internal',
       subject: { type: 'policy', id: policy.kind, key: `policy:${policy.kind}` },
       statement: `${POLICY_LABEL[policy.kind] ?? policy.kind}：${policy.summary}`,
+      // WP488（决策 1682）：政策买前买后都会问 → 公共
+      stage: 'both',
       provenance: [
         {
           source: 'web',
@@ -117,6 +119,8 @@ export function brandKnowledgeCards(
         ...(product.asin === undefined ? {} : { id: product.asin }),
         key: `product:${product.title}`,
       },
+      // WP488（决策 1682）：标价 / 规格是买之前问的 → 售前
+      stage: 'presales',
       // WP346：原价 / 售价分开写；规格跟在后面（AI 补的规格同样只是「待核」的一条）
       statement:
         `${brand} 的「${product.title}」标价 ${product.price_snapshot}` +

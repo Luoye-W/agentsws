@@ -12,7 +12,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUpRight } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useScopeConversations } from '@/components/conversations/conversation-data'
 import { connectionNeedsYou, useScopeConnections } from '@/components/rail/card-status'
 import { type RailScope, railContextOf } from '@/components/rail/rail-scope'
@@ -20,7 +20,7 @@ import { useRailState } from '@/components/rail/rail-state'
 import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import { reportAddress, useScopeReports } from '@/components/reports/report-data'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
-import { getMySchedules, getPositions } from '@/lib/api'
+import { getMySchedules, getPositions, startKnowledgeLearn } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 /** 最多几个（决策 1019：4–6 个）。 */
@@ -33,6 +33,13 @@ export const LANDING_VISIBLE = 4
  * 英文 / 数字开头才隔一个空格（「连上 Shopify」）。
  */
 export const zhAfterVerb = (name: string): string => (/^[A-Za-z0-9]/.test(name) ? ` ${name}` : name)
+/** WP488：客服那几条职责（岗位页上多一个「从过往邮件学」）。 */
+export const KNOWLEDGE_LEARN_ROLES: readonly string[] = [
+  'dtc.support',
+  'amz.support',
+  'dtc.live-chat',
+]
+
 /** 其中「打开卡」那一类最多几个（留位置给能直接发的提示）。 */
 const OPEN_MAX = 3
 
@@ -75,6 +82,7 @@ export function useLandingActions(
   send: (prompt: string) => void,
 ): LandingAction[] {
   const { t, lang } = useApp()
+  const navigate = useNavigate()
   const rail = useRailState()
   const openConnect = useOpenConnect()
   const scope = usePageScope()
@@ -144,6 +152,27 @@ export function useLandingActions(
     })
 
   const shown = open.slice(0, OPEN_MAX)
+  /*
+   * WP488（决策 1680）：客服岗位「从过往邮件学」——直接开一次（默认回看 12 个月），跳到那件事看进度；
+   * 没接邮箱时服务端在那件事里出连接卡（决策 690）。
+   */
+  const learnRole = scope?.roles?.find((r) => KNOWLEDGE_LEARN_ROLES.includes(r.role_id))
+  if (learnRole !== undefined)
+    shown.push({
+      id: 'learn_email',
+      kind: 'open',
+      label: t('landing.learn_email'),
+      run: () => {
+        void startKnowledgeLearn({ source: 'email' }, learnRole.assignment)
+          .then((job) => {
+            if (job.matter_id !== undefined) navigate(`/matters/${job.matter_id}`)
+            else navigate('/knowledge')
+          })
+          .catch(() => {
+            navigate('/knowledge')
+          })
+      },
+    })
   const sends: LandingAction[] = uniqueByLabel(prompts).map((p) => ({
     id: `prompt:${p.id}`,
     kind: 'send',

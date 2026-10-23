@@ -53,6 +53,8 @@ import type { MailboxWriter } from './writeback.js'
 export const DEFAULT_BACKFILL_DAYS = 30
 /** 首次最多拉多少封。 */
 export const DEFAULT_BACKFILL_LIMIT = 2000
+/** WP488：「从过往邮件学」每个文件夹最多回看多少封（最新的那些）。 */
+export const DEFAULT_HISTORY_LIMIT = 3000
 
 /**
  * 默认要扫的文件夹（语义）。真名按服务器上的清单解析——各家叫法不一样。
@@ -220,6 +222,60 @@ export class MailboxSync {
     const next = base - days * 86_400_000
     this.floorMs.set(account, next)
     return new Date(next).toISOString()
+  }
+
+  /** WP488：现在接着的邮箱地址。 */
+  accounts(): string[] {
+    return this.opts.accounts().map((a) => a.address)
+  }
+
+  /**
+   * WP488（决策 1680 / 1686）：「从过往邮件学」读历史往来——收件箱 + 已发，按日期回看，**不碰游标、
+   * 不落消息库、不分拣、不交岗位**（一年前的信不该被当成新来信再开一遍事项）。解析出来的只在内存里用。
+   *
+   * 收信端没实现按日期回看（老替身）就回空：调用方只用消息库里已有的。
+   */
+  async history(
+    address: string,
+    since: Iso8601,
+    opts: { limit?: number } = {},
+  ): Promise<{ records: MessageRecord[]; folders: number; supported: boolean }> {
+    const account = this.opts.accounts().find((a) => a.address === address)
+    if (account === undefined) return { records: [], folders: 0, supported: false }
+    const limit = opts.limit ?? DEFAULT_HISTORY_LIMIT
+    const folders = account.folders.filter((f) => {
+      const kind = folderKindOf(f)
+      return kind === 'inbox' || kind === 'sent' || kind === 'support' || kind === 'archive'
+    })
+    const records: MessageRecord[] = []
+    let supported = false
+    let read = 0
+    for (const folder of folders) {
+      const source = account.open(folder)
+      if (source.fetchSinceDate === undefined) continue
+      supported = true
+      read += 1
+      const batch = await source.fetchSinceDate(since, limit).catch((e: unknown) => {
+        this.opts.on_error?.(e)
+        return []
+      })
+      for (const raw of batch) {
+        try {
+          records.push(
+            await parseMessage({
+              raw,
+              account: address,
+              folder,
+              workspace_id: this.opts.workspace_id,
+              received_at: raw.internal_date ?? this.opts.clock.now(),
+            }),
+          )
+        } catch {
+          // 解析不了的一封跳过（缺 From 之类）
+        }
+      }
+    }
+    return { records, folders: read, supported }
   }
 
   /** 这只邮箱现在回溯到哪一天（界面上"再往前取"旁边那句话）。 */

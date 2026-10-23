@@ -35,6 +35,7 @@ import {
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { INBOX_EN, INBOX_ZH } from './i18n-inbox'
+import { KNOWLEDGE_LEARN_EN, KNOWLEDGE_LEARN_ZH } from './i18n-knowledge-learn'
 import { LAYOUT_EN, LAYOUT_ZH } from './i18n-layout'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
@@ -9126,6 +9127,7 @@ const TABLES: Record<Lang, Table> = {
     // WP439：消息页右栏「规则」
     ...MESSAGE_RULES_ZH,
     ...FOLLOW_UP_ZH,
+    ...KNOWLEDGE_LEARN_ZH,
     ...INBOX_ZH,
     // WP469：日历与待办（待办 + 日历合成一页）
     ...CAL_TODO_ZH,
@@ -9210,6 +9212,7 @@ const TABLES: Record<Lang, Table> = {
     ...PEERS_EN,
     ...MESSAGE_RULES_EN,
     ...FOLLOW_UP_EN,
+    ...KNOWLEDGE_LEARN_EN,
     ...INBOX_EN,
     ...CAL_TODO_EN,
     ...COMPANY_EN,

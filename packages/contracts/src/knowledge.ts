@@ -491,3 +491,169 @@ export const isAssistantNotesPayload = (p: unknown): p is AssistantNotesPayload 
   p !== null &&
   (p as { form?: unknown }).form === ASSISTANT_NOTES_FORM &&
   Array.isArray((p as { card_ids?: unknown }).card_ids)
+
+/* ── WP488（决策 1680–1682、1686）：从过往邮件 / 官网 / 售后网站学，公共 / 售前 / 售后三份。**只加不删** ── */
+
+/** 从过往邮件学：默认回看几个月（决策 1686；卡上能改）。 */
+export const DEFAULT_EMAIL_LOOKBACK_MONTHS = 12
+/** 回看月数的上下限。 */
+export const EMAIL_LOOKBACK_MONTHS_MAX = 36
+
+/** 三份的标签页顺序：公共（= `both`）/ 售前 / 售后。 */
+export const KNOWLEDGE_STAGES: readonly KnowledgeStage[] = ['both', 'presales', 'postsales']
+
+export const isKnowledgeStage = (v: unknown): v is KnowledgeStage =>
+  v === 'both' || v === 'presales' || v === 'postsales'
+
+/** 没标的就是公共（存量卡一条不用改）。 */
+export const stageOf = (card: { stage?: KnowledgeStage | undefined }): KnowledgeStage =>
+  card.stage ?? 'both'
+
+/**
+ * 售后的信号：已经买了（订单号 / 我的订单 / 收到了 / 坏了 / 退款进度 / 物流到哪）。
+ * 只认**强信号**——「退货政策是什么」这种买之前也会问的不算。
+ */
+const POSTSALES_RE =
+  /\b(?:my|the|this)\s+(?:order|package|parcel|shipment|delivery|refund|replacement)\b|\border\s*(?:#|no\.?|number|id)\s*[:：]?\s*[A-Z0-9-]{3,}|#\s?\d{4,}|\b(?:tracking|track(?:ing)?\s+number|where\s+is\s+my|hasn'?t\s+arrived|not\s+(?:yet\s+)?(?:arrived|received|delivered)|i\s+(?:received|got|bought|ordered|purchased)|arrived\s+(?:damaged|broken)|damaged|broken|defective|missing\s+item|wrong\s+item|return\s+label|refund\s+status|cancel\s+my\s+order|change\s+(?:my\s+)?(?:shipping\s+)?address)\b|我的订单|订单号|已(?:经)?(?:下单|付款|购买|买了|收到)|收到(?:了|的)|还没(?:收到|到)|物流(?:到哪|单号|信息)|快递(?:到哪|单号)|坏了|破损|少发|错发|漏发|退款进度|改地址|取消订单/i
+
+/** 售前的信号：还没买（价格 / 折扣 / 选型 / 兼容 / 有没有货 / 下单前）。 */
+const PRESALES_RE =
+  /\b(?:how\s+much|price|pricing|cost|discount|coupon|promo(?:tion)?\s*code|bulk|wholesale|in\s+stock|available|availability|which\s+(?:one|model|size|version)|difference\s+between|compare|compatible|compatibility|does\s+it\s+(?:fit|work|support|come)|before\s+(?:i\s+)?(?:buy|order|purchas)|planning\s+to\s+(?:buy|order)|thinking\s+(?:of|about)\s+(?:buying|ordering)|pre-?order|recommend)\b|多少钱|价格|报价|优惠|折扣|有货|现货|库存|哪(?:款|个型号)|区别|兼容|适合|推荐|下单前|买之前|想买|打算买|预售/i
+
+/**
+ * WP488（决策 1682）：这段话是售前还是售后（**规则判，不问模型**）。
+ *
+ * 已有订单号 / 已购 / 物流售后词 → 售后；询价 / 选型 / 发货前 → 售前；两边都像或都不像 → `undefined`
+ * （取用方按「判不出 → 两边都取」处理；学的时候判不出给 `both`）。
+ */
+export function stageOfText(text: string): Exclude<KnowledgeStage, 'both'> | undefined {
+  const post = POSTSALES_RE.test(text)
+  const pre = PRESALES_RE.test(text)
+  if (post && !pre) return 'postsales'
+  if (pre && !post) return 'presales'
+  return undefined
+}
+
+/** 学的时候用：模型给的范围认得就用，认不得按规则判，规则也判不出给 `both`。 */
+export function resolveStage(given: unknown, text: string): KnowledgeStage {
+  if (isKnowledgeStage(given)) return given
+  return stageOfText(text) ?? 'both'
+}
+
+/** 学的是哪一种来源。 */
+export type KnowledgeLearnSource = 'email' | 'website'
+
+/** 汇总卡（`knowledge_update` + `form: 'knowledge_learned'`）。 */
+export const KNOWLEDGE_LEARNED_FORM = 'knowledge_learned'
+
+/** 汇总卡上的一条（卡早已以 `proposed` 写进知识库，批了才生效）。 */
+export interface KnowledgeLearnedItem {
+  card_id: string
+  question: string
+  answer: string
+  stage: KnowledgeStage
+  /** 依据：几封往来 / 哪一页（给人看的一句）。 */
+  basis: string
+  /** 政策敏感 / 带承诺 / 没脱敏——要多看一眼。 */
+  hold?: boolean
+}
+
+export interface KnowledgeLearnedPayload {
+  form: typeof KNOWLEDGE_LEARNED_FORM
+  job_id: string
+  source: KnowledgeLearnSource
+  card_ids: string[]
+  items: KnowledgeLearnedItem[]
+  /**
+   * 人在卡上改过的范围（`approve` + `edited_payload`：卡 id → 范围）；
+   * 和不要的那几条（卡 id）。服务端只认这两处改动。
+   */
+  stages?: Record<string, KnowledgeStage>
+  drop?: string[]
+  before: null
+  after: string
+}
+
+export const isKnowledgeLearnedPayload = (p: unknown): p is KnowledgeLearnedPayload =>
+  typeof p === 'object' &&
+  p !== null &&
+  (p as { form?: unknown }).form === KNOWLEDGE_LEARNED_FORM &&
+  Array.isArray((p as { items?: unknown }).items)
+
+/** 「这几条可能过期」卡（`knowledge_update` + `form: 'knowledge_stale'`）。 */
+export const KNOWLEDGE_STALE_FORM = 'knowledge_stale'
+
+export interface KnowledgeStalePayload {
+  form: typeof KNOWLEDGE_STALE_FORM
+  recheck_ids: string[]
+  /**
+   * 人在卡上选的（`approve` + `edited_payload.resolution`）：`unchanged` = 确认没变；
+   * `relearn` = 按网站上的新内容重学这几页（旧的几条撤下，新学到的再出一张汇总卡）。不要 = 忽略。
+   */
+  resolution?: 'unchanged' | 'relearn'
+  /** 复查是哪条职责跑的（重学时用它问模型）。 */
+  assignment_id?: string
+  items: { recheck_id: string; card_id: string; statement: string; url: string; change: string }[]
+  before: null
+  after: string
+}
+
+export const isKnowledgeStalePayload = (p: unknown): p is KnowledgeStalePayload =>
+  typeof p === 'object' &&
+  p !== null &&
+  (p as { form?: unknown }).form === KNOWLEDGE_STALE_FORM &&
+  Array.isArray((p as { recheck_ids?: unknown }).recheck_ids)
+
+/** 开跑前的预估（花费跟簇数 / 页数走；模型网关的上限照算）。 */
+export interface KnowledgeLearnEstimate {
+  source: KnowledgeLearnSource
+  /** 邮件：回看几个月。 */
+  months?: number
+  /** 网站：要读的入口。 */
+  urls?: string[]
+  /** 邮件：拼出来几对「客户问 → 我们答」。 */
+  pairs?: number
+  /** 邮件：成了几簇（= 问几次模型）。网站：最多读几页（= 最多问几次模型）。 */
+  calls: number
+  /** 预估花费（模型网关的计价单位；本机免费模型 / 没价就不给）。 */
+  cost?: number
+  /** 网关这个月的用量与上限（有上限才给）。 */
+  budget?: { used: number; cap: number }
+  /** 装不装得下（没上限 = 装得下）。 */
+  fits: boolean
+  /** 邮件：接没接邮箱。 */
+  connected?: boolean
+  /** 模型能不能用（没接模型就学不了）。 */
+  model: boolean
+}
+
+export type KnowledgeLearnState =
+  | 'running'
+  | 'done'
+  | 'failed'
+  | 'needs_connection'
+  | 'over_budget'
+  | 'no_model'
+
+/** 一次「学一遍」（服务进程内存里；结果在知识库与汇总卡上）。 */
+export interface KnowledgeLearnJob {
+  id: string
+  workspace_id: WorkspaceId
+  source: KnowledgeLearnSource
+  state: KnowledgeLearnState
+  months?: number
+  urls?: string[]
+  /** 走到哪一步了（第几簇 / 第几页，共几个）。 */
+  progress: { done: number; total: number }
+  /** 学到几条（都是待确认）。 */
+  learned: number
+  estimate?: KnowledgeLearnEstimate
+  matter_id?: string
+  approval_id?: string
+  /** 连接卡（没接邮箱时）。 */
+  connect_card_id?: string
+  /** 给人看的一句（失败原因 / 为什么只学到这几条）。 */
+  note?: string
+  started_at: Iso8601
+  finished_at?: Iso8601
+}

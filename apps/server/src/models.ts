@@ -577,6 +577,11 @@ export interface ModelsAssembly {
    */
   purposeRef(purpose: ModelPurpose): ModelRef
   /**
+   * WP488：一条模型来源的单价（每 100 万 token；价目里没有回 `undefined`）。开跑前预估花费用
+   * （「从过往邮件学」按簇数、网站按页数算一个数给人看）。
+   */
+  priceOf?(ref: ModelRef): { in: number; out: number; cached: number } | undefined
+  /**
    * WP150：把「用我的 DeepSeek 账号登录」那一条模型来源摘掉（手动登出与登录失效**同一条路**：
    * 同 `port.remove`——配置、默认、按 purpose 的选择、三步验证结果一起清，网关重装），
    * 并在这个品牌的事件日志里记一条 `model.account_signed_out`（界面据此刷新「还没接模型」与那张卡）。
@@ -3730,6 +3735,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       reassemble()
     },
     purposeRef: (purpose) => policyOf().by_purpose?.[purpose] ?? defaultRef(),
+    priceOf: (ref) => policyOf().prices[`${ref.provider}/${ref.model}`],
     deepseekSearchKey() {
       for (const c of deepseekOfficialConfigs()) {
         const key = keySource(c.id)()

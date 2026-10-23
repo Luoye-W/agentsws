@@ -71,6 +71,7 @@ import { guessIndustry } from '@agentsws/b2b-core'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import {
+  BRAND_INTAKE_USER_AGENT,
   type PageFetch as BrandIntakeFetch,
   fetchPage,
   fetchRobots,
@@ -106,6 +107,7 @@ import type {
   ImageProvider,
   KolChannel,
   MatterId,
+  MessageRecord,
   OrganizationMode,
   Person,
   PersonaSubject,
@@ -257,7 +259,9 @@ import {
   chatAnswerStubScript,
   detectAnsweredBoundaries,
   emailAnswerStubScript,
+  type HistoryMail,
   SUPPORT_BOUNDARIES,
+  htmlToText as siteHtmlToText,
 } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -565,7 +569,23 @@ import { createImageService, type ImageService } from './image-tools.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { knowledgeSourceFile } from './knowledge-file.js'
+import {
+  createKnowledgeLearner,
+  isLearnedCard,
+  isStaleCard,
+  type KnowledgeLearnDeps,
+  type KnowledgeLearner,
+  retrievalStage,
+} from './knowledge-learn.js'
+import { createKnowledgeLearnToolExecutor } from './knowledge-learn-tools.js'
 import { importKnowledgePack } from './knowledge-pack.js'
+// WP488：客服知识库从过往邮件 / 官网 / 售后网站学一遍
+import {
+  cheapestRef,
+  createStageJudge,
+  type StageJudge,
+  type StageJudgeDeps,
+} from './knowledge-stage.js'
 import { checkUpload, UploadRejected, uploadBlobKey, uploadSubjectRef } from './knowledge-upload.js'
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createByoSourceStore } from './kol-byo.js'
@@ -1674,6 +1694,17 @@ export interface ServerOptions {
    */
   brandIntakeFetch?: BrandIntakeFetch
   /**
+   * WP488：「从网站学」读页那一口（测试注入本地假站点）。不给 = 与品牌分析同一口
+   * （`brandIntakeFetch`，再不给就是 `globalThis.fetch`）。
+   */
+  knowledgeSiteFetch?: BrandIntakeFetch
+  /** WP488：「从过往邮件学」读邮箱那一口（测试注入一批模拟往来）。不给 = 这个品牌的消息库 + 按日期回看。 */
+  knowledgeLearnMail?: KnowledgeLearnDeps['mail']
+  /** WP488：「学一遍」问模型那一口（测试注入假模型）。不给 = 这个品牌的网关、`extraction` 档。 */
+  knowledgeLearnModel?: KnowledgeLearnDeps['model']
+  /** WP488：判售前 / 售后那一口（测试注入假模型）。不给 = 这个品牌最便宜的那一档模型。 */
+  knowledgeStageModel?: StageJudgeDeps['model']
+  /**
    * WP346：品牌分析 AI 归纳那一步的模型**替身**（测试与离线 demo 用）。生产不传——走这个品牌
    * 自己的默认模型（没接模型就跳过 AI 那几格）。
    */
@@ -1880,6 +1911,8 @@ export interface Server {
   organizations: OrganizationsAssembly
   /** WP322：FAQ 表导入（上传表格后台认列、出定规矩卡、卡批了一行一张知识卡）。 */
   faqImport: FaqImporter
+  /** WP488：客服知识库「学一遍」（过往邮件 / 官网 / 售后网站；学到的待确认 + 一张汇总卡）。 */
+  knowledgeLearn: KnowledgeLearner
   /**
    * WP66（52 O1）：这个进程里的**多套品牌模块**。
    *
@@ -3332,6 +3365,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const seoDecidedHook: SeoDecidedHook = {}
   /** WP322：FAQ 导入器（知识口装好时才建；决定发生时现取）。 */
   let faqImporter: FaqImporter | undefined
+  /** WP488：客服知识库「学一遍」（过往邮件 / 官网 / 售后网站）；知识口装好时才建。 */
+  let knowledgeLearner: KnowledgeLearner | undefined
+  /** WP488（决策 1704 = C）：售前 / 售后由 AI 判（同一线程只问一次）；模型口装好时才建，之前退回规则。 */
+  let stageJudge: StageJudge | undefined
+  const stageFor = async (
+    ws: WorkspaceId,
+    text: string,
+    key?: string,
+  ): Promise<{ stage?: 'presales' | 'postsales' }> =>
+    stageJudge === undefined ? retrievalStage(text) : stageJudge.retrieval(ws, text, key)
+  /** WP488：复查一小时最多看一次（到期的页一周才一次，这一层只是别每一刻钟都列一遍源）。 */
+  const knowledgeRecheckAt = new Map<string, number>()
+  const knowledgeRecheckIfDue = async (ws: WorkspaceId): Promise<number | undefined> => {
+    const now = Date.parse(clock.now())
+    const last = knowledgeRecheckAt.get(ws)
+    if (knowledgeLearner === undefined || (last !== undefined && now - last < 3_600_000))
+      return undefined
+    knowledgeRecheckAt.set(ws, now)
+    const position = positionFor(ws, SUPPORT_DUTIES)
+    return knowledgeLearner.recheckSites(ws, {
+      ...(position === undefined
+        ? {}
+        : { actor: { ...position, workspace_id: ws, role_id: position.role_id } }),
+    })
+  }
 
   /*
    * WP219（docs/90 §6）：已审的第三方内容更新。只在**开着**（桌面安装包给 `AGENTSWS_CONTENT_UPDATES=on`，
@@ -6823,6 +6881,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         clock,
         workspace_id: ws,
         knowledge: knowledge.retrieval,
+        // WP488（决策 1704 = C）：查政策前先让 AI 判这件事是售前还是售后（同一件事只问一次）
+        judgeStage: (text, key) => stageFor(ws, text, key),
         roles,
         // 运行时装在工作模型之前（两者互相需要），所以这里收的是取值函数
         work: () => workRef,
@@ -7259,6 +7319,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             // WP385（决策 1076）：网站运营 / 内容与搜索读体检结论（只读；正在体检就等它跑完）
             siteHealthTools: createSiteHealthToolExecutor({ service: () => siteHealth }),
+            // WP488：客服岗位「学一遍」（过往邮件 / 官网 / 售后网站；只写待确认 + 一张卡）
+            knowledgeLearnTools: createKnowledgeLearnToolExecutor({
+              learner: () => knowledgeLearner,
+              mailConnected: async (w) => {
+                const b = await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined)
+                return (b?.messages.sync.accounts().length ?? 0) > 0
+              },
+            }),
             // WP419（自查 R10 / S3）：Reddit 起草出卡、社媒发帖排期出卡（只出卡；发不发永远人点）
             socialWorkTools: createSocialToolExecutor({
               redditWatch: () => redditWatchLate.current,
@@ -8854,13 +8922,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       models: gatewayProxy,
       // 同一套知识与订单只读：记录源就是运行时那一个
       source: records,
-      searchKnowledge: async (text, limit) => {
+      searchKnowledge: async (text: string, limit: number, ctx?: { thread?: string }) => {
         const position = positionFor(ws, LIVE_CHAT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const { hits } = await knowledge.retrieval.search({
           text,
           k: limit,
+          // WP488（决策 1682 / 1704）：先问 AI 售前还是售后（同一线程只问一次）；判不出两边都取
+          ...(await stageFor(ws, text, ctx?.thread)),
           actor: {
             person_id: position.person_id,
             workspace_id: ws,
@@ -9185,13 +9255,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       models: gatewayProxy,
       rawStore: channels.raw,
       sendMail: (input) => channels.sendMail(input),
-      searchKnowledge: async (text, limit) => {
+      searchKnowledge: async (text: string, limit: number, ctx?: { thread?: string }) => {
         const position = firstPositionOf(ws)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const { hits } = await knowledge.retrieval.search({
           text,
           k: limit,
+          // WP488（决策 1682 / 1704）：先问 AI 售前还是售后（同一线程只问一次）；判不出两边都取
+          ...(await stageFor(ws, text, ctx?.thread)),
           actor: {
             person_id: position.person_id,
             workspace_id: ws,
@@ -9609,13 +9681,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       applyNow: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
       models: gatewayProxy,
       position: () => positionFor(ws, SUPPORT_DUTIES),
-      searchKnowledge: async (text, limit) => {
+      searchKnowledge: async (text: string, limit: number, ctx?: { thread?: string }) => {
         const position = positionFor(ws, SUPPORT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
         const { hits } = await knowledge.retrieval.search({
           text,
           k: limit,
+          // WP488（决策 1682 / 1704）：先问 AI 售前还是售后（同一线程只问一次）；判不出两边都取
+          ...(await stageFor(ws, text, ctx?.thread)),
           actor: {
             person_id: position.person_id,
             workspace_id: ws,
@@ -11122,6 +11196,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await faqImporter?.onDecided(item)
       return
     }
+    // WP488：「学到 N 条」汇总卡 / 「这几条可能过期」卡被点了 → 这一批生效 / 作废，或确认没变 / 重学
+    if (isLearnedCard(item) || isStaleCard(item)) {
+      await knowledgeLearner?.onDecided(item)
+      return
+    }
     // WP323：记录去处的「定规矩」卡被决定 → 生效 / 换成新对照 / 不留（第一次就说不用）
     if (isRecordSinkCard(item)) return outboundLog.onDecided(item)
     // WP441：「要建这条规则吗」卡被决定 → 建了才生效（勾了「也处理过去 30 天的」顺手处理）
@@ -11992,7 +12071,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const b = await of()
       const sla = await b.supportJudgment.sweepSla()
       const followUp = await b.followUp?.sweepIfDue().catch(() => undefined)
-      return followUp === undefined ? sla : { ...sla, follow_up: followUp }
+      // WP488：学过的网页每周复查一次（挂在同一拍上，不另起定时；没到期的一页都不读）
+      const rechecked = await knowledgeRecheckIfDue(ws).catch(() => undefined)
+      const out = followUp === undefined ? sla : { ...sla, follow_up: followUp }
+      return rechecked === undefined || rechecked === 0
+        ? out
+        : { ...out, knowledge_rechecks: rechecked }
     })
   }
 
@@ -12941,11 +13025,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       // WP240：首批知识进**确认的那个品牌**的知识库（以前一律进启动品牌）
       seedKnowledge: async (profile, actor) => {
-        for (const card of brandKnowledgeCards(profile, {
+        const seeds = brandKnowledgeCards(profile, {
           workspace_id: actor.workspace_id as WorkspaceId,
           at: clock.now(),
           owner: actor.person_id as PersonId,
-        })) {
+        })
+        // WP488（决策 1700 = B）：整批一次问 AI 归公共 / 售前 / 售后；问不成用默认（政策公共、商品售前）
+        const stages = await stageJudge
+          ?.batch(
+            actor.workspace_id as WorkspaceId,
+            seeds.map((c) => c.statement),
+          )
+          .catch(() => undefined)
+        for (const [i, seed] of seeds.entries()) {
+          const stage = stages?.[i]
+          const card = stage === undefined ? seed : { ...seed, stage }
           try {
             await knowledge.store.propose(card)
           } catch (err) {
@@ -13283,6 +13377,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       )?.bytes,
     approvalFlow: async (ws) => hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'),
     approverOf: async (ws) => (await identity.getWorkspace(ws))?.owner_id,
+    // WP488（决策 1700 = B）：整表一次问 AI 归公共 / 售前 / 售后（判官晚绑定；问不成按规则）
+    stages: async (actor, items) => stageJudge?.batch(actor.workspace_id, items),
     mapper: async (actor, prompt) => {
       const ws = actor.workspace_id
       const own = ws === workspace.id
@@ -13309,6 +13405,272 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   const faqImport = faqImporter
 
+  /*
+   * WP488（决策 1680 / 1681 / 1682 / 1686）：客服知识库从过往邮件 / 官网 / 售后网站学一遍。
+   * 读邮件 = 这个品牌的消息库 + 按日期回看（不落库、不分拣）；读页 = 品牌分析那一口抓取（只 GET、工坊 UA、遵 robots），
+   * 正文太薄（前端渲染的帮助中心）再交内置浏览器渲染一次；问模型 = 这个品牌的网关、`extraction` 档、不思考。
+   */
+  const learnModelsOf = async (ws: WorkspaceId) =>
+    ws === workspace.id ? boot.ownModels : await brandModules.models(ws)
+  const learnGatewayOf = async (ws: WorkspaceId) =>
+    ws === workspace.id ? boot.ownGateway : await brandModules.gateway(ws)
+  knowledgeLearner = createKnowledgeLearner({
+    clock,
+    knowledge,
+    approvals,
+    newId: (prefix) => `${prefix}_${randomBytes(6).toString('hex')}`,
+    log: (line) => process.stdout.write(`${line}\n`),
+    mail: async (ws) => {
+      if (options.knowledgeLearnMail !== undefined) return options.knowledgeLearnMail(ws)
+      const brand = await brandModules.forWorkspace(ws).catch(() => undefined)
+      if (brand === undefined) return undefined
+      const toMail = (m: MessageRecord): HistoryMail => ({
+        id: m.id,
+        thread_id: m.thread_id,
+        ...(m.message_id === undefined ? {} : { message_id: m.message_id }),
+        from: { email: m.from.email },
+        subject: m.subject,
+        text: m.text,
+        date: m.date,
+        headers: m.headers,
+        ...(m.triage?.kind === undefined ? {} : { kind: m.triage.kind }),
+      })
+      return {
+        accounts: () => brand.messages.sync.accounts(),
+        stored: async () => (await brand.messages.store.list({ limit: 20_000 })).map(toMail),
+        history: async (account, since) => {
+          const got = await brand.messages.sync.history(account, since)
+          return { records: got.records.map(toMail), supported: got.supported }
+        },
+        machineSent: async () =>
+          new Set((await brand.channels.outbox.store.list(ws)).map((r) => r.message_id)),
+      }
+    },
+    model: async (actor) => {
+      if (options.knowledgeLearnModel !== undefined) return options.knowledgeLearnModel(actor)
+      const models = await learnModelsOf(actor.workspace_id)
+      const ref = models.configured() ? models.purposeRef('extraction') : undefined
+      // 没接真模型（只有 stub）就不学：stub 回的是确定性假话，不能当口径
+      if (ref === undefined || ref.provider === 'stub') return undefined
+      const gateway = await learnGatewayOf(actor.workspace_id)
+      const price = models.priceOf?.(ref)
+      return {
+        complete: async (prompt, run_id) =>
+          (
+            await gateway.complete({
+              messages: [{ role: 'user', content: prompt }],
+              meta: {
+                workspace_id: actor.workspace_id,
+                assignment_id: actor.assignment_id as never,
+                role_id: actor.role_id as never,
+                run_id: run_id as never,
+                purpose: 'extraction',
+              },
+              model: ref,
+              max_output_tokens: 1200,
+              thinking: 'off',
+            })
+          ).text,
+        estimate: (calls, inputChars, outputTokens) =>
+          price === undefined || (price.in === 0 && price.out === 0)
+            ? undefined
+            : (calls * (Math.ceil(inputChars / 4) * price.in + outputTokens * price.out)) /
+              1_000_000,
+        budget: async () => {
+          const b = await (
+            gateway as Partial<{
+              budget(scope: { workspace_id: WorkspaceId }): Promise<{
+                used_base: number
+                cap_base: number
+                frozen: boolean
+              }>
+            }>
+          ).budget?.({ workspace_id: actor.workspace_id })
+          return b === undefined || (b.cap_base <= 0 && !b.frozen)
+            ? undefined
+            : { used: b.used_base, cap: b.cap_base, frozen: b.frozen }
+        },
+      }
+    },
+    reader: async (ws) => {
+      const doFetch = (options.knowledgeSiteFetch ??
+        options.brandIntakeFetch ??
+        globalThis.fetch) as BrandIntakeFetch
+      const browser = (await brandModules.forWorkspace(ws).catch(() => undefined))?.webBrowser
+      const robots = new Map<string, string[]>()
+      const allowed = async (url: string): Promise<boolean> => {
+        const u = new URL(url)
+        let rules = robots.get(u.origin)
+        if (rules === undefined) {
+          rules = await fetchRobots(doFetch, u.origin).catch(() => [] as string[])
+          robots.set(u.origin, rules)
+        }
+        return !isDisallowed(u.pathname, rules)
+      }
+      return {
+        page: async (url) => {
+          if (!(await allowed(url).catch(() => false))) return undefined
+          const got = await fetchPage(doFetch, url)
+          const html = got.ok ? got.html : undefined
+          let text = html === undefined ? '' : siteHtmlToText(html)
+          // 前端渲染的帮助中心：静态正文太薄 → 内置浏览器渲染一次（有桌面壳才有；按小时限额）
+          if (text.length < 200 && browser?.available() === true) {
+            const rendered = await browser.fetch(url).catch(() => undefined)
+            if (rendered !== undefined && rendered.body.content.length > text.length)
+              text = rendered.body.content
+          }
+          if (html === undefined && text === '') return undefined
+          return { url, ...(html === undefined ? {} : { html }), text }
+        },
+        sitemap: async (url) => {
+          if (!(await allowed(url).catch(() => false))) return undefined
+          const res = await doFetch(url, {
+            method: 'GET',
+            headers: { 'user-agent': BRAND_INTAKE_USER_AGENT, accept: 'application/xml,text/xml' },
+            signal: AbortSignal.timeout(10_000),
+          }).catch(() => undefined)
+          if (res === undefined || !res.ok) return undefined
+          const body = await res.text().catch(() => '')
+          return body.length > 2_000_000 ? body.slice(0, 2_000_000) : body
+        },
+      }
+    },
+    brandSite: (ws) => onboardingRef?.brandProfile(ws)?.website,
+    work: async (ws) => {
+      const brand = await brandModules.forWorkspace(ws).catch(() => undefined)
+      if (brand === undefined) return undefined
+      return {
+        open: (actor, title) => {
+          try {
+            return brand.work.createMatter({
+              kind: 'project',
+              title,
+              entry: 'position',
+              role_id: actor.role_id as RoleId,
+              position_id: actor.assignment_id as never,
+              participants: [actor.person_id],
+            }).id
+          } catch {
+            return undefined
+          }
+        },
+        note: (matter_id, text) => {
+          try {
+            brand.work.appendEvent(matter_id as never, {
+              kind: 'status',
+              text,
+              actor: { kind: 'agent', id: 'knowledge-learn' },
+            })
+          } catch {
+            // 事项没了：进度照样在知识库页上
+          }
+        },
+        attach: (_matter_id, item) => {
+          try {
+            brand.work.onCard(cardRefOf(item))
+          } catch {
+            // 挂不上事项不影响卡本身
+          }
+        },
+      }
+    },
+    askConnect: async (actor, matter_id, why) => {
+      const out = await (await setupCardsOf(actor.workspace_id))?.askConnect({
+        needs: [{ kind: 'email', service: 'imap_smtp', name: '客服邮箱', required: true }],
+        why,
+        actor: {
+          person_id: actor.person_id,
+          assignment_id: actor.assignment_id as never,
+          role_id: actor.role_id as never,
+        },
+        ...(matter_id === undefined ? {} : { matter_id }),
+        resume: false,
+      })
+      if (out === undefined) return undefined
+      if (matter_id !== undefined && out.item.subject.matter_id === matter_id)
+        try {
+          ;(await brandModules.forWorkspace(actor.workspace_id)).work.onCard(cardRefOf(out.item))
+        } catch {
+          // 挂不上事项不影响卡本身
+        }
+      return out.item.id
+    },
+  })
+
+  /*
+   * WP488（决策 1700 = B、1704 = C）：售前 / 售后由 AI 判——这个品牌最便宜的那一档模型、短提示、不思考；
+   * 撞网关上限 / 出错退回规则。FAQ 整表 / 品牌种子整批也走它（一次调用判完）。
+   */
+  stageJudge = createStageJudge({
+    clock,
+    log: (line) => process.stdout.write(`${line}\n`),
+    model: async (ws) => {
+      if (options.knowledgeStageModel !== undefined) return options.knowledgeStageModel(ws)
+      const models = await learnModelsOf(ws)
+      if (!models.configured()) return undefined
+      const gateway = await learnGatewayOf(ws)
+      const ref = cheapestRef(
+        gateway.providers(),
+        (r) => models.priceOf?.(r),
+        models.purposeRef('extraction'),
+      )
+      if (ref === undefined) return undefined
+      const price = models.priceOf?.(ref)
+      return {
+        complete: async (prompt, o) =>
+          (
+            await gateway.complete({
+              messages: [{ role: 'user', content: prompt }],
+              meta: {
+                workspace_id: ws,
+                assignment_id: 'system' as never,
+                role_id: 'system' as never,
+                run_id: o.run_id as never,
+                purpose: 'extraction',
+              },
+              model: ref,
+              max_output_tokens: o.max_output_tokens,
+              thinking: 'off',
+            })
+          ).text,
+        estimate: (calls, inputChars, outputTokens) =>
+          price === undefined || (price.in === 0 && price.out === 0)
+            ? undefined
+            : (calls * (Math.ceil(inputChars / 4) * price.in + outputTokens * price.out)) /
+              1_000_000,
+        budget: async () => {
+          const b = await (
+            gateway as Partial<{
+              budget(scope: { workspace_id: WorkspaceId }): Promise<{
+                used_base: number
+                cap_base: number
+                frozen: boolean
+              }>
+            }>
+          ).budget?.({ workspace_id: ws })
+          return b === undefined || (b.cap_base <= 0 && !b.frozen)
+            ? undefined
+            : { used: b.used_base, cap: b.cap_base, frozen: b.frozen }
+        },
+      }
+    },
+  })
+
+  const needLearner = (): KnowledgeLearner => {
+    if (knowledgeLearner === undefined) throw new Error('这个服务进程没装「学一遍」')
+    return knowledgeLearner
+  }
+  const learnActorOf = (actor: {
+    person_id: string
+    workspace_id: string
+    assignment_id: string
+    role_id: string
+  }) => ({
+    person_id: actor.person_id as PersonId,
+    workspace_id: actor.workspace_id as WorkspaceId,
+    assignment_id: actor.assignment_id,
+    role_id: actor.role_id,
+  })
   const knowledgePort: KnowledgePort = {
     search: (q) => knowledge.retrieval.search(q),
     cards: (filter, actor) => knowledge.store.list(filter, actor),
@@ -13460,6 +13822,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         by: actor.person_id,
         ...(card.state === 'blocked' ? {} : { approval_item_id: card.id }),
       })
+    },
+    // WP488（决策 1680 / 1681 / 1686）：学一遍（预估 / 开跑 / 进度）
+    learnEstimate: (actor, input) =>
+      needLearner().estimate(learnActorOf(actor), {
+        source: input.source,
+        ...(input.months === undefined ? {} : { months: input.months }),
+        ...(input.urls === undefined ? {} : { urls: input.urls }),
+      }),
+    learnStart: (actor, input) =>
+      needLearner().start(learnActorOf(actor), {
+        source: input.source,
+        ...(input.months === undefined ? {} : { months: input.months }),
+        ...(input.urls === undefined ? {} : { urls: input.urls }),
+      }),
+    learnJobs: (actor) => needLearner().jobs(actor.workspace_id).slice(0, 10),
+    // WP488（决策 1682）：改范围——看得见这条才改得了（看不见当不存在）
+    setCardStage: async (actor, id, stage) => {
+      const card = await knowledge.store.get(id, actor)
+      if (card === undefined || card.status === 'retired') return undefined
+      return knowledge.store.patch(id, { stage })
     },
     // WP56（48 §4 #6）：源页复核队列
     rechecks: (actor, filter) =>
@@ -14798,6 +15180,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const { hits } = await knowledge.retrieval.search({
           text,
           k: 8,
+          // WP488（决策 1682 / 1704）：岗位问答同样先让 AI 判售前 / 售后
+          ...(await stageFor(actor.workspace_id as WorkspaceId, text)),
           actor: {
             person_id: actor.person_id,
             workspace_id: actor.workspace_id,
@@ -17273,6 +17657,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     outbound: outboundLog,
     approvals,
     faqImport,
+    knowledgeLearn: needLearner(),
     work,
     meetings,
     /*
@@ -17452,6 +17837,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await background.settled()
       // WP322：后台还在认的表先认完（别在关库之后再写卡）
       await faqImport.settled()
+      // WP488：还在学的先学完（别在关库之后再写卡）
+      await knowledgeLearner?.settled()
       if (unmountWs) {
         // 先把 WS 收掉：否则还开着的连接会让 http.Server 的 close 一直挂着
         await unmountWs()
@@ -17584,6 +17971,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isFaqBatchCard(out) ||
           // WP350：助理扇出的「要记的 N 条」确认卡
           isAssistantNotesCard(out) ||
+          // WP488：「学到 N 条」汇总卡 / 「这几条可能过期」卡
+          isLearnedCard(out) ||
+          isStaleCard(out) ||
           // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
           isRecordSinkCard(out) ||
           // WP441：「要建这条规则吗」卡（建 = 生效）

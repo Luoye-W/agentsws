@@ -257,6 +257,8 @@ export interface KnowledgePort {
     layers?: KnowledgeLayer[]
     k?: number
     precheck?: boolean
+    /** WP488：这次问的是售前还是售后（不给 = 两边都取）。 */
+    stage?: 'both' | 'presales' | 'postsales'
   }): Promise<{ hits: RetrievalHit[]; relevant: boolean; matched: string[]; missing: string[] }>
   cards(
     filter: {
@@ -318,6 +320,35 @@ export interface KnowledgePort {
   /* ── WP56（48 §4 #6 / #9）：复核队列与知识包。都是**可选**面 ────────────── */
   /** 源页 / 文档改了之后开出来的复核（`status` 缺省只给还开着的）。 */
   rechecks?(actor: GatewayActor, filter: { status?: string }): MaybePromise<unknown[]>
+  /**
+   * WP488（决策 1680 / 1681 / 1686）：从过往邮件 / 官网 / 售后网站学一遍——开跑前的预估
+   * （几次模型调用、预估花费、网关上限装不装得下、接没接邮箱）。
+   */
+  learnEstimate?(
+    actor: GatewayActor,
+    input: {
+      source: 'email' | 'website'
+      months?: number | undefined
+      urls?: string[] | undefined
+    },
+  ): MaybePromise<unknown>
+  /** WP488：开一次（后台跑；回这一次的进度对象）。学到的一律待确认，出一张汇总卡。 */
+  learnStart?(
+    actor: GatewayActor,
+    input: {
+      source: 'email' | 'website'
+      months?: number | undefined
+      urls?: string[] | undefined
+    },
+  ): MaybePromise<unknown>
+  /** WP488：这个品牌最近几次（新的在前）。 */
+  learnJobs?(actor: GatewayActor): MaybePromise<unknown[]>
+  /** WP488（决策 1682）：改一条知识的范围（公共 / 售前 / 售后）。看不见的卡当不存在。 */
+  setCardStage?(
+    actor: GatewayActor,
+    id: string,
+    stage: 'both' | 'presales' | 'postsales',
+  ): MaybePromise<unknown | undefined>
   /** 答一张复核卡：确认没变 / 按新值更新 / 忽略。 */
   resolveRecheck?(
     actor: GatewayActor,
