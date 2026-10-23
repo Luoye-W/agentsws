@@ -16,6 +16,12 @@ export interface SerpItem {
   url: string
   title: string
   snippet?: string
+  /**
+   * WP484：`url` 还是 Google 自己的跳转地址（`/goto?url=<不透明的一串>`）——10-23 实测，没 cookie / 没登录的
+   * 浏览器拿到的结果页里，结果链接不再带目标网址，只有这一种。只在调用方传了 `redirects: true` 时出现；
+   * 调用方要自己把它换成目标网址（壳里按跳转的 Location 换），换不出来就不要。
+   */
+  redirect?: true
 }
 
 export interface PageSignals {
@@ -43,7 +49,12 @@ export interface SerpExtract {
 }
 
 export function extractSerp(
-  args: { engine: 'google' | 'bing'; limit: number },
+  args: {
+    engine: 'google' | 'bing'
+    limit: number
+    /** WP484：Google 结果链接只有不透明跳转地址时，也收下（带 `redirect: true`），由调用方去换目标网址。 */
+    redirects?: boolean
+  },
   doc: Document = document,
   here: string = location.href,
 ): SerpExtract {
@@ -106,10 +117,31 @@ export function extractSerp(
   const items: SerpItem[] = []
   let candidates = 0
   const seen = new Set<string>()
-  const push = (url: string, title: string, snippet: string): void => {
-    if (url === '' || title === '' || seen.has(url) || own(url)) return
+  const push = (url: string, title: string, snippet: string, redirect = false): void => {
+    if (url === '' || title === '' || seen.has(url) || (!redirect && own(url))) return
     seen.add(url)
-    items.push({ url, title, ...(snippet === '' ? {} : { snippet }) })
+    items.push({
+      url,
+      title,
+      ...(snippet === '' ? {} : { snippet }),
+      ...(redirect ? { redirect: true as const } : {}),
+    })
+  }
+  /**
+   * WP484：Google 自己的跳转地址（`/goto?url=…`、`/url?…&url=…`），目标那一截不是网址（不透明的一串）——
+   * 回绝对地址；别的回空。
+   */
+  const opaqueRedirect = (href: string): string => {
+    const abs = absolute(href)
+    try {
+      const u = new URL(abs)
+      const host = u.hostname.replace(/^www\./, '')
+      if (!/^google\./.test(host) || (u.pathname !== '/goto' && u.pathname !== '/url')) return ''
+      const v = u.searchParams.get('url') ?? u.searchParams.get('q') ?? ''
+      return v !== '' && !/^https?:\/\//.test(v) ? u.href : ''
+    } catch {
+      return ''
+    }
   }
   if (args.engine === 'google') {
     // WP454：先在 #search 里找；一条都没有再看 #rso、整页（结果容器的位置随 Google 改版会变）
@@ -135,7 +167,9 @@ export function extractSerp(
           ['href', 'data-href', 'ping']
             .map((attr) => target(a.getAttribute(attr) ?? ''))
             .find((u) => u !== '' && !own(u)) ?? ''
-        push(url, clean(h3.textContent, 300), clean(snip, 500))
+        const hop =
+          url === '' && args.redirects === true ? opaqueRedirect(a.getAttribute('href') ?? '') : ''
+        push(hop === '' ? url : hop, clean(h3.textContent, 300), clean(snip, 500), hop !== '')
       }
     }
   } else {
