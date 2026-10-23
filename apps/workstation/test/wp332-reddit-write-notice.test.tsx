@@ -142,7 +142,9 @@ describe('WP332 没发出去提醒条', () => {
     fireEvent.click(await screen.findByTestId('reddit-write-refill'))
     const line = await screen.findByTestId('reddit-write-going')
     expect(line.getAttribute('data-route')).toBe('plugin')
-    expect(line.textContent).toBe('回复 alice（Reddit · r/ivraxr） · ego 这会儿用不了，这一次改交给插件')
+    expect(line.textContent).toBe(
+      '回复 alice（Reddit · r/ivraxr） · ego 这会儿用不了，这一次改交给插件',
+    )
     expect(line.textContent).toContain('ego 这会儿用不了')
   })
 
