@@ -6,7 +6,15 @@ import type { Lang } from './common.js'
 
 export const CONSENT: Record<
   Lang,
-  { title: string; text: string; allow: string; deny: string; policy: string; settings: string; label: string }
+  {
+    title: string
+    text: string
+    allow: string
+    deny: string
+    policy: string
+    settings: string
+    label: string
+  }
 > = {
   zh: {
     title: '允许我们统计访问吗？',
