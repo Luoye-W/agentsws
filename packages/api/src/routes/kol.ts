@@ -223,6 +223,98 @@ export interface KolImportView {
 }
 
 /**
+ * WP489（决策 1683 / 1684）：表格 / 在线表导入的**预览**——还什么都没写。人看完（可改列、改状态对照）
+ * 再点「导入」走 {@link KolImportCommitView}。
+ */
+export interface KolImportPreviewView {
+  ok: boolean
+  /** `ok: false` 时那一句人话（读不了 / 要登录 / 下载成 Excel 拖进来）。 */
+  message?: string
+  job_id?: string
+  /** 文件名或链接。 */
+  source?: string
+  /** 一句话：新增几个 / 合并几个 / 几条带合作 / 几列没认出。 */
+  summary?: string
+  columns?: { header: string; field: string | null; samples: string[] }[]
+  statuses?: { source: string; stage: CollaborationStage | null; count: number; by: string }[]
+  counts?: {
+    rows: number
+    create: number
+    merge: number
+    skip: number
+    collabs: number
+    historical: number
+    unknown_status: number
+  }
+  /** 前几行的预览。 */
+  rows?: {
+    source_row: number
+    name: string
+    action: 'create' | 'merge' | 'skip'
+    merge_into?: string
+    stage?: CollaborationStage
+    historical: boolean
+    skip?: string
+  }[]
+  /** 金额没写币种时按哪种记（可改）。 */
+  currency: string
+  /** 对话里拖进来的那一路出的那张预览卡。 */
+  approval_item_id?: string
+}
+
+/** WP489：导入做完了。 */
+export interface KolImportCommitView {
+  summary: string
+  created_creators: number
+  merged_creators: number
+  created_accounts: number
+  created_contacts: number
+  created_collaborations: number
+  updated_collaborations: number
+  historical: number
+  skipped: number
+  /** 历史合作挂的那个归档活动。 */
+  campaign_id: string
+  campaign_name: string
+}
+
+/** WP489（决策 1685 / 1686）：读过往邮件判阶段——开跑前的预估。 */
+export interface KolMailStageEstimateView {
+  months: number
+  /** 邮箱里对得上的红人数 / 信数。 */
+  creators: number
+  messages: number
+  input_tokens: number
+  output_tokens: number
+  /** 有价目才有。 */
+  cost?: number
+  currency?: string
+  /** 接了真模型没有（没接就只按规则判，不花钱）。 */
+  model: boolean
+  /** 模型网关这个月还剩多少（有上限才有）。 */
+  budget_left?: number
+  /** 本机邮件只存到这天之后——已让邮箱往前补拉。 */
+  backfill_from?: string
+  /** 连着邮箱没有。 */
+  mail_connected: boolean
+  summary: string
+  approval_item_id?: string
+}
+
+/** WP489：判完了。 */
+export interface KolMailStageRunView {
+  summary: string
+  judged: number
+  updated: number
+  same: number
+  conflicts: number
+  by_model: number
+  by_rule: number
+  /** 预算到顶 / 模型出错后改按规则判的人数。 */
+  fallback: number
+}
+
+/**
  * 找人的结果（`GET /v1/kol/search`）。
  *
  * **"拿不到"与"搜到 0 个"必须分得开**（36 §3）：`ok: false` 时 `message` 是一句
@@ -671,6 +763,37 @@ export interface KolPort {
     input: { filename?: string | undefined; content: string },
   ): MaybePromise<KolImportView>
 
+  /** WP489：表格 / 在线表导入——先预览（可选：老装配没有）。 */
+  previewImport?(
+    actor: KolActor,
+    input: {
+      filename?: string | undefined
+      content?: string | undefined
+      content_base64?: string | undefined
+      url?: string | undefined
+    },
+  ): MaybePromise<KolImportPreviewView>
+  /** WP489：按预览（及人改过的列 / 状态对照）导入。 */
+  commitImport?(
+    actor: KolActor,
+    input: {
+      job_id: string
+      columns?: (string | null)[] | undefined
+      statuses?: { source: string; stage: CollaborationStage | null }[] | undefined
+      currency?: string | undefined
+    },
+  ): MaybePromise<KolImportCommitView>
+  /** WP489：读过往邮件判阶段——预估（不花钱）。 */
+  estimateMailStages?(
+    actor: KolActor,
+    input: { months?: number | undefined },
+  ): MaybePromise<KolMailStageEstimateView>
+  /** WP489：读过往邮件判阶段——真跑。 */
+  runMailStages?(
+    actor: KolActor,
+    input: { months?: number | undefined },
+  ): MaybePromise<KolMailStageRunView>
+
   /** 起草一封开发信并提上去（L2 起；禁承诺当场 block）。 */
   outreach(
     actor: KolActor,
@@ -1001,6 +1124,34 @@ const ImportBody = z.object({
   /** 表的正文（CSV / TSV）。上传口子在工作台那一侧把文件读成文本再递过来。 */
   content: z.string().min(1).max(4_000_000),
 })
+
+const ImportPreviewBody = z
+  .object({
+    filename: z.string().max(200).optional(),
+    content: z.string().max(4_000_000).optional(),
+    /** xlsx / xls 原件（base64）。 */
+    content_base64: z.string().max(12_000_000).optional(),
+    /** 在线表格的链接（飞书 / Google 表格 / 其它）。 */
+    url: z.string().url().max(2000).optional(),
+  })
+  .refine((b) => b.content !== undefined || b.content_base64 !== undefined || b.url !== undefined, {
+    message: '要一个文件或一条链接',
+  })
+
+const ImportCommitBody = z.object({
+  job_id: z.string().min(1).max(100),
+  columns: z.array(z.string().max(40).nullable()).max(60).optional(),
+  statuses: z
+    .array(z.object({ source: z.string().max(200), stage: z.enum(STAGES).nullable() }))
+    .max(200)
+    .optional(),
+  currency: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .optional(),
+})
+
+const MailStageBody = z.object({ months: z.number().int().min(1).max(60).optional() })
 
 const channelQuery = (c: Parameters<typeof param>[0]): KolChannel | undefined => {
   const raw = c.req.query('channel')
@@ -1543,6 +1694,89 @@ export function kolRoutes(): Route[] {
           await portOf(deps).createTrackedLink(actorOf(c), await body(c, TrackedLinkBody)),
           201,
         ),
+    ),
+
+    /* ── WP489：表格 / 在线表导入（先预览再导）、读过往邮件判阶段 ─────────────── */
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/import/preview',
+        operationId: 'previewKolImport',
+        summary:
+          '导一张表之前先预览（xlsx / xls / csv / tsv，或一条在线表格链接）：认列、状态词对照、新增 / 合并 / 带合作各几条。什么都不写',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ACCOUNT,
+        body: ImportPreviewBody,
+        returns: 'KolImportPreviewView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).previewImport
+        if (fn === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有表格导入预览。')
+        return ok(c, await fn.call(portOf(deps), actorOf(c), await body(c, ImportPreviewBody)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/import/commit',
+        operationId: 'commitKolImport',
+        summary:
+          '按预览导入：已有红人只补空白不覆盖；带状态的行建合作，结束了的挂「历史合作（导入）」归档活动',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ACCOUNT,
+        body: ImportCommitBody,
+        returns: 'KolImportCommitView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).commitImport
+        if (fn === undefined) throw new ApiError('not_implemented', '这个服务进程没有表格导入。')
+        return ok(c, await fn.call(portOf(deps), actorOf(c), await body(c, ImportCommitBody)), 201)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/mail-stages/estimate',
+        operationId: 'estimateKolMailStages',
+        summary:
+          '读过往邮件判红人合作阶段之前先估：对得上几个人、几封信、大概花多少（只算与红人有关的往来）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_COLLAB,
+        body: MailStageBody,
+        returns: 'KolMailStageEstimateView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).estimateMailStages
+        if (fn === undefined) throw new ApiError('not_implemented', '这个服务进程没有邮件判阶段。')
+        return ok(c, await fn.call(portOf(deps), actorOf(c), await body(c, MailStageBody)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/mail-stages/run',
+        operationId: 'runKolMailStages',
+        summary:
+          '读过往邮件判红人合作阶段（每个判断附依据邮件）：与表格写的不一样就出一张卡让人选，一样或表格没写就直接更新并留痕',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        body: MailStageBody,
+        returns: 'KolMailStageRunView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).runMailStages
+        if (fn === undefined) throw new ApiError('not_implemented', '这个服务进程没有邮件判阶段。')
+        return ok(c, await fn.call(portOf(deps), actorOf(c), await body(c, MailStageBody)))
+      },
     ),
 
     route(

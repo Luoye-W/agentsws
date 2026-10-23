@@ -29,11 +29,14 @@ import type {
 } from '@agentsws/contracts'
 import { KOL_TOOL_NAMES, kolChannelOfRole } from '@agentsws/kol-core'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
+import type { KolImportAssembly } from './kol-import.js'
 
 export interface KolToolsOptions {
   workspace_id: WorkspaceId
   /** 懒取：红人装配比运行时晚建出来（同 server.ts 里 `work: () => workRef` 那一处）。 */
   port(): KolPort | undefined
+  /** WP489：表格导入 / 邮件判阶段（懒取；没装就没有）。 */
+  importer?(): KolImportAssembly | undefined
   /** 现在几点（登记交付物没给 `due_at` 时按「一周后」兜底）。 */
   now(): Iso8601
   /**
@@ -203,6 +206,26 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
     const channel = channelOf(input.channel, own)
 
     switch (bare) {
+      // WP489：在线表格链接 → 预览卡；用过往邮件更新阶段 → 预估卡（两样都是人点了才动库）
+      case 'import_creator_sheet': {
+        const url = str(input.url)
+        if (url === undefined) return missing('表格链接')
+        const importer = options.importer?.()
+        if (importer === undefined) return { status: 'error', reason: '这个进程没装表格导入。' }
+        const message = await importer.previewCard(actor, { filename: url, url })
+        return { status: 'ok', data: { kind: 'kol_import_preview', message } }
+      }
+      case 'update_stages_from_mail': {
+        const importer = options.importer?.()
+        if (importer === undefined) return { status: 'error', reason: '这个进程没装邮件判阶段。' }
+        const months = num(input.months)
+        const message = await importer.mailStageCard(actor, {
+          ...(months === undefined
+            ? {}
+            : { months: Math.max(1, Math.min(60, Math.round(months))) }),
+        })
+        return { status: 'ok', data: { kind: 'kol_mail_stage_estimate', message } }
+      }
       case 'search_creators': {
         /*
          * WP117b（66 复测 #15）：**关键词可以是空的，粉丝区间不能丢。**

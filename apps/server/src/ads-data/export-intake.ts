@@ -17,6 +17,8 @@ export interface AdsExportIntakeContext {
   role_id?: string
   /** 从哪个岗位开的（`ads` = 投放）。 */
   position_template_id?: string
+  /** WP489：谁拖进来的（红人表出预览卡要知道卡给谁）。 */
+  person_id?: string
 }
 
 /** 每份附件一句（不相干的回 `undefined`）。 */
@@ -76,4 +78,17 @@ export function withIntakeNote<T extends { chars: number; text?: string }>(
   const text =
     attachment.text === undefined || attachment.text === '' ? note : `${note}\n\n${attachment.text}`
   return { ...attachment, text, chars: text.length }
+}
+
+/** WP489：几个入库口子拼成一个——每份附件取第一个认领它的那一句。 */
+export function composeIntakes(
+  ...list: (AdsExportIntake | undefined)[]
+): AdsExportIntake | undefined {
+  const live = list.filter((x): x is AdsExportIntake => x !== undefined)
+  if (live.length === 0) return undefined
+  if (live.length === 1) return live[0]
+  return (files, ctx) => {
+    const notes = live.map((f) => f(files, ctx))
+    return files.map((_, i) => notes.map((n) => n[i]).find((x) => x !== undefined))
+  }
 }

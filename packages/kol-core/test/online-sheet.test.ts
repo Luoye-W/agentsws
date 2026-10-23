@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { gridFromHtml, gridFromRead, gridFromText, onlineSheetBlock, onlineSheetPlan } from '../src/index.js'
+import {
+  gridFromHtml,
+  gridFromRead,
+  gridFromText,
+  onlineSheetBlock,
+  onlineSheetPlan,
+} from '../src/index.js'
 
 describe('WP489 在线表格', () => {
   it('认链接：Google 先读导出页、再读页面；飞书读页面', () => {
@@ -33,13 +39,25 @@ describe('WP489 在线表格', () => {
   })
 
   it('登录页 / 没权限页认得出', () => {
-    expect(onlineSheetBlock({ ok: true, final_url: 'https://accounts.google.com/v3/signin/identifier' })).toBe('login')
-    expect(onlineSheetBlock({ ok: true, final_url: 'https://acme.feishu.cn/sheets/x', password_inputs: 1 })).toBe(
-      'login',
-    )
-    expect(onlineSheetBlock({ ok: true, final_url: 'https://docs.google.com/x', text: 'You need access. Request access' })).toBe(
-      'no_access',
-    )
-    expect(onlineSheetBlock({ ok: true, final_url: 'https://docs.google.com/x', text: '名称\t链接' })).toBeUndefined()
+    expect(
+      onlineSheetBlock({ ok: true, final_url: 'https://accounts.google.com/v3/signin/identifier' }),
+    ).toBe('login')
+    expect(
+      onlineSheetBlock({
+        ok: true,
+        final_url: 'https://acme.feishu.cn/sheets/x',
+        password_inputs: 1,
+      }),
+    ).toBe('login')
+    expect(
+      onlineSheetBlock({
+        ok: true,
+        final_url: 'https://docs.google.com/x',
+        text: 'You need access. Request access',
+      }),
+    ).toBe('no_access')
+    expect(
+      onlineSheetBlock({ ok: true, final_url: 'https://docs.google.com/x', text: '名称\t链接' }),
+    ).toBeUndefined()
   })
 })

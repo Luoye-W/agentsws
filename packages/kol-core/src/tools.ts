@@ -285,6 +285,27 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
       required: ['collaboration_id'],
     },
   },
+  {
+    name: 'import_creator_sheet',
+    description:
+      'WP489：用户贴了一条在线表格链接（飞书 / Google 表格 / 其它）说要导入红人：用工坊自己已登录的浏览器读那张表，出一张「导入红人表」预览卡（新增几个、合并几个、带几条合作），人点了才导。读不了会回一句该怎么办（登录一下 / 下载成 Excel 拖进来），照原话转告。拖进来的文件不用调它（已自动出卡）。',
+    input_schema: {
+      type: 'object',
+      properties: { url: str('表格链接（用户贴的原样）') },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'update_stages_from_mail',
+    description:
+      'WP489：用户说「用邮件更新一下红人状态」这类话：读过往邮件里与红人有关的往来，先估人数与花费、出一张卡，人点了才判；判出的每一步都带依据邮件，和表格写的不一样会再出卡让人选。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        months: { type: 'number', description: '回看几个月，默认 12（用户说了才改）' },
+      },
+    },
+  },
 ]
 
 /** 全部红人工具的名字（已排序，进 `tools.allow` 的那一份）。 */

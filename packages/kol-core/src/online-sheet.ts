@@ -88,10 +88,12 @@ export function onlineSheetBlock(read: OnlinePageRead): OnlineSheetBlock | undef
   } catch {
     // 没有最终地址：只看页面内容
   }
-  if (LOGIN_HOSTS.test(host) || /\/(login|signin|sign-in|accounts\/login)\b/i.test(path)) return 'login'
+  if (LOGIN_HOSTS.test(host) || /\/(login|signin|sign-in|accounts\/login)\b/i.test(path))
+    return 'login'
   if ((read.password_inputs ?? 0) > 0) return 'login'
   const body = `${read.text ?? ''} ${(read.html ?? '').slice(0, 200_000)}`
-  if (/type=["']?password/i.test(read.html ?? '') && /sign in|log in|登录/i.test(body)) return 'login'
+  if (/type=["']?password/i.test(read.html ?? '') && /sign in|log in|登录/i.test(body))
+    return 'login'
   if (
     /you need (access|permission)|request access|ask for access|没有权限|无权限|需要权限|申请权限|无访问权限/i.test(
       body,
@@ -113,7 +115,8 @@ const ENTITIES: Readonly<Record<string, string>> = {
 function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
     if (e[0] === '#') {
-      const code = e[1] === 'x' || e[1] === 'X' ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1))
+      const code =
+        e[1] === 'x' || e[1] === 'X' ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1))
       return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m
     }
     return ENTITIES[e.toLowerCase()] ?? m
@@ -144,7 +147,11 @@ export function gridFromHtml(html: string): string[][] | undefined {
       }
       if (cells.some((c) => c !== '')) rows.push(cells)
     }
-    if (rows.length >= 2 && (best === undefined || rows.length * (rows[0]?.length ?? 0) > best.length * (best[0]?.length ?? 0)))
+    if (
+      rows.length >= 2 &&
+      (best === undefined ||
+        rows.length * (rows[0]?.length ?? 0) > best.length * (best[0]?.length ?? 0))
+    )
       best = rows
   }
   return best

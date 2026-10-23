@@ -25,7 +25,13 @@ const run = (grid: string[][], ai = new Map()) => {
   const map = resolveColumnMap(table.headers, samples, ai)
   const statuses = resolveStatusMap(distinctStatuses(table, map))
   const rows = table.rows.map((row, i) =>
-    normalizeSheetRow({ row, source_row: table.first_row + i, headers: table.headers, map, statuses }),
+    normalizeSheetRow({
+      row,
+      source_row: table.first_row + i,
+      headers: table.headers,
+      map,
+      statuses,
+    }),
   )
   return { table, map, statuses, rows }
 }
@@ -34,7 +40,17 @@ describe('WP489 表格导入：认表头与列', () => {
   it('中文表头（含状态 / 金额 / 日期 / 备注 / 负责人）', () => {
     const { map } = run([
       ['达人名称', '主页链接', '邮箱', '合作状态', '合作方式', '报价', '日期', '备注', '负责人'],
-      ['小桌', 'https://www.youtube.com/@deskzhang', 'a@x.com', '已寄样', '置换', '¥3,000', '2025/03/04', '老朋友', '阿林'],
+      [
+        '小桌',
+        'https://www.youtube.com/@deskzhang',
+        'a@x.com',
+        '已寄样',
+        '置换',
+        '¥3,000',
+        '2025/03/04',
+        '老朋友',
+        '阿林',
+      ],
     ])
     expect(map).toEqual([
       'display_name',
@@ -145,7 +161,13 @@ describe('WP489 一行 → 事实', () => {
   it('一格两个链接 = 一个人两个账号；@名字要表里说了平台才认', () => {
     const { rows } = run([
       ['名称', '链接', '账号', '平台', '邮箱'],
-      ['小桌', 'https://www.youtube.com/@deskzhang, https://www.tiktok.com/@deskzhang', '', '', 'A@X.com; b@x.com'],
+      [
+        '小桌',
+        'https://www.youtube.com/@deskzhang, https://www.tiktok.com/@deskzhang',
+        '',
+        '',
+        'A@X.com; b@x.com',
+      ],
       ['Rosa', '', '@rosa.desk', 'Instagram', ''],
       ['猜不出', '', '@nobody', '', ''],
     ])
@@ -183,7 +205,12 @@ describe('WP489 预览与合并规则', () => {
   })
 
   it('新增 / 合并 / 同表重复 / 认不出是谁；带状态的建合作、结束了的算历史', () => {
-    const a = row({ source_row: 2, accounts: [{ channel: 'youtube', handle: 'a', url: '' }], stage: 'closed', status_raw: '已合作' })
+    const a = row({
+      source_row: 2,
+      accounts: [{ channel: 'youtube', handle: 'a', url: '' }],
+      stage: 'closed',
+      status_raw: '已合作',
+    })
     const b = row({ source_row: 3, emails: ['b@x.com'], stage: 'negotiating', status_raw: '谈价' })
     const dup = row({ source_row: 4, accounts: [{ channel: 'youtube', handle: 'a', url: '' }] })
     const anon = row({ source_row: 5, display_name: '只有名字' })
@@ -192,20 +219,46 @@ describe('WP489 预览与合并规则', () => {
       r.emails.includes('b@x.com') ? { creator_id: 'cre_b', display_name: 'B' } : undefined,
     )
     expect(plans.map((p) => p.action)).toEqual(['create', 'merge', 'skip', 'skip', 'create'])
-    expect(counts).toMatchObject({ create: 2, merge: 1, skip: 2, collabs: 2, historical: 1, unknown_status: 1 })
+    expect(counts).toMatchObject({
+      create: 2,
+      merge: 1,
+      skip: 2,
+      collabs: 2,
+      historical: 1,
+      unknown_status: 1,
+    })
     expect(plans[2]?.skip).toContain('第 2 行')
   })
 
   it('只补空白：已有值一格不动，0 与 false 是值', () => {
-    const existing = { display_name: '库里的名字', category: '', followers: 0, region: undefined as string | undefined }
+    const existing = {
+      display_name: '库里的名字',
+      category: '',
+      followers: 0,
+      region: undefined as string | undefined,
+    }
     expect(
-      fillBlanks(existing, { display_name: '表里的名字', category: '桌搭', followers: 9000, region: 'US' }),
+      fillBlanks(existing, {
+        display_name: '表里的名字',
+        category: '桌搭',
+        followers: 9000,
+        region: 'US',
+      }),
     ).toEqual({ category: '桌搭', region: 'US' })
   })
 
   it('指纹：同一行换个列序再导一次是同一行', () => {
-    const a = row({ accounts: [{ channel: 'youtube', handle: 'a', url: '' }], emails: ['x@y.com'], status_raw: '已合作' })
-    const b = row({ emails: ['x@y.com'], accounts: [{ channel: 'youtube', handle: 'a', url: 'https://x' }], status_raw: '已合作', source_row: 9 })
+    const a = row({
+      accounts: [{ channel: 'youtube', handle: 'a', url: '' }],
+      emails: ['x@y.com'],
+      status_raw: '已合作',
+    })
+    const b = row({
+      emails: ['x@y.com'],
+      accounts: [{ channel: 'youtube', handle: 'a', url: 'https://x' }],
+      status_raw: '已合作',
+      source_row: 9,
+    })
     expect(sheetRowKey(a)).toBe(sheetRowKey(b))
     expect(sheetRowKey(a)).not.toBe(sheetRowKey({ ...a, status_raw: '谈价' }))
   })

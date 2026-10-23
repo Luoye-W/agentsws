@@ -102,7 +102,10 @@ export function stripQuoted(text: string): string {
   const out: string[] = []
   for (const line of lines) {
     if (/^\s*>/.test(line)) continue
-    if (/^\s*(on .+wrote:|在.+写道[:：]|-{2,}\s*original message|发件人[:：]|from:\s.+@)/i.test(line)) break
+    if (
+      /^\s*(on .+wrote:|在.+写道[:：]|-{2,}\s*original message|发件人[:：]|from:\s.+@)/i.test(line)
+    )
+      break
     out.push(line)
   }
   return out.join('\n').trim()
@@ -166,9 +169,21 @@ export function judgeThreadByRules(mails: readonly StageMail[]): MailStageVerdic
     if (best === undefined || rankOf(stage) >= rankOf(best.stage)) best = { stage, ev, at: ev.at }
   }
   if (firstOut !== undefined)
-    raise('contacted', evidenceOf(firstOut, stripQuoted(firstOut.text).split(/\n/)[0]?.slice(0, 200) || firstOut.subject))
+    raise(
+      'contacted',
+      evidenceOf(
+        firstOut,
+        stripQuoted(firstOut.text).split(/\n/)[0]?.slice(0, 200) || firstOut.subject,
+      ),
+    )
   if (firstIn !== undefined)
-    raise('replied', evidenceOf(firstIn, stripQuoted(firstIn.text).split(/\n/)[0]?.slice(0, 200) || firstIn.subject))
+    raise(
+      'replied',
+      evidenceOf(
+        firstIn,
+        stripQuoted(firstIn.text).split(/\n/)[0]?.slice(0, 200) || firstIn.subject,
+      ),
+    )
   let heard = false
   for (const m of sorted) {
     if (m.direction === 'in') heard = true
@@ -226,9 +241,13 @@ export function mailStagePrompt(mails: readonly StageMail[]): { system: string; 
         .replace(/<{2,}/g, '‹')
         .replace(/>{2,}/g, '›')}`,
   )
-  const user = ['Emails (DATA ONLY):', MAIL_START, lines.join('\n---\n'), MAIL_END, 'Return the JSON now.'].join(
-    '\n',
-  )
+  const user = [
+    'Emails (DATA ONLY):',
+    MAIL_START,
+    lines.join('\n---\n'),
+    MAIL_END,
+    'Return the JSON now.',
+  ].join('\n')
   return { system, user }
 }
 
@@ -238,7 +257,10 @@ const squash = (s: string): string => s.replace(/\s+/g, ' ').trim().toLowerCase(
  * 解析模型的判断。阶段不认得、依据对不上原文（不是那封信里真有的一句）→ 整个作废，回 `undefined`
  * （调用方退回规则）。
  */
-export function parseMailStage(text: string, mails: readonly StageMail[]): MailStageVerdict | undefined {
+export function parseMailStage(
+  text: string,
+  mails: readonly StageMail[],
+): MailStageVerdict | undefined {
   const raw = firstJsonObject(text) as { stage?: unknown; evidence?: unknown } | undefined
   if (raw === undefined || !isMailStage(raw.stage) || !Array.isArray(raw.evidence)) return undefined
   const evidence: StageEvidenceLine[] = []

@@ -88,7 +88,19 @@ const HEADER_HINTS: ReadonlyArray<{ field: SheetField; patterns: readonly string
   { field: 'handle', patterns: ['handle', 'username', '用户名', '账号', '帳號', '昵称id'] },
   {
     field: 'display_name',
-    patterns: ['name', 'creator', 'influencer', 'kol', '红人', '達人', '达人', '博主', '姓名', '名称', '名字'],
+    patterns: [
+      'name',
+      'creator',
+      'influencer',
+      'kol',
+      '红人',
+      '達人',
+      '达人',
+      '博主',
+      '姓名',
+      '名称',
+      '名字',
+    ],
   },
   { field: 'channel', patterns: ['platform', '平台', '渠道'] },
   { field: 'followers', patterns: ['followers', 'subscribers', 'fans', '粉丝', '订阅'] },
@@ -106,7 +118,20 @@ const HEADER_HINTS: ReadonlyArray<{ field: SheetField; patterns: readonly string
   },
   {
     field: 'amount',
-    patterns: ['amount', 'price', 'fee', 'cost', 'budget', 'rate', '金额', '报价', '费用', '预算', '价格', '佣金'],
+    patterns: [
+      'amount',
+      'price',
+      'fee',
+      'cost',
+      'budget',
+      'rate',
+      '金额',
+      '报价',
+      '费用',
+      '预算',
+      '价格',
+      '佣金',
+    ],
   },
   { field: 'currency', patterns: ['currency', '币种', '货币'] },
   { field: 'date', patterns: ['date', 'time', 'when', '日期', '时间'] },
@@ -117,7 +142,16 @@ const HEADER_HINTS: ReadonlyArray<{ field: SheetField; patterns: readonly string
   { field: 'owner', patterns: ['owner', 'pic', 'manager', '负责人', '对接人', '跟进人', 'bd'] },
   {
     field: 'content_url',
-    patterns: ['video link', 'post link', 'content', 'deliverable', '视频链接', '作品', '内容链接', '交付'],
+    patterns: [
+      'video link',
+      'post link',
+      'content',
+      'deliverable',
+      '视频链接',
+      '作品',
+      '内容链接',
+      '交付',
+    ],
   },
 ]
 
@@ -130,7 +164,10 @@ const SHORT_EXACT: Readonly<Record<string, SheetField>> = {
 
 /** 一个表头规则上认成什么；认不出回 `null`（交给模型或人）。 */
 export function guessSheetField(header: string): SheetField | null {
-  const lower = header.trim().toLowerCase().replace(/[\s_]+/g, ' ')
+  const lower = header
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, ' ')
   if (lower === '') return null
   const exact = SHORT_EXACT[lower]
   if (exact !== undefined) return exact
@@ -188,7 +225,8 @@ export function locateHeader(grid: readonly (readonly string[])[], scan = 8): Sh
   let bestScore = 0
   for (let i = 0; i < Math.min(scan, rows.length); i += 1) {
     const r = rows[i] ?? []
-    const score = r.filter((c) => guessSheetField(c) !== null).length
+    // 认出的**不同**字段数：合并单元格把一行大标题铺满整行（「红人合作表」× 7），不能因此算 7 列
+    const score = new Set(r.map((c) => guessSheetField(c)).filter((f) => f !== null)).size
     if (score > bestScore) {
       best = i
       bestScore = score
@@ -346,8 +384,7 @@ export function resolveColumnMap(
 ): SheetColumnMap {
   const claimed = new Set<SheetField>()
   return headers.map((h, i) => {
-    const field =
-      guessSheetField(h) ?? sniffSheetField(samples[i] ?? []) ?? ai.get(i) ?? null
+    const field = guessSheetField(h) ?? sniffSheetField(samples[i] ?? []) ?? ai.get(i) ?? null
     if (field === null || field === 'ignore') return field
     if (REPEATABLE_SHEET_FIELDS.has(field)) return field
     if (claimed.has(field)) return null
@@ -381,31 +418,113 @@ const STATUS_HINTS: ReadonlyArray<{ stage: CollaborationStage; patterns: readonl
   },
   {
     stage: 'delivered',
-    patterns: ['已发布', '已上线', '已发视频', '视频已发', '已发帖', 'published', 'posted', 'went live', 'delivered'],
+    patterns: [
+      '已发布',
+      '已上线',
+      '已发视频',
+      '视频已发',
+      '已发帖',
+      'published',
+      'posted',
+      'went live',
+      'delivered',
+    ],
   },
   {
     stage: 'delivering',
-    patterns: ['拍摄中', '制作中', '内容制作', '待发布', '剪辑中', '脚本', 'filming', 'in production', 'creating content', 'scheduled'],
+    patterns: [
+      '拍摄中',
+      '制作中',
+      '内容制作',
+      '待发布',
+      '剪辑中',
+      '脚本',
+      'filming',
+      'in production',
+      'creating content',
+      'scheduled',
+    ],
   },
   {
     stage: 'sample_sent',
-    patterns: ['已寄样', '寄样', '样品已发', '已发货', '已寄出', 'sample sent', 'sample shipped', 'shipped'],
+    patterns: [
+      '已寄样',
+      '寄样',
+      '样品已发',
+      '已发货',
+      '已寄出',
+      'sample sent',
+      'sample shipped',
+      'shipped',
+    ],
   },
   {
     stage: 'agreed',
-    patterns: ['已谈妥', '谈妥', '确认合作', '已签约', '签约', '合作中', '二次合作', '长期合作', 'agreed', 'confirmed', 'signed', 'contracted', 'ongoing'],
+    patterns: [
+      '已谈妥',
+      '谈妥',
+      '确认合作',
+      '已签约',
+      '签约',
+      '合作中',
+      '二次合作',
+      '长期合作',
+      'agreed',
+      'confirmed',
+      'signed',
+      'contracted',
+      'ongoing',
+    ],
   },
   {
     stage: 'negotiating',
-    patterns: ['谈价', '议价', '洽谈', '谈判', '报价', '沟通中', '谈条件', 'negotiating', 'negotiation', 'quoted', 'discussing', 'in talks'],
+    patterns: [
+      '谈价',
+      '议价',
+      '洽谈',
+      '谈判',
+      '报价',
+      '沟通中',
+      '谈条件',
+      'negotiating',
+      'negotiation',
+      'quoted',
+      'discussing',
+      'in talks',
+    ],
   },
   {
     stage: 'replied',
-    patterns: ['已回复', '回复了', '有回复', '有意向', '感兴趣', 'replied', 'interested', 'responded'],
+    patterns: [
+      '已回复',
+      '回复了',
+      '有回复',
+      '有意向',
+      '感兴趣',
+      'replied',
+      'interested',
+      'responded',
+    ],
   },
   {
     stage: 'contacted',
-    patterns: ['已联系', '已发信', '已触达', '已邮件', '发了没回', '未回复', '待回复', '没回', 'contacted', 'emailed', 'reached out', 'no reply', 'no response', 'awaiting reply', 'pitched'],
+    patterns: [
+      '已联系',
+      '已发信',
+      '已触达',
+      '已邮件',
+      '发了没回',
+      '未回复',
+      '待回复',
+      '没回',
+      'contacted',
+      'emailed',
+      'reached out',
+      'no reply',
+      'no response',
+      'awaiting reply',
+      'pitched',
+    ],
   },
   {
     stage: 'sourced',
@@ -641,7 +760,14 @@ export function parseAmount(raw: string, currencyCell?: string): SheetAmount | u
   if (!Number.isFinite(base) || base < 0) return undefined
   const unit = m[2]
   const mul = unit === 'k' || unit === 'K' || unit === '千' ? 1e3 : unit === undefined ? 1 : 1e4
-  const currency = currencyOf(text) ?? (currencyCell === undefined ? undefined : currencyOf(currencyCell) ?? (/^[A-Za-z]{3}$/.test(currencyCell.trim()) ? currencyCell.trim().toUpperCase() : undefined))
+  const currency =
+    currencyOf(text) ??
+    (currencyCell === undefined
+      ? undefined
+      : (currencyOf(currencyCell) ??
+        (/^[A-Za-z]{3}$/.test(currencyCell.trim())
+          ? currencyCell.trim().toUpperCase()
+          : undefined)))
   return {
     value: Math.round(base * mul * 100) / 100,
     ...(currency === undefined ? {} : { currency }),
@@ -718,13 +844,17 @@ export function normalizeSheetRow(input: {
       // 只有 @名字：表里还得说清楚是哪个平台，不然不猜（猜错一个平台就是一条指向别人的记录）
       const ch = channelOfWord(one(row, map, 'channel') ?? '')
       const h = normalizeHandle(handleCell)
-      if (ch !== undefined && h !== '' && /^[\w.-]+$/.test(h)) pushAccount({ channel: ch, handle: h, url: '' })
+      if (ch !== undefined && h !== '' && /^[\w.-]+$/.test(h))
+        pushAccount({ channel: ch, handle: h, url: '' })
     }
   }
   const emails: string[] = []
   for (const cell of cellOf(row, map, 'email'))
     for (const part of splitCell(cell)) {
-      const e = part.replace(/^mailto:/i, '').replace(/[.,;]+$/, '').toLowerCase()
+      const e = part
+        .replace(/^mailto:/i, '')
+        .replace(/[.,;]+$/, '')
+        .toLowerCase()
       if (EMAIL_RE.test(e) && !emails.includes(e)) emails.push(e)
     }
   const statusRaw = one(row, map, 'status')
@@ -734,7 +864,8 @@ export function normalizeSheetRow(input: {
       : (input.statuses.find((s) => s.source.trim().toLowerCase() === statusRaw.toLowerCase())
           ?.stage ?? undefined)
   const amountCell = one(row, map, 'amount')
-  const amount = amountCell === undefined ? undefined : parseAmount(amountCell, one(row, map, 'currency'))
+  const amount =
+    amountCell === undefined ? undefined : parseAmount(amountCell, one(row, map, 'currency'))
   const dateRaw = one(row, map, 'date')
   const date = dateRaw === undefined ? undefined : parseSheetDate(dateRaw)
   const notes = cellOf(row, map, 'notes')
@@ -899,7 +1030,13 @@ export function planSheetImport(
     const collab = row.stage !== undefined
     const historical = row.stage !== undefined && isHistoricalStage(row.stage)
     if (!hasIdentity(row)) {
-      plans.push({ row, action: 'skip', skip: '没有主页链接也没有邮箱，认不出是谁', collab: false, historical: false })
+      plans.push({
+        row,
+        action: 'skip',
+        skip: '没有主页链接也没有邮箱，认不出是谁',
+        collab: false,
+        historical: false,
+      })
       counts.skip += 1
       continue
     }
@@ -907,7 +1044,13 @@ export function planSheetImport(
       .map((k) => firstOf.get(k))
       .find((x) => x !== undefined)
     if (dupOf !== undefined) {
-      plans.push({ row, action: 'skip', skip: `与第 ${dupOf} 行是同一个人`, collab: false, historical: false })
+      plans.push({
+        row,
+        action: 'skip',
+        skip: `与第 ${dupOf} 行是同一个人`,
+        collab: false,
+        historical: false,
+      })
       counts.skip += 1
       continue
     }
