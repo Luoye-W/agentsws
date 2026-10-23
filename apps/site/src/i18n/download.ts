@@ -23,8 +23,9 @@ const zh = {
   beta: '内测版',
   changelog: '更新日志',
   others: '其他版本 ↓',
-  frameBar: '初始化设置 · 选岗位',
-  shotAlt: '初始化设置第三步：勾选要上岗的岗位',
+  frameBar: '初始化设置 · 接上 AI',
+  shotAlt:
+    '初始化设置第一步「接上 AI」：用工坊的接口、用自己的模型接口、DeepSeek 官方、ChatGPT 订阅',
   osTitle: '选你的电脑',
   os: {
     'mac-arm64': { h: 'macOS · M 系列芯片', p: 'M1 及以后', btn: '下载 .dmg' },
@@ -55,7 +56,7 @@ const zh = {
     eyebrow: '装好之后',
     title: '四步开工，十分钟左右。',
     steps: [
-      ['接上 AI', '用自己的 key，或用积分'],
+      ['接上 AI', 'DeepSeek 账号、ChatGPT 订阅、自己的 key，或积分'],
       ['你的生意', '贴官网，自动填好品牌档案'],
       ['选岗位', '勾几个，职责自动配好'],
       ['连接与开工', '连店铺和邮箱，交第一件事'],
@@ -101,8 +102,9 @@ const en: DownloadCopy = {
   beta: 'beta',
   changelog: 'Changelog',
   others: 'Other versions ↓',
-  frameBar: 'Setup · Pick your roles',
-  shotAlt: 'Setup, step three: tick the roles you want to start with',
+  frameBar: 'Setup · Connect an AI',
+  shotAlt:
+    'First setup step, Connect an AI: Workshop API, your own model API, DeepSeek official, ChatGPT plan',
   osTitle: 'Pick your computer',
   os: {
     'mac-arm64': {
@@ -138,7 +140,7 @@ const en: DownloadCopy = {
     eyebrow: 'After installing',
     title: 'Four steps, about ten minutes.',
     steps: [
-      ['Connect an AI', 'Your own key, or credits'],
+      ['Connect an AI', 'Your DeepSeek account, ChatGPT plan, own key, or credits'],
       ['Your business', 'Paste your website; the brand profile fills itself'],
       ['Pick roles', 'Tick a few; duties are set up for you'],
       ['Connect and start', 'Link your store and email, hand over the first task'],

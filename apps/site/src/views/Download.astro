@@ -1,7 +1,7 @@
 ---
 /** 下载页：读下载清单（WP218：构建时取下载站上最新那份，取不到用 `src/data/downloads.json`）。链接没定的显示「即将提供」。 */
 import { Image } from 'astro:assets'
-import rolesShot from '../assets/onboarding-roles.png'
+import aiShot from '../assets/app/onboarding-ai.png'
 import Hint from '../components/Hint.astro'
 import Icon from '../components/Icon.astro'
 import { GITHUB_URL } from '../config.js'
@@ -58,7 +58,7 @@ const attrs = (it: DownloadItem) =>
       <div class="dl-shot">
         <div class="frame">
           <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span>{t.frameBar}</span></div>
-          <div class="frame-img"><Image src={rolesShot} alt={t.shotAlt} width={1360} height={760} fit="cover" position="top" widths={[680, 980, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 980px" loading="eager" /></div>
+          <div class="frame-img"><Image src={aiShot} alt={t.shotAlt} width={1360} height={760} fit="cover" position="top" widths={[680, 980, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 980px" loading="eager" /></div>
         </div>
       </div>
     </div>

@@ -55,15 +55,18 @@ describe('首屏下载按系统直下', () => {
 })
 
 describe('首页文案', () => {
-  it('定位进 meta 与首屏；首屏三个勾是 Mac / Windows、一键连平台、按量付费', () => {
+  // 10-23（私有 docs/117 G / N）：首屏改讲「主动式 AI Agents 团队」；第三个勾换成 DeepSeek 账号、ChatGPT 订阅直接登录
+  it('定位进 meta 与首屏；首屏讲主动式团队；三个勾是 Mac / Windows、一键连平台、自带账号登录', () => {
     expect(HOME.zh.meta.title).toContain('专为跨境电商 / 出海卖家打造的 AI Agents')
     expect(HOME.zh.meta.description).toContain('专为跨境电商 / 出海卖家打造的 AI Agents')
     expect(HOME.zh.hero.position).toContain('专为跨境电商 / 出海卖家打造的 AI Agents')
-    expect(HOME.zh.hero.title.join('')).toContain('面板会吃灰')
+    expect(HOME.zh.hero.title.join('')).toContain('主动式')
+    expect(HOME.zh.hero.title.join('')).not.toContain('面板会吃灰')
+    expect(HOME.en.hero.title.join('')).toMatch(/proactive/u)
     expect(HOME.zh.hero.checks).toEqual([
       'Mac / Windows',
       '一键连上各平台',
-      '按量付费 · 自带 key 免费',
+      'DeepSeek 账号、ChatGPT 订阅直接登录',
     ])
     expect(HOME.en.meta.title).toMatch(/cross-border e-commerce sellers/u)
   })
@@ -77,12 +80,27 @@ describe('首页文案', () => {
     expect(company?.h).toMatch(/老板开启/u)
   })
 
-  it('能动手、一键连平台、按量付费都点到了', () => {
+  it('能动手、一键连平台、自带 DeepSeek / ChatGPT / API 都点到了', () => {
     expect(HOME.zh.base.title.join('')).toContain('还能动手')
-    expect(HOME.zh.how.items[0]?.h).toBe('一键连上各平台')
-    expect(HOME.zh.how.items[0]?.p).toContain('不用申请开发者应用')
-    expect(HOME.zh.credits.title).toContain('按量付费')
-    expect(HOME.en.credits.title).toMatch(/Pay as you go/u)
+    expect(HOME.zh.how.groups[0]?.items[0]?.h).toBe('一键连上各平台')
+    expect(HOME.zh.how.groups[0]?.items[0]?.p).toContain('不用申请开发者应用')
+    // 10-23（docs/117 F）：原「价格」段换成「接上 AI」，积分只说和 DeepSeek 官方同价
+    expect(HOME.zh.ai.options.map((o) => o.h)).toEqual([
+      'DeepSeek 账号登录',
+      'ChatGPT 订阅',
+      '你自己的 API key',
+      '工坊积分',
+    ])
+    expect(HOME.zh.ai.options[3]?.p).toContain('和 DeepSeek 官方同价')
+    expect(HOME.en.ai.title).toMatch(/DeepSeek account/u)
+  })
+
+  it('团队通道按人数月付写明了，不再说「不按席位」一刀切', () => {
+    for (const lang of ['zh', 'en'] as const) {
+      expect(HOME[lang].free.fine).toMatch(/团队通道|team channel/u)
+      expect(HOME[lang].ai.price.p).toMatch(/团队通道|team channel/u)
+    }
+    expect(HOME.zh.free.sub).toContain('自己用不按席位')
   })
 })
 

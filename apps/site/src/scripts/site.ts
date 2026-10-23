@@ -161,3 +161,42 @@ if (dlButtons.length > 0) {
     for (const note of document.querySelectorAll<HTMLElement>(`[data-dl-note="${os}"]`))
       note.hidden = false
 }
+
+// 10-23（私有 docs/117）：首页「一天怎么过」截图滑动——标签、左右箭头、小圆点跟着当前那张走；不自动播放
+for (const slider of document.querySelectorAll<HTMLElement>('[data-slider]')) {
+  const track = slider.querySelector<HTMLElement>('[data-track]')
+  if (!track) continue
+  const tabs = [...slider.querySelectorAll<HTMLElement>('[data-go]')]
+  const dots = [...slider.querySelectorAll('.slider-dots i')]
+  const n = track.children.length
+  const cur = (): number => Math.round(track.scrollLeft / Math.max(1, track.clientWidth))
+  const go = (i: number): void =>
+    track.scrollTo({ left: track.clientWidth * Math.max(0, Math.min(n - 1, i)) })
+  const sync = (): void => {
+    const i = cur()
+    for (const [k, t] of tabs.entries()) t.setAttribute('aria-selected', String(k === i))
+    for (const [k, d] of dots.entries()) d.classList.toggle('on', k === i)
+  }
+  for (const t of tabs)
+    t.addEventListener('click', (e) => {
+      e.preventDefault()
+      go(Number(t.dataset.go))
+    })
+  for (const b of slider.querySelectorAll<HTMLElement>('[data-step]'))
+    b.addEventListener('click', () => go(cur() + Number(b.dataset.step)))
+  track.addEventListener('scroll', () => requestAnimationFrame(sync), { passive: true })
+  sync()
+}
+
+// 「几句话交代」：按组切（没开脚本时每组都摊开）
+for (const box of document.querySelectorAll<HTMLElement>('[data-tabs]')) {
+  const tabs = [...box.querySelectorAll<HTMLElement>('[data-tab]')]
+  const panels = [...box.querySelectorAll<HTMLElement>('[data-panel]')]
+  const show = (i: number): void => {
+    for (const [k, t] of tabs.entries()) t.setAttribute('aria-selected', String(k === i))
+    for (const [k, p] of panels.entries()) p.hidden = k !== i
+  }
+  for (const t of tabs) t.addEventListener('click', () => show(Number(t.dataset.tab)))
+  box.classList.add('js')
+  show(0)
+}

@@ -1,12 +1,12 @@
 ---
 /**
- * 岗位页：十个出厂岗位各一行（一句话、会出的卡、要连什么）；客服、红人、B2B 三个附一张工作台截图
- * （WP344 起由 `scripts/app-shots.mjs` 从演示世界重拍）。
+ * 岗位页：十个出厂岗位各一行（一句话、会出的卡、要连什么）；客服、网站运营、B2B 三个附一张工作台截图
+ * （WP344 起由 `scripts/app-shots.mjs` 从演示世界重拍；10-23 红人换成网站运营，演示里红人岗位没有卡）。
  */
 import { Image } from 'astro:assets'
 import b2bShot from '../assets/app/role-b2b.png'
-import kolShot from '../assets/app/role-kol.png'
 import supportShot from '../assets/app/role-support.png'
+import webopsShot from '../assets/app/role-webops.png'
 import Icon from '../components/Icon.astro'
 import { type Lang, localePath } from '../i18n/common.js'
 import { HOME } from '../i18n/home.js'
@@ -23,7 +23,7 @@ const roles = ROLES[lang]
 const p = (x: string) => localePath(x, lang)
 const shots: Record<string, { src: ImageMetadata; w: number; h: number }> = {
   support: { src: supportShot, w: 1360, h: 760 },
-  kol: { src: kolShot, w: 1360, h: 760 },
+  store: { src: webopsShot, w: 1360, h: 760 },
   b2b: { src: b2bShot, w: 1360, h: 760 },
 }
 ---
