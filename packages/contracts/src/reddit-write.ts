@@ -316,6 +316,25 @@ export interface RedditWritesList {
   in_plugin?: number
 }
 
+/**
+ * WP495（1717）：没发出去的那一条里，**可能其实已经发出去了**的两种——
+ * `ego_unconfirmed`（工坊在 ego 里点过发送，没确认发出去）与 `interrupted`（在 ego 里发到一半工坊重启了，
+ * 不知道点没点过发送）。这两种「再填一次」之前先问一句「确认上次没发出去？」，免得同一条发两遍；
+ * 别的失败（平台拦了 / 没登录 / 插件里点了不发…）确定没发出去，不问。
+ */
+export const REDDIT_WRITE_MAYBE_SENT_OUTCOMES: readonly string[] = [
+  'ego_unconfirmed',
+  'interrupted',
+]
+
+export const redditWriteMaybeSent = (w: {
+  state: RedditWriteView['state']
+  outcome?: string | undefined
+}): boolean =>
+  w.state === 'failed' &&
+  w.outcome !== undefined &&
+  REDDIT_WRITE_MAYBE_SENT_OUTCOMES.includes(w.outcome)
+
 /** WP332：没发出去的提醒在岗位页留多久（天）；更早的进度里还在，不再占一行。 */
 export const REDDIT_WRITE_NOTICE_DAYS = 7
 

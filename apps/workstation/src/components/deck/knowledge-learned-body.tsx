@@ -6,18 +6,20 @@
  *   （`approve` + `edited_payload.stages / drop`，服务端只认这两处改动）。「不采纳」= 整批作废，在卡底那一排。
  * - **这几条可能过期**（`form: 'knowledge_stale'`）：哪条、网站上哪个数变了；「都没变」/「按网站重学」/「忽略」。
  *
- * 少字：标题已经说了学到几条；含承诺 / 政策的那几条只挂一个小标。
+ * 少字：标题已经说了学到几条；WP495（1701）：只有答案里真写了承诺（退款 / 退货天数、保修期、赔付 / 补发、
+ * 价格保证）的那几条挂一个小图标，悬停出「含承诺，细看一眼」；别的不挂。
  */
-import type {
-  KnowledgeLearnedPayload,
-  KnowledgeStage,
-  KnowledgeStalePayload,
+import {
+  hasCommitment,
+  type KnowledgeLearnedPayload,
+  type KnowledgeStage,
+  type KnowledgeStalePayload,
 } from '@agentsws/contracts'
 import type { DeckCard } from '@agentsws/deck'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { type FootAction, FootButtons, useCardFootActions } from '@/components/deck/card-foot'
-import { WsTag } from '@/components/design'
+import { CommitmentMark } from '@/components/knowledge/commitment-mark'
 import { StageSelect } from '@/components/knowledge/stage-select'
 import { decide } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -112,7 +114,7 @@ export function KnowledgeLearnedBody({
                   onChange={(s) => setStages({ ...stages, [it.card_id]: s })}
                 />
                 <span className="truncate">{t('kl.card.basis', { basis: it.basis })}</span>
-                {it.hold === true ? <WsTag>{t('kl.card.hold')}</WsTag> : null}
+                {(it.commitment ?? hasCommitment(it.answer)) ? <CommitmentMark /> : null}
                 {decidable ? (
                   <label className="ml-auto inline-flex items-center gap-1">
                     <input

@@ -268,6 +268,13 @@ describe('从过往邮件学', () => {
     // 归纳没判范围的那条（物流）按问法规则判成售后
     expect(p.items.map((i) => i.stage).sort()).toEqual(['postsales', 'postsales', 'presales'])
     expect(p.items.every((i) => /段往来/.test(i.basis))).toBe(true)
+    // WP495（1701）：只有真写了承诺的（退款 5 个工作日）带 commitment；折扣 10%、物流 48 小时都不是承诺
+    expect(
+      p.items
+        .filter((i) => i.commitment === true)
+        .map((i) => i.question)
+        .sort(),
+    ).toEqual(['How do refunds work?'])
 
     // 学到的先是待确认：带依据（出处指着那几段往来），检索不到
     const learned = (

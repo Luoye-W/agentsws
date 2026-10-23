@@ -36,7 +36,8 @@ export const KNOWLEDGE_LEARN_ZH: Record<string, string> = {
   'kl.job.open': '打开',
   // 汇总卡
   'kl.card.basis': '依据：{basis}',
-  'kl.card.hold': '含承诺 / 政策，细看一眼',
+  // WP495（1701）：只挂在真写了承诺的那几条上（小图标，悬停出这一句）
+  'kl.card.commitment': '含承诺，细看一眼',
   'kl.card.drop': '不要这条',
   'kl.card.confirm': '采纳 {n} 条',
   'kl.card.more': '还有 {n} 条在知识库「待确认」里',
@@ -80,7 +81,7 @@ export const KNOWLEDGE_LEARN_EN: Record<string, string> = {
   'kl.job.no_model': 'No AI model connected',
   'kl.job.open': 'Open',
   'kl.card.basis': 'From: {basis}',
-  'kl.card.hold': 'Contains a promise / policy — check it',
+  'kl.card.commitment': 'Contains a promise — take a closer look',
   'kl.card.drop': 'Drop this one',
   'kl.card.confirm': 'Adopt {n}',
   'kl.card.more': '{n} more under “Pending” in Knowledge',

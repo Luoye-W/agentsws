@@ -15,9 +15,11 @@
  *   人在卡上改字、批 → 按选路发；卡上不发了 = 不发。
  * -「再填一次」与出卡同一个选路（ego 能用工坊自己在 ego 里发，不能用交给插件并照实说一句）；点了按钮进「在发…」，
  *   这一行接着显示正在用哪条路发，发出去 / 又没发出去照实变。
+ * WP495（1717）：ego 里「点过发送、没确认发出去」（以及在 ego 里发到一半重启了）的那一条可能其实发出去了——
+ *   点「再填一次」先在这一行问「确认上次没发出去？」（确认 / 取消），确认才按选路再发；别的失败不问。
  */
 
-import { redditWriteNotices } from '@agentsws/contracts'
+import { redditWriteMaybeSent, redditWriteNotices } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, RotateCcw, SendHorizontal, X } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
@@ -72,6 +74,8 @@ export function RedditWriteNotice({
   const key = [...REDDIT_WRITES_KEY, assignment ?? '']
   /** WP491：点过「再填一次」的那几条（审批项 → 新那件活），接着在这一行显示走哪条路、发没发出去。 */
   const [tracked, setTracked] = useState<Record<string, string>>({})
+  /** WP495（1717）：正在问「确认上次没发出去？」的那一条（job id）。 */
+  const [asking, setAsking] = useState<string | undefined>(undefined)
   const writes = useQuery({
     queryKey: key,
     queryFn: () => listRedditWrites(assignment ?? ''),
@@ -204,6 +208,7 @@ export function RedditWriteNotice({
       {rows.slice(0, MAX_ROWS).map((w) => {
         const canEdit = w.can_refill === true && w.text !== undefined
         const mine = refill.isPending && refill.variables === w.job_id
+        const confirming = asking === w.job_id && !mine
         return (
           // WP456-T2：一行提醒（浅底、黄图标），不再铺一整条黄
           <NoticeLine
@@ -213,14 +218,43 @@ export function RedditWriteNotice({
             data-outcome={w.outcome}
             end={
               <>
-                {w.can_refill === true ? (
+                {w.can_refill === true && confirming ? (
+                  // WP495（1717）：可能已经发出去了——先问一句，确认才再发
+                  <span
+                    className="flex items-center gap-1.5"
+                    data-testid="reddit-write-refill-confirm"
+                  >
+                    <span className="text-xs text-ws-ink">{t('redditw.notice.refill.ask')}</span>
+                    <Button
+                      size="xs"
+                      disabled={busy}
+                      onClick={() => {
+                        setAsking(undefined)
+                        refill.mutate(w.job_id)
+                      }}
+                      data-testid="reddit-write-refill-confirm-yes"
+                    >
+                      {t('redditw.notice.refill.ask.yes')}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      onClick={() => setAsking(undefined)}
+                      data-testid="reddit-write-refill-confirm-no"
+                    >
+                      {t('redditw.notice.refill.ask.no')}
+                    </Button>
+                  </span>
+                ) : w.can_refill === true ? (
                   <>
                     <Hint text={t('redditw.notice.refill.hint')} />
                     <Button
                       size="xs"
                       className="gap-1"
                       disabled={busy}
-                      onClick={() => refill.mutate(w.job_id)}
+                      onClick={() =>
+                        redditWriteMaybeSent(w) ? setAsking(w.job_id) : refill.mutate(w.job_id)
+                      }
                       data-testid="reddit-write-refill"
                     >
                       {mine ? (

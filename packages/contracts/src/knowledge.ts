@@ -540,6 +540,42 @@ export function resolveStage(given: unknown, text: string): KnowledgeStage {
   return stageOfText(text) ?? 'both'
 }
 
+/* ── WP495（1701）：哪几条**真写了承诺**——只给它们挂小图标。规则判，不问模型 ── */
+
+/**
+ * 承诺词：退款 / 退货 / 换货、保修 / 质保、赔付 / 补发 / 换新、价格保证（保价 / 退差价 / price match）。
+ * 光是「发货 3–5 天」「价格 $29」不算承诺——那是事实，不是我们答应客户的事。
+ */
+const COMMITMENT_WORD_RE =
+  /\b(?:refund(?:s|ed|able)?|returns?|returnable|exchanges?|warrant(?:y|ies|ied)|guarantee[ds]?|money[-\s]?back|compensat(?:e|ed|ion)|reimburs(?:e|ed|ement)|replace(?:d|ment|ments)?|resend|re-?ship|price[-\s]?(?:match|protection|adjustment|guarantee))\b|退款|退货|换货|退换|包退|包换|保修|质保|保固|保换|赔偿|赔付|补偿|补发|重发|换新|价保|保价|价格保证|退差价|补差价/i
+
+/** 数字 + 期限 / 比例 / 金额（「30 days」「1 year」「100%」「$20」「7天」「七天」「一年」「20 元」）。 */
+const COMMITMENT_QUANTITY_RE =
+  /\b\d+(?:\.\d+)?\s*(?:-|to|–)?\s*(?:\d+\s*)?(?:business\s+|working\s+|calendar\s+)?(?:days?|weeks?|months?|years?|yrs?|hours?|hrs?)\b|\b(?:one|two|three|five|seven|ten|fourteen|fifteen|thirty|sixty|ninety)\s*[-\s]\s*(?:days?|weeks?|months?|years?)\b|\d+(?:\.\d+)?\s*%|[$€£¥]\s*\d|\b\d+(?:\.\d+)?\s*(?:usd|eur|gbp|dollars?)\b|\d+\s*(?:个)?(?:工作日|天|日|周|星期|个月|月|年|小时)|[一二两三四五六七八九十百]+\s*(?:个)?(?:工作日|天|日|周|星期|个月|月|年|小时)|\d+(?:\.\d+)?\s*(?:元|美元|欧元|英镑)/i
+
+/** 不带数字、本身就是承诺的说法（全额退款 / 免费换新 / 终身保修 / 无理由退货）。 */
+const COMMITMENT_ABSOLUTE_RE =
+  /\b(?:full|100%)\s+refund|\bmoney[-\s]?back\s+guarantee|\blifetime\s+(?:warranty|guarantee)|\bfree\s+(?:returns?|replacements?|exchanges?|resend|reship)|\bno[-\s]questions?[-\s]asked\b|全额退款|全额退|免费(?:退|换|补发|重发|换新|维修|保修)|终身保修|终身质保|无理由退/i
+
+/** 一句一句看（承诺词与数字得在同一句里，免得「发货 3 天。退货请联系我们。」被凑成一条承诺）。 */
+const SENTENCE_SPLIT_RE = /(?<=[.!?;])\s+|(?<=[。！？；])\s*|\n+/
+
+/**
+ * WP495（1701）：这段话里有没有**真写了承诺**——退款 / 退货天数、保修期、赔付 / 补发、价格保证。
+ *
+ * 判据：同一句里「承诺词 + 数字（期限 / 比例 / 金额）」，或者一句本身就是承诺的说法（全额退款、终身保修…）。
+ * 只有政策主题、没写具体答应什么（「退货请联系客服」）的不算。
+ */
+export function hasCommitment(text: string): boolean {
+  const normalized = text.normalize('NFKC')
+  for (const sentence of normalized.split(SENTENCE_SPLIT_RE)) {
+    if (sentence.trim() === '') continue
+    if (COMMITMENT_ABSOLUTE_RE.test(sentence)) return true
+    if (COMMITMENT_WORD_RE.test(sentence) && COMMITMENT_QUANTITY_RE.test(sentence)) return true
+  }
+  return false
+}
+
 /** 学的是哪一种来源。 */
 export type KnowledgeLearnSource = 'email' | 'website'
 
@@ -556,6 +592,11 @@ export interface KnowledgeLearnedItem {
   basis: string
   /** 政策敏感 / 带承诺 / 没脱敏——要多看一眼。 */
   hold?: boolean
+  /**
+   * WP495（1701）：答案里**真写了承诺**（退款 / 退货天数、保修期、赔付 / 补发、价格保证）——卡上只给这几条挂小图标。
+   * 规则判（{@link hasCommitment}），不问模型。老卡没有这一格，界面按答案原文现判。
+   */
+  commitment?: boolean
 }
 
 export interface KnowledgeLearnedPayload {
