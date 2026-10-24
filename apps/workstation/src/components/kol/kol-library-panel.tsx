@@ -20,6 +20,7 @@ import {
   Package,
   Search,
   Send,
+  Sheet,
   Tag,
   Upload,
   UserRound,
@@ -31,6 +32,7 @@ import type { ContextRef } from '@/components/ask-ai/ask-ai-store'
 import { registerRefSource } from '@/components/ask-ai/ref-sources'
 import { AutopilotStrip } from '@/components/autopilot/autopilot-strip'
 import { EmptyState, Segmented } from '@/components/design'
+import { KolSyncRows } from '@/components/kol/kol-sync-panel'
 import { FilterChip, LibrarySearch } from '@/components/library/library-group'
 import {
   consumeLibraryIntent,
@@ -233,7 +235,12 @@ function download(name: string, text: string): void {
 
 /* ── 面板 ─────────────────────────────────────────────────────────── */
 
-type Layer = { kind: 'creator'; id: string } | { kind: 'thread'; id: string } | { kind: 'find' }
+type Layer =
+  | { kind: 'creator'; id: string }
+  | { kind: 'thread'; id: string }
+  | { kind: 'find' }
+  // WP509：⋯ 里「同步到表格」叠开的那一层
+  | { kind: 'sync' }
 
 export function KolLibraryPanel(props: RailPanelBodyProps): ReactNode {
   const { t, lang } = useApp()
@@ -587,6 +594,12 @@ function KolLibraryBody({
   /* ── 叠的那一层 ── */
   const layerOf = (): LibraryLayer | null => {
     if (layer === null) return null
+    if (layer.kind === 'sync')
+      return {
+        key: 'sync',
+        title: t('kolsync.rail.title'),
+        node: <KolSyncRows assignment={assignment} open />,
+      }
     if (layer.kind === 'find')
       return {
         key: 'find',
@@ -724,6 +737,14 @@ function KolLibraryBody({
           icon: <Search aria-hidden className="size-4" />,
           onSelect: () => {
             setLayer({ kind: 'find' })
+          },
+        },
+        {
+          id: 'sync',
+          label: t('kolsync.lib.menu'),
+          icon: <Sheet aria-hidden className="size-4" />,
+          onSelect: () => {
+            setLayer({ kind: 'sync' })
           },
         },
         {

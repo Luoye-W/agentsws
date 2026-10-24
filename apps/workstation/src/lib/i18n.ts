@@ -37,6 +37,7 @@ import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { INBOX_EN, INBOX_ZH } from './i18n-inbox'
 import { KNOWLEDGE_LEARN_EN, KNOWLEDGE_LEARN_ZH } from './i18n-knowledge-learn'
 import { KOL_INFO_EN, KOL_INFO_ZH } from './i18n-kol-info'
+import { KOL_SYNC_EN, KOL_SYNC_ZH } from './i18n-kol-sync'
 import { LAYOUT_EN, LAYOUT_ZH } from './i18n-layout'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
@@ -9109,6 +9110,8 @@ const TABLES: Record<Lang, Table> = {
     ...LIBRARY_ZH,
     // WP504：第三栏库面板、批量条、✦ 问 AI
     ...RAIL_LIBRARY_ZH,
+    // WP509：红人同步到飞书表
+    ...KOL_SYNC_ZH,
     ...CLOUD_AUTH_ZH,
     ...POSITION_ZH,
     ...READ_ROUTES_ZH,
@@ -9214,6 +9217,7 @@ const TABLES: Record<Lang, Table> = {
     ...en,
     ...LIBRARY_EN,
     ...RAIL_LIBRARY_EN,
+    ...KOL_SYNC_EN,
     ...CLOUD_AUTH_EN,
     ...POSITION_EN,
     ...READ_ROUTES_EN,
