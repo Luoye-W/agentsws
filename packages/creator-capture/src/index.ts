@@ -7,7 +7,7 @@
  * | `kol/` | 指标算法（体检、受众真实性、频道估值、导出列、批量节奏）与快照类型 | 私有插件 `src/lib/kol/` @ 57fca9c（源自 KOLAgents 旧插件 d25b877），本体逐字不动 |
  * | `kol/utils/` | 快照类型、YouTube 搜索页 / 链接页采集器、数字解析 | 私有插件 `src/lib/kol/utils/` @ 57fca9c |
  * | `collectors/` | 主页 / 内容页 / 列表页采集器（DOM 只读） | 私有插件 `src/contents/utils/` @ 57fca9c |
- * | `wire/` | 快照 → 本机 `ingest` 请求体（主页观测、列表批量、内容观测、链接页观测、公开联系方式） | 私有插件外壳 `pluginApi.ts` / `local-handlers.ts` / `public-contacts.ts` 等 |
+ * | `wire/` | 快照 → 本机 `ingest` 请求体（主页观测、列表批量、内容观测、链接页观测、公开联系方式）；WP498：「存入红人池」请求体、列表页预筛 | 私有插件外壳 `pluginApi.ts` / `local-handlers.ts` / `public-contacts.ts` 等 |
  * | `page/` + `page-script*.ts` | 在页面里读一遍（ego 用 `page.evaluate` 注入；插件是 content script 直接调） | 新写 |
  * | `metrics.ts` | 快照 → 面板上那几块算出来的数 | 新写（只调上面的算法） |
  *
@@ -21,6 +21,7 @@
 export type { ListCaptureTarget } from './collectors/listCaptureTarget.js'
 export { resolveListCaptureTarget } from './collectors/listCaptureTarget.js'
 export { type PanelRoute, resolvePanelRoute } from './collectors/panelRoute.js'
+export type { RelevanceBand, RelevanceTally } from './collectors/relevance.js'
 export {
   bioLinkCacheKey,
   type CachedBioLink,
@@ -59,6 +60,13 @@ export {
   PAGE_ARGS_PLACEHOLDER,
   type PageScriptInput,
 } from './page-script.js'
+export {
+  type CreatorSaveBody,
+  type CreatorSaveRecentItem,
+  creatorSaveBodyOf,
+  pluginCreatorSaveBodyOf,
+  SAVE_RECENT_ITEMS_MAX,
+} from './wire/creatorSave.js'
 export { followersFromText } from './wire/followerCount.js'
 export { listContentObservations, listSourcePage, listSourceUrl } from './wire/listContent.js'
 export {
@@ -73,4 +81,5 @@ export {
   listObservationsOf,
 } from './wire/observations.js'
 export { type IngestPlan, type IngestPlanOptions, ingestPlanOf } from './wire/plan.js'
+export { type ListPrescreen, listWantsSeedTopics, prescreenList } from './wire/prescreen.js'
 export { publicContactOfLink, publicContactsOfProfile } from './wire/publicContacts.js'

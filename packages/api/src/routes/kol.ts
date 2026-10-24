@@ -193,6 +193,35 @@ export interface KolCreatorDetail {
       blocked?: string
     }
   >
+  /**
+   * WP498（决策 1752 C，只加）：每个账号最近一次「存入红人池」时主页上的资料（按 `PlatformAccount.id`；
+   * 插件按钮或 ego 自动存入）。没存入过的账号没有这一格。工作台红人详情与 `get_creator` 工具都读它。
+   */
+  profiles?: Record<string, KolCreatorProfileView>
+}
+
+/** WP498（1752 C）：存入红人池时主页上的资料（页面上公开渲染着的；数字是 `saved_at` 那一刻的）。 */
+export interface KolCreatorProfileView {
+  saved_at: Iso8601
+  country?: string
+  /** 加入时间（页面原文，如 `Mar 3, 2021`）。 */
+  joined_date?: string
+  total_views?: number
+  avg_views?: number
+  video_count?: number
+  bio?: string
+  avatar_url?: string
+  banner_url?: string
+  recent_items?: {
+    title: string
+    views?: number
+    views_text?: string
+    likes?: number
+    comments?: number
+    published_at?: string
+    published_text?: string
+    thumbnail_url?: string
+  }[]
 }
 
 /** 合并建议在卡面上的样子。 */

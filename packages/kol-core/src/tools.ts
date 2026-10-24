@@ -88,7 +88,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
      */
     name: 'capture_creator_pages',
     description:
-      '在浏览器（ego）里打开红人主页 / 视频或帖子页 / 搜索或话题列表页 / Linktree，用和浏览器插件**同一套采集规则**读出数据并记下来（存进本机红人库，和插件采集的一样备份到工坊云端）。读到的有：粉丝 / 订阅、作品数、平均播放、总播放、国家、加入时间、简介、外链与公开联系方式、近期作品、更新规律，以及体检（播放 / 粉丝比、疑似刷粉）、受众真实性信号、频道估值区间；列表页读出页面上的每个候选人。**记红人数据优先用它**——你只负责挑要看哪几页，数字由采集规则读。一次最多 10 页，每页十几秒。YouTube / TikTok / Instagram / Linktree 之外的页面或读不出来时，再用 record_creator_observations 手记。',
+      '在浏览器（ego）里打开红人主页 / 视频或帖子页 / 搜索或话题列表页 / Linktree，用和浏览器插件**同一套采集规则**读出数据并记下来（存进本机红人库，和插件采集的一样备份到工坊云端）。读到的有：粉丝 / 订阅、作品数、平均播放、总播放、国家、加入时间、简介、外链与公开联系方式、近期作品、更新规律，以及体检（播放 / 粉丝比、疑似刷粉）、受众真实性信号、频道估值区间；**读到的每个红人主页都会存入红人池**（和插件「存入红人池」同一个入口，国家、加入时间、总播放、近期作品也存；回执里 summary 说存了几个、新增几个）。列表页读出页面上的每个候选人、全记下来；视频页右栏每行带插件预筛的相关度分（relevance_score，按分排好，plugin_would_skip 标的是插件会筛掉的），挑人先看前面的。**记红人数据优先用它**——你只负责挑要看哪几页，数字由采集规则读。一次最多 10 页，每页十几秒。YouTube / TikTok / Instagram / Linktree 之外的页面或读不出来时，再用 record_creator_observations 手记。',
     input_schema: {
       type: 'object',
       properties: {
@@ -164,7 +164,8 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   },
   {
     name: 'get_creator',
-    description: '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史。',
+    description:
+      '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史；存入过红人池的账号还带主页资料（profiles：国家、加入时间、总播放、平均播放、作品数、简介、头像、横幅、近期作品，saved_at 是那一刻）。',
     input_schema: {
       type: 'object',
       properties: { creator_id: str('红人 id') },

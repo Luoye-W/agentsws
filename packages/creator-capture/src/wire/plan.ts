@@ -10,13 +10,19 @@
  * - **链接页**：`toBioLinkObservationPayload` → 链接页观测。
  * - **列表页**：每个候选 `toBulkObservationItem` → 按 20 个一块（`chunkItems`）→ 每块一批观测 + 这一块里红人带着的内容观测。
  *   插件里是人点「采集」时勾着的那些（缺省全勾）；这里是全部（AI 想挑人，就只把要的那几页交过来）。
+ *   WP498（1742 C）：视频页右栏先过插件那套预筛（`prescreen.ts`）打上分，交过来的是打过分的那一份——
+ *   分随观测一起记（`relevance_score`，同插件），一行不丢。
+ * - **存入红人池**（WP498，1740 B）：主页那一条另出一份「存入红人池」的请求体（`creatorSave.ts`，插件面板那个按钮的同一份
+ *   换形 + 加入时间 / 近期作品）。
  */
 import { type CachedBioLink, expandBioLinks } from '../kol/bioLinkCache.js'
 import { chunkItems, toBulkObservationItem } from '../kol/bulkCapture.js'
 import { type BioLinkSnapshot, toBioLinkObservationPayload } from '../kol/utils/bioLink.js'
 import { toContentObservationPayload } from '../kol/utils/contentSnapshot.js'
 import { type CreatorSnapshot, toObservationPayload } from '../kol/utils/creatorSnapshot.js'
+import type { SearchCreatorCandidate } from '../kol/utils/youtubeSearch.js'
 import type { PageCapture } from '../page/capture.js'
+import { type CreatorSaveBody, creatorSaveBodyOf } from './creatorSave.js'
 import {
   type BioLinkObservationBody,
   bioLinkObservationBodyOf,
@@ -32,6 +38,8 @@ import { publicContactsOfProfile } from './publicContacts.js'
 export interface IngestPlan {
   /** 主页那一条（展开过 link-in-bio 的快照），没有就是 `undefined`。 */
   creator?: CreatorSnapshot
+  /** WP498（1740 B）：主页那一条的「存入红人池」请求体（没有主页就没有）。 */
+  creator_save?: CreatorSaveBody
   /** 一批一批的观测（主页：一批一条；列表：20 条一批）。 */
   observation_batches: CaptureObservation[][]
   content_observations: ContentObservationBody[]
@@ -43,6 +51,8 @@ export interface IngestPlanOptions {
   now: string
   /** 同一趟里顺手读到的链接页（展开主页上的 link-in-bio，与插件「看过就记住」那份缓存同一个用法）。 */
   bio_links?: readonly BioLinkSnapshot[]
+  /** WP498（1742 C）：列表页打过分的候选（`prescreenList(...).candidates`）；不给就用页面上读到的原样。 */
+  list_candidates?: readonly SearchCreatorCandidate[]
 }
 
 export function ingestPlanOf(capture: PageCapture, options: IngestPlanOptions): IngestPlan {
@@ -61,6 +71,7 @@ export function ingestPlanOf(capture: PageCapture, options: IngestPlanOptions): 
     const expanded = expandBioLinks(snap.links, cached)
     if (expanded.length !== snap.links.length) snap = { ...snap, links: expanded }
     plan.creator = snap
+    plan.creator_save = creatorSaveBodyOf(snap, options.now)
     plan.observation_batches.push([
       creatorObservationOf(toObservationPayload(snap), publicContactsOfProfile(snap)),
     ])
@@ -79,7 +90,7 @@ export function ingestPlanOf(capture: PageCapture, options: IngestPlanOptions): 
 
   if (capture.list && capture.list.candidates.length > 0) {
     const { target } = capture.list
-    const items = capture.list.candidates.map(toBulkObservationItem)
+    const items = (options.list_candidates ?? capture.list.candidates).map(toBulkObservationItem)
     for (const chunk of chunkItems(items)) {
       const batch = {
         platform: target.platform,

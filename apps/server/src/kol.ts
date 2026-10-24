@@ -277,6 +277,39 @@ export interface KolAccountObservation {
    * `/influencer/creators?batch=<id>` 按它把「这一批」筛出来。只记本机，不出去。
    */
   batch_id?: string
+  /**
+   * WP498（决策 1740 B）：「存入红人池」那一刻主页上的资料（插件按钮与 ego 自动存入同一个入口）。
+   * 只有 `source: 'manual_save'` 的行有；只记本机，不出去（上云的只有观测那几格与 1707b 的资料字段）。
+   */
+  profile?: KolProfileSnapshot
+}
+
+/** WP498（1740 B）：存入红人池时主页上的资料（都是页面上公开渲染着的东西；数字是那一刻的）。 */
+export interface KolProfileSnapshot {
+  avatar_url?: string
+  banner_url?: string
+  bio?: string
+  /** 国家 / 地区（页面原文，如 `Germany`）。 */
+  country?: string
+  /** 加入时间（页面原文，如 `Mar 3, 2021`）。 */
+  joined_date?: string
+  /** 累计播放。 */
+  total_views?: number
+  /** 近期作品的平均播放。 */
+  avg_views?: number
+  /** 作品数。 */
+  video_count?: number
+  /** 近期作品（最多 12 条）。 */
+  recent_items?: {
+    title: string
+    views?: number
+    views_text?: string
+    likes?: number
+    comments?: number
+    published_at?: string
+    published_text?: string
+    thumbnail_url?: string
+  }[]
 }
 
 /**

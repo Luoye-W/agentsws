@@ -39,6 +39,7 @@ import {
   getKolOutreachDefaults,
   type KolCampaignData,
   type KolChannelId,
+  type KolCreatorProfileData,
   type KolOutreachData,
   type KolSearchData,
   planKolCampaign,
@@ -429,6 +430,79 @@ function Discovery({
   )
 }
 
+/** 大数缩写（总播放动辄上百万）。 */
+const compact = (n: number): string =>
+  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : num(n)
+
+/**
+ * WP498（决策 1752 C）：存入红人池时主页上的资料——一行数字、两行简介、前三条近期作品。
+ * 头像 / 横幅只给链接：工坊的壳不加载外站图片（`img-src 'self' blob: data:`）。
+ */
+function SavedProfile({ profile: p }: { profile: KolCreatorProfileData }): React.ReactNode {
+  const { t } = useApp()
+  const facts = [
+    p.country,
+    p.joined_date === undefined ? undefined : t('kol.profile.joined', { at: p.joined_date }),
+    p.total_views === undefined
+      ? undefined
+      : t('kol.profile.total_views', { n: compact(p.total_views) }),
+    p.avg_views === undefined ? undefined : t('kol.profile.avg_views', { n: compact(p.avg_views) }),
+    p.video_count === undefined ? undefined : t('kol.profile.videos', { n: String(p.video_count) }),
+  ].filter((x): x is string => x !== undefined)
+  const recent = p.recent_items ?? []
+  return (
+    <div className="flex w-full flex-col gap-1 text-xs" data-testid="kol-saved-profile">
+      <div className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
+        <span data-testid="kol-profile-facts">{facts.join(' · ')}</span>
+        <span>{t('kol.profile.saved_at', { at: p.saved_at.slice(0, 10) })}</span>
+        {p.avatar_url === undefined ? null : (
+          <a className="underline" href={p.avatar_url} target="_blank" rel="noreferrer">
+            {t('kol.profile.avatar')}
+          </a>
+        )}
+        {p.banner_url === undefined ? null : (
+          <a className="underline" href={p.banner_url} target="_blank" rel="noreferrer">
+            {t('kol.profile.banner')}
+          </a>
+        )}
+        {p.avatar_url === undefined && p.banner_url === undefined ? null : (
+          <Hint text={t('kol.profile.images.hint')} testId="kol-profile-images-hint" />
+        )}
+      </div>
+      {p.bio === undefined ? null : (
+        <p className="line-clamp-2 text-muted-foreground" data-testid="kol-profile-bio">
+          {p.bio}
+        </p>
+      )}
+      {recent.length === 0 ? null : (
+        <div data-testid="kol-profile-recent">
+          <span className="text-muted-foreground">{t('kol.profile.recent')}</span>
+          <ul className="flex flex-col">
+            {recent.slice(0, 3).map((r, i) => (
+              <li key={`${String(i)}-${r.title}`} className="truncate">
+                {r.title}
+                <span className="ml-2 text-muted-foreground">
+                  {[
+                    r.views_text ?? (r.views === undefined ? undefined : compact(r.views)),
+                    r.published_text,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {recent.length > 3 ? (
+            <span className="text-muted-foreground">
+              {t('kol.profile.more', { n: String(recent.length - 3) })}
+            </span>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── 红人详情（资料快照 / 联系方式脱敏 / 合作历史）───────────────────── */
 
 function CreatorDetail({
@@ -566,6 +640,9 @@ function CreatorDetail({
               <span className="text-xs text-muted-foreground" data-testid="kol-observed-at">
                 {t('kol.observed_at', { at: a.observed_at.slice(0, 10) })}
               </span>
+              {view.profiles?.[a.id] === undefined ? null : (
+                <SavedProfile profile={view.profiles[a.id] as KolCreatorProfileData} />
+              )}
             </div>
           ))}
         </section>

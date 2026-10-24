@@ -1,0 +1,26 @@
+{
+  "page": "tiktok-profile",
+  "save_creator": [
+    {
+      "channel": "tiktok",
+      "handle": "lunchfixture",
+      "external_id": "7000000000000000101",
+      "display_name": "Lunch Fixture",
+      "url": "https://www.tiktok.com/@lunchfixture",
+      "page_url": "https://www.tiktok.com/@lunchfixture",
+      "avatar_url": "https://p16.example/avatar-lunchfixture.png",
+      "bio": "Ten-minute lunches every day. Collabs: lunch@fixture.example",
+      "followers": 256000,
+      "avg_views": 45967,
+      "video_count": 412,
+      "country": "US",
+      "contact": {
+        "kind": "email",
+        "value": "lunch@fixture.example",
+        "source": "channel_about"
+      },
+      "observed_at": "2026-10-23T08:00:00.000Z",
+      "source": "manual_save"
+    }
+  ]
+}

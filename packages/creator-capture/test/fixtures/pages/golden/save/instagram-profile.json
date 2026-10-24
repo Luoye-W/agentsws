@@ -1,0 +1,25 @@
+{
+  "page": "instagram-profile",
+  "save_creator": [
+    {
+      "channel": "instagram",
+      "handle": "clayfixture",
+      "external_id": "clayfixture",
+      "display_name": "Clay Fixture",
+      "url": "https://www.instagram.com/clayfixture/",
+      "page_url": "https://www.instagram.com/clayfixture/",
+      "avatar_url": "https://cdn.example/avatar-clayfixture.png",
+      "bio": "Handmade ceramics · new pieces weekly · studio@clayfixture.example",
+      "followers": 48200,
+      "avg_views": 5850,
+      "video_count": 128,
+      "contact": {
+        "kind": "email",
+        "value": "studio@clayfixture.example",
+        "source": "channel_about"
+      },
+      "observed_at": "2026-10-23T08:00:00.000Z",
+      "source": "manual_save"
+    }
+  ]
+}

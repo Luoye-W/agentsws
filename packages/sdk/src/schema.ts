@@ -80010,6 +80010,17 @@ export interface operations {
           page_url?: string
           /** @enum {string} */
           source?: 'channel_page' | 'content_page' | 'search_results' | 'manual_save'
+          joined_date?: string
+          recent_items?: {
+            title: string
+            views?: number
+            views_text?: string
+            likes?: number
+            comments?: number
+            published_at?: string
+            published_text?: string
+            thumbnail_url?: string
+          }[]
         }
       }
     }

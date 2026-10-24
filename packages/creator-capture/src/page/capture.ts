@@ -69,6 +69,11 @@ export interface PageListCapture {
   candidates: SearchCreatorCandidate[]
   /** 视频页右栏：身份对不上、被丢掉的条数（插件面板上也数这个）。 */
   unidentified?: number
+  /**
+   * WP498（决策 1742 C）：视频页右栏的种子——这条视频的频道（插件列表按钮拿它的 `externalId` 去本机要种子主题词，
+   * 给右栏每一行打相关度分）。搜索 / 话题页没有。
+   */
+  seed?: { externalId: string; handle?: string; name?: string }
 }
 
 export interface PageCapture {
@@ -105,7 +110,12 @@ function readList(target: ListCaptureTarget): PageListCapture {
     seedExternalId: seed?.externalId,
     seedHandle: seed?.handle,
   })
-  return { target, candidates: out.candidates, unidentified: out.unidentified }
+  return {
+    target,
+    candidates: out.candidates,
+    unidentified: out.unidentified,
+    ...(seed ? { seed } : {}),
+  }
 }
 
 /** 读一遍这一页。 */
