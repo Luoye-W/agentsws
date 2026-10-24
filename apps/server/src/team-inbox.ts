@@ -199,8 +199,8 @@ export interface TeamInboxOptions {
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   /** 用法与同事（装配方从组织面与身份层读；组织面装得晚，读不到当 ①）。 */
   directory(): Promise<TeamDirectory>
-  /** 现在连着的邮箱地址。 */
-  mailboxes(): readonly string[]
+  /** 这个品牌的邮箱地址（连着的 + 消息库里有信的，同消息页左栏那一列）。 */
+  mailboxes(): readonly string[] | Promise<readonly string[]>
   /** 同岗位的同事：做这条职责的人（「不在交给同岗位的同事」用）。 */
   holdersOf(role_id: string): readonly PersonId[]
   approvals: Pick<ApprovalBus, 'queue' | 'reroute'>
@@ -294,7 +294,7 @@ export function createTeamInbox(options: TeamInboxOptions): TeamInbox {
     const can_edit =
       t.mode === 'peers' ? me !== undefined : t.mode === 'company' ? me?.admin === true : false
     const now = clock.now()
-    const accounts = [...new Set(options.mailboxes().map(mailboxKey))]
+    const accounts = [...new Set((await options.mailboxes()).map(mailboxKey))]
     const mailboxes: MailboxOwnersRow[] = accounts.map((account) => ({
       account,
       owners: store.owners(account).filter((p) => t.members.some((m) => m.person_id === p)),

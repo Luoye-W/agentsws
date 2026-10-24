@@ -121,6 +121,15 @@ export function compositeApprovals(primary: ApprovalBus, secondary: ApprovalBus)
       const [a, b] = await Promise.all([primary.expire(now), secondary.expire(now)])
       return [...a, ...b]
     },
+    // WP510：改派（催促卡按邮箱负责人分）/ 当场过期——落到卡住的那一本（那一本没实现就当改不了）
+    async reroute(id, input) {
+      const bus = await ownerOf(id)
+      return bus?.reroute === undefined ? undefined : bus.reroute(id, input)
+    },
+    async expireNow(id, reason) {
+      const bus = await ownerOf(id)
+      return bus?.expireNow === undefined ? undefined : bus.expireNow(id, reason)
+    },
     // WP414：撤回跟着处理的卡 / 事后补理由——落到卡住的那一本（那一本没实现就当撤不了）
     async reopen(id, by, input) {
       const bus = await ownerOf(id)

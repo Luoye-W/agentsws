@@ -9778,7 +9778,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       appendEvent,
       directory: async () =>
         teamDirectoryOf === undefined ? { mode: 'solo', members: [] } : teamDirectoryOf(ws),
-      mailboxes: () => connections.mailAccounts().map((a) => a.address),
+      mailboxes: async () => [
+        ...connections.mailAccounts().map((a) => a.address),
+        ...(await Promise.resolve()
+          .then(() => messages.store.accounts())
+          .catch(() => [] as string[])),
+      ],
       holdersOf: (role_id) => [
         ...new Set(
           roles.assignments

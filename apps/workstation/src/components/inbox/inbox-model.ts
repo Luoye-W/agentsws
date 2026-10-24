@@ -108,9 +108,15 @@ export function useInboxPresence(enabled: boolean): void {
     }
     beat()
     const timer = setInterval(beat, INBOX_PRESENCE_BEAT_MS)
+    // 关掉 / 刷新页面：卸载那一下来不及发，用 keepalive 送一个 null（别人那边立刻消失，不等 20 秒）
+    const leave = (): void => {
+      void inboxPresence(null, { keepalive: true }).catch(() => undefined)
+    }
+    globalThis.addEventListener?.('pagehide', leave)
     return () => {
       live = false
       clearInterval(timer)
+      globalThis.removeEventListener?.('pagehide', leave)
       viewersStore.set({})
       void inboxPresence(null).catch(() => undefined)
     }

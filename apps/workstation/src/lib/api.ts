@@ -474,6 +474,8 @@ export interface RequestOptions {
   anonymous?: boolean
   /** 覆盖 X-Assignment */
   assignment?: string
+  /** WP510：页面关掉时也要送出去的那一下（「在看」立刻消失）。 */
+  keepalive?: boolean
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -489,6 +491,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     method: options.method ?? 'GET',
     headers,
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+    ...(options.keepalive === true ? { keepalive: true } : {}),
   })
   const text = await res.text()
   const parsed: unknown = text === '' ? {} : JSON.parse(text)
@@ -7497,8 +7500,13 @@ export const getInbox = (opts?: { scope?: 'all' }): Promise<InboxView> =>
 /** WP510（决策 1515）：「谁在看」——我开着哪一件（`null` = 没开着），回别人开着哪几件。 */
 export const inboxPresence = (
   item: string | null,
+  opts?: { keepalive?: boolean },
 ): Promise<import('@agentsws/contracts').InboxPresenceView> =>
-  api('/v1/inbox/presence', { method: 'POST', body: { item } })
+  api('/v1/inbox/presence', {
+    method: 'POST',
+    body: { item },
+    ...(opts?.keepalive === true ? { keepalive: true } : {}),
+  })
 
 /** WP510：收件箱分工（邮箱负责人、多少天没上线算不在、不在时交给谁、同事）。 */
 export const getInboxTeam = (): Promise<import('@agentsws/contracts').TeamInboxView> =>
