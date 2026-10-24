@@ -42112,6 +42112,10 @@
                     "type": "string",
                     "maxLength": 80
                   },
+                  "offering": {
+                    "type": "string",
+                    "enum": ["physical", "app", "digital", ""]
+                  },
                   "email_service": {
                     "type": "string",
                     "maxLength": 60

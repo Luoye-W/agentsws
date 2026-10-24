@@ -453,6 +453,11 @@ export const DEFAULT_REPORTS: readonly ReportSpec[] = [
         wide: true,
       },
       { id: 'stop-loss', kind: 'table', title: '止损记录', dataset: 'ads.stop_loss' },
+      // WP452（docs/109 §5.2 #12–16）：资料在右——体检、保本线、素材疲劳、广告与落地页
+      { id: 'audit', kind: 'table', title: '账户体检', dataset: 'ads.audit', wide: true },
+      { id: 'break-even', kind: 'table', title: '保本线', dataset: 'ads.break_even' },
+      { id: 'fatigue', kind: 'table', title: '素材疲劳', dataset: 'ads.fatigue', wide: true },
+      { id: 'landing', kind: 'table', title: '广告与落地页', dataset: 'ads.landing', wide: true },
     ],
   }),
   // ── B2B ──────────────────────────────────────────────────

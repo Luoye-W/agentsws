@@ -41830,6 +41830,8 @@ export interface operations {
           support_email?: '' | string
           currency?: string
           category?: string
+          /** @enum {string} */
+          offering?: 'physical' | 'app' | 'digital' | ''
           email_service?: string
           subcategory?: string
           positioning?: string

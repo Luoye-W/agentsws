@@ -17,6 +17,10 @@ import { ExternalLink } from 'lucide-react'
 import { useId } from 'react'
 import { AdsChangeBody, isAdsChangePayload } from '@/components/ads/ads-change-body'
 import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
+import {
+  ExperimentReadoutBody,
+  isExperimentReadoutPayload,
+} from '@/components/ads/experiment-readout-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { openExternal } from '@/components/connections/bridge'
 import { DigestCardBody } from '@/components/content-updates/digest-card-body'
@@ -417,6 +421,17 @@ export function DeckCardBody({
                 option={option}
                 onOption={onOption}
               />
+            ) : isExperimentReadoutPayload(card.detail.payload) ? (
+              // WP452：广告实验「保留 / 停 / 再测」——每一版的数与为什么，下面照旧是三个选项
+              <>
+                <ExperimentReadoutBody payload={card.detail.payload} />
+                <OptionList
+                  options={options}
+                  option={option}
+                  onOption={onOption}
+                  kind={card.kind}
+                />
+              </>
             ) : (
               <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />
             )}

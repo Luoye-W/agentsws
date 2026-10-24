@@ -32,6 +32,10 @@ This product includes software developed by third parties under their own licens
 - Check items and rules adapted (ideas only, no code imported) from AgriciDaniel/claude-blog (MIT, Copyright (c) 2025-2026 AgriciDaniel) -
   https://github.com/AgriciDaniel/claude-blog @ 354442348815a7f0327077ad89af2c43cf4b4ab4: skills/blog-cannibalization,
   blog-decay -> packages/seo-core/src/cannibalization.ts (WP448)
+- Check items and methods adapted (ideas only, no code imported) from AgriciDaniel/claude-ads (MIT, Copyright (c) 2026 Daniel Agrici) -
+  https://github.com/AgriciDaniel/claude-ads @ fc3908e786c318776df89a3a098333da377364be: ads/references/*-audit.md, skills/ads-test,
+  ads-math, ads-landing, ads-creative, ads-monitor, ads-attribution, ads-apple -> packages/ads-core/src/{exports/audit-skeleton,
+  experiment-design,economics,landing,fatigue}.ts and packages/skills/bundled/{ads-experiment,ads-attribution}/SKILL.md (WP452)
 - @adobe/structured-data-validator (Apache-2.0, Copyright 2025 Adobe) - https://github.com/adobe/structured-data-validator
   (Google rich-result checks for structured data in the site technical audit, packages/site-core; npm dependency, unmodified)
 See each package's LICENSE for details.

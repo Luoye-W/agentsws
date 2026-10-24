@@ -158,6 +158,7 @@ import {
   runAmazonScript,
   type ScriptStep,
 } from './stub-ads-amazon.js'
+import { runAdsSkillScript } from './stub-ads-skills.js'
 import {
   boundariesToAsk,
   boundaryGate,
@@ -2019,7 +2020,9 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         }
         const out =
           adsAmazon === 'ads'
-            ? await runAdsScript(exec)
+            ? // WP452：话里点到体检 / 保本线 / 落地页 / 实验结果就走那一样，否则照旧查数 → 止损
+              ((await runAdsSkillScript(exec, b2bText, req.tools.allow)) ??
+              (await runAdsScript(exec)))
             : await runAmazonScript(exec, b2bText, req.tools.allow)
         for (const change_id of out.staged) {
           sink({ type: 'change.staged', change_id })

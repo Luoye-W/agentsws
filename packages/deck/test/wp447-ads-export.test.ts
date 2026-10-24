@@ -71,6 +71,9 @@ describe('WP447 只读新平台的三块', () => {
       'ads.export_spend',
       'ads.export_overview',
       'ads.export_audit',
+      // WP452：保本线、广告与落地页（只读的平台也能看，都不碰账户）
+      'ads.break_even_calc',
+      'ads.landing_checks',
     ])
     // 「查看完整报告」指到那一家自己的后台（同一个 `ads` 源默认是 Meta 的）
     for (const b of blocksForRole('ads.pinterest'))

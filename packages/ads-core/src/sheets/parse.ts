@@ -55,6 +55,8 @@ export type ExportField =
   | 'day_end'
   | 'account'
   | 'account_id'
+  // WP452：素材疲劳要看的「频次」（Meta 等广告那一层的导出有；没有这一列就不判频次）
+  | 'frequency'
 
 /** 别名（比较前都先归一：小写、去掉空格与标点）。 */
 const ALIASES: Record<ExportField, readonly string[]> = {
@@ -110,6 +112,7 @@ const ALIASES: Record<ExportField, readonly string[]> = {
   day_end: ['Reporting ends'],
   account: ['Account', 'Account name'],
   account_id: ['Customer ID', 'Account ID'],
+  frequency: ['Frequency'],
 }
 
 /**
@@ -144,6 +147,7 @@ const ALIASES_ZH: Partial<Record<ExportField, readonly string[]>> = {
   roas: ['转化价值/费用', '购物广告花费回报', '广告花费回报'],
   account: ['账号', '账户', '账户名称'],
   account_id: ['客户 ID', '账户编号'],
+  frequency: ['频次'],
 }
 
 /** 归一：小写、只留字母数字（WP315：中日韩字也留，中文表头才认得出）。 */

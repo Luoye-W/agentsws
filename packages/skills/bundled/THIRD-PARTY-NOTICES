@@ -321,3 +321,37 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+================================================================================
+AgriciDaniel/claude-ads
+https://github.com/AgriciDaniel/claude-ads
+pinned commit fc3908e786c318776df89a3a098333da377364be
+Used in: ads-experiment (method from skills/ads-test), ads-attribution (method from
+         skills/ads-attribution and skills/ads-apple); rewritten in Chinese for Agents
+         Workshop's rules. The account check-up checklist structure (ads/references/*-audit.md:
+         "no evidence = unknown") and the methods of skills/ads-math, ads-landing, ads-creative,
+         ads-monitor are reflected in our own code in packages/ads-core (exports/audit-skeleton.ts,
+         experiment-design.ts, economics.ts, landing.ts, fatigue.ts); only the method was borrowed,
+         no code or platform facts were copied.
+--------------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2026 Daniel Agrici (AgriciDaniel)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

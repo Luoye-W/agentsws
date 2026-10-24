@@ -1768,6 +1768,19 @@ export const REPORT_DATASETS: readonly DatasetDef[] = [
   },
   { id: 'ads.campaigns', sources: ['ads'], run: (ctx) => fromQueryTable('ads.campaigns', ctx) },
   { id: 'ads.stop_loss', sources: ['ads'], run: (ctx) => fromQueryTable('ads.stop_loss_log', ctx) },
+  // WP452：体检（三态）、保本线、素材疲劳、广告与落地页——资料，在右栏「报表 · 投放」里
+  { id: 'ads.audit', sources: ['ads'], run: (ctx) => fromQueryTable('ads.export_audit', ctx) },
+  {
+    id: 'ads.break_even',
+    sources: ['ads'],
+    run: (ctx) => fromQueryTable('ads.break_even_calc', ctx),
+  },
+  {
+    id: 'ads.fatigue',
+    sources: ['ads'],
+    run: (ctx) => fromQueryTable('ads.creative_fatigue', ctx),
+  },
+  { id: 'ads.landing', sources: ['ads'], run: (ctx) => fromQueryTable('ads.landing_checks', ctx) },
   { id: 'b2b.inquiries', sources: ['b2b'], run: (ctx) => fromQueryTable('b2b.inquiries', ctx) },
   { id: 'b2b.quotes', sources: ['b2b'], run: (ctx) => fromQueryTable('b2b.quotes_pending', ctx) },
   {

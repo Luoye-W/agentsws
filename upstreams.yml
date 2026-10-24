@@ -823,6 +823,31 @@ upstreams:
       - packages/skills/test/wp449-content-skills.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
+  - id: claude-ads
+    kind: ported
+    why: 投放第二批技能（WP452，docs/109 §5.2 #12–16、§6.3）——体检清单「没证据就标未知」的结构、实验设计与读结果、盈亏平衡、落地页一致性、素材疲劳、归因（含 App）的方法改编自它（MIT）；代码自写，平台事实不抄
+    repo: AgriciDaniel/claude-ads
+    pinned_commit: fc3908e786c318776df89a3a098333da377364be
+    watch: [releases, readme]
+    watch_paths:
+      - ads/references
+      - skills/ads-test
+      - skills/ads-math
+      - skills/ads-landing
+      - skills/ads-creative
+      - skills/ads-monitor
+      - skills/ads-attribution
+      - skills/ads-apple
+    we_depend_on:
+      - 'ads/references/*-audit.md 的检查项结构（查什么、凭什么、没证据标未知） → packages/ads-core/src/exports/ads-audit-checklist.content.json 与 audit-skeleton.ts（自己的数据与代码）'
+      - 'skills/ads-test 的方法（先定再看、样本不够不叫赢） → packages/skills/bundled/ads-experiment/SKILL.md；packages/ads-core/src/experiment-design.ts（教科书公式，自己的代码）'
+      - 'skills/ads-math、ads-landing、ads-creative、ads-monitor 的方法 → packages/ads-core/src/{economics,landing,fatigue}.ts（自己的代码，门槛做成可改的起步值）'
+      - 'skills/ads-attribution、ads-apple 的方法 → packages/skills/bundled/ads-attribution/SKILL.md'
+    covered_by:
+      - packages/skills/test/wp452-ads-skills.test.ts
+      - packages/ads-core/test/wp452-ads-skills.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
   # 两份研究技能改编自这两家（MIT）。**只留方法论与产出，取数层整个换掉**
   # （上游直接抓 Reddit 公开页面 / JSON、用浏览器 cookie 调 X 内部接口、调第三方抓取服务——一条都没进来；
   # 我们只走官方网页工具、接口中台、Reddit 两路、品牌连上的官方接口，见 social-core/src/research/sources.ts）。

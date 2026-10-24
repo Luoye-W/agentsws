@@ -7,6 +7,7 @@
 
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
 import { ADS_OVERVIEW_EN, ADS_OVERVIEW_ZH } from './i18n-ads-overview'
+import { ADS_SKILLS_EN, ADS_SKILLS_ZH } from './i18n-ads-skills'
 import { AMAZON_COMPETITORS_EN, AMAZON_COMPETITORS_ZH } from './i18n-amazon-competitors'
 import { AMAZON_KEYWORDS_EN, AMAZON_KEYWORDS_ZH } from './i18n-amazon-keywords'
 import { AMAZON_LISTING_EN, AMAZON_LISTING_ZH } from './i18n-amazon-listing'
@@ -9157,6 +9158,8 @@ const TABLES: Record<Lang, Table> = {
     ...KNOWLEDGE_LEARN_ZH,
     ...INBOX_ZH,
     ...KOL_INFO_ZH,
+    // WP452：投放第二批技能
+    ...ADS_SKILLS_ZH,
     // WP469：日历与待办（待办 + 日历合成一页）
     ...CAL_TODO_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
@@ -9244,6 +9247,7 @@ const TABLES: Record<Lang, Table> = {
     ...KNOWLEDGE_LEARN_EN,
     ...INBOX_EN,
     ...KOL_INFO_EN,
+    ...ADS_SKILLS_EN,
     ...CAL_TODO_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,
