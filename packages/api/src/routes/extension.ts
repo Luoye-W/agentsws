@@ -328,6 +328,24 @@ export interface ExtensionCreatorSave {
   observed_at: Iso8601
   page_url?: string
   source?: 'channel_page' | 'content_page' | 'search_results' | 'manual_save'
+  /**
+   * WP498（决策 1740 B，只加；老插件不带）：加入时间（页面原文，如 `Mar 3, 2021`）。只进本机红人库。
+   */
+  joined_date?: string
+  /** WP498（1740 B，只加）：近期作品（主页上那一排，最多 12 条）。只进本机红人库。 */
+  recent_items?: ExtensionCreatorRecentItem[]
+}
+
+/** WP498：「存入红人池」带来的一条近期作品（页面上本来就渲染着的那几格）。 */
+export interface ExtensionCreatorRecentItem {
+  title: string
+  views?: number
+  views_text?: string
+  likes?: number
+  comments?: number
+  published_at?: string
+  published_text?: string
+  thumbnail_url?: string
 }
 
 export interface ExtensionCreatorSaveResult {
@@ -714,6 +732,20 @@ const contentSaveSchema = contentObservationSchema
   })
   .strict()
 
+/** WP498：「存入红人池」带来的一条近期作品（只有页面上渲染着的那几格；没有正文、没有评论）。 */
+const recentItemSchema = z
+  .object({
+    title: z.string().min(1).max(300),
+    views: z.number().int().nonnegative().optional(),
+    views_text: z.string().max(120).optional(),
+    likes: z.number().int().nonnegative().optional(),
+    comments: z.number().int().nonnegative().optional(),
+    published_at: z.string().max(60).optional(),
+    published_text: z.string().max(120).optional(),
+    thumbnail_url: z.string().max(600).optional(),
+  })
+  .strict()
+
 /** 显式存入红人池：观测的白名单再加存入才有的几格。 */
 const creatorSaveSchema = z
   .object({
@@ -736,8 +768,17 @@ const creatorSaveSchema = z
     observed_at: z.string().min(1),
     page_url: z.string().max(600).optional(),
     source: z.enum(['channel_page', 'content_page', 'search_results', 'manual_save']).optional(),
+    // WP498（决策 1740 B，只加；老插件不带）：加入时间、近期作品——只进本机红人库
+    joined_date: z.string().max(80).optional(),
+    recent_items: z.array(recentItemSchema).max(12).optional(),
   })
   .strict()
+
+/**
+ * WP498：ego 路「存入红人池」也过**同一道闸**（见 {@link EXTENSION_INGEST_SCHEMA}）——
+ * 插件那条路由的请求体 schema 原样导出。
+ */
+export const EXTENSION_CREATOR_SAVE_SCHEMA = creatorSaveSchema
 
 /** 写进自己红人池的联系方式行。 */
 const contactSaveSchema = z

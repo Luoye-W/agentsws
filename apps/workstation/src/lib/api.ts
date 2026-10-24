@@ -5672,6 +5672,27 @@ export interface KolCreatorDetailData {
   collaborations: KolCollaborationData[]
   deliverables: KolDeliverableData[]
   tracked_links: { id: string; url: string; clicks: number; orders: number; revenue: number }[]
+  /** WP498（决策 1752 C）：每个账号最近一次「存入红人池」时主页上的资料（按账号 id；没存入过的没有）。 */
+  profiles?: Record<string, KolCreatorProfileData>
+}
+
+/** WP498：存入红人池时主页上的资料（页面原文 / 那一刻的数）。 */
+export interface KolCreatorProfileData {
+  saved_at: string
+  country?: string
+  joined_date?: string
+  total_views?: number
+  avg_views?: number
+  video_count?: number
+  bio?: string
+  avatar_url?: string
+  banner_url?: string
+  recent_items?: {
+    title: string
+    views?: number
+    views_text?: string
+    published_text?: string
+  }[]
 }
 
 export interface KolCollaborationData {

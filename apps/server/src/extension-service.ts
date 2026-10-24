@@ -31,6 +31,7 @@ import type {
   ExtensionContentResult,
   ExtensionContentSaveResult,
   ExtensionCreatorReport,
+  ExtensionCreatorSave,
   ExtensionCreatorSaveResult,
   ExtensionHello,
   ExtensionIngestResult,
@@ -64,6 +65,7 @@ import type {
   KolBioLinkObservation,
   KolContent,
   KolContentObservation,
+  KolProfileSnapshot,
   KolStore,
 } from './kol.js'
 import { CONTACT_SECRET_FIELD, contactSecretId } from './kol-service.js'
@@ -322,6 +324,52 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
   }
 
   /** 找到「这条渠道上的这个人」：handle 与平台的稳定 id（`UC…`）都认。 */
+  /**
+   * WP498（1740 B）：「存入红人池」请求体里主页上的资料 → 本机那一行粉丝快照上的 `profile`。
+   * 都是页面上公开渲染着的东西；一格都没有就不带。
+   */
+  function profileOfSave(input: ExtensionCreatorSave): KolProfileSnapshot | undefined {
+    const profile: KolProfileSnapshot = {
+      ...(input.avatar_url === undefined ? {} : { avatar_url: input.avatar_url }),
+      ...(input.banner_url === undefined ? {} : { banner_url: input.banner_url }),
+      ...(input.bio === undefined ? {} : { bio: input.bio }),
+      ...(input.country === undefined ? {} : { country: input.country }),
+      ...(input.joined_date === undefined ? {} : { joined_date: input.joined_date }),
+      ...(input.total_views === undefined ? {} : { total_views: input.total_views }),
+      ...(input.avg_views === undefined ? {} : { avg_views: input.avg_views }),
+      ...(input.video_count === undefined ? {} : { video_count: input.video_count }),
+      ...(input.recent_items === undefined || input.recent_items.length === 0
+        ? {}
+        : { recent_items: input.recent_items.slice(0, 12) }),
+    }
+    return Object.keys(profile).length === 0 ? undefined : profile
+  }
+
+  /** WP498：这个账号「存入红人池」过没有（插件按钮或 ego 自动存入；看有没有 `manual_save` 那一行快照）。 */
+  const inPool = (account_id: string): boolean =>
+    options.kol.accountObservations({ account_id }).some((o) => o.source === 'manual_save')
+
+  /**
+   * WP498（1740 B 照 1707b）：**存入了红人池的人**，主页观测送公共库时带上资料那几格——名字、主页链接、地区
+   * （库里记着的，存入时从页面上读到的国家）。出门前在转发那一跳过 `sanitizePublicProfile`（认不出的那一格丢掉）。
+   * 只认主页观测、只认存入过的人：没存入的主页观测与列表页那一批照旧是窄行（1742 C 不改上云的东西）。
+   * ego 读主页一律先存入（1740 B），所以 ego 路的主页观测都带；插件路是人点过「存入红人池」之后的那几次带。
+   * 类目 / 语言是用户自己的分法，不在这里送。
+   */
+  function publicProfileOf(
+    one: ExtensionObservation,
+    creator: Creator,
+    account: PlatformAccount,
+  ): Pick<PublicObservationRow, 'display_name' | 'url' | 'region'> {
+    const name =
+      one.display_name ?? (creator.display_name === '' ? undefined : creator.display_name)
+    return {
+      ...(name === undefined ? {} : { display_name: name }),
+      ...(account.url === '' ? {} : { url: account.url }),
+      ...(account.region === undefined ? {} : { region: account.region }),
+    }
+  }
+
   function findAccount(
     channel: KolChannel,
     key: string,
@@ -374,6 +422,8 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       followers_text?: string | undefined
       country?: string | undefined
       observed_at: string
+      /** WP498（1740 B）：存入红人池那一刻主页上的资料（只有显式存入带）。 */
+      profile?: KolProfileSnapshot | undefined
     } & ListSource,
   ): { creator: Creator; account: PlatformAccount } {
     // WP416：同一频道两种链接（`/channel/UC…` 与 `/@name`）收成同一个人——handle 与稳定 id 都比
@@ -441,6 +491,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       followers?: number | undefined
       followers_text?: string | undefined
       observed_at: string
+      profile?: KolProfileSnapshot | undefined
     } & ListSource,
   ): void {
     const row: KolAccountObservation = {
@@ -458,6 +509,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       ...(one.source_query === undefined ? {} : { source_query: one.source_query }),
       ...(one.relevance_score === undefined ? {} : { relevance_score: one.relevance_score }),
       ...(one.batch_id === undefined ? {} : { batch_id: one.batch_id }),
+      ...(one.profile === undefined ? {} : { profile: one.profile }),
     }
     options.kol.saveAccountObservation(row)
   }
@@ -928,6 +980,9 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         if (one.channel === 'youtube' && /^uc[a-z0-9_-]{22}$/.test(bare)) continue
         if (one.followers === undefined) continue
         forwardable.push({
+          ...(one.source === 'channel_page' && inPool(account.id)
+            ? publicProfileOf(one, creator, account)
+            : {}),
           channel: one.channel,
           handle: one.handle,
           ...(one.followers_text === undefined ? {} : { followers_text: one.followers_text }),
@@ -1083,7 +1138,8 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     saveCreator: (session, input): ExtensionCreatorSaveResult => {
       void session
       const existingBefore = findAccount(input.channel, input.handle, input.external_id)
-      const { creator, account } = upsert(input)
+      // WP498（1740 B）：主页上的资料（国家、加入时间、总播放、近期作品……）随这一行粉丝快照一起记下
+      const { creator, account } = upsert({ ...input, profile: profileOfSave(input) })
       // 页面上看到的商务邮箱：存入是一次显式动作，明文当场进加密库（同观测那条路）。
       if (input.contact !== undefined) storeContact(creator.id, input.contact)
       // WP131：显式存入也是「收进红人库」——开关开着就排队自动评分

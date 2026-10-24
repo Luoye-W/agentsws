@@ -12,9 +12,12 @@ export {
   type EgoCreatorCapture,
   type EgoIngestOutcome,
   type EgoPageCapture,
+  type EgoPoolOutcome,
   egoCaptureCall,
   egoCapturePage,
   ingestEgoPlan,
+  saveEgoCreator,
+  seedTopicsOf,
   summarizeCapture,
 } from './capture.js'
 export {

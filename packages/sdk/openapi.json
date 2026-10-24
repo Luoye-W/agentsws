@@ -100105,6 +100105,57 @@
                   "source": {
                     "type": "string",
                     "enum": ["channel_page", "content_page", "search_results", "manual_save"]
+                  },
+                  "joined_date": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "recent_items": {
+                    "maxItems": 12,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "views": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "views_text": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "likes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "comments": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "published_at": {
+                          "type": "string",
+                          "maxLength": 60
+                        },
+                        "published_text": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "thumbnail_url": {
+                          "type": "string",
+                          "maxLength": 600
+                        }
+                      },
+                      "required": ["title"],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": ["channel", "handle", "observed_at"],

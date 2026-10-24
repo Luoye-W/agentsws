@@ -1,0 +1,28 @@
+{
+  "page": "youtube-channel+linktree",
+  "save_creator": [
+    {
+      "channel": "youtube",
+      "handle": "@deskfixture",
+      "external_id": "UCdeskFIXTURE0000000001",
+      "display_name": "Desk Fixture",
+      "url": "https://www.youtube.com/@deskfixture/videos",
+      "page_url": "https://www.youtube.com/@deskfixture/videos",
+      "avatar_url": "https://yt3.example/avatar-deskfixture.png",
+      "banner_url": "https://yt3.example/banner-deskfixture.png",
+      "bio": "Desk setups and keyboard reviews. New video every Wednesday.",
+      "followers": 123000,
+      "avg_views": 32500,
+      "video_count": 231,
+      "total_views": 1234567,
+      "country": "Germany",
+      "contact": {
+        "kind": "email",
+        "value": "biz@deskfixture.example",
+        "source": "channel_about"
+      },
+      "observed_at": "2026-10-23T08:00:00.000Z",
+      "source": "manual_save"
+    }
+  ]
+}

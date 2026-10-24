@@ -10,6 +10,9 @@
  * - 「本机服务」是一个记录器：收到的请求体与标准答案（私有插件真代码在同一批假页面上跑出来的，
  *   `test/fixtures/pages/golden/*.json`）逐字段比；时间类的格（观测时间、相对日期换算出的发布时间）不比。
  * - 每一趟一个新空间，跑完 `finish({ keep: [] })`；最后核对 ego 里没留下「读页」空间。
+ * - WP498（int/1036 补）：主页那一趟还会「存入红人池」（`saveCreator`）——请求体去掉多存的两格（加入时间、近期作品）
+ *   与 `golden/save/*.json`（插件按钮那一份）逐字段比；视频页右栏要种子主题词（`seedSignature`），
+ *   核对真浏览器里读出的种子频道是 `@seedchannel`（这里回「不在库里」，观测照旧与 WP496 标准答案比）。
  */
 import { readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -116,10 +119,18 @@ const server = createServer((req, res) => {
 await new Promise<void>((r) => server.listen(port, '127.0.0.1', r))
 
 /* ── 「本机服务」：只记下收到的请求体 ── */
-const got: { observations: unknown[][]; contents: unknown[]; bios: unknown[] } = {
+const got: {
+  observations: unknown[][]
+  contents: unknown[]
+  bios: unknown[]
+  saves: unknown[]
+  seeds: { channel: string; handle: string }[]
+} = {
   observations: [],
   contents: [],
   bios: [],
+  saves: [],
+  seeds: [],
 }
 const port0: EgoCapturePort = {
   ingest: async (_s, input) => {
@@ -137,7 +148,22 @@ const port0: EgoCapturePort = {
     got.bios.push(input)
     return { attached_creators: 0 } as never
   },
+  saveCreator: async (_s, input) => {
+    const { joined_date: _j, recent_items: _r, ...pluginPart } = input as Record<string, unknown>
+    got.saves.push(pluginPart)
+    return { status: 'ok', creator_id: 'cr_e2e' } as never
+  },
+  seedSignature: async (_s, key) => {
+    got.seeds.push({ channel: String(key.channel), handle: String(key.handle) })
+    return undefined
+  },
 }
+const SAVE_GOLDEN = new Set([
+  'youtube-channel+linktree',
+  'youtube-channel-reveal',
+  'tiktok-profile',
+  'instagram-profile',
+])
 
 const TIME_KEYS = new Set(['observed_at', 'captured_at', 'capturedAt'])
 /** 时间类的格不比：观测时间；相对日期（「2 days ago」）按「现在」换算出的发布时间。 */
@@ -190,6 +216,8 @@ for (const c of CASES) {
   got.observations = []
   got.contents = []
   got.bios = []
+  got.saves = []
+  got.seeds = []
   const t0 = Date.now()
   // youtube-channel 带着 Linktree 一起读（顺手读 link-in-bio）→ 对的是「看过 Linktree」那一份标准答案
   const [page] = await capture.capture(actor, [c.url], { lang: 'en', rewrite: REWRITE })
@@ -200,6 +228,16 @@ for (const c of CASES) {
   diff(norm(got.observations), norm(golden.observation_batches), 'observations', problems)
   diff(norm(got.contents), norm(golden.content_observations), 'content_observations', problems)
   diff(norm(got.bios), norm(golden.bio_link_observations), 'bio_link_observations', problems)
+  // WP498 1740 B：主页存入红人池那一份 = 插件按钮那一份；别的页不存
+  const saveGolden = SAVE_GOLDEN.has(goldenName)
+    ? JSON.parse(readFileSync(join(FIX, `pages/golden/save/${goldenName}.json`), 'utf8'))
+        .save_creator
+    : []
+  diff(norm(got.saves), norm(saveGolden), 'save_creator', problems)
+  // WP498 1742 C：视频页右栏读出种子频道、拿去问本机主题词；别的页不问
+  const wantSeeds =
+    c.name === 'youtube-watch-related' ? [{ channel: 'youtube', handle: '@seedchannel' }] : []
+  diff(got.seeds, wantSeeds, 'seed_signature', problems)
   let fields = 0
   const count = (v: unknown): void => {
     if (Array.isArray(v)) v.forEach(count)
@@ -209,6 +247,7 @@ for (const c of CASES) {
   count(norm(golden.observation_batches))
   count(norm(golden.content_observations))
   count(norm(golden.bio_link_observations))
+  count(norm(saveGolden))
   fieldCount[goldenName] = fields
   const ms = Date.now() - t0
   if (problems.length === 0) console.log(`✓ ${goldenName}（${fields} 个值逐字段一致，${ms} 毫秒）`)

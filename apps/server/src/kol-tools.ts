@@ -68,7 +68,13 @@ export interface KolToolsOptions {
       actor: KolActor,
       urls: readonly string[],
       options: { record: boolean },
-    ): Promise<readonly { ok: boolean }[]>
+    ): Promise<
+      readonly {
+        ok: boolean
+        /** WP498（1740 B）：主页存入红人池的回执（只有主页有）。 */
+        pool?: { saved: true; new: boolean } | { saved: false; why: string }
+      }[]
+    >
   }
 }
 
@@ -399,14 +405,23 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
           .filter((u) => /^https:\/\//iu.test(u))
         if (urls.length === 0) return missing('urls（https:// 开头的页面地址）')
         try {
-          const pages = await cap.capture(actor, urls.slice(0, 10), {
-            record: input.record !== false,
-          })
+          const record = input.record !== false
+          const pages = await cap.capture(actor, urls.slice(0, 10), { record })
+          // WP498（1740 B）：读到的红人主页一律存入红人池——存了几个、新增几个，回一句
+          const saved = pages.filter((p) => p.pool?.saved === true)
+          const fresh = saved.filter((p) => p.pool?.saved === true && p.pool.new).length
+          const failed = pages.filter((p) => p.pool?.saved === false).length
+          const pool = record
+            ? `红人主页存入红人池 ${String(saved.length)} 个（新增 ${String(fresh)} 个，已在池里的 ${String(saved.length - fresh)} 个刷新了资料）${failed > 0 ? `；${String(failed)} 个没存进去（见各页 pool.why）` : ''}。`
+            : '只读没记（record: false）：没有存入红人池。'
           return {
             status: 'ok',
             data: {
               rows: pages.length,
               read: pages.filter((p) => p.ok).length,
+              pool_saved: saved.length,
+              pool_new: fresh,
+              summary: pool,
               pages,
               ...(urls.length > 10 ? { note: '一次最多 10 页，后面的没读' } : {}),
             },
