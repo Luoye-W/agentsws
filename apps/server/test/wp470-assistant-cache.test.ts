@@ -269,13 +269,9 @@ describe('WP470 助理：只往后追加、会变的放末尾', () => {
     t.at('2026-10-17T03:00:00.000Z') // 跨天 → 新段，有更早的段可翻
     const reply = await t.say(sid, '帮我翻 4 次以前说的')
     const rounds = t.chats().slice(1)
-    expect(rounds.map((r) => r.tools)).toEqual([
-      ['recall_conversation', 'web_search'],
-      ['recall_conversation', 'web_search'],
-      ['recall_conversation', 'web_search'],
-      ['recall_conversation', 'web_search'],
-      ['recall_conversation', 'web_search'],
-    ])
+    // WP511：有更早的段时多挂「打开那一段」（同样一轮之内不撤）
+    const all = ['open_conversation_segment', 'recall_conversation', 'web_search']
+    expect(rounds.map((r) => r.tools)).toEqual([all, all, all, all, all])
     const results = (rounds.at(-1)?.messages ?? []).filter((m) => m.role === 'tool').map(text)
     expect(results).toHaveLength(4)
     expect(results[3]).toContain('到上限了')

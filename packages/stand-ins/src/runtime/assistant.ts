@@ -173,8 +173,57 @@ export const ASSISTANT_RECALL_TOOL_DEF: ToolDef = {
   },
 }
 
+/**
+ * WP511（决策 1544，docs/115 §4 第 2 条）：「读附件」——长对话里附件全文只在附上的那两轮带，之后上下文里只剩
+ * 「标题 + 开头一段 + 编号」的占位；模型要细节时按编号取回原文（按段读，或按关键词找）。只读；附件只在本机。
+ * 和翻旧账一样不走 `assistant.call`，由随便聊那条模型回合自己接。
+ */
+export const ASSISTANT_READ_ATTACHMENT_TOOL = 'read_attachment'
+
+export const ASSISTANT_READ_ATTACHMENT_TOOL_DEF: ToolDef = {
+  name: ASSISTANT_READ_ATTACHMENT_TOOL,
+  description:
+    '取回用户以前附上的资料原文（会议记录、文档、表格）。上下文里只留了「附件「名字」（编号 …）」和开头一段时用；' +
+    '编号照抄占位里那个。给了关键词回含关键词的那几段，否则按段号读（第 1 段起，每段约 3000 字）。只读。',
+  input_schema: {
+    type: 'object',
+    properties: {
+      ref: { type: 'string', description: '附件编号（占位里「编号」后面那一串）' },
+      query: { type: 'string', description: '要找的关键词（空格隔开），可不填' },
+      part: { type: 'integer', description: '第几段（1 起），不填读第 1 段' },
+    },
+    required: ['ref'],
+  },
+}
+
+/**
+ * WP511（决策 1546，docs/115 §4 第 4 条）：「打开那一段」——小结、翻旧账结果里写着「第 N 段」「第 N 段第 M 句」，
+ * 模型要看当时的原话时按段号翻页读（每页约 20 句）。只读；翻出来的照旧当外部资料围起来。
+ */
+export const ASSISTANT_OPEN_SEGMENT_TOOL = 'open_conversation_segment'
+
+export const ASSISTANT_OPEN_SEGMENT_TOOL_DEF: ToolDef = {
+  name: ASSISTANT_OPEN_SEGMENT_TOOL,
+  description:
+    '打开以前某一段话题的原话（小结和翻旧账结果里写的「第 N 段」「第 N 段第 M 句」）。小结太粗、要当时的原话时用；' +
+    '从第 from 句起读一页（约 20 句），不够再翻下一页。只读。',
+  input_schema: {
+    type: 'object',
+    properties: {
+      segment: { type: 'integer', description: '第几段（小结里写的段号）' },
+      from: { type: 'integer', description: '从第几句起（1 起），不填从头' },
+    },
+    required: ['segment'],
+  },
+}
+
 export const ASSISTANT_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
-  [...ASSISTANT_TOOL_DEFS, ASSISTANT_RECALL_TOOL_DEF].map((d) => [d.name, d]),
+  [
+    ...ASSISTANT_TOOL_DEFS,
+    ASSISTANT_RECALL_TOOL_DEF,
+    ASSISTANT_READ_ATTACHMENT_TOOL_DEF,
+    ASSISTANT_OPEN_SEGMENT_TOOL_DEF,
+  ].map((d) => [d.name, d]),
 )
 
 /** `work_overview` 的一行（一个岗位）。 */

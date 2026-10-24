@@ -7,8 +7,11 @@ import type { FreeChatActor, FreeChatMessageView, FreeChatSessionView } from '@a
 import type { Clock, ModelRef } from '@agentsws/contracts'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import {
+  attachmentsIn,
   dispatchesOf,
   estimateTokens,
+  FILES_NOTE_HEAD,
+  filesNote,
   parseSummary,
   ruleSummary,
   summaryInstruction,
@@ -45,6 +48,22 @@ export interface AssistantContextStats {
   cached_tokens?: number
   /** WP470：命中率（cached / input，三位小数；没有输入记 0）。 */
   cache_ratio?: number
+  /** WP511（决策 1545）：这一轮按哪个窗口算的（模型目录 / 认得的官方型号 / 64K）。 */
+  context_window?: number
+  /** WP511：原话预算（真 token；窗口一半、封顶 96K）。 */
+  raw_budget?: number
+  /** WP511：估算 → 真 token 的换算比（没校过记 1）。 */
+  token_ratio?: number
+  /** WP511：原话里有几份附件已卸载成占位。 */
+  offloaded?: number
+  /** WP511：这一轮翻了几次以前聊过的、其中几次翻到了东西。 */
+  history_calls?: number
+  history_hits?: number
+  /** WP511：这一轮打开了几次以前那一段、读了几次附件。 */
+  segment_opens?: number
+  attachment_reads?: number
+  /** WP511：用户这句像是在纠正助理（「不对」「我说过」…）。 */
+  correction?: boolean
 }
 
 export interface SegmentDeps {
@@ -195,14 +214,18 @@ export function createSegments(deps: SegmentDeps) {
   ): Promise<AssistantSegmentRow> => {
     const last = fold.at(-1)
     if (last === undefined) return seg
-    const got = await ask(actor, 'compact', transcriptOf(fold, seg.compact?.text), lastModel(fold))
-    const text =
+    const prior = seg.compact === undefined ? undefined : dropFilesNote(seg.compact.text)
+    const got = await ask(actor, 'compact', transcriptOf(fold, prior), lastModel(fold))
+    const base =
       got === undefined
-        ? [seg.compact?.text, ruleSummary(fold).summary].filter((x) => x !== undefined).join('\n')
+        ? [prior, ruleSummary(fold).summary].filter((x) => x !== undefined).join('\n')
         : `${got.title}\n${got.summary}`
+    // WP511：压进去的附件编号单独记着、每次重写末尾那一行——模型写小结时漏了也不丢，之后照样能取回
+    const files = [...(seg.compact?.files ?? []), ...attachmentsIn(fold)]
+    const text = files.length === 0 ? base : `${base}\n${filesNote(files)}`
     const next: AssistantSegmentRow = {
       ...seg,
-      compact: { upto: last.id, text, at: clock.now() },
+      compact: { upto: last.id, text, at: clock.now(), ...(files.length === 0 ? {} : { files }) },
     }
     store.putSegment(next)
     deps.observe?.(actor, 'assistant.topic', {
@@ -229,3 +252,9 @@ export function createSegments(deps: SegmentDeps) {
 }
 
 export type Segments = ReturnType<typeof createSegments>
+
+const dropFilesNote = (text: string): string =>
+  text
+    .split('\n')
+    .filter((l) => !l.startsWith(FILES_NOTE_HEAD))
+    .join('\n')

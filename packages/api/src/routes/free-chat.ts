@@ -148,6 +148,12 @@ export interface AssistantHistoryHitView {
   title?: string
   /** 命中那一小段（前后几十个字）。 */
   snippet: string
+  /** WP511：这条长对话里第几段（1 起）。 */
+  segment_n?: number
+  /** WP511：那一段里第几句（1 起；命中小结时没有）。 */
+  message_n?: number
+  /** WP511：命中的是这句话附上的资料（名字）。 */
+  attachment?: string
 }
 
 /** WP350：用户附上的一份文本类资料（.txt / .md / .docx / .pdf / 粘贴的长文本；WP357 加 .xlsx / .csv，读成表格文字）。 */

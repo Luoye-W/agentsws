@@ -116,7 +116,18 @@ export interface AssistantSegmentRow {
   /** 这段里交出去的事（只记编号与一句话；进度永远现查）。 */
   dispatches?: { matter_id: string; title: string; position_name: string; batch_id?: string }[]
   /** 段内压缩：`upto` 这条（含）以前的原话已经压进 `text`，进模型时只带它与之后的原话。 */
-  compact?: { upto: string; text: string; at: string }
+  compact?: {
+    upto: string
+    text: string
+    at: string
+    /** WP511：压进去的话里附过的资料（编号、名字、字数）——小结末尾那一行按它重写，压几次都不丢。 */
+    files?: { ref: string; name: string; chars: number }[]
+  }
+  /**
+   * WP511（决策 1545）：估算 → 真 token 的换算比（模型报回的输入 / 我们估的，滑动平均，夹在 0.4–1.5）。
+   * 原话预算按真 token 算，比较时用它把估算换过去；新的一段从上一段接着用。
+   */
+  token_ratio?: number
   /**
    * WP470（决策 1543）：这一段第一轮拼上下文时冻结的那几块——之后这一段每一轮的系统提示都用它，
    * 开头逐字不变才命中缓存。`memory_ids` = 当时已有的记忆（进系统提示的照旧是其中最近 20 条；段内新记的放末尾附加）；
