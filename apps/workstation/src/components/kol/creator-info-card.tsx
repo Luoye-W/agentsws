@@ -869,6 +869,21 @@ function ContactsSection({
   )
 }
 
+/**
+ * WP508：详情上的「在批量开发信里」——同库卡的 `outreachBatchOf`：这条渠道上最近那条合作还没往前走（没有 / 待联系）才算。
+ */
+function outreachBatchOfView(
+  view: Pick<KolCreatorDetailData, 'outreach_queue' | 'collaborations'>,
+  channel: KolChannelId,
+): 'queued' | 'sent' | undefined {
+  if (view.outreach_queue === undefined) return undefined
+  const latest = view.collaborations
+    .filter((c) => c.channel === channel)
+    .sort((a, b) => (b.last_activity_at ?? '').localeCompare(a.last_activity_at ?? ''))[0]
+  if (latest !== undefined && latest.stage !== 'sourced') return undefined
+  return view.outreach_queue
+}
+
 /* ── 开发信（KOLAgents `OutreachDraftSection`：在这里起草预览，批 / 发在卡片里） ── */
 
 function OutreachSection({
@@ -876,12 +891,17 @@ function OutreachSection({
   channel,
   creatorId,
   rejected = false,
+  inBatch,
 }: {
   assignment: string
   channel: KolChannelId
   creatorId: string
   /** WP505（决策 1773 B）：人点过「淘汰」——起草按钮退成次要样式（还能用，只是不再是这一页的主按钮）。 */
   rejected?: boolean
+  /**
+   * WP508：在批量开发信里、阶段还没推进——起草退成次要；`queued`（一批没发完的里排着）点了只提示一句、不起草第二封。
+   */
+  inBatch?: 'queued' | 'sent' | undefined
 }): ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -991,10 +1011,17 @@ function OutreachSection({
         <div className="flex justify-end">
           <Button
             size="xs"
-            variant={rejected ? 'outline' : 'default'}
+            variant={rejected || inBatch !== undefined ? 'outline' : 'default'}
             data-testid="kol-outreach-go"
+            data-in-batch={inBatch}
             disabled={product.trim() === '' || pitch.trim() === '' || outreach.isPending}
             onClick={() => {
+              if (inBatch === 'queued') {
+                setError(undefined)
+                setDraft(undefined)
+                setReceipt(t('kol.lib.draft.in_batch'))
+                return
+              }
               outreach.mutate()
             }}
           >
@@ -1504,6 +1531,7 @@ export function CreatorInfoCard({
         channel={channel}
         creatorId={view.creator.id}
         rejected={view.review?.decision === 'rejected'}
+        inBatch={outreachBatchOfView(view, channel)}
       />
 
       <TrackedLinksSection links={view.tracked_links} />

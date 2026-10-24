@@ -5759,6 +5759,8 @@ export interface KolCreatorDetailData {
   tags?: string[]
   /** WP502（1763 B）：人工审核决定（没有 = 待审）。 */
   review?: KolCreatorReviewData
+  /** WP508（只加）：批量开发信里排着队 / 已提上去（同列表行的 `outreach_queue`）。不在任何批次里就不带。 */
+  outreach_queue?: 'queued' | 'sent'
 }
 
 /** WP500：一个账号的几项估算（插件那几份算法，服务端算好；都是公开页面上的数推出来的）。 */

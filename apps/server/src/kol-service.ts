@@ -669,8 +669,17 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       ...checksOf(accounts),
       ...auditOf(creator.id),
       ...tagsAndReviewOf(creator.id),
+      ...outreachQueueOf(creator.id),
     }
   }
+
+  /** WP508：详情上也带「排队中 / 已发」（同列表行；批次记录在下面 WP506 那一段）。 */
+  const outreachQueueOf = (creator_id: string): Pick<KolCreatorDetail, 'outreach_queue'> =>
+    queuedInBatches().has(creator_id)
+      ? { outreach_queue: 'queued' }
+      : sentInBatches().has(creator_id)
+        ? { outreach_queue: 'sent' }
+        : {}
 
   /* ── WP502（决策 1763 B）：人工标签与审核决定（只在本机）──────────────── */
 

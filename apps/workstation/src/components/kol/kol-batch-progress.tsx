@@ -170,9 +170,15 @@ function waitLine(p: KolOutreachBatchProgress, t: ReturnType<typeof useApp>['t']
 export function BatchProgress({
   progress,
   assignment,
+  title,
 }: {
   progress: KolOutreachBatchProgress
   assignment: string | undefined
+  /**
+   * WP508：红人库顶上那一块——标题、进度条、「已发 x / n」、为什么还没发下一封挤成紧凑一行
+   * （那一块底色就是 surface，进度条的槽换成线色才看得见，不然像空了一大截）。
+   */
+  title?: string
 }): ReactNode {
   const { t } = useApp()
   const control = useControl(progress.approval_item_id, assignment)
@@ -184,6 +190,20 @@ export function BatchProgress({
     .join('\n')
   const btn =
     'inline-flex h-6 items-center rounded-md px-2 text-xs font-medium text-ws-body hover:bg-ws-hover hover:text-ws-ink disabled:opacity-50'
+  const compact = title !== undefined
+  const wait =
+    progress.state === 'sending' ? (
+      <span
+        className={cn(
+          'text-xs',
+          progress.waiting === 'mailbox' ? 'text-ws-warn' : 'text-ws-muted-fg',
+          compact && 'min-w-0 truncate',
+        )}
+        data-testid="kol-batch-progress-wait"
+      >
+        {waitLine(progress, t)}
+      </span>
+    ) : null
   return (
     <div
       className="flex flex-col gap-1.5"
@@ -191,10 +211,22 @@ export function BatchProgress({
       data-state={progress.state}
       data-waiting={progress.waiting ?? ''}
     >
-      <div className="flex items-center gap-2 text-xs">
+      <div
+        className="flex min-w-0 items-center gap-2 text-xs"
+        data-testid="kol-batch-progress-head"
+      >
+        {compact ? (
+          <span className="shrink-0 font-medium text-ws-ink" data-testid="kol-batch-progress-title">
+            {title}
+          </span>
+        ) : null}
         <span
           aria-hidden
-          className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-ws-surface"
+          data-testid="kol-batch-progress-bar"
+          className={cn(
+            'h-1.5 shrink-0 overflow-hidden rounded-full',
+            compact ? 'w-16 bg-ws-line' : 'w-24 bg-ws-surface',
+          )}
         >
           <span className="block h-full rounded-full bg-ws-brand" style={{ width: `${pct}%` }} />
         </span>
@@ -211,18 +243,16 @@ export function BatchProgress({
             {t(`kol.batch.progress.state.${progress.state}`)}
           </span>
         )}
+        {compact && wait !== null ? (
+          <>
+            <span aria-hidden className="text-ws-faint">
+              ·
+            </span>
+            {wait}
+          </>
+        ) : null}
       </div>
-      {progress.state === 'sending' ? (
-        <p
-          className={cn(
-            'text-xs',
-            progress.waiting === 'mailbox' ? 'text-ws-warn' : 'text-ws-muted-fg',
-          )}
-          data-testid="kol-batch-progress-wait"
-        >
-          {waitLine(progress, t)}
-        </p>
-      ) : null}
+      {compact || wait === null ? null : <p className="flex">{wait}</p>}
       {live ? (
         <div className="flex flex-wrap items-center gap-1 text-xs text-ws-muted-fg">
           <BatchPace
@@ -299,8 +329,7 @@ export function LiveBatches({
           className="rounded-lg bg-ws-surface px-3 py-2"
           data-testid={`kol-live-batch-${p.batch_id}`}
         >
-          <p className="pb-1 text-xs font-medium text-ws-ink">{t('kol.batch.strip')}</p>
-          <BatchProgress progress={p} assignment={assignment} />
+          <BatchProgress progress={p} assignment={assignment} title={t('kol.batch.strip')} />
         </li>
       ))}
     </ul>

@@ -172,6 +172,16 @@ describe('WP506 批量开发信分时发', () => {
     expect(mark.get(ids[0] as string)).toBe('sent')
     expect(mark.get(ids[1] as string)).toBe('queued')
     expect(mark.get(ids[2] as string)).toBe('queued')
+    // WP508：详情上也带同一个标（详情里的起草按钮据此退成次要）
+    for (const [id, want] of [
+      [ids[0], 'sent'],
+      [ids[1], 'queued'],
+    ] as const) {
+      const d = await data<{ outreach_queue?: string }>(
+        await api(`/v1/kol/creators/${encodeURIComponent(id as string)}`),
+      )
+      expect(d.outreach_queue).toBe(want)
+    }
 
     // 间隔没到：这一拍什么都不发
     t += 10 * MIN

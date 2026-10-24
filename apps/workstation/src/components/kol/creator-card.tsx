@@ -66,6 +66,7 @@ export type NextStep =
   | 'review'
   | 'blocked'
   | 'view'
+  | 'progress'
 
 const NEXT_BY_STAGE: Readonly<Record<string, NextStep>> = {
   sourced: 'draft',
@@ -86,17 +87,36 @@ const NEXT_BY_STAGE: Readonly<Record<string, NextStep>> = {
  * 已经在谈的合作照旧按阶段走（淘汰只是标记，进行中的事不替人停）。
  */
 export function nextStepOf(
-  row: Pick<KolCreatorRowData, 'blocked' | 'collab'> & Partial<Pick<KolCreatorRowData, 'review'>>,
+  row: Pick<KolCreatorRowData, 'blocked' | 'collab'> &
+    Partial<Pick<KolCreatorRowData, 'review' | 'outreach_queue'>>,
 ): NextStep {
+  // WP508：在一批没发完的开发信里排着（排队中 / 在发 / 暂停）——主按钮「看进度」，不再催起草（防重复起草 / 重复发）；
+  // 已经提上去、阶段还没推进的——「看看」。阶段推进了就照下面的阶段规则。
+  const batch = outreachBatchOf(row)
+  if (batch === 'queued') return 'progress'
+  if (batch === 'sent') return 'view'
   if (row.collab === undefined && row.review?.decision === 'rejected') return 'view'
   if (row.blocked !== undefined) return 'blocked'
   if (row.collab === undefined) return 'draft'
   return NEXT_BY_STAGE[row.collab.stage] ?? 'view'
 }
 
-/** 下一步落在哪：开发信 / 人工看 / 看看在详情里，其余在合作线程里。 */
+/**
+ * WP508：这个人在批量开发信里、而且合作阶段还没往前走（没有合作 / 还是「待联系」）——
+ * `queued` = 一批没发完的开发信里排着（排队中 / 在发 / 暂停），`sent` = 最近的批次里已经提上去了。
+ * 阶段推进了（已联系及以后）就不算，照阶段规则走。
+ */
+export function outreachBatchOf(
+  row: Partial<Pick<KolCreatorRowData, 'collab' | 'outreach_queue'>>,
+): 'queued' | 'sent' | undefined {
+  if (row.outreach_queue === undefined) return undefined
+  if (row.collab !== undefined && row.collab.stage !== 'sourced') return undefined
+  return row.outreach_queue
+}
+
+/** 下一步落在哪：开发信 / 人工看 / 看看在详情里，「看进度」在库顶那一块，其余在合作线程里。 */
 export function stepOpensThread(step: NextStep): boolean {
-  return step !== 'draft' && step !== 'blocked' && step !== 'view'
+  return step !== 'draft' && step !== 'blocked' && step !== 'view' && step !== 'progress'
 }
 
 const num = (n: number | undefined): string =>

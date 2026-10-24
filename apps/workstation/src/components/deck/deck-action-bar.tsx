@@ -23,7 +23,13 @@
  */
 import { FOLLOW_UP_CARD_FORM } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
-import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsws/deck'
+import {
+  CONFIRM_ONLY_FORMS,
+  LAYOUT_VERBS,
+  MANUAL_SEND_VERB_KIND,
+  verbKey,
+  verbRank,
+} from '@agentsws/deck'
 import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { type FootAction, FootButton } from '@/components/deck/card-foot'
@@ -90,6 +96,10 @@ function rowActions(card: DeckCard): DeckAction[] {
               form === 'kol_mail_match') &&
             a === 'instruct'
           ),
+      )
+      // WP508：只有确认含义的卡（停用 / 启用知识、整批导入……）没有「修改」——服务端已经不给，这里再兜一层
+      .filter(
+        (a) => !(typeof form === 'string' && CONFIRM_ONLY_FORMS.has(form) && a === 'instruct'),
       )
       .sort((a, b) => rank(a) - rank(b))
   )
