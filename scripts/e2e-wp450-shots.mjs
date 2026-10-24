@@ -123,7 +123,7 @@ async function open(browser, token, theme, path) {
   return { page, context }
 }
 
-async function openPanel(page, tab) {
+async function openPanel(page) {
   if ((await page.getByTestId('rail-cards').count()) === 0)
     await page.getByTestId('rail-toggle').click()
   const card = page.getByTestId('rail-card-seo-plan')

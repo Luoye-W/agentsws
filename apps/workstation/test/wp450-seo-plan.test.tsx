@@ -333,8 +333,8 @@ describe('WP450 中栏「一组主题」卡', () => {
     await waitFor(() => {
       expect(api.decide).toHaveBeenCalledTimes(1)
     })
-    const edited = (api.decide.mock.calls[0]?.[1] as { edited_payload: SeoClusterPayload })
-      .edited_payload
+    const call = api.decide.mock.calls[0] as unknown[]
+    const edited = (call[1] as { edited_payload: SeoClusterPayload }).edited_payload
     expect(edited.cluster.spokes.map((s) => s.id)).toEqual(['s1'])
     expect(edited.cluster.links.every((l) => l.from !== 's2' && l.to !== 's2')).toBe(true)
     expect(edited.schedule.map((s) => s.post_id)).toEqual(['pillar', 's1'])

@@ -8,7 +8,7 @@
  * 搜索结果故意凑成：一个总页（「usb c charger」，「best usb c charger」和它前 10 名重叠 7 个、并成同一篇）+ 两个小组
  * （GaN 两篇重叠 ≥ 4、笔记本瓦数两篇重叠 ≥ 4）+ 一个和谁都不重叠的词 + 一个品牌词——一组主题的样子一眼看得出来。
  */
-import type { DataCallResult, SerpResult, SeoClusterKeyword } from '@agentsws/contracts'
+import type { DataCallResult, SeoClusterKeyword, SerpResult } from '@agentsws/contracts'
 
 const R = (n: number): string => `https://retail-${String(n)}.example/usb-c-chargers`
 const B = (n: number): string => `https://review-${String(n)}.example/best-chargers`

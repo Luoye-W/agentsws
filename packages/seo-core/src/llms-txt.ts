@@ -127,9 +127,7 @@ const STRUCTURE_PATH =
 export function checkLlmsTxt(input: {
   url: string
   origin: string
-  fetched:
-    | { status: number; body?: string; content_type?: string; final_url?: string }
-    | undefined
+  fetched: { status: number; body?: string; content_type?: string; final_url?: string } | undefined
   expected: readonly string[]
   known?: ReadonlySet<string>
   at: string
