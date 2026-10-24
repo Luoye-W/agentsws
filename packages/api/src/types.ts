@@ -349,6 +349,15 @@ export interface KnowledgePort {
     id: string,
     stage: 'both' | 'presales' | 'postsales',
   ): MaybePromise<unknown | undefined>
+  /**
+   * WP506（决策 1789 B）：停用 / 启用几条知识（单条也走它）。就地生效、不出卡；停用的检索取不到。
+   * 看不见的、已退役的当不存在（进 `missing`）。只给人点——网关挡掉 AI 运行的令牌。
+   */
+  setCardsDisabled?(
+    actor: GatewayActor,
+    ids: readonly string[],
+    disabled: boolean,
+  ): MaybePromise<{ updated: unknown[]; missing: string[] }>
   /** 答一张复核卡：确认没变 / 按新值更新 / 忽略。 */
   resolveRecheck?(
     actor: GatewayActor,

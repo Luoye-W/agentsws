@@ -9,6 +9,7 @@ import { needsConnectionReason } from '@agentsws/contracts'
 import {
   isKnowledgeLearnRole,
   KNOWLEDGE_LEARN_TOOL_NAMES,
+  PROPOSE_KNOWLEDGE_TOGGLE_TOOL,
   type ToolExecution,
   type ToolExecutor,
 } from '@agentsws/stand-ins'
@@ -16,17 +17,76 @@ import type { KnowledgeLearner, LearnActor } from './knowledge-learn.js'
 
 const bare = (name: string): string => name.split('__').pop() ?? name
 
+/** WP506（决策 1796 C）：AI 提议停用 / 启用知识——只出卡；回来的是出没出卡、几条。 */
+export interface KnowledgeToggleProposal {
+  ok: boolean
+  approval_item_id?: string
+  count: number
+  message: string
+}
+
+export interface KnowledgeToggleInput {
+  action: 'disable' | 'enable'
+  reason: string
+  query?: string
+  ids?: string[]
+}
+
 export function createKnowledgeLearnToolExecutor(options: {
   learner(): KnowledgeLearner | undefined
   /** 这个品牌接没接邮箱（没接直接回连接码，不开空事）。 */
   mailConnected(workspace_id: string): Promise<boolean>
+  /**
+   * WP506（决策 1796 C）：出一张「停用 / 启用这几条？」确认卡（不改任何东西）。不给 = 这个进程没有这一项。
+   */
+  proposeToggle?(actor: LearnActor, input: KnowledgeToggleInput): Promise<KnowledgeToggleProposal>
 }): ToolExecutor {
+  /** WP506：只出卡（人点了才生效），不碰知识库。 */
+  const proposeToggle = async (call: Parameters<ToolExecutor>[0]): Promise<ToolExecution> => {
+    if (options.proposeToggle === undefined)
+      return { status: 'error', reason: '这里没装停用 / 启用知识的提议。' }
+    const input = call.input
+    const action =
+      input.action === 'enable' ? 'enable' : input.action === 'disable' ? 'disable' : undefined
+    if (action === undefined) return { status: 'error', reason: 'action 只认 disable / enable。' }
+    const reason = typeof input.reason === 'string' ? input.reason.trim().slice(0, 300) : ''
+    if (reason === '') return { status: 'error', reason: '要写一句理由（reason），卡上给人看。' }
+    const query = typeof input.query === 'string' ? input.query.trim().slice(0, 100) : ''
+    const ids = Array.isArray(input.ids)
+      ? input.ids.filter((x): x is string => typeof x === 'string' && x !== '').slice(0, 20)
+      : []
+    if (query === '' && ids.length === 0)
+      return { status: 'error', reason: '给一个关键词（query）或知识 id（ids），才知道是哪几条。' }
+    const req = call.request
+    const out = await options.proposeToggle(
+      {
+        person_id: req.actor.person_id,
+        workspace_id: req.workspace_id as never,
+        assignment_id: req.actor.assignment_id,
+        role_id: req.actor.role_id,
+      },
+      {
+        action,
+        reason,
+        ...(query === '' ? {} : { query }),
+        ...(ids.length === 0 ? {} : { ids }),
+      },
+    )
+    return { status: 'ok', data: out }
+  }
   return async (call): Promise<ToolExecution> => {
     if (!KNOWLEDGE_LEARN_TOOL_NAMES.includes(bare(call.name)))
       return { status: 'error', reason: '不认识的工具' }
     const req = call.request
     if (!isKnowledgeLearnRole(req.actor.role_id))
-      return { status: 'blocked', reason: '「学一遍」只给客服岗位。' }
+      return {
+        status: 'blocked',
+        reason:
+          bare(call.name) === PROPOSE_KNOWLEDGE_TOGGLE_TOOL
+            ? '停用 / 启用知识的提议只给客服岗位。'
+            : '「学一遍」只给客服岗位。',
+      }
+    if (bare(call.name) === PROPOSE_KNOWLEDGE_TOGGLE_TOOL) return proposeToggle(call)
     const learner = options.learner()
     if (learner === undefined) return { status: 'error', reason: '这里没装「学一遍」。' }
     const input = call.input

@@ -184,6 +184,11 @@ export interface KolCreatorRow {
    * 红人库卡上标「等你确认」。卡定了（发 / 不发）就不再带。
    */
   awaiting_confirm?: true
+  /**
+   * WP506（决策 1788 B，只加）：批了的批量开发信里，这个人**排着队**（`queued`，还没轮到）或**已发**
+   * （`sent`，最近 30 天的批次里提上去了）。卡上标「排队中 / 已发」。不在任何批次里就不带。
+   */
+  outreach_queue?: 'queued' | 'sent'
 }
 
 /** WP502（决策 1763 B）：人工审核决定——通过 / 淘汰，一句理由可选。重置为待审 = 删掉这一行。 */
@@ -625,9 +630,52 @@ export interface KolOutreachBatchView {
 /** WP504：批量开发信卡批了之后真提上去了几封（每封走开发信那条账本路）。 */
 export interface KolOutreachBatchSendView {
   batch_id: string
+  /** WP506：批的那一刻就提上去的（分时发：通常是第一封）。 */
   staged: { creator_id: string; change_id?: string; approval_item_id?: string }[]
-  /** 批的时候已经发不了的（联系方式没了 / 额度到顶 / 刚被谢绝）。 */
+  /** 批的时候已经发不了的（联系方式没了 / 刚被谢绝）。 */
   skipped: { creator_id: string; reason: string }[]
+  /** WP506（决策 1788 B）：还排着队、按节奏一封一封发的。 */
+  queued?: number
+}
+
+/**
+ * WP506（决策 1788 B）：一批批量开发信的发送进度（卡上 / 红人库里看）。
+ *
+ * - `state`：`pending` 卡还没定 · `sending` 按节奏在发 · `paused` 人暂停了 · `cancelled` 人取消了剩下的 ·
+ *   `done` 发完了 · `rejected` 卡没批；
+ * - `waiting`：在发、但这一刻为什么还没发下一封——`gap` 两封之间的间隔 · `hour` 这一小时发满了 ·
+ *   `quota` 今天这条职责的额度满了（明天接着发）· `mailbox` 还没连发信邮箱（连好就接着发）；
+ * - `next_at`：估计下一封什么时候（`gap` / `hour` / `quota` 才有）。
+ */
+export interface KolOutreachBatchProgressView {
+  batch_id: string
+  approval_item_id: string
+  channel: KolChannel
+  state: 'pending' | 'sending' | 'paused' | 'cancelled' | 'done' | 'rejected'
+  per_hour: number
+  /**
+   * WP506（决策 1795 C）：缺省节奏是按哪种邮箱定的——`new` 新邮箱 5 封 / `established` 老邮箱 15 封；
+   * `pace_why` 是那一句依据（卡上悬停看）。人改过节奏（`pace_edited`）卡上就不再说「新邮箱 / 老邮箱」。
+   */
+  pace_basis?: 'new' | 'established'
+  pace_why?: string
+  pace_edited?: boolean
+  total: number
+  sent: number
+  queued: number
+  skipped: number
+  cancelled: number
+  waiting?: 'gap' | 'hour' | 'quota' | 'mailbox'
+  next_at?: Iso8601
+  created_at: Iso8601
+  rows: {
+    creator_id: string
+    display_name: string
+    state: 'queued' | 'sending' | 'sent' | 'skipped' | 'cancelled'
+    at?: Iso8601
+    reason?: string
+    change_id?: string
+  }[]
 }
 
 /** 接受一张清单卡之后真建出来了什么。 */
@@ -1008,6 +1056,20 @@ export interface KolPort {
   ): MaybePromise<KolOutreachBatchSendView>
   /** WP504：那张批量卡没批 / 过期了——名单上的「等你确认」收掉。 */
   dropOutreachBatch?(approval_item_id: string): MaybePromise<void>
+  /** WP506（决策 1788 B）：这条渠道最近的批量开发信与发送进度（新的在前；卡上 / 库里看）。 */
+  outreachBatches?(
+    actor: KolActor,
+    filter: { channel?: KolChannel | undefined; approval_item_id?: string | undefined },
+  ): MaybePromise<KolOutreachBatchProgressView[]>
+  /**
+   * WP506（决策 1788 B）：管一批——改节奏（每小时几封，卡没定时也能改）、暂停 / 继续、取消剩下的
+   * （已发的不撤）。只给人点（AI 运行的令牌 403）。
+   */
+  controlOutreachBatch?(
+    actor: KolActor,
+    approval_item_id: string,
+    input: { action?: 'pause' | 'resume' | 'cancel' | undefined; per_hour?: number | undefined },
+  ): MaybePromise<KolOutreachBatchProgressView>
   /** WP416：把起草那两格存成这个品牌的设置（下次每个红人都预填它）。 */
   saveOutreachDefaults?(
     actor: KolActor,
@@ -1295,6 +1357,26 @@ const OutreachBatchBody = z.object({
   product: z.string().min(1).max(200).optional(),
   brand_pitch: z.string().max(500).optional(),
 })
+
+/**
+ * WP506（决策 1788 B / 1795 C）：每小时最多几封——上下限 1–30；缺省按发信邮箱的「年龄」定：
+ * 新邮箱（或认不出来）5 封、老邮箱 15 封（怎么认见 `kol-service.ts` 的 `outreachPaceFor`）。每天的额度照样管着。
+ */
+export const OUTREACH_PER_HOUR_MIN = 1
+export const OUTREACH_PER_HOUR_MAX = 30
+export const OUTREACH_PER_HOUR_NEW = 5
+export const OUTREACH_PER_HOUR_ESTABLISHED = 15
+/** 认不出邮箱的时候（老批次没记节奏时也用它）= 按新邮箱算。 */
+export const DEFAULT_OUTREACH_PER_HOUR = OUTREACH_PER_HOUR_NEW
+
+const OutreachBatchControlBody = z
+  .object({
+    action: z.enum(['pause', 'resume', 'cancel']).optional(),
+    per_hour: z.number().int().min(OUTREACH_PER_HOUR_MIN).max(OUTREACH_PER_HOUR_MAX).optional(),
+  })
+  .refine((b) => b.action !== undefined || b.per_hour !== undefined, {
+    message: '给 action（pause / resume / cancel）或 per_hour 至少一个',
+  })
 
 const OutreachDefaultsBody = z.object({
   brand_pitch: z.string().max(500).optional(),
@@ -2151,6 +2233,77 @@ export function kolRoutes(): Route[] {
         if (fn === undefined)
           throw new ApiError('not_implemented', '这个服务进程没有批量开发信这一项。')
         return ok(c, await fn.call(portOf(deps), actorOf(c), await body(c, OutreachBatchBody)), 201)
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/outreach/batches',
+        operationId: 'listKolOutreachBatches',
+        summary:
+          '批量开发信的发送进度（决策 1788 B：批了之后按节奏逐封发——已发几封、排着几封、为什么还没发下一封）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTACT,
+        params: [
+          { name: 'channel', in: 'query', description: '只看这条渠道的' },
+          { name: 'approval_item_id', in: 'query', description: '只看这一张批量卡的' },
+        ],
+        returns: 'KolOutreachBatchProgressView[]',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).outreachBatches
+        if (fn === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有批量开发信这一项。')
+        const channel = c.req.query('channel')
+        if (channel !== undefined && !ChannelSchema.safeParse(channel).success)
+          throw new ApiError('invalid_input', 'channel 不认识')
+        const approval_item_id = c.req.query('approval_item_id')
+        return ok(
+          c,
+          await fn.call(portOf(deps), actorOf(c), {
+            ...(channel === undefined ? {} : { channel: channel as KolChannel }),
+            ...(approval_item_id === undefined || approval_item_id === ''
+              ? {}
+              : { approval_item_id }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/outreach/batches/:id/control',
+        operationId: 'controlKolOutreachBatch',
+        summary:
+          '管一批批量开发信：改节奏（每小时最多几封）、暂停 / 继续、取消剩下的（已发的不撤）。只给人点（决策 1788 B）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTACT,
+        params: [{ name: 'id', in: 'path', required: true, description: '那张批量卡的 id' }],
+        body: OutreachBatchControlBody,
+        returns: 'KolOutreachBatchProgressView',
+      },
+      async (c, deps) => {
+        if (principalOf(c).kind === 'runtime')
+          throw new ApiError(
+            'forbidden',
+            '批量开发信的节奏、暂停与取消只能由人在卡上或红人库里点，AI 运行不能调用',
+          )
+        const fn = portOf(deps).controlOutreachBatch
+        if (fn === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有批量开发信这一项。')
+        return ok(
+          c,
+          await fn.call(
+            portOf(deps),
+            actorOf(c),
+            param(c, 'id'),
+            await body(c, OutreachBatchControlBody),
+          ),
+        )
       },
     ),
     route(

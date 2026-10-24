@@ -125,6 +125,15 @@ export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) 
     if (a === 'snooze') return t('follow_up.verb.wait')
     if (a === 'reject') return t('follow_up.verb.stop')
   }
+  // WP506（决策 1796 C）：AI 提议停用 / 启用知识——「停用 N 条」/「启用 N 条」·「不用」
+  const toggle = card.detail.payload as { form?: unknown; action?: unknown; items?: unknown }
+  if (toggle?.form === 'knowledge_toggle' && Array.isArray(toggle.items)) {
+    if (a === 'approve')
+      return t(
+        toggle.action === 'enable' ? 'kl.toggle.approve.enable' : 'kl.toggle.approve.disable',
+      ).replace('{n}', String(toggle.items.length))
+    if (a === 'reject') return t('kl.toggle.reject')
+  }
   // WP504（决策 1777 A）：批量开发信卡上主按钮写「发出 N 封」（N = 名单上真要发的人数）
   const batch = kolBatchCount(card.detail.payload)
   if (batch !== undefined && a === 'approve')

@@ -855,7 +855,8 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     // WP488：「学到 N 条」汇总卡 / 「这几条可能过期」卡也由学习器自己施行（条目早就以待确认建好了）
     if (
       item.kind === 'knowledge_update' &&
-      (form === 'knowledge_learned' || form === 'knowledge_stale')
+      // WP506：「停用 / 启用这几条知识？」也一样（批了由 knowledge-toggle 施行）
+      (form === 'knowledge_learned' || form === 'knowledge_stale' || form === 'knowledge_toggle')
     )
       return
     const decided =

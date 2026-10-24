@@ -4647,6 +4647,9 @@ export interface KnowledgeCardRow {
   verification_state?: 'fresh' | 'stale' | 'quarantined'
   last_verified_at?: string
   media?: string[]
+  /** WP506（决策 1789 B）：人停用了这一条（检索取不到；启用回来原样）。 */
+  disabled_at?: string
+  disabled_by?: string
   updated_at: string
   /* ── WP209：知识库按类型 / 品牌 / 状态 / 来源分组要的几格——服务端本来就回（整张 FactCard），
      这里只是把它们认下来（只加）。 */
@@ -4747,6 +4750,24 @@ export const setKnowledgeCardStage = (
     body: { stage },
     ...(assignment === undefined ? {} : { assignment }),
   })
+
+/**
+ * WP506（决策 1789 B）：批量停用 / 启用知识（单条也走它）。就地生效、可撤销；停用的检索取不到。
+ * 看不见的 / 已退役的进 `missing`。只给人点（AI 运行的令牌 403）。
+ */
+export const setKnowledgeCardsDisabled = (
+  ids: readonly string[],
+  disabled: boolean,
+  assignment?: string,
+): Promise<{ updated: KnowledgeCardRow[]; missing: string[] }> =>
+  api<{ updated: KnowledgeCardRow[]; missing: string[] }>(
+    `/v1/knowledge/cards/${disabled ? 'disable' : 'enable'}`,
+    {
+      method: 'POST',
+      body: { ids },
+      ...(assignment === undefined ? {} : { assignment }),
+    },
+  )
 
 export const listKnowledgeGaps = (assignment?: string): Promise<KnowledgeGapRow[]> =>
   api<KnowledgeGapRow[]>('/v1/knowledge/gaps?status=open', {
@@ -5656,6 +5677,8 @@ export interface KolCreatorRowData {
   review?: KolCreatorReviewData
   /** WP504（1777 A）：在一张还没定的批量开发信卡上（卡上标「等你确认」）。 */
   awaiting_confirm?: boolean
+  /** WP506（决策 1788 B）：批了的批量开发信里排着队 / 最近 30 天已发（卡上「排队中 / 已发」）。 */
+  outreach_queue?: 'queued' | 'sent'
 }
 
 /** WP502（1763 B）：人工审核决定——通过 / 淘汰，一句理由可选。 */
@@ -6128,6 +6151,63 @@ export const batchKolOutreach = (
   assignment?: string,
 ): Promise<KolOutreachBatchData> =>
   api('/v1/kol/outreach/batch', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/**
+ * WP506（决策 1788 B）：一批批量开发信的发送进度。`waiting`：`gap` 两封之间的间隔 · `hour` 这一小时满了 ·
+ * `quota` 今天额度满了（明天接着发）· `mailbox` 还没连发信邮箱。
+ */
+export interface KolOutreachBatchProgress {
+  batch_id: string
+  approval_item_id: string
+  channel: KolChannelId
+  state: 'pending' | 'sending' | 'paused' | 'cancelled' | 'done' | 'rejected'
+  per_hour: number
+  /** WP506（决策 1795 C）：缺省节奏的依据（新邮箱 5 / 老邮箱 15）；人改过就不再说。 */
+  pace_basis?: 'new' | 'established'
+  pace_why?: string
+  pace_edited?: boolean
+  total: number
+  sent: number
+  queued: number
+  skipped: number
+  cancelled: number
+  waiting?: 'gap' | 'hour' | 'quota' | 'mailbox'
+  next_at?: string
+  created_at: string
+  rows: {
+    creator_id: string
+    display_name: string
+    state: 'queued' | 'sending' | 'sent' | 'skipped' | 'cancelled'
+    at?: string
+    reason?: string
+  }[]
+}
+
+/** WP506：每小时最多几封的上下限与缺省（同服务端 `@agentsws/api` 那三个数）。 */
+export const OUTREACH_PER_HOUR = { min: 1, max: 30, fresh: 5, established: 15 } as const
+
+export const getKolOutreachBatches = (
+  filter: { channel?: KolChannelId; approval_item_id?: string } = {},
+  assignment?: string,
+): Promise<KolOutreachBatchProgress[]> => {
+  const q = new URLSearchParams()
+  if (filter.channel !== undefined) q.set('channel', filter.channel)
+  if (filter.approval_item_id !== undefined) q.set('approval_item_id', filter.approval_item_id)
+  const qs = q.toString()
+  return api(`/v1/kol/outreach/batches${qs === '' ? '' : `?${qs}`}`, withAssignment(assignment))
+}
+
+/** WP506：改节奏 / 暂停 / 继续 / 取消剩下的（已发的不撤）。只给人点。 */
+export const controlKolOutreachBatch = (
+  approval_item_id: string,
+  input: { action?: 'pause' | 'resume' | 'cancel'; per_hour?: number },
+  assignment?: string,
+): Promise<KolOutreachBatchProgress> =>
+  api(`/v1/kol/outreach/batches/${encodeURIComponent(approval_item_id)}/control`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
 
 export const getKolCollaborations = (
   filter: { channel?: KolChannelId } = {},

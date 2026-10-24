@@ -125,6 +125,8 @@ export const HANDLERS = {
   reconcileDeliveries: 'channels.reconcile_deliveries',
   /** WP68 / 48 §5.2：红人开发信的序列跟进（首封 / 3 天 / 7 天），每天一轮。 */
   kolSequence: 'kol.outreach_sequence',
+  /** WP506（决策 1788 B）：批了的批量开发信按节奏逐封发（每分钟一拍，每批最多提一封）。 */
+  kolOutreachBatch: 'kol.outreach_batch_pump',
   /** WP173 / docs/84 §2：B2B 开发信序列（跟进 / 收尾到点出卡、排着的首封再走一遍），每天一轮。 */
   b2bSequence: 'b2b.outreach_sequence',
   /** WP73 / 56 §6：到点把**已批准**的帖子经适配器发出去（每 5 分钟一轮）。 */
@@ -194,6 +196,14 @@ export const KOL_SEQUENCE_CRON = '0 9 * * *'
  * 所以早上这一拍正好是"排到明天"的那一批该出卡的时候。
  */
 export const B2B_SEQUENCE_CRON = '0 9 * * *'
+
+/**
+ * WP506（决策 1788 B）：批量开发信的节奏一拍——每分钟。
+ *
+ * 每小时 N 封、两封之间均匀隔开（默认 10 封 = 6 分钟一封），一分钟一拍的误差看不出来。
+ * 没有在发的批次时这一拍只读一次设置，什么都不做。
+ */
+export const KOL_OUTREACH_BATCH_INTERVAL_MS = 60_000
 
 /**
  * WP73：到点发布的巡检节奏。
@@ -1040,6 +1050,19 @@ export function registerKolSequence(scheduler: Scheduler, deps: KolSequenceDeps)
   scheduler.register(HANDLERS.kolSequence, () => deps.sweep())
 }
 
+/* WP506（决策 1788 B）：批了的批量开发信按节奏逐封发 */
+export interface KolOutreachBatchDeps {
+  /**
+   * 每一批在发的往前走一步（最多提一封）。**每一封仍是一张 `kol_outreach` staged change 走 guardrail**；
+   * 节奏、每天额度、暂停 / 取消都在实现里判，这里只是一拍。
+   */
+  pump(): Promise<{ batches: number; staged: number; skipped: number; waiting: number }>
+}
+
+export function registerKolOutreachBatch(scheduler: Scheduler, deps: KolOutreachBatchDeps): void {
+  scheduler.register(HANDLERS.kolOutreachBatch, () => deps.pump())
+}
+
 /* WP173 / docs/84 §2：B2B 开发信序列：每天 09:00 */
 export interface B2bSequenceDeps {
   /** 每个品牌一轮：到点的跟进 / 收尾出卡、排着的首封再走一遍、驳回的卡落账。**每一批仍是一张卡**。 */
@@ -1658,6 +1681,19 @@ export async function ensureSystemTasks(
         title: '每天看一眼哪几封开发信该跟进了',
         handler: HANDLERS.kolSequence,
         trigger: { kind: 'cron', expr: KOL_SEQUENCE_CRON, tz },
+        misfire_policy: 'skip',
+      }),
+    )
+    /*
+     * WP506（决策 1788 B）：批量开发信每分钟一拍。错过了**不补跑**（`skip`）：关机再开机不需要把错过的
+     * 几拍一次补上——每拍最多一封、节奏按账本里真提过的时间算，补跑也只会多等，不会多发。
+     */
+    await add(
+      'sched_kol_outreach_batch',
+      systemTask(base, {
+        title: '每分钟看一眼批量开发信该不该发下一封',
+        handler: HANDLERS.kolOutreachBatch,
+        trigger: { kind: 'interval', every_ms: KOL_OUTREACH_BATCH_INTERVAL_MS },
         misfire_policy: 'skip',
       }),
     )
