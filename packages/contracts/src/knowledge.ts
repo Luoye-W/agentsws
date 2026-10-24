@@ -134,6 +134,14 @@ export interface FactCard {
    * 写下来的日期不是核实过的日期。
    */
   last_verified_at?: Iso8601
+  /**
+   * WP506（决策 1789 B）：人在知识库里**停用**了这一条（什么时候、谁）。
+   *
+   * 停用不删、也不动 `status`（启用回来就是原样）：检索层直接把它排除在候选之外，
+   * 回复、起草、边界判断都取不到它。只有人能停用 / 启用（AI 运行的令牌一律 403，没有工具）。
+   */
+  disabled_at?: Iso8601
+  disabled_by?: PersonId
   usage: {
     recalled: number
     cited: number

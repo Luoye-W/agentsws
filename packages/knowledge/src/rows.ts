@@ -31,6 +31,9 @@ export interface CardRow {
   source_changed_at: string | null
   media_json: string | null
   last_verified_at: string | null
+  // WP506（决策 1789 B）：人停用了这一条（检索排除）
+  disabled_at: string | null
+  disabled_by: string | null
   usage_recalled: number
   usage_cited: number
   usage_last_recalled_at: string | null
@@ -73,6 +76,9 @@ export const CARD_COLUMNS = [
   'source_changed_at',
   'media_json',
   'last_verified_at',
+  // WP506
+  'disabled_at',
+  'disabled_by',
   'usage_recalled',
   'usage_cited',
   'usage_last_recalled_at',
@@ -137,6 +143,9 @@ export function rowToCard(row: CardRow): FactCard {
   if (row.source_changed_at !== null) card.source_changed_at = row.source_changed_at
   if (row.media_json !== null) card.media = JSON.parse(row.media_json) as string[]
   if (row.last_verified_at !== null) card.last_verified_at = row.last_verified_at
+  // WP506：老库升上来这两列是 NULL（= 没停用）；`?? null` 兜住还没迁移的行对象
+  if ((row.disabled_at ?? null) !== null) card.disabled_at = row.disabled_at as string
+  if ((row.disabled_by ?? null) !== null) card.disabled_by = row.disabled_by as string
   if (row.as_of !== null) card.as_of = row.as_of
   if (row.downgraded_from !== null) card.downgraded_from = row.downgraded_from as FactCard['layer']
   if (row.structured_json !== null)
@@ -176,6 +185,9 @@ export function cardToRowValues(card: FactCard): (string | number | null)[] {
     card.source_changed_at ?? null,
     card.media === undefined ? null : JSON.stringify(card.media),
     card.last_verified_at ?? null,
+    // WP506
+    card.disabled_at ?? null,
+    card.disabled_by ?? null,
     card.usage.recalled,
     card.usage.cited,
     card.usage.last_recalled_at ?? null,

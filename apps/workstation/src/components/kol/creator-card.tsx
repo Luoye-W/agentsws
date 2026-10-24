@@ -374,6 +374,20 @@ export function CreatorCard({
             {t('library.awaiting')}
           </span>
         ) : null}
+        {/* WP506（1788 B）：批了的批量开发信里——排队中 / 已发 */}
+        {row.awaiting_confirm === true || row.outreach_queue === undefined ? null : (
+          <span
+            className={
+              row.outreach_queue === 'queued'
+                ? 'inline-flex h-5 items-center gap-1 rounded-full bg-ws-tint px-1.5 text-xs font-medium text-ws-brand-ink'
+                : 'inline-flex h-5 items-center gap-1 rounded-full bg-ws-surface px-1.5 text-xs font-medium text-ws-muted-fg'
+            }
+            data-testid="kol-card-queue"
+            data-state={row.outreach_queue}
+          >
+            {t(row.outreach_queue === 'queued' ? 'library.queued' : 'library.sent')}
+          </span>
+        )}
         {/* WP502：定过的才标（通过 / 淘汰）；理由在悬停里 */}
         {row.review === undefined ? null : (
           <span title={row.review.reason} className="inline-flex">

@@ -810,7 +810,8 @@ export function DeckCardBody({
         if (isFollowUpNudgePayload(payload))
           return <FollowUpCardBody card={card} payload={payload} />
         // WP504（决策 1777 A）：批量开发信——名单、发件 / 信 / 节奏 / 跳过、样信（F3）
-        if (isKolOutreachBatchPayload(payload)) return <KolOutreachBatchBody payload={payload} />
+        if (isKolOutreachBatchPayload(payload))
+          return <KolOutreachBatchBody payload={payload} card={card} />
         // WP416：红人开发信——卡面直接放正文（前 6 行可展开）与要先看一眼的几句
         if (isKolOutreachPayload(payload)) return <KolOutreachBody payload={payload} />
         return (

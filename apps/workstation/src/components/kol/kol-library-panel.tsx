@@ -73,6 +73,7 @@ import { cn } from '@/lib/utils'
 import { CollabThread } from './collab-thread'
 import { CreatorCard, stepOpensThread } from './creator-card'
 import { CreatorDetailView } from './creator-pane'
+import { LiveBatches } from './kol-batch-progress'
 import { ALL_CHANNELS, atHandle } from './kol-channel'
 import { KOL_LIBRARY, kolHomeOf, useKolCardHome } from './kol-library-status'
 import { Collaborations, Discovery, ImportAndCampaign } from './kol-panel'
@@ -302,6 +303,7 @@ function KolLibraryBody({
   const [q, setQ] = useState('')
   const [review, setReview] = useState<KolReviewFilter | 'all'>('all')
   const [tag, setTag] = useState('')
+  // 评分筛选默认关（int/1038：设计稿里那个「评分 ≥ 80」是示意，不是默认值）；默认按评分高到低排
   const [top, setTop] = useState(false)
   const [batch, setBatch] = useState<string | undefined>(undefined)
   const [sort, setSort] = useState<'score' | 'followers' | 'new'>('score')
@@ -762,6 +764,8 @@ function KolLibraryBody({
 
         {tab === 'creators' ? (
           <>
+            {/* WP506（1788 B）：批了在发的批量开发信——进度、暂停 / 取消剩下的 */}
+            <LiveBatches channel={channel} assignment={assignment} />
             <LibrarySearch
               value={q}
               onChange={setQ}
@@ -791,6 +795,7 @@ function KolLibraryBody({
                   {t(`kol.channel.${channel}`)}
                 </span>
               )}
+              {/* WP506（int/1038）：默认不带评分筛选——低分 / 已淘汰的也看得见；「+」手加上，「×」去掉 */}
               <FilterChip
                 active={top}
                 testId="kol-library-top"
@@ -798,7 +803,7 @@ function KolLibraryBody({
                   setTop(!top)
                 }}
               >
-                {t('kol.lib.score80')}
+                {top ? `${t('kol.lib.score80')} ×` : `+ ${t('kol.lib.score80')}`}
               </FilterChip>
               <select
                 value={review}

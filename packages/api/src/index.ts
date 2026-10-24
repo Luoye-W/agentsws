@@ -551,6 +551,7 @@ export type {
   KolMailStageEstimateView,
   KolMailStageRunView,
   KolMergeSuggestionView,
+  KolOutreachBatchProgressView,
   KolOutreachBatchSendView,
   KolOutreachBatchView,
   KolOutreachDefaultsView,
@@ -564,7 +565,14 @@ export type {
   KolStageSegment,
   KolTrackedLinkInput,
 } from './routes/kol.js'
-export { KOL_TAG_MAX_LENGTH, KOL_TAGS_MAX, kolRoutes } from './routes/kol.js'
+export {
+  DEFAULT_OUTREACH_PER_HOUR,
+  KOL_TAG_MAX_LENGTH,
+  KOL_TAGS_MAX,
+  kolRoutes,
+  OUTREACH_PER_HOUR_MAX,
+  OUTREACH_PER_HOUR_MIN,
+} from './routes/kol.js'
 export type {
   MeetingIngestInput,
   MeetingProcessOutcome,

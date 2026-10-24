@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS fact_cards (
   source_changed_at      TEXT,
   media_json             TEXT,
   last_verified_at       TEXT,
+  -- WP506（决策 1789 B）：人停用了这一条（检索排除；不删、不动 status）
+  disabled_at            TEXT,
+  disabled_by            TEXT,
   usage_recalled         INTEGER NOT NULL,
   usage_cited            INTEGER NOT NULL,
   usage_last_recalled_at TEXT,
@@ -189,6 +192,9 @@ const ADDED_COLUMNS: readonly [table: string, column: string, type: string][] = 
   // 走 ADDED_COLUMNS 而不是新开一张表——**零新表**是这条交付的明文要求，
   // 而等待者是缺口的一个属性，不是有自己生命周期的实体。
   ['knowledge_gaps', 'waiting_json', 'TEXT'],
+  // WP506（决策 1789 B）：停用（检索排除）。只加可空列——回退到旧代码照样跑（旧代码看不见停用）
+  ['fact_cards', 'disabled_at', 'TEXT'],
+  ['fact_cards', 'disabled_by', 'TEXT'],
 ]
 
 export function migrate(db: Database): void {

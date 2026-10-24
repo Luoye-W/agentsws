@@ -103,6 +103,7 @@ import type {
   DataSourceLevel,
   EventEnvelope,
   ExecutionMode,
+  FactCard,
   Halt,
   ImageProvider,
   KolChannel,
@@ -880,6 +881,7 @@ import {
   registerDailyPlan,
   registerEconomics,
   registerIdempotencySweep,
+  registerKolOutreachBatch,
   registerKolSequence,
   registerLearning,
   registerMailPoll,
@@ -8504,8 +8506,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       knowledge: async (actor) => {
         const config = roles.effectiveConfig(actor.assignment_id)
+        // WP506：停用的那几条不当规则用
         const cards = await knowledge.store.list(
-          { workspace_id: ws, status: 'active' },
+          { workspace_id: ws, status: 'active', enabled: true },
           {
             person_id: actor.person_id,
             workspace_id: ws,
@@ -8781,8 +8784,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const position = positionFor(ws, SUPPORT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
+        // WP506：停用的那几条不算「答过了」
         const cards = await knowledge.store.list(
-          { workspace_id: ws, status: 'active' },
+          { workspace_id: ws, status: 'active', enabled: true },
           {
             person_id: position.person_id,
             workspace_id: ws,
@@ -12184,6 +12188,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return one
       },
     })
+    // WP506（决策 1788 B）：批了的批量开发信按节奏逐封发（这个品牌的红人库与额度）
+    registerKolOutreachBatch(s, {
+      pump: async () => (await of()).kolService.pumpOutreachBatches(),
+    })
     // WP68：红人开发信序列跟进（这个品牌的红人库与额度）
     registerKolSequence(s, {
       sweep: async () => {
@@ -14067,6 +14075,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (card === undefined || card.status === 'retired') return undefined
       return knowledge.store.patch(id, { stage })
     },
+    /*
+     * WP506（决策 1789 B）：停用 / 启用（单条、批量都走这一条）。看得见这条才动得了（看不见当不存在）；
+     * 退役的不动（它本来就不进检索）。就地生效、不出卡：停用收得回（1777 A 的「就地 + 撤销」）。
+     */
+    setCardsDisabled: async (actor, ids, disabled) => {
+      const updated: FactCard[] = []
+      const missing: string[] = []
+      for (const id of [...new Set(ids)]) {
+        const card = await knowledge.store.get(id, actor)
+        if (card === undefined || card.status === 'retired') {
+          missing.push(id)
+          continue
+        }
+        updated.push(await knowledge.store.setDisabled(id, actor.person_id, disabled))
+      }
+      return { updated, missing }
+    },
     // WP56（48 §4 #6）：源页复核队列
     rechecks: (actor, filter) =>
       knowledge.recheck.list(actor.workspace_id, {
@@ -14081,8 +14106,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 剩下的那几条就是「Agent 下次撞到时会问你」的清单。
      */
     boundaries: async (actor) => {
+      // WP506：停用的那几条不算「答过了」（Agent 取不到它）
       const cards = await knowledge.store.list(
-        { workspace_id: actor.workspace_id, status: 'active' },
+        { workspace_id: actor.workspace_id, status: 'active', enabled: true },
         actor,
       )
       const answered = detectAnsweredBoundaries({

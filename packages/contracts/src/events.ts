@@ -183,6 +183,9 @@ export type KnownEventType =
   | 'knowledge.card.proposed'
   | 'knowledge.card.activated'
   | 'knowledge.card.retired'
+  /** WP506（决策 1789 B）：人在知识库里停用 / 启用了一条（检索排除 / 回来）。 */
+  | 'knowledge.card.disabled'
+  | 'knowledge.card.enabled'
   | 'knowledge.card.conflict'
   | 'knowledge.card.recalled'
   /**

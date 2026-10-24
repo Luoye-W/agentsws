@@ -41,6 +41,8 @@ export const STATUS_TONE: Record<KnowledgeStatus, Tone> = {
   pending: 'warn',
   expired: 'neutral',
   conflict: 'bad',
+  // WP506：停用的（检索取不到）
+  disabled: 'neutral',
 }
 
 /** 适用范围的名字：调用方给了名字表就用名字，没有就「类别 · id」。 */

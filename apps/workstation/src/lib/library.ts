@@ -170,7 +170,8 @@ export const KNOWLEDGE_GROUPS = [
 ] as const
 export type KnowledgeGroupId = (typeof KNOWLEDGE_GROUPS)[number]
 
-export const KNOWLEDGE_STATUSES = ['active', 'pending', 'expired', 'conflict'] as const
+/** WP506（决策 1789 B）：`disabled` = 人停用了（只在「已停用」筛选里看得见，排在最后）。 */
+export const KNOWLEDGE_STATUSES = ['active', 'pending', 'expired', 'conflict', 'disabled'] as const
 export type KnowledgeStatus = (typeof KNOWLEDGE_STATUSES)[number]
 
 export type KnowledgeOrigin = 'upload' | 'agent' | 'manual'
@@ -248,6 +249,8 @@ export function knowledgeGroupOf(card: KnowledgeCardRow): Exclude<KnowledgeGroup
  * - 其余：已生效。
  */
 export function knowledgeStatusOf(card: KnowledgeCardRow, now: Date = new Date()): KnowledgeStatus {
+  // WP506：停用的压过一切——它不进检索，别的状态这时都不作数
+  if (card.disabled_at !== undefined) return 'disabled'
   if ((card.conflicts ?? []).length > 0) return 'conflict'
   const until = card.valid?.until
   if (
@@ -290,6 +293,11 @@ export interface KnowledgeFilters {
   /** `*` = 全部；`''` = 只看通用（没限范围的）；`brand:b1` = 这个范围的（加上通用的）。 */
   scope?: string
   status?: KnowledgeStatus | 'all'
+  /**
+   * WP506：`status: 'all'` 时停用的要不要也给（缺省不给——「全部」里看不见停用的，
+   * 它们只在「已停用」筛选里；数各状态有几条时传 `true`）。
+   */
+  includeDisabled?: boolean
 }
 
 export function knowledgeMatches(card: KnowledgeCardRow, query: string): boolean {
@@ -308,7 +316,9 @@ export function filterKnowledge(
   const scope = filters.scope ?? SCOPE_ALL
   const status = filters.status ?? 'all'
   return cards.filter((c) => {
-    if (status !== 'all' && knowledgeStatusOf(c, now) !== status) return false
+    const state = knowledgeStatusOf(c, now)
+    if (status !== 'all' && state !== status) return false
+    if (status === 'all' && state === 'disabled' && filters.includeDisabled !== true) return false
     if (scope !== SCOPE_ALL) {
       const keys = scopeKeysOf(c)
       // 选了某个范围：那个范围的 + 通用的（通用的在哪个范围下都算数）
@@ -338,7 +348,13 @@ export function countByStatus(
   cards: readonly KnowledgeCardRow[],
   now: Date = new Date(),
 ): Record<KnowledgeStatus, number> {
-  const out: Record<KnowledgeStatus, number> = { active: 0, pending: 0, expired: 0, conflict: 0 }
+  const out: Record<KnowledgeStatus, number> = {
+    active: 0,
+    pending: 0,
+    expired: 0,
+    conflict: 0,
+    disabled: 0,
+  }
   for (const c of cards) out[knowledgeStatusOf(c, now)] += 1
   return out
 }
