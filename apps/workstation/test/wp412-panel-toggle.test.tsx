@@ -184,7 +184,6 @@ describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
   it.each([
     ['role', 'role'],
     ['skills', 'skills'],
-    ['knowledge', 'knowledge'],
     ['memory', 'memory'],
     ['caps', 'caps'],
   ])('「⋮ → %s」打开面板并直达「设定」的那一格', async (item, tab) => {
@@ -194,6 +193,16 @@ describe('右上角：专门的面板开关 +「⋮」只放工具', () => {
     fireEvent.click(await screen.findByTestId(`rail-menu-${item}`))
     expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe('settings')
     expect((await screen.findByTestId('settings-panel')).getAttribute('data-tab')).toBe(tab)
+  })
+
+  it('「⋮ → knowledge」打开第三栏知识库（WP504：别名 knowledge → knowledge-library，不再是「设定」的一格）', async () => {
+    renderRail('/positions/asg_sup/duties/dtc.support')
+    await screen.findByTestId('rail-cards')
+    fireEvent.click(screen.getByTestId('rail-overflow'))
+    fireEvent.click(await screen.findByTestId('rail-menu-knowledge'))
+    expect(screen.getByTestId('rail-panel-frame').getAttribute('data-panel')).toBe(
+      'knowledge-library',
+    )
   })
 
   it('职责页上第一项叫「职责定义」', async () => {

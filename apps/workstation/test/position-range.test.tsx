@@ -120,7 +120,9 @@ describe('WP138：范围为空只挡店铺数字，不挡红人工作台与聊�
     state.positions = [summary({ role_id: 'kol.instagram', role_name: 'Instagram 红人' })]
     openPosition()
     expect(await screen.findByTestId('no-range-card')).toBeTruthy()
-    expect((await screen.findByTestId('kol-panel')).textContent).toBe('instagram')
+    // WP504（决策 1765 / 1778 A）：红人工作台搬进第三栏红人库，这里留的是进去的口子——范围为空也不挡它
+    expect(await screen.findByTestId('kol-library-entry')).toBeTruthy()
+    expect(screen.getByTestId('kol-library-entry-open')).toBeTruthy()
     expect(screen.queryByTestId('view-section')).toBeNull()
   })
 
