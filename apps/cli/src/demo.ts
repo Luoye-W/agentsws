@@ -159,6 +159,9 @@ const DEMO_HOME = `<!doctype html><html><head><title>Rovella — 收纳与整理
 <a href="/pages/old-faq">常见问题（旧）</a>
 </main></body></html>`
 Object.assign(DEMO_SITE_HEALTH_PAGES, {
+  // WP450：一份去年放上去的 llms.txt——没写政策页、还挂着下架的夏季特卖合集（体检那一项判「过时」）
+  '/llms.txt':
+    '# Rovella\n\n> 能折起来的收纳箱与衣柜整理件。\n\n## 商品分类\n\n- [整理件](https://nordvolt.example/collections/organizers)\n- [去年夏季特卖](https://nordvolt.example/collections/summer-2025)\n',
   '/': DEMO_HOME,
   '/sitemap.xml': `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://nordvolt.example/sitemap_products_1.xml</loc></sitemap><sitemap><loc>https://nordvolt.example/sitemap_collections_1.xml</loc></sitemap><sitemap><loc>https://nordvolt.example/sitemap_blogs_1.xml</loc></sitemap></sitemapindex>`,
   '/sitemap_products_1.xml': `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://nordvolt.example/products/rovella-storage-box</loc></url><url><loc>https://nordvolt.example/products/rovella-hanger-2024</loc></url></urlset>`,
@@ -341,6 +344,12 @@ export interface DemoOptions {
    * 不给就和原来一样。
    */
   searchDataFor?: (workspace_id: WorkspaceId) => SearchDataPort | undefined
+  /**
+   * WP450：主题簇 / 外链体检读的官方数据接口、编辑日历的「最近发布」换成替身。**只给截图脚本用**
+   * （`scripts/e2e-wp450-shots.mjs`：录好的外链回包、一篇已发布的文章）；不给就和原来一样。
+   */
+  seoPlanDataFor?: ServerOptions['seoPlanDataFor']
+  seoPublishedFor?: ServerOptions['seoPublishedFor']
   /**
    * WP181：官方插件那一层（插件层目录或替身后端）。**只给截图脚本用**（`scripts/e2e-wp181-shots.mjs`：
    * 装上「自动化任务」拍右栏定时任务面板）；demo 默认全内存、没有插件层（设置页照实说「装不了」）。
@@ -1757,6 +1766,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     searchConsoleFor: () =>
       standInSearchConsole({ rows: [...DEMO_GSC_ROWS, ...DEMO_COMPETING_ROWS], pages: DEMO_PAGES }),
     ...(options.searchDataFor === undefined ? {} : { searchDataFor: options.searchDataFor }),
+    ...(options.seoPlanDataFor === undefined ? {} : { seoPlanDataFor: options.seoPlanDataFor }),
+    ...(options.seoPublishedFor === undefined ? {} : { seoPublishedFor: options.seoPublishedFor }),
     ...(options.officialPlugins === undefined ? {} : { officialPlugins: options.officialPlugins }),
     ...(options.contentUpdates === undefined ? {} : { contentUpdates: options.contentUpdates }),
     ...(options.officialContent === undefined ? {} : { officialContent: options.officialContent }),

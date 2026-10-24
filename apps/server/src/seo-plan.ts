@@ -178,6 +178,25 @@ const PR_ROLES = ['pr.press', 'pr.forums', 'pr.reddit'] as RoleId[]
 /** llms.txt 交给谁（主题模板那一条；没人担交整站搭建）。 */
 const SITE_ROLES = ['site.shopify-theme', 'site.shopify-build'] as RoleId[]
 
+/** 品牌档案里的关键词（字符串或 `{ keyword }` 都认；不是数组就没有）。 */
+function profileKeywords(brand: SeoBrandInfo): string[] {
+  const raw = (brand as { keywords?: unknown }).keywords
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((k) =>
+      typeof k === 'string'
+        ? k
+        : typeof k === 'object' &&
+            k !== null &&
+            typeof (k as { keyword?: unknown }).keyword === 'string'
+          ? (k as { keyword: string }).keyword
+          : '',
+    )
+    .map((k) => k.trim())
+    .filter((k) => k !== '')
+    .slice(0, 20)
+}
+
 const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined
 
@@ -272,6 +291,7 @@ export function createSeoPlan(options: SeoPlanOptions): SeoPlanAssembly {
     brand: SeoBrandInfo,
     cost: { credits: number; calls: number },
     notes: string[],
+    serpCache: Map<string, string[]>,
   ): Promise<SeoClusterKeyword[]> => {
     const terms = [brand.name, ...brand.domains.map((d) => d.split('.')[0] ?? '')].filter(
       (t) => t.trim() !== '',
@@ -319,8 +339,11 @@ export function createSeoPlan(options: SeoPlanOptions): SeoPlanAssembly {
         notes.push('这次没读到 Search Console，候选词只从品类来')
       }
     } else notes.push('Search Console 没连：候选词只从品类来，接上后能把已经排上的词一起算进来')
-    // ② 品类词 + 它的搜索结果里「大家还问」
-    const seed = (brand.subcategory ?? brand.category ?? '').trim()
+    // ② 品牌档案里的关键词（AI 查过、人确认过的）
+    const profileWords = profileKeywords(brand)
+    for (const k of profileWords) add({ keyword: k, intent: 'unknown', from: 'brand' })
+    // ③ 品类词（没有就用档案第一个关键词）+ 它的搜索结果里「大家还问」
+    const seed = (brand.subcategory ?? brand.category ?? profileWords[0] ?? '').trim()
     if (seed !== '') {
       add({ keyword: seed, intent: 'unknown', from: 'brand' })
       try {
@@ -332,13 +355,21 @@ export function createSeoPlan(options: SeoPlanOptions): SeoPlanAssembly {
         })
         cost.calls += 1
         cost.credits += r.credits ?? 0
+        // 品类词自己的结果留着，分组时不再查一次
+        serpCache.set(
+          normalizeQuery(seed),
+          r.items
+            .filter((i) => i.type === 'organic')
+            .slice(0, 10)
+            .map((i) => i.url),
+        )
         for (const q of r.people_also_ask ?? [])
           add({ keyword: q, intent: 'unknown', from: 'related' })
       } catch {
         notes.push('品类词的搜索结果这次没查到')
       }
     }
-    // ③ 关键词概况（量 / 意图；估算）——查得到才补，查不到照样分组
+    // ④ 关键词概况（量 / 意图；估算）——查得到才补，查不到照样分组
     const list = [...out.values()]
     const data = options.dataService?.()
     if (data !== undefined && list.length > 0) {
@@ -381,12 +412,18 @@ export function createSeoPlan(options: SeoPlanOptions): SeoPlanAssembly {
     const p = await serpPrice()
     if (!p.ok) return { skipped: p.reason ?? '搜索数据接口没接上', cost, notes }
     const brand = await options.brand()
-    const pool = await candidates(brand, cost, notes)
+    const serpCache = new Map<string, string[]>()
+    const pool = await candidates(brand, cost, notes, serpCache)
     const strength = (k: SeoClusterKeyword): number => k.volume ?? k.impressions ?? 0
     const top = [...pool].sort((a, b) => strength(b) - strength(a)).slice(0, MAX_CLUSTER_SERP)
     if (top.length < 3) return { skipped: '候选词不到 3 个，凑不成一组', cost, notes }
     const serps = new Map<string, string[]>()
     for (const k of top) {
+      const cached = serpCache.get(normalizeQuery(k.keyword))
+      if (cached !== undefined && cached.length > 0) {
+        serps.set(k.keyword, cached)
+        continue
+      }
       try {
         const r = await options.searchData().serp({
           query: k.keyword,
@@ -787,6 +824,7 @@ export function createSeoPlan(options: SeoPlanOptions): SeoPlanAssembly {
       if (run.ours === undefined && rows.length === 0) run.status = 'skipped'
       else if (notes.length > 0) run.status = 'partial'
       const terms = [brand.name, ...brand.domains.map((d) => d.split('.')[0] ?? '')]
+      const next0 = load()
       let keywords: string[] = []
       try {
         const gsc = options.searchConsole()
@@ -799,6 +837,10 @@ export function createSeoPlan(options: SeoPlanOptions): SeoPlanAssembly {
       } catch {
         keywords = []
       }
+      // 编辑日历里排过的词也算「我们在乎的词」（认完全匹配锚文本）
+      keywords = [
+        ...new Set([...keywords, ...(next0.calendar ?? []).map((e) => normalizeQuery(e.keyword))]),
+      ]
       const result = auditBacklinks({
         ...(run.ours === undefined ? {} : { ours: run.ours }),
         ...(prev?.ours === undefined

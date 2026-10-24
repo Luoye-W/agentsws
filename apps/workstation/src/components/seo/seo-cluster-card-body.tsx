@@ -79,7 +79,12 @@ export function SeoClusterCardBody({
   const c = payload.cluster
   const dateOf = (id: string): string | undefined =>
     payload.schedule.find((s) => s.post_id === id)?.date.slice(5)
-  const posts = [c.pillar, ...c.spokes]
+  // 按哪天写排（同一天总页在前）
+  const posts = [c.pillar, ...c.spokes].sort(
+    (a, b) =>
+      (dateOf(a.id) ?? '').localeCompare(dateOf(b.id) ?? '') ||
+      (a.role === 'pillar' ? -1 : b.role === 'pillar' ? 1 : 0),
+  )
   const toggle = (id: string): void => {
     const next = new Set(removed)
     if (next.has(id)) next.delete(id)

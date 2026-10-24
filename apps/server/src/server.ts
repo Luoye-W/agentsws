@@ -121,6 +121,7 @@ import type {
   RoleId,
   RunRequest,
   SearchDataPort,
+  SeoPublishedPost,
   SkillTier,
   StartRun,
   StorefrontPlatform,
@@ -922,7 +923,7 @@ import {
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { driftAlertCards } from './seo-drift-alerts.js'
-import { createSeoPlan } from './seo-plan.js'
+import { createSeoPlan, type SeoPlanDataPort } from './seo-plan.js'
 import {
   claimRuleCard,
   createSeoService,
@@ -1460,6 +1461,14 @@ export interface ServerOptions {
    * 路由口（官方 / 自带 key / 不接）；没接时 SERP 检查与 GEO 探测跳过，其余照跑。
    */
   searchDataFor?: (workspace_id: WorkspaceId) => SearchDataPort | undefined
+  /**
+   * WP450：换掉主题簇 / 外链体检读的官方数据接口、编辑日历读的「最近发布」（测试与截图脚本用替身）。
+   * 不给 = 这个品牌的云客户端（没关联账号 = 没有）与账本里施行了的 `publish_post`。生产路径从不传它们。
+   */
+  seoPlanDataFor?: (workspace_id: WorkspaceId) => SeoPlanDataPort | undefined
+  seoPublishedFor?: (
+    workspace_id: WorkspaceId,
+  ) => Promise<(SeoPublishedPost & { body?: string })[]> | undefined
   /**
    * WP25 的三个测试注入点。生产路径一个都不传，各自走真实现：Shopify 换令牌用
    * `globalThis.fetch`、MX 用 `node:dns/promises`、模型试跑用网关自己的 fetch。
@@ -8733,12 +8742,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       work: { createMatter: (input) => work.createMatter(input) },
       searchConsole: searchConsoleOf,
       searchData: () => options.searchDataFor?.(ws) ?? searchData,
-      dataService: () => (ownCloud.linked() ? createDataService(ownCloud) : undefined),
+      dataService: () =>
+        options.seoPlanDataFor?.(ws) ??
+        (ownCloud.linked() ? createDataService(ownCloud) : undefined),
       brand: seoBrandInfo,
       competitors: async () =>
         ((await seoService.geoHistory()).watch()?.competitors ?? []).flatMap((c) => c.domains),
       refreshCandidates: () => seoService.refreshCandidates(),
       publishedPosts: async () => {
+        const injected = options.seoPublishedFor?.(ws)
+        if (injected !== undefined) return injected
         const changes = await txn.ledger.list({
           workspace_id: ws,
           kind: 'publish_post',
@@ -18369,6 +18382,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
         const out = await target.decide(...args)
         if (
           out.kind === 'seo_topic' ||
+          // WP450：主题簇卡批了 → 排进编辑日历
+          out.kind === 'seo_cluster' ||
           out.kind === B2B_SENDER_CHOICE_KIND ||
           out.kind === 'inbound_dead_letter' ||
           // WP268：挑图卡 / 超额卡
