@@ -58,6 +58,7 @@ import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
 import { REPORTS_EN, REPORTS_ZH } from './i18n-reports'
+import { SEO_PLAN_EN, SEO_PLAN_ZH } from './i18n-seo-plan'
 import { SERVICES_EN, SERVICES_ZH } from './i18n-services'
 import { SETTINGS_EN, SETTINGS_ZH } from './i18n-settings'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
@@ -9157,6 +9158,8 @@ const TABLES: Record<Lang, Table> = {
     ...KNOWLEDGE_LEARN_ZH,
     ...INBOX_ZH,
     ...KOL_INFO_ZH,
+    // WP450：编辑日历（日历 / 外链 / llms.txt）与「一组主题」卡
+    ...SEO_PLAN_ZH,
     // WP469：日历与待办（待办 + 日历合成一页）
     ...CAL_TODO_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
@@ -9244,6 +9247,7 @@ const TABLES: Record<Lang, Table> = {
     ...KNOWLEDGE_LEARN_EN,
     ...INBOX_EN,
     ...KOL_INFO_EN,
+    ...SEO_PLAN_EN,
     ...CAL_TODO_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,

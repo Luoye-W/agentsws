@@ -36,6 +36,7 @@ import {
   isGoogleAlertChangePayload,
 } from '@/components/pr/google-alert-change-body'
 import { GeoWatchCardBody, isGeoWatchPayload } from '@/components/seo/geo-watch-card-body'
+import { isSeoClusterPayload, SeoClusterCardBody } from '@/components/seo/seo-cluster-card-body'
 import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
@@ -448,6 +449,9 @@ export function DeckCardBody({
           return <KnowledgeStaleBody card={card} payload={payload} />
         // WP335：AI 回答监测的设定卡 / 竞品卡——几行要点 + 就地「改」（改好了带着改过的策略批）
         if (isGeoWatchPayload(payload)) return <GeoWatchCardBody card={card} payload={payload} />
+        // WP450：一组主题——总页 + 分页（哪天写、回头改哪页）、内链几条、凭什么分成一组；可去掉几篇再批
+        if (isSeoClusterPayload(payload))
+          return <SeoClusterCardBody card={card} payload={payload} />
         // WP387：在你的 Google 账号里建 / 改 N 条提醒——每条可勾掉、一次确认（主按钮在卡身里）
         if (isGoogleAlertChangePayload(payload))
           return <GoogleAlertChangeBody card={card} payload={payload} />
