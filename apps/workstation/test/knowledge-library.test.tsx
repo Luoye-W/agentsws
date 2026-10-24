@@ -35,6 +35,8 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     listKnowledgeCards: async () => state.cards,
     listKnowledgeRechecks: async () => [],
+    // WP504：知识库搬进第三栏面板（面板头写岗位名，要岗位清单）
+    getPositions: async () => ({ positions: [], instances: [], tile_library: [], max_tiles: 0 }),
     listKnowledgeGaps: async () => [],
     listKnowledgeBoundaries: async () => [],
     listKnowledgeSources: async () => state.sources,
@@ -51,7 +53,9 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-const { KnowledgePage } = await import('@/pages/knowledge')
+// WP504（决策 1779 A）：整页 `/knowledge` 搬进岗位第三栏的知识库面板，这里直接渲染面板
+const { KnowledgeLibraryPanel } = await import('@/components/knowledge/knowledge-library-panel')
+const KnowledgePage = (): React.ReactNode => <KnowledgeLibraryPanel tier="position" pathname="/" />
 
 const CARDS: KnowledgeCardRow[] = [
   card('b2b:pricing_moq', {

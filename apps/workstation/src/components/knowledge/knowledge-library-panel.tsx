@@ -26,7 +26,7 @@ import {
   UploadCloud,
 } from 'lucide-react'
 import { type DragEvent, type ReactNode, useEffect, useRef, useState } from 'react'
-import type { ContextRef } from '@/components/ask-ai/ask-ai-store'
+import { type ContextRef, REF_MIME } from '@/components/ask-ai/ask-ai-store'
 import { registerRefSource } from '@/components/ask-ai/ref-sources'
 import { Segmented, WsCard, WsTag } from '@/components/design'
 import { ClaimRulesSection } from '@/components/knowledge/claim-rules'
@@ -651,8 +651,11 @@ function KnowledgeLibraryBody({ scope }: RailPanelBodyProps): ReactNode {
     />
   )
 
+  /** 拖的是一张库里的卡（要进输入框的），不是文件——这一块不接。 */
+  const isRef = (e: DragEvent<HTMLDivElement>): boolean =>
+    [...(e.dataTransfer?.types ?? [])].includes(REF_MIME)
   const onDrop = (e: DragEvent<HTMLDivElement>): void => {
-    if (!(e.dataTransfer?.types ?? []).includes('Files')) return
+    if (isRef(e)) return
     e.preventDefault()
     setDragging(false)
     void upload([...(e.dataTransfer?.files ?? [])])
@@ -814,7 +817,7 @@ function KnowledgeLibraryBody({ scope }: RailPanelBodyProps): ReactNode {
               dragging ? 'border-ws-brand bg-ws-tint' : 'border-ws-line',
             )}
             onDragOver={(e) => {
-              if (!(e.dataTransfer?.types ?? []).includes('Files')) return
+              if (isRef(e)) return
               e.preventDefault()
               setDragging(true)
             }}

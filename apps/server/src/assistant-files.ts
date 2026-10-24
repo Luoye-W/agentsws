@@ -203,7 +203,8 @@ export function contextAttachment(ref: ContextRefInput): FreeChatAttachment {
     `名字：${ref.label}`,
     ...ref.facts.filter((f) => f.v.trim() !== '').map((f) => `${f.k}：${f.v}`),
   ]
-  const text = EXTERNAL_FENCE.sanitizeText(lines.join('\n'), ASSISTANT_FILE_MAX_CHARS)
+  // 围栏与清洗在交给模型那一步做（`attachmentsBrief`），这里只截到上限
+  const text = lines.join('\n').slice(0, ASSISTANT_FILE_MAX_CHARS)
   return { name: cleanFileName(`引用：${ref.label}`), chars: text.length, text }
 }
 

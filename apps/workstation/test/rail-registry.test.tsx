@@ -266,11 +266,15 @@ describe('内置四个面板走的就是那条公开路（#4）', () => {
     expect(def?.group).toBe('layer')
     expect(def?.hint).toBe('rail.panel.settings.hint')
     expect(registry.panelBody('settings')).toBeDefined()
-    for (const id of ['role', 'memory', 'knowledge', 'skills', 'caps']) {
+    for (const id of ['role', 'memory', 'skills', 'caps']) {
       // 不再是图标轨上的一格
       expect(registry.panelType(id)).toBeUndefined()
       expect(registry.resolvePanelId(id)).toEqual({ id: 'settings', sub: id })
     }
+    // WP504（决策 1779 A）：「知识」改跳知识库面板；WP500 的红人详情那一格并进红人库
+    expect(registry.panelType('knowledge')).toBeUndefined()
+    expect(registry.resolvePanelId('knowledge')).toEqual({ id: 'knowledge-library' })
+    expect(registry.resolvePanelId('kol-creator')).toEqual({ id: 'kol-library' })
     // 不是别名的原样回
     expect(registry.resolvePanelId('browser')).toEqual({ id: 'browser' })
     // WP372：记录 / 发出记录 / 证据合成「产出」的三个标签（旧 id 是别名）
