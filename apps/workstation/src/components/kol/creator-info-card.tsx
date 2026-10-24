@@ -468,7 +468,7 @@ function RateReferenceSection({ checks }: { checks: KolCreatorChecksData }): Rea
       />
       {v.kind === 'estimated' ? (
         <div className="rounded-lg bg-muted/50 px-3 py-2" data-slot="data">
-          <div className="ws-num text-lg font-semibold" data-testid="kol-valuation-range">
+          <div className="ws-num text-ws-title font-semibold" data-testid="kol-valuation-range">
             {formatCents(v.low_cents)} – {formatCents(v.high_cents)}
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -640,7 +640,7 @@ function QualitySection({
         {audit === undefined ? null : (
           <div className="flex flex-col gap-1" data-testid="kol-audit-detail">
             <div className="flex items-baseline gap-1.5">
-              <span className="ws-num text-2xl font-semibold">{Math.round(audit.health)}</span>
+              <span className="ws-num text-[22px] font-semibold">{Math.round(audit.health)}</span>
               <span className="text-xs text-muted-foreground">
                 {t('kol.info.audit.suffix', { at: dayOf(audit.at) })}
               </span>
@@ -1221,7 +1221,7 @@ function RecentWorks({
               </span>
             </span>
             <span
-              className="ws-num flex min-w-0 flex-wrap gap-x-2 text-[11px] text-muted-foreground"
+              className="ws-num flex min-w-0 flex-wrap gap-x-2 text-ws-tiny text-muted-foreground"
               data-slot="data"
             >
               {[
@@ -1296,7 +1296,7 @@ export function CreatorInfoCard({
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3
-              className="text-lg font-semibold leading-tight text-ws-ink"
+              className="text-ws-title font-semibold leading-tight text-ws-ink"
               data-slot="title"
               data-testid="kol-detail-name"
             >
@@ -1429,7 +1429,7 @@ export function CreatorInfoCard({
       {score === undefined ? null : (
         <Block testId="kol-score">
           <div className="flex items-baseline gap-1">
-            <span className="ws-num text-3xl font-semibold">{score.total}</span>
+            <span className="ws-num text-[28px] font-semibold">{score.total}</span>
             <span className="text-sm text-muted-foreground">{t('kol.info.score.suffix')}</span>
             <Hint text={t('kol.info.score.hint')} />
           </div>
