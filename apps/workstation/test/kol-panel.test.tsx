@@ -442,6 +442,60 @@ describe('WP68 红人岗位面板', () => {
     expect(screen.getByTestId('kol-history').textContent).toContain('已建联')
   })
 
+  it('WP498（1752 C）：存入过红人池的账号，详情里看得到主页资料（数字一行、简介、前三条近期作品；图片只给链接）', async () => {
+    getKolCreator.mockResolvedValueOnce({
+      ...DETAIL,
+      profiles: {
+        pa_1: {
+          saved_at: '2026-10-23T10:00:00.000Z',
+          country: 'Germany',
+          joined_date: 'Mar 3, 2021',
+          total_views: 1_234_567,
+          avg_views: 32_500,
+          video_count: 231,
+          bio: 'Desk setups and keyboard reviews.',
+          avatar_url: 'https://yt3.example/avatar.png',
+          banner_url: 'https://yt3.example/banner.png',
+          recent_items: [
+            {
+              title: 'The ultimate desk setup guide',
+              views_text: '39K views',
+              published_text: '2 days ago',
+            },
+            { title: 'Custom keyboards for beginners', views: 27_000 },
+            { title: 'My desk lighting plan' },
+            { title: 'Budget vs flagship keyboard' },
+          ],
+        },
+      },
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    const rows = await screen.findAllByTestId('kol-library-row')
+    fireEvent.click(rows[0] as HTMLElement)
+    const block = await screen.findByTestId('kol-saved-profile')
+    const facts = screen.getByTestId('kol-profile-facts').textContent ?? ''
+    for (const part of ['Germany', '加入于 Mar 3, 2021', '总播放 1.2M', '平均播放 33k', '作品 231'])
+      expect(facts).toContain(part)
+    expect(block.textContent).toContain('存入于 2026-10-23')
+    expect(screen.getByTestId('kol-profile-bio').textContent).toContain('Desk setups')
+    const recent = screen.getByTestId('kol-profile-recent')
+    expect(recent.querySelectorAll('li')).toHaveLength(3)
+    expect(recent.textContent).toContain('39K views · 2 days ago')
+    expect(recent.textContent).toContain('还有 1 条')
+    // 外站图片不直接加载：头像 / 横幅只是链接
+    expect(block.querySelector('img')).toBeNull()
+    expect(screen.getByText('头像').getAttribute('href')).toBe('https://yt3.example/avatar.png')
+    expect(screen.getByText('横幅').getAttribute('href')).toBe('https://yt3.example/banner.png')
+  })
+
+  it('没存入过红人池的账号：没有主页资料那一块', async () => {
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    const rows = await screen.findAllByTestId('kol-library-row')
+    fireEvent.click(rows[0] as HTMLElement)
+    await screen.findByTestId('kol-creator-detail')
+    expect(screen.queryByTestId('kol-saved-profile')).toBeNull()
+  })
+
   it('WP416：起草那两格从品牌档案预填；没连邮箱照实说并给「连邮箱」；改了的产品记成默认', async () => {
     renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
     const rows = await screen.findAllByTestId('kol-library-row')

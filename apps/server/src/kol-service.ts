@@ -30,6 +30,7 @@ import type {
   KolCollaborationRow,
   KolContactView,
   KolCreatorDetail,
+  KolCreatorProfileView,
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
@@ -113,7 +114,7 @@ import {
   suggestMerges,
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
-import type { KolStore } from './kol.js'
+import type { KolAccountObservation, KolStore } from './kol.js'
 import {
   type ByoEndpointConfig,
   type ByoSourceStore,
@@ -553,7 +554,34 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       collaborations,
       deliverables: store.deliverables().filter((d) => ids.has(d.collaboration_id)),
       tracked_links: store.links().filter((l) => ids.has(l.collaboration_id)),
+      ...savedProfilesOf(accounts),
     }
+  }
+
+  /**
+   * WP498（决策 1752 C）：每个账号最近一次「存入红人池」时记下的主页资料（插件按钮或 ego 自动存入的那一行快照）。
+   * 一个都没有就不带这一格。
+   */
+  const savedProfilesOf = (
+    accounts: readonly PlatformAccount[],
+  ): { profiles?: Record<string, KolCreatorProfileView> } => {
+    const out: Record<string, KolCreatorProfileView> = {}
+    for (const a of accounts) {
+      const latest = store
+        .accountObservations({ account_id: a.id })
+        .filter((o) => o.source === 'manual_save' && o.profile !== undefined)
+        // 最近的那一次（同一刻存了两次取后记的那一行）
+        .reduce<KolAccountObservation | undefined>(
+          (best, o) =>
+            best === undefined || Date.parse(o.observed_at) >= Date.parse(best.observed_at)
+              ? o
+              : best,
+          undefined,
+        )
+      if (latest?.profile !== undefined)
+        out[a.id] = { saved_at: latest.observed_at, ...latest.profile }
+    }
+    return Object.keys(out).length === 0 ? {} : { profiles: out }
   }
 
   /*

@@ -541,6 +541,7 @@ export type {
   KolCreatorDetail,
   KolCreatorInput,
   KolCreatorPatch,
+  KolCreatorProfileView,
   KolCreatorRow,
   KolImportCommitView,
   KolImportPreviewView,

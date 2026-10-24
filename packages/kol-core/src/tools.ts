@@ -164,7 +164,8 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   },
   {
     name: 'get_creator',
-    description: '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史。',
+    description:
+      '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史；存入过红人池的账号还带主页资料（profiles：国家、加入时间、总播放、平均播放、作品数、简介、头像、横幅、近期作品，saved_at 是那一刻）。',
     input_schema: {
       type: 'object',
       properties: { creator_id: str('红人 id') },

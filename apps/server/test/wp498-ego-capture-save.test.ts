@@ -28,6 +28,7 @@ import type { EgoSpawn } from '../src/ego-write/runner.js'
 import { createExtensionContributor } from '../src/extension-contribute.js'
 import { createExtensionService } from '../src/extension-service.js'
 import { createKolStore } from '../src/kol.js'
+import { createKolService } from '../src/kol-service.js'
 import type { KolPublicFetch } from '../src/kol-public-client.js'
 import { createKolToolExecutor } from '../src/kol-tools.js'
 import { createSecretStore } from '../src/secret-store.js'
@@ -447,5 +448,75 @@ describe('WP498 1742 C：列表页每行带插件预筛的相关度分', () => {
     const list = page?.list as { relevance: { scored: boolean }; candidates_total: number }
     expect(list.relevance.scored).toBe(false)
     expect(page?.recorded).toMatchObject({ saved: list.candidates_total })
+  })
+})
+
+describe('WP498 1752 C：存下的主页资料回给红人详情与 get_creator', () => {
+  function kolPortOf(svc: ReturnType<typeof assemble>) {
+    return createKolService({
+      workspace_id: WS,
+      store: svc.kol,
+      secrets: { available: true, get: () => undefined, put: () => ({}) as never } as never,
+      clock,
+      approvals: {} as never,
+      ledger: { stage: undefined as never, list: async () => [] },
+      effectiveConfig: () => ({ actions: [], automation: {} }) as never,
+      appendEvent: () => {},
+      random: () => 0.5,
+      assignmentsOf: () => [],
+      holdersOf: () => [],
+      brandName: () => '测试品牌',
+      personName: (id: string) => id,
+    } as never).port
+  }
+
+  it('红人详情带 profiles（按账号）：国家、加入时间、总播放、平均播放、作品数、简介、头像、横幅、近期作品', async () => {
+    const svc = assemble()
+    await egoCapture(svc).capture(actor, ['https://www.youtube.com/@deskfixture/videos'], {
+      lang: 'en',
+      rewrite: REWRITE,
+    })
+    const account = svc.kol.accounts().find((a) => a.handle === '@deskfixture')
+    const port = kolPortOf(svc)
+    const detail = await port.creator(actor as never, account?.creator_id as string)
+    const profile = detail?.profiles?.[account?.id as string]
+    expect(profile).toMatchObject({
+      saved_at: NOW,
+      country: 'Germany',
+      joined_date: 'Mar 3, 2021',
+      total_views: 1_234_567,
+      avg_views: 32_500,
+      video_count: 231,
+      avatar_url: 'https://yt3.example/avatar-deskfixture.png',
+      banner_url: 'https://yt3.example/banner-deskfixture.png',
+    })
+    expect(profile?.bio).toContain('Desk setups')
+    expect(profile?.recent_items?.length).toBe(8)
+
+    // get_creator 工具回的就是这一份
+    const tools = createKolToolExecutor({ workspace_id: WS, port: () => port, now: () => NOW })
+    const res = await tools({
+      name: 'get_creator',
+      input: { creator_id: account?.creator_id },
+      request: { actor: { person_id: 'pr_1', assignment_id: 'asg_1', role_id: 'kol.youtube' } } as never,
+    })
+    expect(res.status).toBe('ok')
+    expect(
+      (res.data as { profiles?: Record<string, { joined_date?: string }> }).profiles?.[
+        account?.id as string
+      ]?.joined_date,
+    ).toBe('Mar 3, 2021')
+  })
+
+  it('没存入过红人池（只有列表页观测）：详情里没有 profiles', async () => {
+    const svc = assemble()
+    await egoCapture(svc).capture(actor, ['https://www.tiktok.com/tag/mealprep'], {
+      lang: 'en',
+      rewrite: REWRITE,
+    })
+    const [account] = svc.kol.accounts()
+    const detail = await kolPortOf(svc).creator(actor as never, account?.creator_id as string)
+    expect(detail).toBeDefined()
+    expect(detail?.profiles).toBeUndefined()
   })
 })
