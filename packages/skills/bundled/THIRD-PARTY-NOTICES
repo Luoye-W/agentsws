@@ -269,6 +269,9 @@ Used in: content-localize (method from skills/blog-translate, blog-localize, blo
          for Agents Workshop's rules). The checks in packages/seo-core (citations.ts from
          blog-factcheck, citability.ts from blog-geo, localize.ts) are our own code; only the method
          was borrowed. The FLOW prompts (CC BY 4.0) were not used.
+         WP450: topic clusters and the editorial calendar (method from skills/blog-cluster,
+         blog-calendar, blog-strategy) and repurposing posts into social drafts (method from
+         skills/blog-repurpose) in packages/seo-core cluster.ts / repurpose.ts are our own code.
 --------------------------------------------------------------------------------
 MIT License
 
@@ -299,6 +302,9 @@ pinned commit 4b99de2f7de7e7d5247042e5fb5b4ea9368ef734
 Used in: seo-judgment (the comparison-page section, method from skills/seo-competitor-pages; the
          AI-citation section, method from skills/seo-geo). packages/seo-core comparison.ts and
          citability.ts are our own code; only the method was borrowed.
+         WP450: SERP-overlap topic clusters (skills/seo-cluster), the backlink check (skills/
+         seo-backlinks) and llms.txt (skills/seo-agentic) in packages/seo-core cluster.ts /
+         backlinks.ts / llms-txt.ts are our own code; only the method was borrowed.
 --------------------------------------------------------------------------------
 MIT License
 

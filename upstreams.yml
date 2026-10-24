@@ -797,14 +797,21 @@ upstreams:
       - skills/blog-locale-audit
       - skills/blog-factcheck
       - skills/blog-geo
+      - skills/blog-cluster
+      - skills/blog-calendar
+      - skills/blog-strategy
+      - skills/blog-repurpose
     we_depend_on:
       - 'skills/{blog-translate,blog-localize,blog-locale-audit} 与 blog-translate/references/{translation-rules,cultural-adaptation}.md → packages/skills/bundled/content-localize/SKILL.md'
       - 'skills/blog-factcheck 的核查方法（逐条抽说法、打开引用页找原数、打不开不算核过、先查网址再抓） → packages/seo-core/src/citations.ts（自己的代码）'
       - 'skills/blog-geo 的打分维度（可单独引用、说法 + 出处、实体一致、结构可抽取） → packages/seo-core/src/citability.ts（自己的代码，分项与权重是我们定的）'
       - 'blog-translate/references/translation-rules.md 的各地数字 / 日期 / 货币写法表 → packages/seo-core/src/localize.ts（MARKET_CONVENTIONS 与逐句检查）'
+      - 'WP450：skills/{blog-cluster,blog-calendar,blog-strategy} 的总页先写、按节奏排、回头改清单 → packages/seo-core/src/cluster.ts 的 scheduleCluster 与 apps/server/src/seo-plan.ts 的编辑日历（自己的代码）'
+      - 'WP450：skills/blog-repurpose 的各平台格式与「不编经历、不编数字」 → packages/seo-core/src/repurpose.ts（自己的代码）'
     covered_by:
       - packages/skills/test/wp449-content-skills.test.ts
       - packages/seo-core/test/wp449-content-quality.test.ts
+      - packages/seo-core/test/wp450-seo-plan.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
   - id: claude-seo
@@ -816,11 +823,18 @@ upstreams:
     watch_paths:
       - skills/seo-competitor-pages
       - skills/seo-geo
+      - skills/seo-cluster
+      - skills/seo-backlinks
+      - skills/seo-agentic
     we_depend_on:
       - 'skills/seo-competitor-pages 的公平准则与结构化数据建议（改成只标自己的商品） → packages/skills/bundled/seo-judgment/SKILL.md「对比页」一节；packages/seo-core/src/comparison.ts（自己的代码）'
       - 'skills/seo-geo 的可引用性维度 → packages/skills/bundled/seo-judgment/SKILL.md「写给人看，也让 AI 答得出」五条；packages/seo-core/src/citability.ts'
+      - 'WP450：skills/seo-cluster 的搜索结果重叠阈值（7 / 4 / 2）、总页挑法、链接矩阵 → packages/seo-core/src/cluster.ts（自己的代码）'
+      - 'WP450：skills/seo-backlinks 的锚文本五类、完全匹配 15% 复核线、单域占比、来源域名竞品差距 → packages/seo-core/src/backlinks.ts（自己的代码）'
+      - 'WP450：skills/seo-agentic 的 llms.txt 结构与 Lighthouse 三条 → packages/seo-core/src/llms-txt.ts（自己的代码）'
     covered_by:
       - packages/skills/test/wp449-content-skills.test.ts
+      - packages/seo-core/test/wp450-seo-plan.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
   # 两份研究技能改编自这两家（MIT）。**只留方法论与产出，取数层整个换掉**
