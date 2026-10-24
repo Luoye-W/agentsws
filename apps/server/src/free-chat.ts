@@ -1827,7 +1827,7 @@ function segmentOnce(
       message_id: first.id,
       kind: 'message',
       at: first.at,
-      ...(first.role === undefined ? {} : { role: first.role }),
+      role: first.role,
       title,
       snippet: `第 ${n} 段第 ${from}–${last} 句`,
       score: 0,

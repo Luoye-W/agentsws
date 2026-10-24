@@ -28,7 +28,8 @@ The assistant keeps a single conversation — no new chats to start, no list to 
 
 - **Switch topics**: click "New topic" at the top right, or just say "new topic, …". After a two-hour break, the next day, or when you clearly move on to something else, the assistant starts a new topic by itself.
 - **Find something you said**: click the magnifier at the top left, type a couple of words, and click a result to jump there.
-- **What it keeps in mind**: each reply only reads the current topic word for word, short summaries of the last few topics, and your "Memory" — so a long conversation doesn't get slower or pricier. When you mention something older ("last week's meeting notes"), it looks it up itself and shows "Source" chips under the reply that jump to the original line. Progress on handed-off work is always checked live, never recalled from the chat.
+- **What it keeps in mind**: each reply only reads the current topic word for word, short summaries of the last few topics, and your "Memory" — so a long conversation doesn't get slower or pricier. When you mention something older ("last week's meeting notes"), it looks it up itself and shows "Source" chips under the reply; click one to open what was said back then in the right-hand panel. The summary line on a topic divider opens that part the same way. Progress on handed-off work is always checked live, never recalled from the chat.
+- **Attached files**: for the turn you attach a file and the next one, the assistant reads it in full; after that it keeps only the title and opening paragraph, and when you ask about details or numbers inside, it looks up the original itself. Files stay on this computer.
 
 ## One document, several positions
 
