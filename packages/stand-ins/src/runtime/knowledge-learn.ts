@@ -10,9 +10,17 @@
 import type { ToolDef } from '@agentsws/contracts'
 
 export const LEARN_SUPPORT_KNOWLEDGE_TOOL = 'learn_support_knowledge'
+/**
+ * WP506（决策 1796 C）：AI **提议**停用 / 启用几条知识——只出一张确认卡（中栏「要你处理」），人点了才生效。
+ * 它自己停用不了：真停用 / 启用的接口只给人点。
+ */
+export const PROPOSE_KNOWLEDGE_TOGGLE_TOOL = 'propose_knowledge_toggle'
 
-/** 一个工具（`tools.allow` 要字节稳定）。 */
-export const KNOWLEDGE_LEARN_TOOL_NAMES: readonly string[] = [LEARN_SUPPORT_KNOWLEDGE_TOOL]
+/** 两个工具（`tools.allow` 要字节稳定）。 */
+export const KNOWLEDGE_LEARN_TOOL_NAMES: readonly string[] = [
+  LEARN_SUPPORT_KNOWLEDGE_TOOL,
+  PROPOSE_KNOWLEDGE_TOGGLE_TOOL,
+]
 
 /** 客服那几条职责（邮件客服、亚马逊客服、在线客服）。 */
 export function isKnowledgeLearnRole(role_id: string): boolean {
@@ -40,6 +48,25 @@ export const KNOWLEDGE_LEARN_TOOL_DEFS: readonly ToolDef[] = [
         },
       },
       required: ['source'],
+    },
+  },
+  {
+    name: PROPOSE_KNOWLEDGE_TOGGLE_TOOL,
+    description:
+      '提议停用（或启用回来）知识库里的几条知识：action=disable 停用（停用的回复和起草都不再用它，不删，随时能启用回来）、' +
+      'action=enable 启用回来。用户说「这条过时了别再用」「把旧运费那几条停掉」「把停用的保修那条恢复」时用。' +
+      '用 query 给一个关键词（按正文 / 主题找，最多 20 条）或用 ids 给知识 id；reason 写一句为什么（卡上给人看）。' +
+      '**你自己停用不了**：这个工具只在「要你处理」里出一张确认卡，列出是哪几条、你的理由，用户点了才真停用 / 启用。' +
+      '回来的是出没出卡、几条；照实说「出了一张卡，你点了才生效」。一条都没找到就说没找到，不要编。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['disable', 'enable'], description: '停用还是启用回来' },
+        query: { type: 'string', description: '按正文 / 主题找的关键词' },
+        ids: { type: 'array', items: { type: 'string' }, description: '知识 id（最多 20 个）' },
+        reason: { type: 'string', description: '一句话：为什么要停用 / 启用' },
+      },
+      required: ['action', 'reason'],
     },
   },
 ]

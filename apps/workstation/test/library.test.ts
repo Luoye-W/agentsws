@@ -189,7 +189,13 @@ describe('知识按类型分组', () => {
     expect(filterKnowledge(all, { status: 'pending' }).map((c) => c.id)).toEqual([
       'b2b:pricing_moq',
     ])
-    expect(countByStatus(all)).toEqual({ active: 2, pending: 1, expired: 0, conflict: 0 })
+    expect(countByStatus(all)).toEqual({
+      active: 2,
+      pending: 1,
+      expired: 0,
+      conflict: 0,
+      disabled: 0,
+    })
   })
 
   it('第三栏：岗位挑自己先看的几类，认不出的给全部', () => {

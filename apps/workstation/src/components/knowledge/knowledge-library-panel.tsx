@@ -7,7 +7,8 @@
  * - 「要复核 N」只是一个**筛选签**——复核本身是中栏「要你处理」里的卡（WP488 的过期卡），这里不定；
  * - 导入 / 导出 / 上传收进面板头的 ↑ 与 ⋯；从邮件学、不能说的话、答不上来的、要补的边界、这一层看得见什么——
  *   在 ⋯ 里，点了**叠一层**（← 回来筛选都在）；
- * - 每条悬停 ✦ 问 AI（1775 A）、多选后可批量停用（就地生效、可撤销，1777 A）。
+ * - 每条悬停 ✦ 问 AI（1775 A）、多选后可批量移格、停用 / 启用（就地生效、可撤销，1777 A / 1789 B）；
+ *   停用的不再被检索取用，「全部」里看不见，只在「已停用」筛选里（WP506）。
  *
  * 通用件全在 `components/library/library-kit.tsx`，这里只管知识这一种资料。
  */
@@ -15,6 +16,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRightLeft,
   BookOpen,
+  CircleOff,
+  CirclePlay,
   Download,
   Eye,
   FileText,
@@ -82,6 +85,7 @@ import {
   listKnowledgeSources,
   listRangeGroups,
   setKnowledgeCardStage,
+  setKnowledgeCardsDisabled,
   UPLOAD_ACCEPT,
   UPLOAD_EXTENSIONS,
   UPLOAD_MAX_BYTES,
@@ -339,7 +343,8 @@ function KnowledgeLibraryBody({ scope }: RailPanelBodyProps): ReactNode {
   const uploads = (sources.data ?? []).filter((s) => s.kind === 'upload')
   const everyCard = cards.data ?? []
   const stageOf = (c: { stage?: KnowledgeStageId }): KnowledgeStageId => c.stage ?? 'both'
-  const live = everyCard.filter((c) => c.status !== 'retired')
+  // 三格的数只数在用的（退役的、停用的不算）
+  const live = everyCard.filter((c) => c.status !== 'retired' && c.disabled_at === undefined)
   const stageCounts = {
     both: live.filter((c) => stageOf(c) === 'both').length,
     presales: live.filter((c) => stageOf(c) === 'presales').length,
@@ -357,7 +362,9 @@ function KnowledgeLibraryBody({ scope }: RailPanelBodyProps): ReactNode {
   const filtering =
     query.trim() !== '' || scopeFilter !== SCOPE_ALL || status !== 'all' || recheckOnly
   const shownCards = filterKnowledge(inTab, { query, scope: scopeFilter, status })
-  const statusCounts = countByStatus(filterKnowledge(inTab, { query, scope: scopeFilter }))
+  const statusCounts = countByStatus(
+    filterKnowledge(inTab, { query, scope: scopeFilter, includeDisabled: true }),
+  )
   const scopes = scopeOptions(inTab)
   const scopeName = (ref: { kind: string; id: string }): string =>
     scopeLabel(ref, rangeGroups.data ?? [], tm)
@@ -395,6 +402,51 @@ function KnowledgeLibraryBody({ scope }: RailPanelBodyProps): ReactNode {
       }
     },
   })
+
+  /**
+   * WP506（决策 1789 B）：批量停用 / 启用——当场生效，撤销 = 反着再做一遍（只动这次真改了的那几条）。
+   * 只有人点得到这里（AI 没有这一项工具，服务端也挡 AI 运行的令牌）。
+   */
+  const toggle = (disabled: boolean): LibraryAction => {
+    const verb = disabled ? 'disable' : 'enable'
+    // 选中的里有没有能改的（都已经是这个状态就灰掉）
+    const changeable = [...selection.ids].some(
+      (id) => (byId.get(id)?.disabled_at !== undefined) !== disabled,
+    )
+    return {
+      id: verb,
+      label: t(`kl.lib.act.${verb}`),
+      icon: disabled ? (
+        <CircleOff aria-hidden className="size-3.5" />
+      ) : (
+        <CirclePlay aria-hidden className="size-3.5" />
+      ),
+      kind: 'instant',
+      disabled: !changeable,
+      ...(disabled ? { title: t('kl.lib.act.disable.hint') } : {}),
+      run: async (ids) => {
+        const target = ids.filter((id) => (byId.get(id)?.disabled_at !== undefined) !== disabled)
+        if (target.length === 0) return undefined
+        const out = await setKnowledgeCardsDisabled(target, disabled)
+        refresh()
+        const done = out.updated.map((c) => c.id)
+        const text = [
+          t(`kl.lib.toast.${verb}`, { n: done.length }),
+          ...(out.missing.length === 0
+            ? []
+            : [t('kl.lib.toast.missing', { n: out.missing.length })]),
+        ].join(' · ')
+        if (done.length === 0) return { text, error: true }
+        return {
+          text,
+          undo: async () => {
+            await setKnowledgeCardsDisabled(done, !disabled)
+            refresh()
+          },
+        }
+      },
+    }
+  }
 
   const groups = groupKnowledge(shownCards)
   const list = cards.isLoading ? (
@@ -776,7 +828,10 @@ function KnowledgeLibraryBody({ scope }: RailPanelBodyProps): ReactNode {
             >
               {t('knowledge.status.all')}
             </FilterChip>
-            {KNOWLEDGE_STATUSES.map((s) => (
+            {KNOWLEDGE_STATUSES.filter(
+              // 「已停用」有才出（或正筛着它）
+              (s) => s !== 'disabled' || statusCounts.disabled > 0 || status === 'disabled',
+            ).map((s) => (
               <FilterChip
                 key={s}
                 active={status === s}
@@ -792,7 +847,11 @@ function KnowledgeLibraryBody({ scope }: RailPanelBodyProps): ReactNode {
           </div>
           <BatchBar
             selection={selection}
-            actions={(['both', 'presales', 'postsales'] as const).map(moveTo)}
+            actions={[
+              ...(['both', 'presales', 'postsales'] as const).map(moveTo),
+              // 「已停用」里是启用；其余时候是停用（「全部」里本来就看不见停用的）
+              status === 'disabled' ? toggle(false) : toggle(true),
+            ]}
             visible={shownCards.map((c) => c.id)}
             refsOf={(ids) => ids.map(refOf)}
           />
@@ -892,7 +951,9 @@ export function KnowledgeLibraryCard(_props: RailCardBodyProps): ReactNode {
     queryFn: () => listKnowledgeRechecks(),
   })
   const gaps = useQuery({ queryKey: ['knowledge-gaps'], queryFn: () => listKnowledgeGaps() })
-  const live = (cards.data ?? []).filter((c) => c.status !== 'retired')
+  const live = (cards.data ?? []).filter(
+    (c) => c.status !== 'retired' && c.disabled_at === undefined,
+  )
   const n = (s: KnowledgeStageId): number => live.filter((c) => (c.stage ?? 'both') === s).length
   const open = (params: Record<string, string>): void => {
     openLibrary(KNOWLEDGE_LIBRARY, { params })

@@ -103,6 +103,7 @@ import type {
   DataSourceLevel,
   EventEnvelope,
   ExecutionMode,
+  FactCard,
   Halt,
   ImageProvider,
   KolChannel,
@@ -597,6 +598,7 @@ import {
   type StageJudge,
   type StageJudgeDeps,
 } from './knowledge-stage.js'
+import { createKnowledgeToggle, isKnowledgeToggleCard } from './knowledge-toggle.js'
 import { checkUpload, UploadRejected, uploadBlobKey, uploadSubjectRef } from './knowledge-upload.js'
 import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createByoSourceStore } from './kol-byo.js'
@@ -880,6 +882,7 @@ import {
   registerDailyPlan,
   registerEconomics,
   registerIdempotencySweep,
+  registerKolOutreachBatch,
   registerKolSequence,
   registerLearning,
   registerMailPoll,
@@ -3701,6 +3704,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ),
     telemetry,
   )
+  /*
+   * WP506（决策 1796 C）：AI 提议停用 / 启用知识 → 一张确认卡 → 人点了才生效（卡定了在 `seoDecidedHook` 里施行）。
+   * 真停用 / 启用的 HTTP 接口仍只给人；AI 这一路只能出卡。
+   */
+  const knowledgeToggle = createKnowledgeToggle({
+    knowledge,
+    approvals,
+    grantsOf: (assignment_id) => {
+      const config = roles.effectiveConfig(assignment_id)
+      return { scopes: config.scopes, ranges: config.ranges }
+    },
+    random,
+  })
   approvalsForContent = approvals
   /*
    * WP428（决策 1244 改）：够条件 → 建议开全自动（通用积木）。历史读这张总线里的账本卡，
@@ -5732,6 +5748,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       brandProfile: () => onboardingRef?.brandProfile(ws) ?? {},
       // WP416：有没有能发信的邮箱（没有：开发信卡照实说、要人点、就地出连接卡）
       mailConnected: () => kolMail.connected(),
+      /*
+       * WP506（决策 1795 C）：默认发件那只邮箱（消息层 `channels[0]`）的已发历史——已同步的「已发送」里几封、
+       * 最早一封哪天；B2B 那边标过「已经正常发信很久」也算。批量开发信的缺省节奏按它定。
+       */
+      mailboxHistory: async () => {
+        const address = kolMailBox.current?.addresses()[0]
+        if (address === undefined) return undefined
+        const sent = await messages.store.list({
+          folder_kind: 'sent',
+          account: address,
+          limit: 20_000,
+        })
+        // 已发的信看信上写的时间（`Date` 头 = 什么时候发的）；没有才退回收进库的时间
+        const earliest = sent.reduce<string | undefined>((min, m) => {
+          const at = Number.isNaN(Date.parse(m.date)) ? m.received_at : m.date
+          return min === undefined || Date.parse(at) < Date.parse(min) ? at : min
+        }, undefined)
+        return {
+          address,
+          sent: sent.length,
+          ...(earliest === undefined ? {} : { earliest_sent_at: earliest }),
+          ...(b2b.sender(address)?.established === undefined ? {} : { declared_established: true }),
+        }
+      },
       appendEvent,
       random,
     })
@@ -7410,6 +7450,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP488：客服岗位「学一遍」（过往邮件 / 官网 / 售后网站；只写待确认 + 一张卡）
             knowledgeLearnTools: createKnowledgeLearnToolExecutor({
               learner: () => knowledgeLearner,
+              // WP506（决策 1796 C）：AI 提议停用 / 启用知识——只出卡，人点了才生效
+              proposeToggle: (actor, input) => knowledgeToggle.propose(actor, input),
               mailConnected: async (w) => {
                 const b = await brandModules.forWorkspace(w as WorkspaceId).catch(() => undefined)
                 return (b?.messages.sync.accounts().length ?? 0) > 0
@@ -8504,8 +8546,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       knowledge: async (actor) => {
         const config = roles.effectiveConfig(actor.assignment_id)
+        // WP506：停用的那几条不当规则用
         const cards = await knowledge.store.list(
-          { workspace_id: ws, status: 'active' },
+          { workspace_id: ws, status: 'active', enabled: true },
           {
             person_id: actor.person_id,
             workspace_id: ws,
@@ -8781,8 +8824,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const position = positionFor(ws, SUPPORT_DUTIES)
         if (position === undefined) return []
         const config = roles.effectiveConfig(position.assignment_id)
+        // WP506：停用的那几条不算「答过了」
         const cards = await knowledge.store.list(
-          { workspace_id: ws, status: 'active' },
+          { workspace_id: ws, status: 'active', enabled: true },
           {
             person_id: position.person_id,
             workspace_id: ws,
@@ -11371,6 +11415,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await faqImporter?.onDecided(item)
       return
     }
+    // WP506（决策 1796 C）：「停用 / 启用这几条知识？」批了 → 逐条停用 / 启用；不批什么都不变
+    if (isKnowledgeToggleCard(item)) {
+      await knowledgeToggle.onDecided(item)
+      return
+    }
     // WP488：「学到 N 条」汇总卡 / 「这几条可能过期」卡被点了 → 这一批生效 / 作废，或确认没变 / 重学
     if (isLearnedCard(item) || isStaleCard(item)) {
       await knowledgeLearner?.onDecided(item)
@@ -12183,6 +12232,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         await b.b2bSales.sweep().catch(() => undefined)
         return one
       },
+    })
+    // WP506（决策 1788 B）：批了的批量开发信按节奏逐封发（这个品牌的红人库与额度）
+    registerKolOutreachBatch(s, {
+      pump: async () => (await of()).kolService.pumpOutreachBatches(),
     })
     // WP68：红人开发信序列跟进（这个品牌的红人库与额度）
     registerKolSequence(s, {
@@ -14067,6 +14120,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (card === undefined || card.status === 'retired') return undefined
       return knowledge.store.patch(id, { stage })
     },
+    /*
+     * WP506（决策 1789 B）：停用 / 启用（单条、批量都走这一条）。看得见这条才动得了（看不见当不存在）；
+     * 退役的不动（它本来就不进检索）。就地生效、不出卡：停用收得回（1777 A 的「就地 + 撤销」）。
+     */
+    setCardsDisabled: async (actor, ids, disabled) => {
+      const updated: FactCard[] = []
+      const missing: string[] = []
+      for (const id of [...new Set(ids)]) {
+        const card = await knowledge.store.get(id, actor)
+        if (card === undefined || card.status === 'retired') {
+          missing.push(id)
+          continue
+        }
+        updated.push(await knowledge.store.setDisabled(id, actor.person_id, disabled))
+      }
+      return { updated, missing }
+    },
     // WP56（48 §4 #6）：源页复核队列
     rechecks: (actor, filter) =>
       knowledge.recheck.list(actor.workspace_id, {
@@ -14081,8 +14151,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 剩下的那几条就是「Agent 下次撞到时会问你」的清单。
      */
     boundaries: async (actor) => {
+      // WP506：停用的那几条不算「答过了」（Agent 取不到它）
       const cards = await knowledge.store.list(
-        { workspace_id: actor.workspace_id, status: 'active' },
+        { workspace_id: actor.workspace_id, status: 'active', enabled: true },
         actor,
       )
       const answered = detectAnsweredBoundaries({
@@ -18211,6 +18282,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isAssistantNotesCard(out) ||
           // WP488：「学到 N 条」汇总卡 / 「这几条可能过期」卡
           isLearnedCard(out) ||
+          // WP506：「停用 / 启用这几条知识？」
+          isKnowledgeToggleCard(out) ||
           isStaleCard(out) ||
           // WP323：记录去处的「定规矩」卡（记下 = 生效 / 换成新对照）
           isRecordSinkCard(out) ||

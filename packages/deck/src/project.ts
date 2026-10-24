@@ -810,12 +810,31 @@ function manualSendLabels(actions: DeckAction[]): Partial<Record<DeckAction, str
  */
 const NOT_WIRED_KEEP: ReadonlySet<DeckAction> = new Set(['reject', 'snooze', 'open'])
 
+/**
+ * WP508：只有确认含义的卡——问的只是「这几条照做不照做」，没有可以「说一句怎么改」的东西，
+ * 所以不出通用的「修改」（`instruct`）。都是 `knowledge_update` 借来的 form：
+ * - `knowledge_toggle`：AI 提议停用 / 启用这几条知识（停用 N 条 / 不用 / 稍后，决策 1796 C）；
+ * - `faq_batch`：FAQ 导入那一整批（通过 = 整批生效，不要 = 整批作废；要改去表里改了重导）；
+ * - `assistant_notes`：助理从一份资料里拆出来的那一批（同上，整批生效 / 整批作废）；
+ * - `knowledge_stale`：「这几条可能过期」（没变 / 按新内容重学在卡身里，不要 = 忽略）。
+ */
+export const CONFIRM_ONLY_FORMS: ReadonlySet<string> = new Set([
+  'knowledge_toggle',
+  'faq_batch',
+  'assistant_notes',
+  'knowledge_stale',
+])
+
 export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   const kind = item.kind as DeckKind
   const risk = ctx.riskClass?.(item) ?? riskClassFor(kind)
   const wiring = ctx.wiring?.(item)
   const notWired = wiring?.state === 'not_wired'
-  const actions = actionsFor(kind, item.state).filter((a) => !notWired || NOT_WIRED_KEEP.has(a))
+  const form = isRecord(item.payload) ? str(item.payload.form) : undefined
+  const confirmOnly = form !== undefined && CONFIRM_ONLY_FORMS.has(form)
+  const actions = actionsFor(kind, item.state)
+    .filter((a) => !notWired || NOT_WIRED_KEEP.has(a))
+    .filter((a) => !(confirmOnly && a === 'instruct'))
   const execution = executionOutcomeOf(item)
   const options = optionsOf(item)
   const payload = isRecord(item.payload) ? item.payload : {}

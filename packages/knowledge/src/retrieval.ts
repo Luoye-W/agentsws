@@ -117,6 +117,8 @@ export class SqliteRetrieval implements Retrieval {
       // WP56（48 §4 #6）：`quarantined` 是**唯一**真正从检索里排除的状态，
       // 而且只能由人显式产生。`stale` / `unverified` 一律不排除——只是排在后面。
       "(c.verification_state IS NULL OR c.verification_state != 'quarantined')",
+      // WP506（决策 1789 B）：人在知识库里停用的那几条不进候选（回复、起草都取不到）
+      'c.disabled_at IS NULL',
     ]
     const params: (string | number)[] = [...vis.params]
 

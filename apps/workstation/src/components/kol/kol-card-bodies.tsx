@@ -5,7 +5,9 @@
  *   介绍取自品牌档案…）一行一句放在正文上面——以前卡面只有标题、下面空一大块，提醒藏在 notes 里看不见。
  * - 验收结论卡：一句话「把这件交付物判为『通过』」，不出露字段名的改之前 / 改之后双格。
  */
-import { useState } from 'react'
+import type { DeckCard } from '@agentsws/deck'
+import { type ReactNode, useState } from 'react'
+import { BatchPace, BatchProgress, useBatchProgress } from '@/components/kol/kol-batch-progress'
 import { useApp } from '@/lib/app-context'
 
 const rec = (v: unknown): Record<string, unknown> =>
@@ -94,6 +96,13 @@ export interface KolOutreachBatchPayload {
   sample?: { creator_name: string; subject: string; body: string }
   letter?: string
   cadence?: string
+  /** WP506（决策 1788 B）：每小时最多几封（卡上能改，改的是这一批上存的那个数）。 */
+  per_hour?: number
+  /** WP506（决策 1795 C）：缺省节奏按哪种邮箱定的（新邮箱 5 / 老邮箱 15）与那一句依据。 */
+  pace_basis?: 'new' | 'established'
+  pace_why?: string
+  /** WP506：出卡那一刻这条职责今天还能发几封。 */
+  quota_remaining?: number
   mailbox?: 'connected' | 'none'
   heads_up?: string[]
 }
@@ -120,18 +129,31 @@ const BATCH_FACES = 8
 
 export function KolOutreachBatchBody({
   payload,
+  card,
 }: {
   payload: KolOutreachBatchPayload
+  /** WP506：有卡才查得到这一批的进度、改得了节奏（`position_id` 就是那条红人分配）。 */
+  card?: Pick<DeckCard, 'id' | 'position_id' | 'available_actions'>
 }): React.ReactNode {
   const { t } = useApp()
   const [open, setOpen] = useState(false)
+  const assignment = card?.position_id
+  const progress = useBatchProgress(card?.id, assignment)
+  // 卡还没定：节奏能改（批了之后在进度那一块里改）
+  const pending = progress === undefined || progress.state === 'pending'
+  const decidable = card?.available_actions.includes('approve') === true
+  const perHour = progress?.per_hour ?? payload.per_hour
+  // 人改过节奏就不再说「新邮箱 / 老邮箱」（那是缺省值的依据）
+  const basis =
+    progress?.pace_edited === true ? undefined : (progress?.pace_basis ?? payload.pace_basis)
+  const why = progress?.pace_why ?? payload.pace_why
   const creators = Array.isArray(payload.creators) ? payload.creators : []
   const skipped = Array.isArray(payload.skipped) ? payload.skipped : []
   const headsUp = (payload.heads_up ?? []).filter((x): x is string => typeof x === 'string')
   const faces = creators.slice(0, BATCH_FACES)
   const more = creators.length - faces.length
   const sample = payload.sample
-  const rows: { id: string; label: string; value: string }[] = [
+  const rows: { id: string; label: string; value: ReactNode }[] = [
     {
       id: 'sender',
       label: t('kol.batch.sender'),
@@ -140,9 +162,34 @@ export function KolOutreachBatchBody({
     ...(str(payload.letter) === undefined
       ? []
       : [{ id: 'letter', label: t('kol.batch.letter'), value: payload.letter as string }]),
-    ...(str(payload.cadence) === undefined
-      ? []
-      : [{ id: 'cadence', label: t('kol.batch.cadence'), value: payload.cadence as string }]),
+    // WP506（决策 1788 B）：分时发——「每小时最多 [10] 封 · 今天还能发 N 封，超了明天接着发」
+    ...(perHour !== undefined && pending
+      ? [
+          {
+            id: 'cadence',
+            label: t('kol.batch.cadence'),
+            value: (
+              <span className="inline-flex flex-wrap items-center gap-x-1.5">
+                <BatchPace
+                  approval_item_id={card?.id}
+                  assignment={assignment}
+                  perHour={perHour}
+                  editable={decidable}
+                  {...(basis === undefined ? {} : { basis })}
+                  {...(why === undefined ? {} : { why })}
+                />
+                {payload.quota_remaining === undefined ? null : (
+                  <span className="text-xs text-ws-muted-fg">
+                    {t('kol.batch.pace.left', { n: payload.quota_remaining })}
+                  </span>
+                )}
+              </span>
+            ),
+          },
+        ]
+      : perHour === undefined && str(payload.cadence) !== undefined
+        ? [{ id: 'cadence', label: t('kol.batch.cadence'), value: payload.cadence as string }]
+        : []),
     {
       id: 'skipped',
       label: t('kol.batch.skipped'),
@@ -203,6 +250,10 @@ export function KolOutreachBatchBody({
           </div>
         ))}
       </dl>
+      {/* WP506：批了之后——已发几封、为什么还没发下一封、暂停 / 取消剩下的 */}
+      {progress === undefined || pending || progress.state === 'rejected' ? null : (
+        <BatchProgress progress={progress} assignment={assignment} />
+      )}
       {headsUp.length === 0 ? null : (
         <ul className="flex flex-col gap-0.5 text-xs text-ws-warn" data-testid="kol-batch-heads-up">
           {headsUp.map((h) => (

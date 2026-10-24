@@ -60,6 +60,7 @@ import {
   KnowledgeLearnedBody,
   KnowledgeStaleBody,
 } from './knowledge-learned-body'
+import { isKnowledgeToggleBody, KnowledgeToggleBody } from './knowledge-toggle-body'
 import { isReport, ReportBody } from './report-body'
 import { isThemeChoicePayload, ThemeChoiceBody } from './theme-choice-body'
 import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
@@ -437,6 +438,9 @@ export function DeckCardBody({
         if (isFaqBatchPayload(payload)) return <FaqBatchBody payload={payload} />
         // WP350：助理扇出的「要记的 N 条」——按岗位列正文与原文出处
         if (isAssistantNotesPayload(payload)) return <AssistantNotesBody payload={payload} />
+        // WP506（1796 C）：AI 提议停用 / 启用几条知识——哪几条、AI 的理由；批了之后能撤销
+        if (isKnowledgeToggleBody(payload))
+          return <KnowledgeToggleBody card={card} payload={payload} />
         // WP488：「学到 N 条」——每条可改范围、可去掉，一次采纳；「这几条可能过期」——都没变 / 按网站重学
         if (isKnowledgeLearnedBody(payload))
           return <KnowledgeLearnedBody card={card} payload={payload} />
@@ -810,7 +814,8 @@ export function DeckCardBody({
         if (isFollowUpNudgePayload(payload))
           return <FollowUpCardBody card={card} payload={payload} />
         // WP504（决策 1777 A）：批量开发信——名单、发件 / 信 / 节奏 / 跳过、样信（F3）
-        if (isKolOutreachBatchPayload(payload)) return <KolOutreachBatchBody payload={payload} />
+        if (isKolOutreachBatchPayload(payload))
+          return <KolOutreachBatchBody payload={payload} card={card} />
         // WP416：红人开发信——卡面直接放正文（前 6 行可展开）与要先看一眼的几句
         if (isKolOutreachPayload(payload)) return <KolOutreachBody payload={payload} />
         return (

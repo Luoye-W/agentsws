@@ -81,6 +81,7 @@ export {
   riskClassFor,
 } from './matrix.js'
 export {
+  CONFIRM_ONLY_FORMS,
   contentVariantsOf,
   entityChipsOf,
   estimatedMinutes,

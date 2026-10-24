@@ -15,6 +15,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Ban,
   Download,
+  ListChecks,
   Megaphone,
   Package,
   Search,
@@ -71,8 +72,9 @@ import {
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 import { CollabThread } from './collab-thread'
-import { CreatorCard, stepOpensThread } from './creator-card'
+import { CreatorCard, outreachBatchOf, stepOpensThread } from './creator-card'
 import { CreatorDetailView } from './creator-pane'
+import { LiveBatches } from './kol-batch-progress'
 import { ALL_CHANNELS, atHandle } from './kol-channel'
 import { KOL_LIBRARY, kolHomeOf, useKolCardHome } from './kol-library-status'
 import { Collaborations, Discovery, ImportAndCampaign } from './kol-panel'
@@ -298,10 +300,34 @@ function KolLibraryBody({
   const [tab, setTab] = useState<KolTab>('creators')
   const [layer, setLayer] = useState<Layer | null>(null)
   const selection = useSelection()
+  /*
+   * WP508：「看进度」——回到红人格、滚到库顶那一块在发的批次，亮一下。
+   * 详情那一层先收起来（库一直挂着，收起来后滚动位置先还原，再滚到这一块）。
+   */
+  const batchesRef = useRef<HTMLDivElement | null>(null)
+  const [batchFocus, setBatchFocus] = useState(0)
+  const [batchFlash, setBatchFlash] = useState(false)
+  const showBatches = (): void => {
+    setLayer(null)
+    setTab('creators')
+    setBatchFocus((n) => n + 1)
+  }
+  useEffect(() => {
+    if (batchFocus === 0) return
+    batchesRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+    setBatchFlash(true)
+    const timer = setTimeout(() => {
+      setBatchFlash(false)
+    }, 1600)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [batchFocus])
   // 筛选（全部留在这一格里：叠一层再回来还在）
   const [q, setQ] = useState('')
   const [review, setReview] = useState<KolReviewFilter | 'all'>('all')
   const [tag, setTag] = useState('')
+  // 评分筛选默认关（int/1038：设计稿里那个「评分 ≥ 80」是示意，不是默认值）；默认按评分高到低排
   const [top, setTop] = useState(false)
   const [batch, setBatch] = useState<string | undefined>(undefined)
   const [sort, setSort] = useState<'score' | 'followers' | 'new'>('score')
@@ -609,6 +635,7 @@ function KolLibraryBody({
           <CreatorActions
             id={id}
             row={row}
+            onProgress={showBatches}
             draft={async () => {
               const defaults = await getKolOutreachDefaults(assignment)
               if (defaults.product.trim() === '')
@@ -762,6 +789,18 @@ function KolLibraryBody({
 
         {tab === 'creators' ? (
           <>
+            {/* WP506（1788 B）：批了在发的批量开发信——进度、暂停 / 取消剩下的；WP508：「看进度」滚到这里亮一下 */}
+            <div
+              ref={batchesRef}
+              data-testid="kol-live-batches-anchor"
+              data-flash={batchFlash ? 'true' : undefined}
+              className={cn(
+                'scroll-mt-2 rounded-lg transition-shadow empty:hidden',
+                batchFlash && 'ring-2 ring-ws-brand/40',
+              )}
+            >
+              <LiveBatches channel={channel} assignment={assignment} />
+            </div>
             <LibrarySearch
               value={q}
               onChange={setQ}
@@ -791,6 +830,7 @@ function KolLibraryBody({
                   {t(`kol.channel.${channel}`)}
                 </span>
               )}
+              {/* WP506（int/1038）：默认不带评分筛选——低分 / 已淘汰的也看得见；「+」手加上，「×」去掉 */}
               <FilterChip
                 active={top}
                 testId="kol-library-top"
@@ -798,7 +838,7 @@ function KolLibraryBody({
                   setTop(!top)
                 }}
               >
-                {t('kol.lib.score80')}
+                {top ? `${t('kol.lib.score80')} ×` : `+ ${t('kol.lib.score80')}`}
               </FilterChip>
               <select
                 value={review}
@@ -908,7 +948,8 @@ function KolLibraryBody({
                       else setLayer({ kind: 'creator', id: row.creator_id })
                     }}
                     onNext={(step) => {
-                      if (stepOpensThread(step) && row.collab !== undefined)
+                      if (step === 'progress') showBatches()
+                      else if (stepOpensThread(step) && row.collab !== undefined)
                         setLayer({ kind: 'thread', id: row.collab.id })
                       else setLayer({ kind: 'creator', id: row.creator_id })
                     }}
@@ -966,9 +1007,12 @@ function CreatorActions({
   tag,
   review,
   run,
+  onProgress,
 }: {
   id: string
   row: KolCreatorRowData | undefined
+  /** WP508：「看进度」——回到库顶那一块在发的批次。 */
+  onProgress: () => void
   draft: () => Promise<LibraryActionResult>
   sample: () => void
   campaign: LibraryAction
@@ -984,25 +1028,56 @@ function CreatorActions({
     row?.collab !== undefined &&
     ['agreed', 'sample_sent', 'delivering', 'delivered'].includes(row.collab.stage)
   const decision = row?.review?.decision ?? 'pending'
+  // WP508：在批量开发信里（阶段还没推进）——起草退成次要；排着队的另出一个「看进度」当主按钮，点起草只提示一句
+  const inBatch = row === undefined ? undefined : outreachBatchOf(row)
+  const draftPrimary = decision !== 'rejected' && inBatch === undefined
   const btn =
     'inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-medium disabled:opacity-50'
   return (
     <div className="flex flex-col gap-2" data-testid="kol-detail-actions">
       <div className="flex flex-wrap items-center gap-1.5">
+        {inBatch === 'queued' ? (
+          <button
+            type="button"
+            data-testid="kol-detail-progress"
+            data-primary="true"
+            className={cn(btn, 'bg-ws-brand text-ws-brand-fg hover:opacity-90')}
+            onClick={onProgress}
+          >
+            <ListChecks aria-hidden className="size-3.5" />
+            {t('kol.lib.act.progress')}
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={busy}
           data-testid="kol-detail-draft"
           data-kind="confirm"
+          data-in-batch={inBatch}
           // WP505（决策 1773 B）× WP504：人点过「淘汰」的，起草退成次要样式（还能用，只是不再是这一页的主按钮）
-          data-primary={decision === 'rejected' ? 'false' : 'true'}
+          // WP508：在批量开发信里的也退成次要
+          data-primary={draftPrimary ? 'true' : 'false'}
           className={cn(
             btn,
-            decision === 'rejected'
-              ? 'bg-ws-surface text-ws-body hover:bg-ws-hover'
-              : 'bg-ws-brand text-ws-brand-fg hover:opacity-90',
+            draftPrimary
+              ? 'bg-ws-brand text-ws-brand-fg hover:opacity-90'
+              : 'bg-ws-surface text-ws-body hover:bg-ws-hover',
           )}
           onClick={() => {
+            if (inBatch === 'queued') {
+              // 已经在一批里排着：不再起草第二封，只提示一句、带「去看」回到那一批
+              void run(
+                {
+                  id: 'draft',
+                  label: '',
+                  kind: 'confirm',
+                  icon: <Send aria-hidden className="size-3.5" />,
+                  run: async () => ({ text: t('kol.lib.draft.in_batch'), goto: onProgress }),
+                },
+                [id],
+              )
+              return
+            }
             setBusy(true)
             void run(
               {

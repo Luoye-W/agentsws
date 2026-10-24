@@ -23,7 +23,13 @@
  */
 import { FOLLOW_UP_CARD_FORM } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
-import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsws/deck'
+import {
+  CONFIRM_ONLY_FORMS,
+  LAYOUT_VERBS,
+  MANUAL_SEND_VERB_KIND,
+  verbKey,
+  verbRank,
+} from '@agentsws/deck'
 import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { type FootAction, FootButton } from '@/components/deck/card-foot'
@@ -91,6 +97,10 @@ function rowActions(card: DeckCard): DeckAction[] {
             a === 'instruct'
           ),
       )
+      // WP508：只有确认含义的卡（停用 / 启用知识、整批导入……）没有「修改」——服务端已经不给，这里再兜一层
+      .filter(
+        (a) => !(typeof form === 'string' && CONFIRM_ONLY_FORMS.has(form) && a === 'instruct'),
+      )
       .sort((a, b) => rank(a) - rank(b))
   )
 }
@@ -124,6 +134,15 @@ export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) 
   if ((card.detail.payload as { form?: unknown } | undefined)?.form === FOLLOW_UP_CARD_FORM) {
     if (a === 'snooze') return t('follow_up.verb.wait')
     if (a === 'reject') return t('follow_up.verb.stop')
+  }
+  // WP506（决策 1796 C）：AI 提议停用 / 启用知识——「停用 N 条」/「启用 N 条」·「不用」
+  const toggle = card.detail.payload as { form?: unknown; action?: unknown; items?: unknown }
+  if (toggle?.form === 'knowledge_toggle' && Array.isArray(toggle.items)) {
+    if (a === 'approve')
+      return t(
+        toggle.action === 'enable' ? 'kl.toggle.approve.enable' : 'kl.toggle.approve.disable',
+      ).replace('{n}', String(toggle.items.length))
+    if (a === 'reject') return t('kl.toggle.reject')
   }
   // WP504（决策 1777 A）：批量开发信卡上主按钮写「发出 N 封」（N = 名单上真要发的人数）
   const batch = kolBatchCount(card.detail.payload)

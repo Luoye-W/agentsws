@@ -36,6 +36,7 @@ import type {
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
+  KolOutreachBatchProgressView,
   KolOutreachBatchSendView,
   KolOutreachBatchView,
   KolOutreachDefaultsView,
@@ -45,7 +46,16 @@ import type {
   KolSearchResult,
   KolStagedView,
 } from '@agentsws/api'
-import { ApiError, KOL_TAG_MAX_LENGTH, KOL_TAGS_MAX } from '@agentsws/api'
+import {
+  ApiError,
+  DEFAULT_OUTREACH_PER_HOUR,
+  KOL_TAG_MAX_LENGTH,
+  KOL_TAGS_MAX,
+  OUTREACH_PER_HOUR_ESTABLISHED,
+  OUTREACH_PER_HOUR_MAX,
+  OUTREACH_PER_HOUR_MIN,
+  OUTREACH_PER_HOUR_NEW,
+} from '@agentsws/api'
 import type {
   ApprovalBus,
   Assignment,
@@ -361,6 +371,61 @@ export interface KolServiceOptions {
    * 一律要人点（不自动批），回执里带 `needs_mailbox` 让对话里就地出连接卡。不给 = 当连着（老装配）。
    */
   mailConnected?(): boolean
+  /**
+   * WP506（决策 1795 C）：发开发信那只邮箱（默认发件那一只）在**已同步的已发信**里有多少封、最早一封是哪天；
+   * B2B 那边人标过「这只邮箱已经正常发信很久」也带上。批量开发信的缺省节奏按它定（{@link outreachPaceFor}）。
+   * 不给 / 没连邮箱 / 还没同步到已发信 = 当新邮箱。
+   */
+  mailboxHistory?(): MaybePromise<MailboxHistory | undefined>
+}
+
+/** WP506（决策 1795 C）：发信邮箱的已发历史（只要几个数，不要信）。 */
+export interface MailboxHistory {
+  address: string
+  /** 已同步的「已发送」里有几封。 */
+  sent: number
+  /** 其中最早一封的时间。 */
+  earliest_sent_at?: string
+  /** B2B 发信邮箱上人标了「已经正常发信很久」（WP176）。 */
+  declared_established?: boolean
+}
+
+/** 老邮箱的门槛：已同步的已发信里最早一封至少这么多天前…… */
+export const ESTABLISHED_MAILBOX_DAYS = 90
+/** ……而且至少发过这么多封。 */
+export const ESTABLISHED_MAILBOX_SENT = 50
+
+/**
+ * WP506（决策 1795 C）：批量开发信缺省每小时几封——按发信邮箱的「年龄」：
+ * - **老邮箱 15 封**：已同步的已发信里最早一封在 90 天以前、且至少 50 封（发了三个月、每周几封以上的正常邮箱）；
+ *   或者人在 B2B 那边标过「这只邮箱已经正常发信很久」；
+ * - **新邮箱 5 封**：不到这两条的、没连邮箱的、还没同步到已发信的（认不出来就按新的算，宁慢勿进垃圾箱）。
+ *
+ * 只看已同步的历史：邮件同步首次只回溯 30 天，刚连上的老邮箱要等历史够 90 天（或在邮件页往前多取一些）才认得出。
+ */
+export function outreachPaceFor(
+  history: MailboxHistory | undefined,
+  now: string,
+): { per_hour: number; basis: 'new' | 'established'; why: string } {
+  const established = { per_hour: OUTREACH_PER_HOUR_ESTABLISHED, basis: 'established' as const }
+  const fresh = { per_hour: OUTREACH_PER_HOUR_NEW, basis: 'new' as const }
+  if (history === undefined) return { ...fresh, why: '还没连发信邮箱，按新邮箱算' }
+  if (history.declared_established === true)
+    return { ...established, why: '这只邮箱标过「已经正常发信很久」' }
+  const first =
+    history.earliest_sent_at === undefined ? Number.NaN : Date.parse(history.earliest_sent_at)
+  if (history.sent === 0 || Number.isNaN(first))
+    return { ...fresh, why: '还没同步到这只邮箱的已发信，按新邮箱算' }
+  const days = Math.floor((Date.parse(now) - first) / 86_400_000)
+  if (days >= ESTABLISHED_MAILBOX_DAYS && history.sent >= ESTABLISHED_MAILBOX_SENT)
+    return { ...established, why: `已发信 ${history.sent} 封，最早一封在 ${days} 天前` }
+  return {
+    ...fresh,
+    why:
+      days < ESTABLISHED_MAILBOX_DAYS
+        ? `同步到的已发信最早只到 ${days} 天前（不到 ${ESTABLISHED_MAILBOX_DAYS} 天）`
+        : `同步到的已发信只有 ${history.sent} 封（不到 ${ESTABLISHED_MAILBOX_SENT} 封）`,
+  }
 }
 
 export interface KolServiceAssembly {
@@ -381,11 +446,28 @@ export interface KolServiceAssembly {
    */
   sweepSequences(): Promise<KolSequenceSweep>
   /**
+   * WP506（决策 1788 B）：批了的批量开发信按节奏往前走一步（每一批最多提一封）。
+   * 调度器每分钟一拍；批卡那一下也调一次（第一封当场发）。串行，重启后先对账再发、不重发。
+   */
+  pumpOutreachBatches(): Promise<KolOutreachPump>
+  /**
    * WP505（决策 1771 B）：这个品牌现在还用得上的红人图片（外站地址）——每个账号**最近一次存入红人池**那份资料里的
    * 头像、横幅、前 {@link KOL_MEDIA_RECENT_COVERS} 张作品封面（= 详情 / 候选池会去要的那几张）。
    * 图片缓存清理据此认「没人再引用」。
    */
   mediaReferences(): string[]
+}
+
+/** WP506：一拍批量开发信的结果（调度器写进任务的 `last_result`）。 */
+export interface KolOutreachPump {
+  /** 看了几批在发的。 */
+  batches: number
+  /** 这一拍提了几封。 */
+  staged: number
+  /** 这一拍跳过了几个（联系方式没了 / 刚被谢绝……）。 */
+  skipped: number
+  /** 这一拍在等的几批（间隔没到 / 这一小时满了 / 今天额度满了 / 没连邮箱）。 */
+  waiting: number
 }
 
 /** 一轮序列跟进的结果（调度器把它写进任务的 `last_result`）。 */
@@ -587,8 +669,17 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       ...checksOf(accounts),
       ...auditOf(creator.id),
       ...tagsAndReviewOf(creator.id),
+      ...outreachQueueOf(creator.id),
     }
   }
+
+  /** WP508：详情上也带「排队中 / 已发」（同列表行；批次记录在下面 WP506 那一段）。 */
+  const outreachQueueOf = (creator_id: string): Pick<KolCreatorDetail, 'outreach_queue'> =>
+    queuedInBatches().has(creator_id)
+      ? { outreach_queue: 'queued' }
+      : sentInBatches().has(creator_id)
+        ? { outreach_queue: 'sent' }
+        : {}
 
   /* ── WP502（决策 1763 B）：人工标签与审核决定（只在本机）──────────────── */
 
@@ -1381,7 +1472,26 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
   }
 
   /* ── WP504（决策 1777 A）：批量开发信——先出一张确认卡，批了才逐个提 ─────────────── */
+  /*
+   * WP506（决策 1788 B）：批了之后**不再一次全提**——排成一条队，按节奏一封一封发：
+   * - 每小时最多 N 封（缺省 {@link DEFAULT_OUTREACH_PER_HOUR}，卡上「节奏」一格能改），两封之间均匀隔开；
+   * - 每天的额度照样管着（`outreachQuotaOf`，滚动 24 小时）：满了就等，明天接着发；
+   * - 没连发信邮箱时不提（提了也发不出去，还会一小时一张卡地刷）——连好就接着发；
+   * - 人可以暂停 / 继续、取消剩下的（已发的不撤）。
+   *
+   * 队列存在设置表里（和批次同一行），每封提之前先记「在发」、提完记「已发」+ 变更号；
+   * 重启后先对账——账本里有这封首封就当已发，**不重发**；没有就退回排队。
+   */
 
+  interface OutreachQueueEntry {
+    creator_id: string
+    display_name: string
+    state: 'queued' | 'sending' | 'sent' | 'skipped' | 'cancelled'
+    at?: string
+    change_id?: string
+    approval_item_id?: string
+    reason?: string
+  }
   interface OutreachBatchRecord {
     batch_id: string
     approval_item_id: string
@@ -1389,12 +1499,41 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     creator_ids: string[]
     product: string
     brand_pitch?: string
-    state: 'pending' | 'approved' | 'rejected'
+    /**
+     * `pending` 卡还没定 · `sending` 按节奏在发 · `paused` 人暂停了 · `cancelled` 取消了剩下的 ·
+     * `done` 发完了 · `rejected` 卡没批 · `approved` WP504 的老记录（批了当场全提，当发完了）。
+     */
+    state: 'pending' | 'approved' | 'rejected' | 'sending' | 'paused' | 'cancelled' | 'done'
     created_at: string
+    /** WP506：每小时最多几封（缺省按发信邮箱定，见 {@link outreachPaceFor}；老记录没有 = {@link DEFAULT_OUTREACH_PER_HOUR}）。 */
+    per_hour?: number
+    /** WP506（决策 1795 C）：出卡时缺省节奏的依据；人改过节奏记 `pace_edited`。 */
+    pace_basis?: 'new' | 'established'
+    pace_why?: string
+    pace_edited?: boolean
+    /** WP506：批了之后才有。 */
+    queue?: OutreachQueueEntry[]
+    /** WP506：批的那个人与他那条渠道分配（之后逐封提都用它，额度也算在它上）。 */
+    sender?: { person_id: PersonId; assignment_id: AssignmentId; role_id: string }
+    approved_at?: string
+    last_sent_at?: string
+    finished_at?: string
   }
   const BATCH_SETTING = 'outreach_batches'
-  /** 一封首封之后多久内算「刚联系过」（批量里跳过）。 */
+  /** 一封首封之后多久内算「刚联系过」（批量里跳过；库里「已发」也只看这么久）。 */
   const RECENT_CONTACT_DAYS = 30
+  const HOUR_MS = 3_600_000
+  const DAY_MS = 86_400_000
+  /** 还在路上的批次（不许被「只留最近 50 批」挤掉）。 */
+  const LIVE_BATCH: ReadonlySet<OutreachBatchRecord['state']> = new Set([
+    'pending',
+    'sending',
+    'paused',
+  ])
+  const clampPerHour = (n: number): number =>
+    Math.min(OUTREACH_PER_HOUR_MAX, Math.max(OUTREACH_PER_HOUR_MIN, Math.round(n)))
+  const perHourOf = (r: Pick<OutreachBatchRecord, 'per_hour'>): number =>
+    clampPerHour(r.per_hour ?? DEFAULT_OUTREACH_PER_HOUR)
   const batchesOf = (): OutreachBatchRecord[] => {
     try {
       return store.setting<OutreachBatchRecord[]>(BATCH_SETTING) ?? []
@@ -1403,17 +1542,72 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     }
   }
   const saveBatches = (rows: OutreachBatchRecord[]): void => {
-    // 只留最近 50 批（定了的只是记一笔；名单上的「等你确认」只看 pending 的）
-    store.saveSetting(BATCH_SETTING, rows.slice(-50), clock.now())
+    // 定完了的只留最近 50 批（记一笔）；还在路上的（没定 / 在发 / 暂停）一条都不丢
+    const finished = rows.filter((r) => !LIVE_BATCH.has(r.state))
+    const keep = new Set(finished.slice(-50))
+    store.saveSetting(
+      BATCH_SETTING,
+      rows.filter((r) => LIVE_BATCH.has(r.state) || keep.has(r)),
+      clock.now(),
+    )
   }
-  const setBatchState = (approval_item_id: string, state: OutreachBatchRecord['state']): void => {
-    const rows = batchesOf()
-    if (!rows.some((r) => r.approval_item_id === approval_item_id)) return
-    saveBatches(rows.map((r) => (r.approval_item_id === approval_item_id ? { ...r, state } : r)))
+  /**
+   * 读最新的那一份、改一批、写回。逐封发的中间要 await（起草、提变更）——每次都重读，
+   * 免得把人刚点的暂停 / 取消 / 改节奏盖掉。
+   */
+  const updateBatch = (
+    approval_item_id: string,
+    fn: (r: OutreachBatchRecord) => OutreachBatchRecord,
+  ): OutreachBatchRecord | undefined => {
+    let out: OutreachBatchRecord | undefined
+    const rows = batchesOf().map((r) => {
+      if (r.approval_item_id !== approval_item_id) return r
+      out = fn(r)
+      return out
+    })
+    if (out !== undefined) saveBatches(rows)
+    return out
+  }
+  const updateEntry = (
+    approval_item_id: string,
+    creator_id: string,
+    patch: Partial<OutreachQueueEntry>,
+    batch: Partial<OutreachBatchRecord> = {},
+  ): void => {
+    updateBatch(approval_item_id, (r) => ({
+      ...r,
+      ...batch,
+      queue: (r.queue ?? []).map((e) => (e.creator_id === creator_id ? { ...e, ...patch } : e)),
+    }))
   }
   /** 还在一张没定的批量卡上的人（红人库卡上标「等你确认」）。 */
   const awaitingInBatches = (): Set<string> =>
     new Set(batchesOf().flatMap((r) => (r.state === 'pending' ? r.creator_ids : [])))
+  /** WP506：批了、还排着队（或正在提）的人——库里卡上「排队中」；新的一批里跳过。 */
+  const queuedInBatches = (): Set<string> =>
+    new Set(
+      batchesOf().flatMap((r) =>
+        r.state === 'sending' || r.state === 'paused'
+          ? (r.queue ?? [])
+              .filter((e) => e.state === 'queued' || e.state === 'sending')
+              .map((e) => e.creator_id)
+          : [],
+      ),
+    )
+  /** WP506：最近 30 天的批次里已经提上去的人——库里卡上「已发」。 */
+  const sentInBatches = (): Set<string> => {
+    const since = Date.parse(clock.now()) - RECENT_CONTACT_DAYS * DAY_MS
+    return new Set(
+      batchesOf().flatMap((r) =>
+        (r.queue ?? [])
+          .filter((e) => e.state === 'sent' && e.at !== undefined && Date.parse(e.at) >= since)
+          .map((e) => e.creator_id),
+      ),
+    )
+  }
+  /** 卡上「节奏」那一句（卡面自己按 `per_hour` / `quota_remaining` 另写；这一句给别的渠道看卡用）。 */
+  const cadenceText = (per_hour: number, remaining: number, basis: 'new' | 'established'): string =>
+    `${basis === 'new' ? '新邮箱' : '老邮箱'}，每小时最多 ${per_hour} 封，一封一封发；今天这条职责还能发 ${remaining} 封，超了明天接着发`
 
   const planOutreachBatch = async (
     actor: { person_id: PersonId; assignment_id: AssignmentId; role_id: string },
@@ -1444,6 +1638,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     const quota = await outreachQuotaOf(mine.id)
     const suppressed = suppressedRefs()
     const pendingElsewhere = awaitingInBatches()
+    // WP506：批了、还在发送队列里的人（另一批）也跳过
+    const queuedElsewhere = queuedInBatches()
     const since = Date.parse(clock.now()) - RECENT_CONTACT_DAYS * 86_400_000
     const recent = new Set(
       (await ledger.list({ workspace_id, kind: 'kol_outreach' }))
@@ -1491,10 +1687,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         skip('在另一张没定的卡上')
         continue
       }
-      if (sending.length >= quota.remaining) {
-        skip('今天额度不够')
+      if (queuedElsewhere.has(id)) {
+        skip('在发送队列里')
         continue
       }
+      // WP506（决策 1788 B）：今天额度不够的不再跳过——批了排着队，额度空出来（明天）接着发
       const { vars } = await outreachVarsOf(stageActor, creator, {
         channel: input.channel,
         product,
@@ -1543,10 +1740,13 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
 
     const noMailbox = options.mailConnected?.() === false
     const heads_up = noMailbox
-      ? ['还没连发信邮箱：现在批了也发不出去。先在连接里连好邮箱，再点「发出」。']
+      ? ['还没连发信邮箱：批了会先排着队，在连接里连好邮箱才开始一封一封发。']
       : []
     const batch_id = nextId('kob')
     const remaining = quota.remaining
+    // WP506（决策 1795 C）：缺省节奏按发信邮箱的「年龄」——新邮箱 5 封、老邮箱 15 封
+    const pace = outreachPaceFor(await options.mailboxHistory?.(), clock.now())
+    const per_hour = pace.per_hour
     const payload = {
       form: 'kol_outreach_batch',
       channel: input.channel,
@@ -1560,7 +1760,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       count: sending.length,
       sample,
       letter: '首封合作邀请 · 每人按他做的内容开头',
-      cadence: `批了就发；今天这条职责还能发 ${remaining} 封`,
+      // WP506（决策 1788 B）：分时发——卡上「节奏」一格能改（改的是批次上的 per_hour，见 controlOutreachBatch）
+      per_hour,
+      pace_basis: pace.basis,
+      pace_why: pace.why,
+      quota_remaining: remaining,
+      cadence: cadenceText(per_hour, remaining, pace.basis),
       mailbox: noMailbox ? 'none' : 'connected',
       heads_up,
     }
@@ -1582,7 +1787,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         diff: {
           before: null,
           after: { outreach: sending.length },
-          summary: `批了就按名单逐个起草并发出 ${sending.length} 封首封开发信`,
+          summary: `批了就按名单逐封起草并发出 ${sending.length} 封首封开发信（每小时最多 ${per_hour} 封）`,
         },
         precheck: {},
       },
@@ -1615,6 +1820,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         ...(input.brand_pitch === undefined ? {} : { brand_pitch: input.brand_pitch }),
         state: 'pending',
         created_at: clock.now(),
+        per_hour,
+        pace_basis: pace.basis,
+        pace_why: pace.why,
       },
     ])
     emit('kol.outreach_batch_planned', actor.person_id, {
@@ -1626,62 +1834,368 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     return { ok: true, approval_item_id: item.id, batch_id, sending, skipped }
   }
 
+  /**
+   * WP504 → WP506（决策 1788 B）：批量卡批了——**不再当场全提**，排成队、先发第一封，其余按节奏由定时那一拍
+   * （{@link pumpOutreachBatches}，每分钟）一封一封发。
+   */
   const sendOutreachBatchOf = async (
     actor: { person_id: PersonId; assignment_id: AssignmentId; role_id: string },
     approval_item_id: string,
   ): Promise<KolOutreachBatchSendView> => {
     const record = batchesOf().find((r) => r.approval_item_id === approval_item_id)
     if (record === undefined) throw new ApiError('not_found', '没有这张批量开发信卡')
-    if (record.state !== 'pending') return { batch_id: record.batch_id, staged: [], skipped: [] }
-    // 先记成「批了」：中途出错也不会被再批一遍、重发一轮
-    setBatchState(approval_item_id, 'approved')
+    if (record.state !== 'pending')
+      return { batch_id: record.batch_id, staged: [], skipped: [], queued: 0 }
+    const now = clock.now()
+    const nameOf = (id: string): string => store.creator(id)?.display_name ?? id
     const mine = assignmentForChannel(actor.person_id, record.channel)
-    const staged: KolOutreachBatchSendView['staged'] = []
-    const skipped: KolOutreachBatchSendView['skipped'] = []
     if (mine === undefined) {
-      for (const id of record.creator_ids)
-        skipped.push({ creator_id: id, reason: '你名下已经没有这条渠道职责了。' })
-      return { batch_id: record.batch_id, staged, skipped }
+      const reason = '你名下已经没有这条渠道职责了。'
+      // 先记成定了：中途出错也不会被再批一遍
+      updateBatch(approval_item_id, (r) => ({
+        ...r,
+        state: 'done',
+        approved_at: now,
+        finished_at: now,
+        queue: r.creator_ids.map((id) => ({
+          creator_id: id,
+          display_name: nameOf(id),
+          state: 'skipped' as const,
+          reason,
+        })),
+      }))
+      return {
+        batch_id: record.batch_id,
+        staged: [],
+        skipped: record.creator_ids.map((id) => ({ creator_id: id, reason })),
+        queued: 0,
+      }
     }
-    const stageActor = { ...actor, assignment_id: mine.id, role_id: mine.role_id }
-    for (const id of record.creator_ids) {
-      const creator = store.creator(id)
-      if (creator === undefined) {
-        skipped.push({ creator_id: id, reason: '这个人已经不在库里了。' })
-        continue
-      }
-      // 批的时候再过一遍单封那几道闸（联系方式、额度、谢绝名单、禁承诺）：stageOutreach 自己会拦
-      const { vars, pitch_note } = await outreachVarsOf(stageActor, creator, {
-        channel: record.channel,
-        product: record.product,
-        brand_pitch: record.brand_pitch,
-      })
-      const out = await stageOutreach({
-        actor: stageActor,
-        creator,
-        channel: record.channel,
-        step: 'first',
-        ...(pitch_note === undefined ? {} : { pitch_note }),
-        preapproved: true,
-        vars,
-      })
-      if (!out.staged) {
-        skipped.push({ creator_id: id, reason: out.message ?? '没提上去。' })
-        continue
-      }
-      staged.push({
+    // 先记成「在发」（整条队落盘）：中途出错也不会被再批一遍、重发一轮
+    updateBatch(approval_item_id, (r) => ({
+      ...r,
+      state: 'sending',
+      approved_at: now,
+      per_hour: perHourOf(r),
+      sender: { person_id: actor.person_id, assignment_id: mine.id, role_id: mine.role_id },
+      queue: r.creator_ids.map((id) => ({
         creator_id: id,
-        ...(out.change_id === undefined ? {} : { change_id: out.change_id }),
-        ...(out.approval_item_id === undefined ? {} : { approval_item_id: out.approval_item_id }),
-      })
-    }
-    emit('kol.outreach_batch_sent', actor.person_id, {
+        display_name: nameOf(id),
+        state: 'queued' as const,
+      })),
+    }))
+    emit('kol.outreach_batch_queued', actor.person_id, {
       batch_id: record.batch_id,
       approval_item_id,
-      staged: staged.length,
-      skipped: skipped.length,
+      queued: record.creator_ids.length,
+      per_hour: perHourOf(record),
     })
-    return { batch_id: record.batch_id, staged, skipped }
+    // 第一封当场发（人刚点了「发出」，要马上看到动静）；其余等定时那一拍
+    await pumpOutreachBatches()
+    const queue = batchesOf().find((r) => r.approval_item_id === approval_item_id)?.queue ?? []
+    return {
+      batch_id: record.batch_id,
+      staged: queue
+        .filter((e) => e.state === 'sent')
+        .map((e) => ({
+          creator_id: e.creator_id,
+          ...(e.change_id === undefined ? {} : { change_id: e.change_id }),
+          ...(e.approval_item_id === undefined ? {} : { approval_item_id: e.approval_item_id }),
+        })),
+      skipped: queue
+        .filter((e) => e.state === 'skipped')
+        .map((e) => ({ creator_id: e.creator_id, reason: e.reason ?? '没提上去。' })),
+      queued: queue.filter((e) => e.state === 'queued' || e.state === 'sending').length,
+    }
+  }
+
+  /** 账本里：这一批批了之后，这个人的首封是不是已经提过了（重启对账 / 防重发）。 */
+  const firstSentSince = async (
+    creator_id: string,
+    since: string | undefined,
+  ): Promise<{ id: string; created_at: string } | undefined> => {
+    const from = since === undefined ? Number.NEGATIVE_INFINITY : Date.parse(since)
+    return (await ledger.list({ workspace_id, kind: 'kol_outreach' })).find((c) => {
+      const after = c.after as { creator_id?: unknown; step?: unknown } | null
+      return (
+        after?.creator_id === creator_id &&
+        after.step === 'first' &&
+        Date.parse(c.created_at) >= from
+      )
+    })
+  }
+
+  /**
+   * 这一批这一刻能不能发下一封；不能就说为什么、估计什么时候（卡上 / 库里那一句）。
+   * 顺序：没连邮箱 → 今天额度满了 → 这一小时发满了 → 两封之间还没隔够。
+   */
+  const waitOf = async (
+    r: OutreachBatchRecord,
+    next: OutreachQueueEntry | undefined,
+  ): Promise<{ why: 'gap' | 'hour' | 'quota' | 'mailbox'; next_at?: string } | undefined> => {
+    if (r.sender === undefined || next === undefined) return undefined
+    // 演练红人的信进演练收件箱，不要邮箱
+    if (options.mailConnected?.() === false && store.creator(next.creator_id)?.sandbox !== true)
+      return { why: 'mailbox' }
+    const now = Date.parse(clock.now())
+    const times = (await ledger.list({ workspace_id, kind: 'kol_outreach' }))
+      .filter((c) => c.assignment_id === r.sender?.assignment_id)
+      .map((c) => Date.parse(c.created_at))
+      .filter((t) => Number.isFinite(t) && t <= now)
+      .sort((a, b) => a - b)
+    const quota = await outreachQuotaOf(r.sender.assignment_id)
+    if (!quota.allowed) {
+      // 滚动 24 小时：最早那几封滑出窗口时才空出名额
+      const day = times.filter((t) => t > now - DAY_MS)
+      const free = day[Math.max(0, day.length - quota.cap)]
+      return {
+        why: 'quota',
+        ...(free === undefined ? {} : { next_at: new Date(free + DAY_MS).toISOString() }),
+      }
+    }
+    const per_hour = perHourOf(r)
+    const hour = times.filter((t) => t > now - HOUR_MS)
+    if (hour.length >= per_hour) {
+      const free = hour[hour.length - per_hour]
+      return {
+        why: 'hour',
+        ...(free === undefined ? {} : { next_at: new Date(free + HOUR_MS).toISOString() }),
+      }
+    }
+    if (r.last_sent_at !== undefined) {
+      const due = Date.parse(r.last_sent_at) + Math.ceil(HOUR_MS / per_hour)
+      if (now < due) return { why: 'gap', next_at: new Date(due).toISOString() }
+    }
+    return undefined
+  }
+
+  /** 一批往前走一步：对账 → 发完了收尾 → 该等就等 → 提下一封。一拍最多提一封。 */
+  const pumpBatch = async (
+    approval_item_id: string,
+  ): Promise<'idle' | 'done' | 'wait' | 'sent' | 'skipped' | 'requeued'> => {
+    let r = batchesOf().find((x) => x.approval_item_id === approval_item_id)
+    if (r === undefined || r.state !== 'sending' || r.sender === undefined) return 'idle'
+    // 1. 上次崩在半路的（记了「在发」、没记完）：账本里有就当发了，没有就退回排队——**不重发**
+    for (const e of (r.queue ?? []).filter((x) => x.state === 'sending')) {
+      const found = await firstSentSince(e.creator_id, r.approved_at)
+      const last = r.last_sent_at
+      updateEntry(
+        approval_item_id,
+        e.creator_id,
+        found === undefined
+          ? { state: 'queued' }
+          : { state: 'sent', at: found.created_at, change_id: found.id },
+        // 认回来的那一封也算进间隔（崩在「提了、没记完」时，下一封照样要隔够）
+        found !== undefined && (last === undefined || last < found.created_at)
+          ? { last_sent_at: found.created_at }
+          : {},
+      )
+    }
+    r = batchesOf().find((x) => x.approval_item_id === approval_item_id)
+    if (r === undefined || r.state !== 'sending' || r.sender === undefined) return 'idle'
+    const next = (r.queue ?? []).find((e) => e.state === 'queued')
+    if (next === undefined) {
+      const finished = updateBatch(approval_item_id, (x) => ({
+        ...x,
+        state: 'done',
+        finished_at: clock.now(),
+      }))
+      const q = finished?.queue ?? []
+      emit('kol.outreach_batch_sent', r.sender.person_id, {
+        batch_id: r.batch_id,
+        approval_item_id,
+        staged: q.filter((e) => e.state === 'sent').length,
+        skipped: q.filter((e) => e.state === 'skipped').length,
+      })
+      return 'done'
+    }
+    if ((await waitOf(r, next)) !== undefined) return 'wait'
+    // 2. 已经有这一封了（比如人在详情里单发过）：当发了，不再发第二封
+    const already = await firstSentSince(next.creator_id, r.approved_at)
+    if (already !== undefined) {
+      updateEntry(approval_item_id, next.creator_id, {
+        state: 'sent',
+        at: already.created_at,
+        change_id: already.id,
+      })
+      return 'sent'
+    }
+    // 3. 先记「在发」再提：提到一半进程没了，下次照上面对账
+    updateEntry(approval_item_id, next.creator_id, { state: 'sending' })
+    const creator = store.creator(next.creator_id)
+    if (creator === undefined) {
+      updateEntry(approval_item_id, next.creator_id, {
+        state: 'skipped',
+        reason: '这个人已经不在库里了。',
+      })
+      return 'skipped'
+    }
+    const stageActor = r.sender
+    // 每封再过一遍单封那几道闸（联系方式、额度、谢绝名单、禁承诺）：stageOutreach 自己会拦
+    const { vars, pitch_note } = await outreachVarsOf(stageActor, creator, {
+      channel: r.channel,
+      product: r.product,
+      brand_pitch: r.brand_pitch,
+    })
+    const out = await stageOutreach({
+      actor: stageActor,
+      creator,
+      channel: r.channel,
+      step: 'first',
+      ...(pitch_note === undefined ? {} : { pitch_note }),
+      preapproved: true,
+      vars,
+    })
+    if (out.staged) {
+      const at = clock.now()
+      updateEntry(
+        approval_item_id,
+        next.creator_id,
+        {
+          state: 'sent',
+          at,
+          ...(out.change_id === undefined ? {} : { change_id: out.change_id }),
+          ...(out.approval_item_id === undefined ? {} : { approval_item_id: out.approval_item_id }),
+        },
+        { last_sent_at: at },
+      )
+      return 'sent'
+    }
+    // 额度在这中间被别的信用掉了：退回排队，等下一拍（不算跳过）
+    if (!out.quota.allowed) {
+      updateEntry(approval_item_id, next.creator_id, { state: 'queued' })
+      return 'requeued'
+    }
+    updateEntry(approval_item_id, next.creator_id, {
+      state: 'skipped',
+      reason: out.message ?? '没提上去。',
+    })
+    return 'skipped'
+  }
+
+  /*
+   * 一拍：每一批在发的往前走一步。**串行**——批卡那一下与定时那一拍撞在一起时排队，
+   * 不会两边同时提同一个人。
+   */
+  let pumpChain: Promise<unknown> = Promise.resolve()
+  const pumpOnce = async (): Promise<KolOutreachPump> => {
+    const out: KolOutreachPump = { batches: 0, staged: 0, skipped: 0, waiting: 0 }
+    for (const r of batchesOf().filter((x) => x.state === 'sending')) {
+      out.batches += 1
+      const step = await pumpBatch(r.approval_item_id)
+      if (step === 'sent') out.staged += 1
+      else if (step === 'skipped') out.skipped += 1
+      else if (step === 'wait' || step === 'requeued') out.waiting += 1
+    }
+    return out
+  }
+  const pumpOutreachBatches = (): Promise<KolOutreachPump> => {
+    const run = pumpChain.then(pumpOnce, pumpOnce)
+    pumpChain = run.catch(() => undefined)
+    return run
+  }
+
+  const progressOf = async (r: OutreachBatchRecord): Promise<KolOutreachBatchProgressView> => {
+    const rows: KolOutreachBatchProgressView['rows'] =
+      r.queue ??
+      r.creator_ids.map((id) => ({
+        creator_id: id,
+        display_name: store.creator(id)?.display_name ?? id,
+        state: 'queued' as const,
+      }))
+    const count = (s: OutreachQueueEntry['state']): number =>
+      rows.filter((e) => e.state === s).length
+    const state: KolOutreachBatchProgressView['state'] = r.state === 'approved' ? 'done' : r.state
+    const wait =
+      state === 'sending'
+        ? await waitOf(
+            r,
+            rows.find((e) => e.state === 'queued'),
+          )
+        : undefined
+    return {
+      batch_id: r.batch_id,
+      approval_item_id: r.approval_item_id,
+      channel: r.channel,
+      state,
+      per_hour: perHourOf(r),
+      ...(r.pace_basis === undefined ? {} : { pace_basis: r.pace_basis }),
+      ...(r.pace_why === undefined ? {} : { pace_why: r.pace_why }),
+      ...(r.pace_edited === true ? { pace_edited: true } : {}),
+      total: rows.length,
+      sent: count('sent'),
+      // 「在发」那一封还没落定，算在排队里
+      queued: count('queued') + count('sending'),
+      skipped: count('skipped'),
+      cancelled: count('cancelled'),
+      ...(wait === undefined ? {} : { waiting: wait.why }),
+      ...(wait?.next_at === undefined ? {} : { next_at: wait.next_at }),
+      created_at: r.created_at,
+      rows: rows.map((e) => ({
+        creator_id: e.creator_id,
+        display_name: e.display_name,
+        state: e.state,
+        ...(e.at === undefined ? {} : { at: e.at }),
+        ...(e.reason === undefined ? {} : { reason: e.reason }),
+        ...(e.change_id === undefined ? {} : { change_id: e.change_id }),
+      })),
+    }
+  }
+
+  /** 改节奏 / 暂停 / 继续 / 取消剩下的（只给人点：网关挡 AI 运行的令牌）。 */
+  const controlOutreachBatchOf = async (
+    actor: { person_id: PersonId },
+    approval_item_id: string,
+    input: { action?: 'pause' | 'resume' | 'cancel' | undefined; per_hour?: number | undefined },
+  ): Promise<KolOutreachBatchProgressView> => {
+    const r = batchesOf().find((x) => x.approval_item_id === approval_item_id)
+    if (r === undefined) throw new ApiError('not_found', '没有这张批量开发信卡')
+    if (assignmentForChannel(actor.person_id, r.channel) === undefined)
+      throw new ApiError(
+        'forbidden',
+        `你名下没有「${channelLabel(r.channel)} 红人」这条职责，管不了这一批开发信。`,
+      )
+    if (!LIVE_BATCH.has(r.state))
+      throw new ApiError('conflict', '这一批已经发完、取消了或没批，改不了。')
+    const now = clock.now()
+    const action = input.action
+    if (action === 'pause' && r.state === 'pending')
+      throw new ApiError('conflict', '卡还没批，没在发。不想发就在卡上点「不发」。')
+    if (action === 'cancel' && r.state === 'pending')
+      throw new ApiError('conflict', '卡还没批，一封都没发。不想发就在卡上点「不发」。')
+    if (action === 'resume' && r.state !== 'paused')
+      throw new ApiError('conflict', '这一批没在暂停。')
+    const next = updateBatch(approval_item_id, (x) => ({
+      ...x,
+      ...(input.per_hour === undefined
+        ? {}
+        : {
+            per_hour: clampPerHour(input.per_hour),
+            // 数真变了才算人改过（卡上从此不再说「新邮箱 / 老邮箱」）
+            ...(clampPerHour(input.per_hour) === perHourOf(x) ? {} : { pace_edited: true }),
+          }),
+      ...(action === 'pause' ? { state: 'paused' as const } : {}),
+      ...(action === 'resume' ? { state: 'sending' as const } : {}),
+      ...(action === 'cancel'
+        ? {
+            state: 'cancelled' as const,
+            finished_at: now,
+            queue: (x.queue ?? []).map((e) =>
+              e.state === 'queued' ? { ...e, state: 'cancelled' as const, at: now } : e,
+            ),
+          }
+        : {}),
+    }))
+    emit('kol.outreach_batch_control', actor.person_id, {
+      batch_id: r.batch_id,
+      approval_item_id,
+      ...(action === undefined ? {} : { action }),
+      ...(input.per_hour === undefined ? {} : { per_hour: clampPerHour(input.per_hour) }),
+    })
+    // 继续 / 改了节奏：该发的这一拍就发（不用干等下一分钟）
+    if (next?.state === 'sending') await pumpOutreachBatches()
+    const fresh = batchesOf().find((x) => x.approval_item_id === approval_item_id) ?? next ?? r
+    return progressOf(fresh)
   }
 
   const port: KolPort = {
@@ -1715,6 +2229,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       const hasContact = new Set(store.contacts().map((ct) => ct.creator_id))
       // WP504：还在一张没定的批量开发信卡上的人（卡上标「等你确认」）
       const awaiting = awaitingInBatches()
+      // WP506：批了的批量开发信里排着队 / 已发的人（卡上标「排队中 / 已发」）
+      const queuedNow = queuedInBatches()
+      const sentRecently = sentInBatches()
       // WP131：自动评分跑出来的体检概括数（做成了的才有）
       const audits = new Map(
         store
@@ -1746,6 +2263,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           ...(score.blocked === undefined ? {} : { blocked: score.blocked }),
           has_contact: hasContact.has(account.creator_id),
           ...(awaiting.has(account.creator_id) ? { awaiting_confirm: true as const } : {}),
+          ...(queuedNow.has(account.creator_id)
+            ? { outreach_queue: 'queued' as const }
+            : sentRecently.has(account.creator_id)
+              ? { outreach_queue: 'sent' as const }
+              : {}),
           ...(() => {
             const avatar = avatarMediaOf(account.id)
             const tags = tagRows.get(account.creator_id) ?? []
@@ -2817,7 +3339,26 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     },
 
     dropOutreachBatch(approval_item_id) {
-      setBatchState(approval_item_id, 'rejected')
+      // 只收没定的那张（批了在发的不因为卡过期之类的事被改成「没批」）
+      updateBatch(approval_item_id, (r) =>
+        r.state === 'pending' ? { ...r, state: 'rejected' } : r,
+      )
+    },
+
+    async outreachBatches(_actor, filter) {
+      const rows = batchesOf()
+        .filter((r) => filter.channel === undefined || r.channel === filter.channel)
+        .filter(
+          (r) =>
+            filter.approval_item_id === undefined || r.approval_item_id === filter.approval_item_id,
+        )
+        .reverse()
+        .slice(0, 20)
+      return Promise.all(rows.map(progressOf))
+    },
+
+    async controlOutreachBatch(actor, approval_item_id, input) {
+      return controlOutreachBatchOf(actor, approval_item_id, input)
     },
 
     async planCampaign(actor, input) {
@@ -3445,6 +3986,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       }
     },
     sweepSequences,
+    pumpOutreachBatches,
     mediaReferences() {
       const latest = new Map<string, KolAccountObservation>()
       for (const o of store.accountObservations()) {

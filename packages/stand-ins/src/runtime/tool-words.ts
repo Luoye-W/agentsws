@@ -26,6 +26,8 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   list_orders: '订单列表',
   get_product: '商品资料',
   search_policies: '规矩与政策库',
+  // WP506（决策 1796 C）：AI 提议停用 / 启用知识（只出卡）
+  propose_knowledge_toggle: '停用 / 启用知识',
   list_threads: '会话记录',
   // 两个产出工具（宿主回调）
   draft_reply: '起草回复',

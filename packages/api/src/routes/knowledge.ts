@@ -92,6 +92,18 @@ const LearnBody = z.object({
 
 const StageBody = z.object({ stage: z.enum(['both', 'presales', 'postsales']) })
 
+/** WP506（决策 1789 B）：批量停用 / 启用（一次最多 200 条，和批量条一次能勾的一样多）。 */
+const DisableBody = z.object({ ids: z.array(z.string().min(1)).min(1).max(200) })
+
+/**
+ * WP506（决策 1789 B，同 1772「审核只人点」）：停用 / 启用只给人点——AI 运行的令牌（`runtime`）一律 403。
+ * AI 也没有这一项工具；用户让 AI 停用哪条时，它告诉人去知识库里点。
+ */
+function humanOnly(c: Parameters<Route['handler']>[0]): void {
+  if (principalOf(c).kind === 'runtime')
+    throw new ApiError('forbidden', '停用 / 启用知识只能由人在知识库里点，AI 运行不能调用')
+}
+
 const RecheckResolveBody = z.object({
   /** 冻结的三选一（`packages/knowledge` 的 `RECHECK_OPTIONS`）。 */
   resolution: z.enum(['unchanged', 'adopt_new', 'ignore']),
@@ -633,6 +645,130 @@ export function knowledgeRoutes(): Route[] {
           param(c, 'id'),
           input.stage,
         )
+        if (card === undefined) throw new ApiError('not_found', '没有这条知识')
+        return ok(c, card)
+      },
+    ),
+
+    /* ── WP506（决策 1789 B）：停用 / 启用（单条 + 批量），只给人点 ──────────── */
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/cards/disable',
+        operationId: 'disableKnowledgeCards',
+        summary:
+          '批量停用知识（知识库多选；就地生效、可撤销）。看不见的 / 已退役的进 missing。只给人点',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: DisableBody,
+        returns: 'KnowledgeDisableResult',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const input = await body(c, DisableBody)
+        const fn = needs(deps.knowledge.setCardsDisabled, '停用 / 启用')
+        return ok(
+          c,
+          await fn.call(
+            deps.knowledge,
+            actorOf(deps, { principal: p, assignment: a }),
+            input.ids,
+            true,
+          ),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/cards/enable',
+        operationId: 'enableKnowledgeCards',
+        summary:
+          '批量启用知识（知识库多选；就地生效、可撤销）。看不见的 / 已退役的进 missing。只给人点',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: DisableBody,
+        returns: 'KnowledgeDisableResult',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const input = await body(c, DisableBody)
+        const fn = needs(deps.knowledge.setCardsDisabled, '停用 / 启用')
+        return ok(
+          c,
+          await fn.call(
+            deps.knowledge,
+            actorOf(deps, { principal: p, assignment: a }),
+            input.ids,
+            false,
+          ),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/cards/:id/disable',
+        operationId: 'disableKnowledgeCard',
+        summary:
+          '停用一条知识（就地生效、可撤销；停用的不再被检索 / 回复取用，不删、不动状态）。只给人点',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '事实卡 id' }],
+        returns: 'FactCard',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const fn = needs(deps.knowledge.setCardsDisabled, '停用 / 启用')
+        const out = await fn.call(
+          deps.knowledge,
+          actorOf(deps, { principal: p, assignment: a }),
+          [param(c, 'id')],
+          true,
+        )
+        const card = out.updated[0]
+        if (card === undefined) throw new ApiError('not_found', '没有这条知识')
+        return ok(c, card)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/knowledge/cards/:id/enable',
+        operationId: 'enableKnowledgeCard',
+        summary:
+          '启用一条知识（就地生效、可撤销；停用的不再被检索 / 回复取用，不删、不动状态）。只给人点',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '事实卡 id' }],
+        returns: 'FactCard',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const p = principalOf(c)
+        const a = assignmentOf(c)
+        const fn = needs(deps.knowledge.setCardsDisabled, '停用 / 启用')
+        const out = await fn.call(
+          deps.knowledge,
+          actorOf(deps, { principal: p, assignment: a }),
+          [param(c, 'id')],
+          false,
+        )
+        const card = out.updated[0]
         if (card === undefined) throw new ApiError('not_found', '没有这条知识')
         return ok(c, card)
       },
