@@ -55,9 +55,10 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
         ...(input.model === undefined ? {} : { model: input.model }),
         ...(input.effort === undefined ? {} : { effort: input.effort }),
         ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
+        // WP504（决策 1775 A）：带着引用的卡问 = 围绕这几张卡的一段对话（进中栏线程，不在框上当场答）
         ...(input.context === undefined || input.context.length === 0
           ? {}
-          : { context: input.context }),
+          : { context: input.context, mode: 'chat' as const }),
       })
       // 没交出去：错误交给框下那一句（WP259，字放回框里），这里不再画一份
       if (entry?.status === 'error') {

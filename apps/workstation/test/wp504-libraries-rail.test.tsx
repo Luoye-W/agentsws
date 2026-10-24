@@ -98,6 +98,11 @@ const { NOW, row, ROWS, POSITIONS, api } = vi.hoisted(() => {
     listKnowledgeSources: vi.fn(async () => []),
     listRangeGroups: vi.fn(async () => []),
     setKnowledgeCardStage: vi.fn(async () => ({})),
+    openMatterAtPosition: vi.fn(async () => ({
+      matter: { id: 'mat_1' },
+      mode: 'ask',
+      ambiguous: false,
+    })),
   }
 
   return { NOW, row, ROWS, POSITIONS, api }
@@ -127,6 +132,7 @@ const { usesKnowledge } = await import('@/components/knowledge/knowledge-library
 const { knowledgeTarget } = await import('@/pages/knowledge')
 const { MatterComposer } = await import('@/components/matter/matter-composer')
 const { translate } = await import('@/lib/i18n')
+const { usePositionOpen } = await import('@/components/work/use-position-open')
 
 const t = (k: string, v?: Record<string, string | number>): string => translate('zh', k, v)
 
@@ -364,6 +370,37 @@ describe('✦ 问 AI（1775 A / 1776 A）', () => {
     expect(first.context.map((c) => `${c.kind}:${c.id}`)).toEqual(['creator:cre_desk'])
     expect(first.context[0]?.facts.length).toBeGreaterThan(5)
     expect(screen.queryByTestId('ask-ai-chip')).toBeNull()
+  })
+})
+
+describe('问出去（1775 A）', () => {
+  it('带着引用问 = 一段会话（mode chat），引用随话交给服务端', async () => {
+    function Ask(): React.ReactNode {
+      const { open } = usePositionOpen('asg_yt', () => {})
+      return (
+        <button
+          type="button"
+          data-testid="go"
+          onClick={() => {
+            open.mutate({
+              title: '为什么是 83 分？',
+              context: askStore.refsPayload([creatorRef(ROWS[0] as KolCreatorRowData, t)]),
+            })
+          }}
+        />
+      )
+    }
+    renderWithProviders(<Ask />)
+    fireEvent.click(screen.getByTestId('go'))
+    await waitFor(() => {
+      expect(api.openMatterAtPosition).toHaveBeenCalledTimes(1)
+    })
+    const [, body] = api.openMatterAtPosition.mock.calls[0] as unknown as [
+      string,
+      { mode?: string; context?: { id: string }[] },
+    ]
+    expect(body.mode).toBe('chat')
+    expect(body.context?.map((c) => c.id)).toEqual(['cre_desk'])
   })
 })
 

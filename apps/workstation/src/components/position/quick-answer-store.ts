@@ -82,7 +82,8 @@ export async function askAtPosition(input: {
   /** 已经拆好的描述（⌘K 从随便聊带过来的上下文）：给了就用 `text` 当标题、原样交，不再拆 */
   summary?: string
   role_id?: string
-  mode?: 'quick'
+  /** WP504：带着第三栏引用的卡问 = 一段会话（`chat`，回答在中栏线程里，1775 A）。 */
+  mode?: 'quick' | 'chat'
   /** WP342：输入框左下角选的 AI（记在开出来的事项上；不给 = 品牌默认） */
   model?: string
   /** WP370：连同 `model` 一起选的思考程度 */
