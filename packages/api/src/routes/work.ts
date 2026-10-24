@@ -54,7 +54,7 @@ import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
-import { AttachedFileBody } from './free-chat.js'
+import { AttachedFileBody, ContextRefBody } from './free-chat.js'
 
 /** 与工作台面同一个准入：能读自己的队列就能看自己的事项与待办。 */
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
@@ -175,6 +175,8 @@ const MessageBody = z
   .object({
     text: z.string().max(4000),
     files: z.array(AttachedFileBody).max(3).optional(),
+    /** WP504（决策 1775 A）：第三栏「问 AI」引用的卡（结构化摘要）。 */
+    context: z.array(ContextRefBody).max(10).optional(),
   })
   .refine((b) => b.text.trim() !== '' || (b.files ?? []).length > 0, {
     message: '说点什么，或者附一份资料',
@@ -416,6 +418,8 @@ export interface WorkPort {
     text: string,
     /** WP357：这句话附上的资料（原样转给宿主读；不给 = 没附）。 */
     files?: readonly { name: string; data: string }[],
+    /** WP504：第三栏「问 AI」引用的卡（结构化摘要；宿主像附件那样记在这句话上）。 */
+    context?: readonly z.infer<typeof ContextRefBody>[],
   ): Promise<{ event: MatterEvent; run_id?: string }>
   /** WP264（决策 177）：人改标题（`title_source: 'user'`，之后不再被自动覆盖）。 */
   retitleMatter?(actor: WorkActor, id: string, title: string): MaybePromise<Matter>
@@ -732,17 +736,17 @@ export function workRoutes(): Route[] {
       },
       async (c, deps) => {
         const actor = actorOf(c)
-        const { text, files } = await body(c, MessageBody)
-        return ok(
-          c,
-          await workOf(deps).say(
-            actor,
-            param(c, 'id'),
-            text,
-            ...(files === undefined || files.length === 0 ? [] : [files]),
-          ),
-          201,
-        )
+        const { text, files, context } = await body(c, MessageBody)
+        const said =
+          context === undefined || context.length === 0
+            ? await workOf(deps).say(
+                actor,
+                param(c, 'id'),
+                text,
+                ...(files === undefined || files.length === 0 ? [] : [files]),
+              )
+            : await workOf(deps).say(actor, param(c, 'id'), text, files ?? [], context)
+        return ok(c, said, 201)
       },
     ),
     route(

@@ -8032,6 +8032,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/kol/outreach/batch': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 红人库多选后「发开发信」：**只出一张确认卡**（名单、跳过谁和原因、样信、「发出 N 封」），批了才逐个起草并发出（决策 1777 A） */
+    post: operations['batchKolOutreach']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/kol/outreach/defaults': {
     parameters: {
       query?: never
@@ -48133,6 +48150,15 @@ export interface operations {
             name: string
             data: string
           }[]
+          context?: {
+            kind: string
+            id: string
+            label: string
+            facts: {
+              k: string
+              v: string
+            }[]
+          }[]
         }
       }
     }
@@ -49112,6 +49138,15 @@ export interface operations {
           files?: {
             name: string
             data: string
+          }[]
+          context?: {
+            kind: string
+            id: string
+            label: string
+            facts: {
+              k: string
+              v: string
+            }[]
           }[]
         }
       }
@@ -63530,6 +63565,104 @@ export interface operations {
     }
     responses: {
       /** @description KolOutreachView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  batchKolOutreach: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          /** @enum {string} */
+          channel: 'youtube' | 'facebook' | 'instagram' | 'tiktok' | 'x'
+          creator_ids: string[]
+          product?: string
+          brand_pitch?: string
+        }
+      }
+    }
+    responses: {
+      /** @description KolOutreachBatchView */
       200: {
         headers: {
           [name: string]: unknown

@@ -60,7 +60,12 @@ import {
 } from '@agentsws/roles'
 import type { Work } from '@agentsws/work'
 import { type AdsExportIntake, withIntakeNote } from './ads-data/export-intake.js'
-import { attachmentsBrief, readAssistantFile } from './assistant-files.js'
+import {
+  attachmentsBrief,
+  type ContextRefInput,
+  contextAttachment,
+  readAssistantFile,
+} from './assistant-files.js'
 import { belongsTo, holdersByPlacement, WORKSPACE_BASE_ROLES } from './position-placements.js'
 import {
   buildPositionWork,
@@ -209,6 +214,11 @@ export interface OpenAtPositionInput {
    * 记在事项第一句话上；路由与三分只看话本身，运行拿到「话 + 附件围起来」。
    */
   files?: readonly { name: string; data: string }[]
+  /**
+   * WP504（决策 1775 A）：第三栏点 ✦「问 AI」引用的卡（结构化摘要）。像附件那样记在第一句话上、
+   * 围起来交给模型；路由与三分照旧只看话本身。
+   */
+  context?: readonly ContextRefInput[]
 }
 
 /** WP287：岗位里问一句，当场的回答（岗位页输入框下面那一段）。 */
@@ -764,9 +774,11 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
             person_id: input.person_id,
             ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
           })
-    const attachments: MatterAttachment[] = (input.files ?? []).map((f, i) =>
-      withIntakeNote(readAssistantFile(f), intake[i]),
-    )
+    const attachments: MatterAttachment[] = [
+      // WP504：引用的卡排在附件前面（它们是这句话问的对象）
+      ...(input.context ?? []).map(contextAttachment),
+      ...(input.files ?? []).map((f, i) => withIntakeNote(readAssistantFile(f), intake[i])),
+    ]
     const brief = attachments.length === 0 ? undefined : attachmentsBrief(text, attachments)
     /*
      * WP84：从快捷提示点进来的，职责是**已经定好的**，不跑路由。

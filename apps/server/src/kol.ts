@@ -372,6 +372,8 @@ export type KolSettingKey =
   | 'outreach_defaults'
   /** WP416：点过「不是同一个人」的合并建议（以前只记在内存里，重启后又冒出来）。 */
   | 'merge_rejected'
+  /** WP504（决策 1777 A）：批量开发信确认卡（哪一批、名单、定没定），名单上的「等你确认」看它。 */
+  | 'outreach_batches'
 
 /** WP502（决策 1763 B）：一个人的人工标签（行 id = creator_id）。 */
 export interface KolCreatorTagRow {

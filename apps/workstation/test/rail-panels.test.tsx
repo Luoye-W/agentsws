@@ -12,7 +12,9 @@
  *   界面显示"已提交审批"——**不是直接改**（14 §1）；
  * - 内置模板只读：出的是"复制一份再改"，不是一个按下去会 403 的输入框（05 §0）。
  */
+
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LayerMemoryData, PositionInstanceData, RoleDetailView } from '@/lib/api'
 import { openRailPanel, openSettingsTab, renderWithProviders } from './helpers'
@@ -394,15 +396,28 @@ describe('额度面板：改额度走审批，不是直接改（14 §1 / 05 §0�
   })
 })
 
+/**
+ * WP504（决策 1779 A）：「设定 → 知识」改成跳到**知识库面板**；原来那一格（这一层管得着哪些知识 + 助理记下的几条）
+ * 收在知识库 ⋯ 里「这个岗位看得见什么」，叠在库上。
+ */
+async function openScopeKnowledge(): Promise<void> {
+  await openSettingsTab('knowledge')
+  expect(await screen.findByTestId('rail-panel-knowledge-library')).toBeDefined()
+  await userEvent.click(await screen.findByTestId('library-menu'))
+  await userEvent.click(await screen.findByTestId('library-menu-scope'))
+}
+
 describe('知识面板（19）', () => {
   it('列这条职责的适用范围与在用的事实卡数，不做编辑器', async () => {
     renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
-    await openSettingsTab('knowledge')
+    await openScopeKnowledge()
     expect(await screen.findByTestId('rail-knowledge-role')).toBeDefined()
     expect(screen.getByTestId('rail-knowledge-scope').textContent).toContain('store')
     expect(screen.getByTestId('rail-knowledge-cards').textContent).toContain('0')
     expect(screen.getByTestId('rail-knowledge-more').getAttribute('href')).toBe('/knowledge')
     expect(screen.queryByTestId('rail-knowledge-notes')).toBeNull()
+    // 叠在库上：头上「← 知识库」
+    expect(screen.getByTestId('library-back')).toBeDefined()
   })
 
   it('WP350 / WP357：助理扇出到这个岗位、还在用的几条列在最上面「助理记下的」，带改 / 删（别的岗位的、退役的不列）', async () => {
@@ -421,7 +436,7 @@ describe('知识面板（19）', () => {
       note('c', 'web-ops', 'retired'),
     ] as never)
     renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
-    await openSettingsTab('knowledge')
+    await openScopeKnowledge()
     const block = await screen.findByTestId('rail-knowledge-notes')
     expect(block.textContent).toContain('助理记下的 1 条')
     const rows = screen.getAllByTestId('rail-knowledge-note')

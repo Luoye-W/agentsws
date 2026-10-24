@@ -204,6 +204,8 @@ export function CreatorCard({
   assignment,
   onOpen,
   onNext,
+  as: Tag = 'li',
+  leading,
 }: {
   row: KolCreatorRowData
   /** 取本机缓存的头像要带的分配（不给就用当前那条）。 */
@@ -214,6 +216,10 @@ export function CreatorCard({
   onOpen: () => void
   /** 点主按钮。 */
   onNext: (step: NextStep) => void
+  /** WP504：在库面板里外面已经有一层 `<li>`（`LibraryItemFrame`），这里画成 `div`。 */
+  as?: 'li' | 'div'
+  /** WP504：名字前面那一格（多选时的勾）。 */
+  leading?: ReactNode
 }): ReactNode {
   const { t } = useApp()
   const step = nextStepOf(row)
@@ -222,13 +228,17 @@ export function CreatorCard({
   // 格子里写他做什么（「数码」）；没判的（没限类目 / 认不出）不画色块——中间分不是结论
   const catLevel = cat === undefined || cat.unknown === true ? undefined : levelOfFactor(cat.score)
   return (
-    <li
+    <Tag
       // WP416（自查 kol U1）：卡在窄的右栏里时（容器查询）只出一行「粉丝 · 互动」，三格数字不挤成一团
-      className="@container flex min-w-0 flex-col gap-2 rounded-[var(--ws-radius-card)] border bg-card p-2.5"
+      className="@container relative flex min-w-0 flex-col gap-2 rounded-[var(--ws-radius-card)] border bg-card p-2.5"
       data-testid="kol-creator-card"
       data-creator={row.creator_id}
       data-next={step}
     >
+      {/* WP504：多选时的勾放在卡左上角（不能套在下面那个按钮里） */}
+      {leading == null ? null : (
+        <span className="absolute top-3.5 left-3 z-10 flex">{leading}</span>
+      )}
       <button
         type="button"
         className="flex min-w-0 flex-col gap-2 rounded-sm text-left hover:bg-muted/50"
@@ -236,7 +246,7 @@ export function CreatorCard({
         data-creator={row.creator_id}
         onClick={onOpen}
       >
-        <span className="flex min-w-0 items-start gap-2">
+        <span className={cn('flex min-w-0 items-start gap-2', leading != null && 'pl-6')}>
           <CreatorAvatar
             id={row.creator_id}
             name={row.display_name}
@@ -354,6 +364,16 @@ export function CreatorCard({
         >
           <ExternalLink className="size-3.5" aria-hidden />
         </a>
+        {/* WP504（1777 A）：在一张还没定的批量开发信卡上——标「等你确认」 */}
+        {row.awaiting_confirm === true ? (
+          <span
+            className="inline-flex h-5 items-center gap-1 rounded-full bg-ws-warn-bg px-1.5 text-xs font-medium text-ws-warn"
+            data-testid="kol-card-awaiting"
+          >
+            <i aria-hidden className="size-1.5 rounded-full bg-ws-warn" />
+            {t('library.awaiting')}
+          </span>
+        ) : null}
         {/* WP502：定过的才标（通过 / 淘汰）；理由在悬停里 */}
         {row.review === undefined ? null : (
           <span title={row.review.reason} className="inline-flex">
@@ -379,6 +399,6 @@ export function CreatorCard({
           {t(`kol.card.next.${step}`)}
         </Button>
       </span>
-    </li>
+    </Tag>
   )
 }

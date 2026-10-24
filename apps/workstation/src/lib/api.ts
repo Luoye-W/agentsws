@@ -832,6 +832,8 @@ export const openMatterAtPosition = (
     model_effort?: string
     /** WP357：附上的资料（base64；服务端按助理那套读成文字） */
     files?: { name: string; data: string }[]
+    /** WP504（决策 1775 A）：第三栏「问 AI」引用的卡（结构化摘要，服务端记在这句话上交给模型）。 */
+    context?: ContextRefInput[]
   },
 ): Promise<OpenAtPositionData> =>
   api<OpenAtPositionData>(`/v1/positions/${encodeURIComponent(id)}/matters`, {
@@ -1254,11 +1256,28 @@ export const postMatterMessage = (
   text: string,
   /** WP357：这句话附上的资料（base64；服务端按助理那套读成文字） */
   files?: { name: string; data: string }[],
+  /** WP504：第三栏「问 AI」引用的卡（结构化摘要）。 */
+  context?: ContextRefInput[],
 ): Promise<{ event: MatterEvent; run_id?: string }> =>
   api(`/v1/matters/${encodeURIComponent(id)}/messages`, {
     method: 'POST',
-    body: files === undefined || files.length === 0 ? { text } : { text, files },
+    body: {
+      text,
+      ...(files === undefined || files.length === 0 ? {} : { files }),
+      ...(context === undefined || context.length === 0 ? {} : { context }),
+    },
   })
+
+/**
+ * WP504（决策 1775 A）：一张被引用的卡交给服务端的样子——是什么、叫什么、一排「字段：值」。
+ * 服务端把它记在那句话上（像附件那样围起来），运行拿到「话 + 引用的卡」。
+ */
+export interface ContextRefInput {
+  kind: string
+  id: string
+  label: string
+  facts: { k: string; v: string }[]
+}
 
 /** WP341（决策 847）：对话里点了「调工具」的 genui 按钮（只读当场跑；会改外部的出卡、挂进这件事的时间线）。 */
 export const runGenuiTool = (id: string, input: GenuiToolInput): Promise<GenuiToolOutcome> =>
@@ -5635,6 +5654,8 @@ export interface KolCreatorRowData {
   tags?: string[]
   /** WP502（1763 B）：人工审核决定（没有 = 待审）。 */
   review?: KolCreatorReviewData
+  /** WP504（1777 A）：在一张还没定的批量开发信卡上（卡上标「等你确认」）。 */
+  awaiting_confirm?: boolean
 }
 
 /** WP502（1763 B）：人工审核决定——通过 / 淘汰，一句理由可选。 */
@@ -6085,6 +6106,29 @@ export const draftKolOutreach = (
 ): Promise<KolOutreachData> =>
   api('/v1/kol/outreach', { method: 'POST', body: input, ...withAssignment(assignment) })
 
+/** WP504（决策 1777 A）：批量开发信——只出一张确认卡（`kol_outreach_batch`），批了才逐个发。 */
+export interface KolOutreachBatchData {
+  ok: boolean
+  approval_item_id?: string
+  batch_id?: string
+  sending: { creator_id: string; display_name: string }[]
+  skipped: { creator_id: string; display_name: string; reason: string }[]
+  /** 没出卡时那一句人话。 */
+  message?: string
+}
+
+export const batchKolOutreach = (
+  input: {
+    channel: KolChannelId
+    creator_ids: string[]
+    /** 想聊的产品；不给用存过的默认值。 */
+    product?: string
+    brand_pitch?: string
+  },
+  assignment?: string,
+): Promise<KolOutreachBatchData> =>
+  api('/v1/kol/outreach/batch', { method: 'POST', body: input, ...withAssignment(assignment) })
+
 export const getKolCollaborations = (
   filter: { channel?: KolChannelId } = {},
   assignment?: string,
@@ -6222,6 +6266,8 @@ export const planKolCampaign = (
     channels: KolChannelId[]
     headcount: number
     criteria?: { category?: string }
+    /** WP504：库里多选「移入活动」的那批人——清单只在这几个人里挑。 */
+    creator_ids?: string[]
   },
   assignment?: string,
 ): Promise<KolCampaignData> =>

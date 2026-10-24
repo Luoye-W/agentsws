@@ -30,6 +30,7 @@ import {
   useState,
 } from 'react'
 import { flushSync } from 'react-dom'
+import { useAskAi } from '@/components/ask-ai/ask-ai-store'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
@@ -144,6 +145,21 @@ export function ComposerDock({
   }, [collapsible, measure])
 
   const collapsed = collapsible && overlap && !draft && !focused && !engaged
+
+  /*
+   * WP504（决策 1775 A）：第三栏点 ✦ 把一张卡放进这个框——缩成小条时先展开，光标进框（小条是 inert 的，聚焦不进去）。
+   */
+  const { nonce: askNonce } = useAskAi()
+  useEffect(() => {
+    if (askNonce === 0 || inner.current?.querySelector('[data-ask-ai-target]') == null) return
+    setEngaged(true)
+    const frame = requestAnimationFrame(() => {
+      inner.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus()
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+    }
+  }, [askNonce])
 
   /** 点小条：立刻展开、光标进输入框。 */
   const expand = (): void => {

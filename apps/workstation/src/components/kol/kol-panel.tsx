@@ -78,13 +78,14 @@ const num = (n: number | undefined): string =>
 
 /* ── 找人 ─────────────────────────────────────────────────────────────── */
 
-function Discovery({
+export function Discovery({
   assignment,
   channel,
   onOpen,
   onThread,
   batch,
   onClearBatch,
+  searchOnly = false,
 }: {
   assignment: string
   channel: KolChannelId
@@ -94,6 +95,8 @@ function Discovery({
   /** WP131：插件「回作战室看这批」带来的采集批次——只列这一批。 */
   batch?: string
   onClearBatch?: () => void
+  /** WP504：库面板里「找新红人」那一层——只要外面的搜索，不再列一遍自己的库。 */
+  searchOnly?: boolean
 }): React.ReactNode {
   const { t } = useApp()
   const openConnect = useOpenConnect()
@@ -326,7 +329,7 @@ function Discovery({
           </div>
         ) : null}
 
-        <div className="mt-1">
+        <div className="mt-1" hidden={searchOnly}>
           {batch === undefined ? (
             <div className="mb-1 flex items-center gap-2">
               <h4 className="text-xs font-medium text-muted-foreground">
@@ -492,7 +495,7 @@ const STAGE_FILTERS = [
 /** 「其他」那一组折起来时露几条。 */
 const IDLE_PREVIEW = 3
 
-function Collaborations({
+export function Collaborations({
   assignment,
   channel,
   onOpen,
@@ -720,12 +723,20 @@ function Collaborations({
 
 /* ── 导入与 campaign ──────────────────────────────────────────────────── */
 
-function ImportAndCampaign({
+export function ImportAndCampaign({
   assignment,
   channel,
+  named,
+  onClearNamed,
+  onGo,
 }: {
   assignment: string
   channel: KolChannelId
+  /** WP504：库里多选「移入活动」的那批人（清单只在他们里面挑）。 */
+  named?: readonly { creator_id: string; display_name: string }[] | undefined
+  onClearNamed?: () => void
+  /** WP504：在库面板里时「去合作 / 找更多人」切格子（不改地址栏）。 */
+  onGo?: (view: 'threads' | 'pool') => void
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -737,6 +748,10 @@ function ImportAndCampaign({
    */
   const [allExisting, setAllExisting] = useState<number | undefined>(undefined)
   const goView = (view: 'threads' | 'pool'): void => {
+    if (onGo !== undefined) {
+      onGo(view)
+      return
+    }
     setSearch((prev) => {
       const next = new URLSearchParams(prev)
       next.set('kol', view)
@@ -763,6 +778,9 @@ function ImportAndCampaign({
           budget: Number(budget),
           channels,
           headcount: Number(headcount),
+          ...(named === undefined || named.length === 0
+            ? {}
+            : { creator_ids: named.map((n) => n.creator_id) }),
         },
         assignment,
       ),
@@ -831,6 +849,26 @@ function ImportAndCampaign({
           <h4 className="mb-1 text-xs font-medium text-muted-foreground">
             {t('kol.campaign.title')}
           </h4>
+          {/* WP504：库里多选「移入活动」带过来的那批人——清单只在他们里面挑 */}
+          {named === undefined || named.length === 0 ? null : (
+            <div
+              className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg bg-ws-tint px-2 py-1.5 text-xs"
+              data-testid="kol-campaign-named"
+              data-count={named.length}
+            >
+              <span className="font-medium text-ws-brand">
+                {t('kol.lib.campaign.picked', { n: named.length })}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-ws-body">
+                {named.map((n) => n.display_name).join('、')}
+              </span>
+              {onClearNamed === undefined ? null : (
+                <Button size="xs" variant="ghost" onClick={onClearNamed}>
+                  {t('kol.lib.campaign.picked.clear')}
+                </Button>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Input
               className="min-w-40 flex-1"

@@ -185,6 +185,29 @@ export function attachmentsBrief(
   return [text.trim() === '' ? '（用户只附了资料，没说话）' : text, ...blocks].join('\n\n')
 }
 
+/** WP504（决策 1775 A）：第三栏「问 AI」引用的一张卡（结构化摘要）。 */
+export interface ContextRefInput {
+  kind: string
+  id: string
+  label: string
+  facts: readonly { k: string; v: string }[]
+}
+
+/**
+ * WP504：一张被引用的卡 → 记在那句话上的一份「附件」（名字「引用：Desk Fixture」，正文一行一格「字段：值」）。
+ * 交给模型时和附件一样围起来（`attachmentsBrief`）——卡里有红人简介这类外来文字，是资料不是指令。
+ */
+export function contextAttachment(ref: ContextRefInput): FreeChatAttachment {
+  const lines = [
+    `这是用户在工坊第三栏点「问 AI」引用的一张卡（类型 ${ref.kind}，id ${ref.id}）：`,
+    `名字：${ref.label}`,
+    ...ref.facts.filter((f) => f.v.trim() !== '').map((f) => `${f.k}：${f.v}`),
+  ]
+  // 围栏与清洗在交给模型那一步做（`attachmentsBrief`），这里只截到上限
+  const text = lines.join('\n').slice(0, ASSISTANT_FILE_MAX_CHARS)
+  return { name: cleanFileName(`引用：${ref.label}`), chars: text.length, text }
+}
+
 /** WP357：只附了资料、没说话时，时间线上那句话写什么。 */
 export const attachedLine = (files: readonly { name: string }[]): string =>
   `看一下附上的资料：${files.map((f) => `「${f.name}」`).join('')}`

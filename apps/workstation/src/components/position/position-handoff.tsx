@@ -19,7 +19,8 @@
  *
  * **WP437（Luoye 10-21）**：挪到中栏底部居中、悬浮在内容之上——页面把它放在内容最后（根加 `DOCK_PAGE`）。
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { AskSuggestions, useComposerRefs } from '@/components/ask-ai/composer-refs'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { MatterComposer } from '@/components/matter/matter-composer'
 import { useAttachedDocs } from '@/components/matter/use-attached-docs'
@@ -58,6 +59,18 @@ export function PositionHandoff({
   const attached = useAttachedDocs()
   const { open, pick, choice, error, clearError } = usePositionOpen(id, () => {
     setText('')
+  })
+  /*
+   * WP504（决策 1775 A）：第三栏点 ✦「问 AI」的卡落在这个框里（引用小卡 + 建议问题 + `@` 搜 + 拖进来）；
+   * 发出去时引用按结构化摘要随这句话交给服务端，发完清掉。
+   */
+  const area = useRef<HTMLTextAreaElement>(null)
+  const asked = useComposerRefs({
+    area,
+    onChange: (v) => {
+      setText(v.slice(0, TASK_TEXT_MAX))
+      clearError()
+    },
   })
 
   const mine = view.roles.filter(
@@ -108,8 +121,17 @@ export function PositionHandoff({
     clearError()
     setStarted(true)
     const files = attached.take().map((d) => ({ name: d.name, data: d.data }))
+    const context = asked.payload()
+    asked.clear()
     open.mutate(
-      { title, model, ...(effort === undefined ? {} : { effort }), files, ...pin },
+      {
+        title,
+        model,
+        ...(effort === undefined ? {} : { effort }),
+        files,
+        ...pin,
+        ...(context === undefined ? {} : { context }),
+      },
       {
         // WP259：没交出去，字放回框里（框下说一句人话）；WP357：附件也放回去
         onError: () => {
@@ -123,10 +145,7 @@ export function PositionHandoff({
   const composer = (
     <MatterComposer
       value={text}
-      onChange={(v) => {
-        setText(v.slice(0, TASK_TEXT_MAX))
-        clearError()
-      }}
+      onChange={asked.onChange}
       onSend={submit}
       onStop={() => undefined}
       running={false}
@@ -157,8 +176,31 @@ export function PositionHandoff({
       onAttachDocs={attached.add}
       onDetachDoc={attached.remove}
       docProblem={attached.problem}
+      askTarget
+      areaRef={area}
+      chips={asked.chips}
+      overlay={asked.overlay}
+      onKeyDownFirst={asked.onKeyDownFirst}
+      onRefDrop={asked.onRefDrop}
+      // 有引用时占位词换成「问问这位…」那一类（F4b）
+      {...(asked.refs.length === 0 ? {} : { placeholderText: t('ask_ai.placeholder') })}
     />
   )
+  /** 点一个建议问题 = 直接问（带着引用）。 */
+  const askNow = (q: string): void => {
+    const context = asked.payload()
+    asked.clear()
+    clearError()
+    setStarted(true)
+    open.mutate({
+      title: q.slice(0, TASK_TEXT_MAX),
+      model,
+      ...(effort === undefined ? {} : { effort }),
+      files: [],
+      ...pin,
+      ...(context === undefined ? {} : { context }),
+    })
+  }
 
   /*
    * WP437（Luoye 10-21）：对话框挪到**中栏底部居中**、悬浮在内容之上（`ComposerDock`）；这个组件放在页面内容的最后。
@@ -207,7 +249,12 @@ export function PositionHandoff({
             WP372（决策 1019）：快捷按钮按状态现出（看新报表 / 等你的对话 / 去连接 + 这个岗位自己的提示），
             最多 6 个，点了直接打开那张卡或直接发出去；开始对话后收起。
           */}
-          {started ? null : <LandingActions actions={actions} />}
+          {/* WP504：有引用时上面换成按这几张卡出的建议问题（F4b），没有才是这一页的快捷按钮 */}
+          {asked.refs.length > 0 ? (
+            <AskSuggestions items={asked.suggestions} onPick={askNow} />
+          ) : started ? null : (
+            <LandingActions actions={actions} />
+          )}
           {/* WP259：没发出去就在框上说一句（含服务端那句话），不再静默 */}
           <HandoffError error={error} />
         </>

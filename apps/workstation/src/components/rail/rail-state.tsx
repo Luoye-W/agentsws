@@ -73,7 +73,8 @@ export const DEFAULT_OPEN_CARDS: readonly string[] = ['conversations', 'plans']
 
 /** 某张卡这会儿展开着吗（显式记过的为准，没记过按默认）。 */
 export function cardOpen(flags: Record<string, boolean>, id: string): boolean {
-  return flags[id] ?? DEFAULT_OPEN_CARDS.includes(id)
+  // WP504：库卡注册时自己说默认展开
+  return flags[id] ?? (DEFAULT_OPEN_CARDS.includes(id) || railCard(id)?.defaultOpen === true)
 }
 
 export interface RailState {

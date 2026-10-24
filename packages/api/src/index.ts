@@ -551,6 +551,8 @@ export type {
   KolMailStageEstimateView,
   KolMailStageRunView,
   KolMergeSuggestionView,
+  KolOutreachBatchSendView,
+  KolOutreachBatchView,
   KolOutreachDefaultsView,
   KolOutreachView,
   KolPort,

@@ -33,7 +33,7 @@ import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
-import { AttachedFileBody } from './free-chat.js'
+import { AttachedFileBody, ContextRefBody } from './free-chat.js'
 
 /** 与工作台面同一个准入：能读自己的队列就能看自己的岗位。 */
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
@@ -132,6 +132,8 @@ const OpenBody = z.object({
    * （抹口令、截断）记在事项那句话上，运行拿到「这句话 + 附件」。
    */
   files: z.array(AttachedFileBody).max(3).optional(),
+  /** WP504（决策 1775 A）：第三栏「问 AI」引用的卡（结构化摘要，最多 10 张），记在这句话上交给模型。 */
+  context: z.array(ContextRefBody).max(10).optional(),
 })
 
 const PromoteBody = z.object({

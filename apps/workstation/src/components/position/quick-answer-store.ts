@@ -10,7 +10,12 @@
  * 同一时间只留最近一个（Luoye：只留最近一个回答）；只在内存里——刷新后到岗位「记录」里找。
  */
 import { useSyncExternalStore } from 'react'
-import { type OpenAtPositionData, openMatterAtPosition, type PositionAnswerData } from '@/lib/api'
+import {
+  type ContextRefInput,
+  type OpenAtPositionData,
+  openMatterAtPosition,
+  type PositionAnswerData,
+} from '@/lib/api'
 import { handoffInput } from '@/lib/handoff'
 
 export interface QuickAnswerEntry {
@@ -77,13 +82,16 @@ export async function askAtPosition(input: {
   /** 已经拆好的描述（⌘K 从随便聊带过来的上下文）：给了就用 `text` 当标题、原样交，不再拆 */
   summary?: string
   role_id?: string
-  mode?: 'quick'
+  /** WP504：带着第三栏引用的卡问 = 一段会话（`chat`，回答在中栏线程里，1775 A）。 */
+  mode?: 'quick' | 'chat'
   /** WP342：输入框左下角选的 AI（记在开出来的事项上；不给 = 品牌默认） */
   model?: string
   /** WP370：连同 `model` 一起选的思考程度 */
   effort?: string
   /** WP357：附上的资料（base64） */
   files?: { name: string; data: string }[]
+  /** WP504：第三栏「问 AI」引用的卡 */
+  context?: ContextRefInput[]
 }): Promise<QuickAnswerEntry | undefined> {
   seq += 1
   const nonce = seq
@@ -112,6 +120,9 @@ export async function askAtPosition(input: {
         ? {}
         : { model_effort: input.effort }),
       ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
+      ...(input.context === undefined || input.context.length === 0
+        ? {}
+        : { context: input.context }),
     })
     if (out.ambiguous && out.approval_item_id !== undefined)
       return settle({ ...base, status: 'choice', matter_id: out.matter.id, open: out })

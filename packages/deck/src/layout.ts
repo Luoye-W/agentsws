@@ -89,6 +89,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   daily_report: 'aftermath',
   // 一次 campaign 的产出是**一批人**，卡面问的是"这批人你认不认"
   kol_campaign: 'person',
+  // WP504：批量开发信——对外发出的一批信，卡面问「发不发」
+  kol_outreach_batch: 'outbound',
   // WP144：「让它在接下来 N 分钟操作这台电脑？」——一句话的是非题
   computer_use: 'policy',
   // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）同日报，不进队列（`NOT_A_CARD`）

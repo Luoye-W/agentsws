@@ -29,7 +29,11 @@ const FILTERS: Filter[] = ['all', 'generated', 'uploaded', 'external', 'picked',
 
 export const BRAND_ASSETS_KEY = ['brand-assets'] as const
 
-export function BrandAssetsPage(): ReactNode {
+/**
+ * WP504（决策 1779 A）：设计岗位第三栏的「素材」面板用的也是这一份（`embedded`：不画页标题，头在第三栏上）；
+ * 全局页 `/brand-assets` 照旧当总库。
+ */
+export function BrandAssetsPage({ embedded = false }: { embedded?: boolean } = {}): ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
   const [filter, setFilter] = useState<Filter>('all')
@@ -75,10 +79,12 @@ export function BrandAssetsPage(): ReactNode {
       data-testid="brand-assets-page"
     >
       <header className="flex items-center gap-2">
-        <h1 className="flex items-center gap-1 text-base font-semibold text-ws-ink">
-          {t('assets.title')}
-          <Hint text={t('assets.hint')} testId="brand-assets-hint" />
-        </h1>
+        {embedded ? null : (
+          <h1 className="flex items-center gap-1 text-base font-semibold text-ws-ink">
+            {t('assets.title')}
+            <Hint text={t('assets.hint')} testId="brand-assets-hint" />
+          </h1>
+        )}
         <Button
           size="sm"
           className="ml-auto gap-1.5"
