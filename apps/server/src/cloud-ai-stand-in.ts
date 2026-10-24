@@ -120,11 +120,10 @@ function demoDoneOf(asked: string): string {
 function positionsOf(system: string): string[] {
   const at = system.indexOf('用户的岗位')
   if (at < 0) return []
-  return system
-    .slice(at)
-    .split('\n')
-    .slice(1)
-    .filter((l) => l.startsWith('- '))
+  // 只认紧跟在「用户的岗位」后面那几行（后面的记忆、话题小结也是「- 」开头，别当成岗位名）
+  const lines = system.slice(at).split('\n').slice(1)
+  const end = lines.findIndex((l) => !l.startsWith('- '))
+  return (end < 0 ? lines : lines.slice(0, end))
     .map((l) => l.slice(2).split('：')[0]?.trim() ?? '')
     .filter((n) => n !== '' && n.length <= 20)
 }
