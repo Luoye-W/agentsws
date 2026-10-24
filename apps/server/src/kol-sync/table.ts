@@ -160,7 +160,10 @@ export function syncTableOf(
   const of = (re: RegExp) =>
     [...copied].reverse().find(([type, v]) => re.test(type) && v.trim() !== '')?.[1]
   const bit = of(/^text\/bitable/iu)
-  const plain = of(/^text\/plain/iu)
+  // 全是空行的表复制出来只有制表符和换行：照样是一张表
+  const plain = [...copied]
+    .reverse()
+    .find(([type, v]) => /^text\/plain/iu.test(type) && v !== '')?.[1]
   const cols = bit === undefined ? undefined : bitableColumns(bit)
   const grid = plain === undefined ? [] : parseTsvKeep(plain)
   const k: SyncTableKind = kind ?? (cols === undefined ? 'sheet' : 'bitable')

@@ -18383,6 +18383,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'kol_outreach_batch' ||
           // WP416：同一人合并卡选了 → 真合 / 记「不是同一个人」（落盘）
           isKolMergeCard(out) ||
+          // WP489：导入红人表 / 表格与邮件对不上 / 用邮件更新阶段 / 没对上红人的往来（WP509 发现这一跳原来没接上）
+          // WP509：同步设置卡（开始同步 / 不用）
+          isKolSheetCard(out) ||
           // WP421：B2B 的卡被驳回（回写草稿 / 询盘 / 交接单）
           isB2bRejected(out)
         ) {
@@ -18396,6 +18399,18 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
       }
     },
   })
+}
+
+/** WP489 / WP509：红人表格那几张卡（导入、对不上、邮件判阶段、同步设置）——都是系统提议的 `policy_change`。 */
+const KOL_SHEET_PROPOSERS = new Set([
+  'kol-import',
+  'kol-stage',
+  'kol-mail-stage',
+  'kol-mail-match',
+  'kol-sync',
+])
+function isKolSheetCard(item: ApprovalItem): boolean {
+  return item.kind === 'policy_change' && KOL_SHEET_PROPOSERS.has(item.proposer.id)
 }
 
 /** WP421：B2B 库 / 业务那几种账本卡被驳回了（驳回与「改一下」都走这里）。 */

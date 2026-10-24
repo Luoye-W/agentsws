@@ -259,7 +259,8 @@ const readOnce = async (click) => {
   // 全选之后 Esc 只是取消全选；之后要再点一格才有「选中的格子」
   await press("Escape");
   const of = (re) => [...got].reverse().find(([t, v]) => re.test(t) && String(v).trim() !== "");
-  const plain = of(/^text\/plain/i);
+  // 全是空行的表复制出来只有制表符和换行：不能当「没复制到」
+  const plain = [...got].reverse().find(([t, v]) => /^text\/plain/i.test(t) && String(v) !== "");
   const bit = of(/^text\/bitable/i);
   let fields;
   if (bit) {
