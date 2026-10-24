@@ -161,6 +161,8 @@ export interface AdExperimentEntry {
   memory_id?: string
   at: Iso8601
   updated_at?: Iso8601
+  /** WP452：实验设计那一份（样本量、时长、护栏、什么算赢）；读结果时照它判。 */
+  plan?: import('./ads-skills.js').AdsExperimentPlan
 }
 
 /** 上传表里的一个文件（给人下载的那一份；由 WP314 的 `buildAdUploadBundle` 生成）。 */

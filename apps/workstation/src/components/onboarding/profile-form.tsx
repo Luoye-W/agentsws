@@ -65,6 +65,8 @@ export interface ProfileDraft {
   currency: string
   /** WP335（决策 659）：品类（品牌分析时 AI 填、这里可改；GEO 策略按它认品类）。 */
   category: string
+  /** WP452：卖的是实物 / App / 别的数字产品（空 = 不知道；只有投放与 SEO 的建议读它）。 */
+  offering?: '' | 'physical' | 'app' | 'digital'
   /** WP346（决策 872）：第二版那几格（定位 / 子品类 / 价格带 / 人群 / 关键词 / 竞品）。 */
   insights: InsightValues
   /** WP346：人点了「对」的那几格（存的时候一起发，拿掉「AI 建议」标）。 */
@@ -159,6 +161,7 @@ export function ProfileForm({
     email_service: profile?.email_service ?? '',
     currency: profile?.currency ?? DEFAULT_BRAND_CURRENCY,
     category: profile?.category ?? '',
+    offering: profile?.offering ?? '',
     insights: insightsOfProfile(profile),
     confirm_fields: [],
   })
@@ -537,6 +540,30 @@ export function ProfileForm({
                     setDraft({ ...draft, category: e.target.value })
                   }}
                 />
+              </div>
+              {/* WP452（决策 1399）：卖的是什么——可不填；只有投放与 SEO 的建议读它（Apple 搜索广告只推 App） */}
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="brand-offering" className="flex items-center gap-1">
+                  {t('onboarding.brand.offering')}
+                  <Hint text={t('onboarding.brand.offering.hint')} />
+                </Label>
+                <select
+                  id="brand-offering"
+                  data-testid="brand-offering"
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={draft.offering ?? ''}
+                  onChange={(e) => {
+                    setDraft({
+                      ...draft,
+                      offering: e.target.value as NonNullable<ProfileDraft['offering']>,
+                    })
+                  }}
+                >
+                  <option value="">{t('onboarding.brand.offering.unknown')}</option>
+                  <option value="physical">{t('onboarding.brand.offering.physical')}</option>
+                  <option value="app">{t('onboarding.brand.offering.app')}</option>
+                  <option value="digital">{t('onboarding.brand.offering.digital')}</option>
+                </select>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">

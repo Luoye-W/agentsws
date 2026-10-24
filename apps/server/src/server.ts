@@ -15,6 +15,7 @@ import {
   adDesignPrompt,
   breakEvenView,
   buildAdUploadBundle,
+  fatigueThresholdsOf,
   resolveGrossMargin,
   summarizeLineCompare,
 } from '@agentsws/ads-core'
@@ -121,6 +122,7 @@ import type {
   RoleId,
   RunRequest,
   SearchDataPort,
+  SeoPublishedPost,
   SkillTier,
   StartRun,
   StorefrontPlatform,
@@ -140,6 +142,7 @@ import {
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
   BRAND_INTAKE_WEB_SEARCH_MAX,
+  brandHasApp,
   brandNameOf,
   builtinConnectNeed,
   CONTENT_CHECK_INTERVAL_MS,
@@ -239,7 +242,12 @@ import {
   ruleFromFact,
   type SearchConsolePort,
 } from '@agentsws/seo-core'
-import { type RedirectProbe, siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
+import {
+  crawlerReadableText,
+  type RedirectProbe,
+  siteDesignPrompt,
+  themeDesignVariables,
+} from '@agentsws/site-core'
 import {
   CONTENT_REJECT_TEXT,
   createSkills,
@@ -283,6 +291,12 @@ import { createAdsActionsService } from './ads-actions/service.js'
 import { composeIntakes, createAdsExportIntake } from './ads-data/export-intake.js'
 import { exportDeckData } from './ads-data/export-view.js'
 import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
+import {
+  adsSkillDeckData,
+  experimentReadoutCard,
+  experimentResultText,
+  fatigueRound,
+} from './ads-data/skill-wiring.js'
 import { autoStopLoss, dayBefore, yesterdayBasis } from './ads-data/stop-loss.js'
 import { createAdsDataStore } from './ads-data/store.js'
 import { ADS_BACKEND_NEED_KIND, createAdsDataToolExecutor } from './ads-data/tools.js'
@@ -629,6 +643,9 @@ import {
   kolSandboxIntercept,
 } from './kol-sandbox.js'
 import { CONTACT_SECRET_FIELD, contactSecretId, createKolService } from './kol-service.js'
+import { runEgoSheetWrite } from './kol-sync/runner.js'
+import { createKolSync, type KolSync, type KolSyncEgo } from './kol-sync/service.js'
+import { createKolSyncStore } from './kol-sync/store.js'
 import { createKolToolExecutor, observeViaIngest } from './kol-tools.js'
 import {
   canEditMemory,
@@ -922,10 +939,12 @@ import {
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { driftAlertCards } from './seo-drift-alerts.js'
+import { createSeoPlan, type SeoPlanDataPort } from './seo-plan.js'
 import {
   claimRuleCard,
   createSeoService,
   pickRoleHolder,
+  type SeoBrandInfo,
   type SeoServiceAssembly,
 } from './seo-service.js'
 import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
@@ -1459,6 +1478,14 @@ export interface ServerOptions {
    */
   searchDataFor?: (workspace_id: WorkspaceId) => SearchDataPort | undefined
   /**
+   * WP450：换掉主题簇 / 外链体检读的官方数据接口、编辑日历读的「最近发布」（测试与截图脚本用替身）。
+   * 不给 = 这个品牌的云客户端（没关联账号 = 没有）与账本里施行了的 `publish_post`。生产路径从不传它们。
+   */
+  seoPlanDataFor?: (workspace_id: WorkspaceId) => SeoPlanDataPort | undefined
+  seoPublishedFor?: (
+    workspace_id: WorkspaceId,
+  ) => Promise<(SeoPublishedPost & { body?: string })[]> | undefined
+  /**
    * WP25 的三个测试注入点。生产路径一个都不传，各自走真实现：Shopify 换令牌用
    * `globalThis.fetch`、MX 用 `node:dns/promises`、模型试跑用网关自己的 fetch。
    *
@@ -1774,6 +1801,11 @@ export interface ServerOptions {
    * 生产不传，按浏览器设置探本机的 `ego-browser`。
    */
   egoWriter?: EgoWriter & { wanted?(): boolean }
+  /**
+   * WP509：红人同步到飞书表的那只 ego 手（读表头 + 写）。测试 / 截图塞一个跑本机假飞书页的假 ego；
+   * 生产不传，读走 WP493 只读通道、写走 `runEgoSheetWrite`（同样按浏览器设置探本机的 `ego-browser`）。
+   */
+  kolSheetEgo?: KolSyncEgo
   /**
    * WP386：信息监控拉 feed 的那一跳（测试 / 演示塞录好的 feed，不联网）。生产不传，走全局 fetch。
    */
@@ -2638,6 +2670,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     probe: (path) => probeEgoConnection(path),
   })
   const egoSheetReader = createEgoSheetReader({ ego: egoReader })
+  /*
+   * WP509：红人同步到飞书表的 ego 那只手——读表头走只读通道（`egoReader`，一次一趟），写走 `runEgoSheetWrite`
+   * （整台机器排一条队：同一时刻只有一趟在用户的 ego 里写表）。写要「发帖那一路」开着（`AGENTSWS_EGO_WRITE=off` 整条关）。
+   */
+  let kolSheetQueue: Promise<unknown> = Promise.resolve()
+  const kolSheetEgo: KolSyncEgo = options.kolSheetEgo ?? {
+    available: () =>
+      env.AGENTSWS_EGO_WRITE !== 'off' &&
+      browserSettings.egoWritePath() !== undefined &&
+      egoReadPath() !== undefined,
+    read: (call) => egoReader.run(call),
+    write: (call) => {
+      const task = async () => {
+        const egoPath =
+          env.AGENTSWS_EGO_WRITE === 'off' ? undefined : browserSettings.egoWritePath()
+        if (egoPath === undefined)
+          return {
+            state: 'unavailable' as const,
+            why: 'ego 没装好或没选用',
+            duration_ms: 0,
+            ops: [],
+          }
+        return runEgoSheetWrite({ egoPath, call })
+      }
+      const next = kolSheetQueue.then(task, task)
+      kolSheetQueue = next.catch(() => undefined)
+      return next
+    },
+  }
   /**
    * WP496：ego 路采集红人——插件同一套采集器 + 插件同一个入口（`extensionPortOf` 按会话里的品牌分派；
    * 那一份在后面才建，这里取值函数只在真调工具时才取）。
@@ -5499,7 +5560,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             line_compare: summarizeLineCompare(ads.lineCompareRows()),
           }),
           // WP447：六个新平台（拖进来的报表）的账户概况与体检；托管实例没有看数据的库就不给
-          ...(adsData === undefined ? {} : exportDeckData(adsData)),
+          // WP452：体检十家都给（按品牌读清单、Apple 认品牌档案的「卖的是什么」）；保本线、素材疲劳、落地页核对的最近一次
+          ...(adsData === undefined
+            ? {}
+            : {
+                ...exportDeckData(adsData, {
+                  brand: ws,
+                  ...(() => {
+                    const has = brandHasApp(onboardingRef?.brandProfile(ws).offering)
+                    return has === undefined ? {} : { has_app: has }
+                  })(),
+                }),
+                ...adsSkillDeckData(adsData),
+              }),
         }
       },
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
@@ -6342,6 +6415,52 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 done: (id) => autoStopLossDone.get(id) === doneKey,
                 markDone: (id) => autoStopLossDone.set(id, doneKey),
               })
+              /*
+               * WP452（docs/109 §5.2 #16）：同一轮顺带看素材疲劳——只给建议与换素材需求单，不自动换。
+               * 门槛读职责 yml 的 `thresholds.fatigue_*`（起步值，可改）；`fatigue_auto_request: 0` = 只给建议不下单。
+               */
+              const thresholds = roles.roles.get(holder.role_id)?.thresholds
+              let maxRequests = 5
+              try {
+                const cap = roles
+                  .effectiveConfig(holder.id)
+                  .actions.find((x) => x.id === 'request_design')?.mandate
+                  .caps?.max_design_requests_per_day
+                maxRequests = typeof cap === 'number' ? cap : 5
+              } catch {
+                maxRequests = 5
+              }
+              const designActor = {
+                workspace_id: ws,
+                person_id: holder.person_id,
+                assignment_id: holder.id,
+                role_id: holder.role_id,
+              } as never
+              await fatigueRound({
+                platform,
+                rows: d.rows({
+                  since: new Date(Date.parse(`${d.today()}T00:00:00Z`) - 30 * 86_400_000)
+                    .toISOString()
+                    .slice(0, 10),
+                  until: d.today(),
+                  platform,
+                  levels: ['ad'],
+                }),
+                today: d.today(),
+                thresholds: fatigueThresholdsOf(thresholds),
+                autoRequest: (thresholds?.fatigue_auto_request ?? 1) !== 0,
+                maxRequests,
+                requestDesign: async (need) =>
+                  (
+                    await designService.port.createRequest(designActor, {
+                      title: need.title,
+                      need: need.need,
+                      spec_ids: [],
+                    })
+                  ).request.id,
+                getState: (k) => d.getState?.(k),
+                setState: (k, v) => d.setState?.(k, v),
+              }).catch(() => [])
             },
             seedDailyReport: () =>
               seedAdsDailyReport({
@@ -6366,6 +6485,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 卡给拖表的那个人（用他在红人岗位上的那条分配）。
      */
     const kolImportLate: { current?: KolImportAssembly } = {}
+    /** WP509：红人同步到飞书表（在下面才建；工具只在真调的那一刻取）。 */
+    const kolSheetSyncLate: { current?: KolSync } = {}
     const kolSheetIntake = createKolSheetIntake({
       importer: () => kolImportLate.current,
       actorOf: (person_id) => {
@@ -7161,6 +7282,59 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const rbOptions = options.readonlyBrowser
     // WP228（Luoye 10-05）：托管实例（云上那份）不装——没有浏览器，这一路停用、连接页那一行不显示
     const hostedInstance = hostedBoot !== undefined
+    /**
+     * WP452（docs/109 §5.2 #15）：广告落地页抓两份——不开 JS 的原始页与开 JS 渲染后的那份（复用 WP381 网站体检那一口：
+     * 同一个抓取替身、同一个渲染口；托管实例没有浏览器就只看原始页）。换成「读得到的文字」再交给 ads-core 比。
+     */
+    const adsLandingPage = async (
+      url: string,
+    ): Promise<{ raw?: string; rendered?: string; note?: string }> => {
+      const doFetch =
+        options.siteHealthFetch ?? options.brandIntakeFetch ?? (globalThis.fetch as never)
+      const page = await fetchPage(doFetch, url).catch(() => undefined)
+      if (page === undefined || !page.ok) return { note: page?.reason ?? '落地页没抓到。' }
+      const out: { raw?: string; rendered?: string; note?: string } = {
+        raw: crawlerReadableText(page.html),
+      }
+      const renderer =
+        options.siteHealthRenderer === false || hostedInstance
+          ? undefined
+          : (options.siteHealthRenderer ??
+            createChromeRenderer({ executable: () => browserSettings.get().executable_path }))
+      if (renderer === undefined) return { ...out, note: '这台没有浏览器，只看了不开 JS 的那份。' }
+      try {
+        const host = new URL(url).hostname
+        const html = (await renderer.render([url], [host])).get(url)
+        if (html !== undefined) out.rendered = crawlerReadableText(html)
+        else out.note = '开 JS 那份没渲染出来，只看了原始页。'
+      } catch {
+        out.note = '开 JS 那份没渲染出来，只看了原始页。'
+      }
+      return out
+    }
+    /** WP452：对不上的交给谁就给谁开一件事（网站运营 `dtc.store` / 投放这条自己）；没人担回 `undefined`。 */
+    const adsOpenMatter = async (input: {
+      role_id: string
+      title: string
+      text: string
+    }): Promise<{ matter_id: string } | undefined> => {
+      const holder = roles.assignments
+        .listByWorkspace(ws)
+        .find((a) => a.revoked_at === undefined && a.role_id === input.role_id)
+      if (holder === undefined) return undefined
+      const port = await positionPortFor(ws)
+      const out = await port.open(
+        { workspace_id: ws, person_id: holder.person_id, assignment_id: holder.id },
+        holder.id,
+        {
+          ...fitTaskTitle({ title: input.title, summary: input.text }),
+          role_id: holder.role_id,
+          mode: 'task',
+          detach: true,
+        },
+      )
+      return { matter_id: out.matter.id }
+    }
     // WP246：取数路线的小账（设置 + 每级最近一次结果），每品牌一份
     const readStore = createReadRoutesStore(dir)
     const {
@@ -7610,6 +7784,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               workspace_id: ws,
               port: () => kolService.port,
               importer: () => kolImportLate.current,
+              // WP509：「把红人同步到我这张飞书表 <链接>」
+              sync: () => kolSheetSyncLate.current,
               now: () => clock.now(),
               // WP346（决策 872）：模型没给关键词时按品牌档案里的品类关键词搜
               brandQuery: () => brandSearchQuery(onboardingRef?.brandProfile(ws) ?? {}),
@@ -7803,6 +7979,42 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 } catch {
                   return {}
                 }
+              },
+              // WP452（决策 1399）：品牌档案「卖的是什么」→ Apple 体检有没有 App
+              hasApp: () => brandHasApp(onboardingRef?.brandProfile(ws).offering),
+              // WP452：体检按品牌读清单、保本线、落地页一致性、实验设计与读结果
+              skills: {
+                brand: () => ws,
+                grossMargin: () => resolveGrossMargin(economics.margins())?.margin_pct,
+                landingPage: (url) => adsLandingPage(url),
+                openMatter: (input) => adsOpenMatter(input),
+                experiments: {
+                  add: (req, input) =>
+                    Promise.resolve(
+                      adCreativeService.port.addExperiment(
+                        {
+                          workspace_id: req.workspace_id,
+                          person_id: req.actor.person_id,
+                          assignment_id: req.actor.assignment_id,
+                          role_id: req.actor.role_id,
+                        } as never,
+                        {
+                          hypothesis: input.hypothesis,
+                          change: input.change,
+                          ...(input.platform === 'google' || input.platform === 'meta'
+                            ? { platform: input.platform }
+                            : {}),
+                          plan: input.plan as never,
+                        },
+                      ),
+                    ),
+                  get: (_req, id) => ads.experiment(id) ?? undefined,
+                },
+                readoutCard: async (req, payload) => {
+                  const item = await approvals.create(experimentReadoutCard(req, payload) as never)
+                  return item.state === 'blocked' ? undefined : { id: item.id }
+                },
+                now: () => clock.now(),
               },
             }),
             ownerTools: createOwnerToolExecutor({
@@ -8407,6 +8619,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             pageSpeed: options.siteHealthPageSpeed ?? pageSpeedReader(globalThis.fetch as never),
           }),
       handoff: (input) => siteHandoff(input),
+      // WP450：llms.txt 里写的店名与一句话介绍
+      llmsBrand: async () => {
+        const b = await seoBrandInfo()
+        return { name: b.name, ...(b.one_liner === undefined ? {} : { summary: b.one_liner }) }
+      },
       renderer: () =>
         options.siteHealthRenderer === false || hostedInstance
           ? undefined
@@ -8448,6 +8665,52 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           payload,
         }),
     })
+    // WP450：SEO 与 GEO 的品牌信息（主题簇 / 外链 / llms.txt / 社媒稿那一层也读它）
+    const seoBrandInfo = async (): Promise<SeoBrandInfo> => {
+      const w = await identity.getWorkspace(ws)
+      const domain = w?.profile?.domain?.trim()
+      return {
+        name: w?.brand?.name ?? w?.name ?? ws,
+        language: 'en' as const,
+        domains: domain === undefined || domain === '' ? [] : [domain],
+        shop_host: domain === undefined || domain === '' ? 'shop.invalid' : domain,
+        currency: w?.base_currency ?? workData.base_currency,
+        country: 'us',
+        // WP159：品牌分析确认时写进档案的目标市场（违规宣称规则按它开市场组）
+        ...(() => {
+          const markets = onboardingRef?.brandProfile(ws).markets
+          return markets === undefined ? {} : { markets }
+        })(),
+        // WP169：档案里按市场覆盖的探测语言（没覆盖过就按每个市场的第一语言）
+        ...(() => {
+          const market_languages = onboardingRef?.brandProfile(ws).market_languages
+          return market_languages === undefined ? {} : { market_languages }
+        })(),
+        // WP321：品牌一句话介绍（AI 给 GEO 策略时认品类用）
+        ...(() => {
+          const one_liner = onboardingRef?.brandProfile(ws).one_liner
+          return one_liner === undefined || one_liner.trim() === '' ? {} : { one_liner }
+        })(),
+        // WP335（决策 659）：品牌档案里的「品类」（AI 给 GEO 策略时直接读它，不再从一句话里猜）
+        ...(() => {
+          const category = onboardingRef?.brandProfile(ws).category
+          return category === undefined || category.trim() === '' ? {} : { category }
+        })(),
+        // WP346（决策 872）：品牌档案里的人群 / 关键词 / 竞品（GEO 建议先读它们）
+        ...(() => {
+          const p = onboardingRef?.brandProfile(ws)
+          return {
+            ...(p?.audience === undefined ? {} : { audience: p.audience }),
+            ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
+            ...(p?.competitors === undefined ? {} : { competitors: p.competitors }),
+            // WP380：官方事实表要的子品类、价格带、定位
+            ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+            ...(p?.price_band === undefined ? {} : { price_band: p.price_band }),
+            ...(p?.positioning === undefined ? {} : { positioning: p.positioning }),
+          }
+        })(),
+      }
+    }
     const seoService = createSeoService({
       workspace_id: ws,
       // WP381：周报里和引用数并排的 AI 来源流量（实测）
@@ -8499,51 +8762,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             currency: o.currency,
           }))
       },
-      brand: async () => {
-        const w = await identity.getWorkspace(ws)
-        const domain = w?.profile?.domain?.trim()
-        return {
-          name: w?.brand?.name ?? w?.name ?? ws,
-          language: 'en' as const,
-          domains: domain === undefined || domain === '' ? [] : [domain],
-          shop_host: domain === undefined || domain === '' ? 'shop.invalid' : domain,
-          currency: w?.base_currency ?? workData.base_currency,
-          country: 'us',
-          // WP159：品牌分析确认时写进档案的目标市场（违规宣称规则按它开市场组）
-          ...(() => {
-            const markets = onboardingRef?.brandProfile(ws).markets
-            return markets === undefined ? {} : { markets }
-          })(),
-          // WP169：档案里按市场覆盖的探测语言（没覆盖过就按每个市场的第一语言）
-          ...(() => {
-            const market_languages = onboardingRef?.brandProfile(ws).market_languages
-            return market_languages === undefined ? {} : { market_languages }
-          })(),
-          // WP321：品牌一句话介绍（AI 给 GEO 策略时认品类用）
-          ...(() => {
-            const one_liner = onboardingRef?.brandProfile(ws).one_liner
-            return one_liner === undefined || one_liner.trim() === '' ? {} : { one_liner }
-          })(),
-          // WP335（决策 659）：品牌档案里的「品类」（AI 给 GEO 策略时直接读它，不再从一句话里猜）
-          ...(() => {
-            const category = onboardingRef?.brandProfile(ws).category
-            return category === undefined || category.trim() === '' ? {} : { category }
-          })(),
-          // WP346（决策 872）：品牌档案里的人群 / 关键词 / 竞品（GEO 建议先读它们）
-          ...(() => {
-            const p = onboardingRef?.brandProfile(ws)
-            return {
-              ...(p?.audience === undefined ? {} : { audience: p.audience }),
-              ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
-              ...(p?.competitors === undefined ? {} : { competitors: p.competitors }),
-              // WP380：官方事实表要的子品类、价格带、定位
-              ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
-              ...(p?.price_band === undefined ? {} : { price_band: p.price_band }),
-              ...(p?.positioning === undefined ? {} : { positioning: p.positioning }),
-            }
-          })(),
-        }
-      },
+      brand: seoBrandInfo,
       knowledge: async (actor) => {
         const config = roles.effectiveConfig(actor.assignment_id)
         // WP506：停用的那几条不当规则用
@@ -8712,6 +8931,78 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
     seoLate.current = seoService
+    /*
+     * WP450（docs/109 §5.2 #9–11、17）：主题簇与编辑日历、外链体检、llms.txt、改写成社媒稿。
+     * 和 SEO 与 GEO 共用担当人、搜索数据口与品牌信息；官方数据接口没关联账号时给 undefined（外链体检照实说）。
+     */
+    const seoPlan = createSeoPlan({
+      workspace_id: ws,
+      clock,
+      approvals,
+      holderOf,
+      work: { createMatter: (input) => work.createMatter(input) },
+      searchConsole: searchConsoleOf,
+      searchData: () => options.searchDataFor?.(ws) ?? searchData,
+      dataService: () =>
+        options.seoPlanDataFor?.(ws) ??
+        (ownCloud.linked() ? createDataService(ownCloud) : undefined),
+      brand: seoBrandInfo,
+      competitors: async () =>
+        ((await seoService.geoHistory()).watch()?.competitors ?? []).flatMap((c) => c.domains),
+      refreshCandidates: () => seoService.refreshCandidates(),
+      publishedPosts: async () => {
+        const injected = options.seoPublishedFor?.(ws)
+        if (injected !== undefined) return injected
+        const changes = await txn.ledger.list({
+          workspace_id: ws,
+          kind: 'publish_post',
+          status: ['applied'],
+        })
+        const domain = (await seoBrandInfo()).domains[0]
+        return changes
+          .flatMap((c) => {
+            const after = (c.after ?? {}) as Record<string, unknown>
+            if (after.published !== true || typeof after.title !== 'string') return []
+            const handle = typeof after.handle === 'string' ? after.handle : undefined
+            const blog = typeof after.blog_handle === 'string' ? after.blog_handle : 'news'
+            const url =
+              typeof after.url === 'string'
+                ? after.url
+                : handle !== undefined && domain !== undefined
+                  ? `https://${domain}/blogs/${blog}/${handle}`
+                  : undefined
+            return [
+              {
+                change_id: c.id,
+                title: after.title,
+                published_at: c.apply?.at ?? c.updated_at,
+                ...(url === undefined ? {} : { url }),
+                ...(typeof after.body === 'string' ? { body: after.body } : {}),
+              },
+            ]
+          })
+          .sort((a, b) => b.published_at.localeCompare(a.published_at))
+      },
+      drafter: ({ actor, run_id }) => seoModel(actor, run_id),
+      siteUrls: () => siteHealth.sitemapUrls(),
+      llmsLive: () => siteHealth.latest()?.llms_txt,
+      perDay: () => {
+        const a = roles.roles.get('dtc.content')?.actions.find((x) => x.id === 'stage_publish_post')
+        const cap = a?.mandate.caps.max_posts_per_day
+        return typeof cap === 'number' ? cap : 2
+      },
+      event: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'seo_plan' },
+          subject: { type: 'seo_plan', id: ws },
+          correlation: { trace_id: `tr_seo_plan_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+      ...(dir === undefined ? {} : { dir }),
+    })
     /*
      * WP69（54 §1 / §3）岗位面：与这个品牌的 `Work` 绑在一起建（事项与 Run 都落在它里面）。
      *
@@ -10334,6 +10625,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }),
     })
     kolImportLate.current = kolImport
+    /*
+     * WP509（决策 1730 B、1811）：红人同步到用户自己的飞书表——经 ego（用户已登录的浏览器），不要飞书开发者应用。
+     * 本机档才有（ego 装在用户电脑上）；每分钟看一拍红人库，按「多久一次」攒成一批写。
+     */
+    const kolSheetSync =
+      hostedBoot !== undefined
+        ? undefined
+        : createKolSync({
+            workspace_id: ws,
+            store: createKolSyncStore(dir === undefined ? {} : { dbDir: dir }),
+            kol,
+            secrets: brandSecrets,
+            clock,
+            ...(txn.approvals === undefined ? {} : { approvals: txn.approvals }),
+            random,
+            ego: kolSheetEgo,
+            appendEvent,
+            tzOffsetMinutes: () => outboundTz.get(ws) ?? 0,
+          })
+    kolSheetSync?.start()
+    if (kolSheetSync !== undefined) kolSheetSyncLate.current = kolSheetSync
     const amazonOwnHolder = ():
       | { person_id: string; assignment_id: string; role_id: string }
       | undefined => {
@@ -11219,6 +11531,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kolSandbox,
       kolMail,
       kolImport,
+      ...(kolSheetSync === undefined ? {} : { kolSheetSync }),
       kolPublic,
       searchData,
       ...(webBrowser === undefined ? {} : { webBrowser }),
@@ -11233,6 +11546,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       b2bOutbound,
       b2bSales,
       seoService,
+      // WP450：主题簇与编辑日历、外链体检、llms.txt、改写成社媒稿
+      seoPlan,
       // WP381：网站 / 商品体检与 AI 来源流量
       siteHealth,
       // WP335：品牌分析认品类用的模型口（与内容与搜索同一个口）
@@ -11363,6 +11678,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         liveData?.close()
         connections.close()
         kol.close()
+        kolSheetSync?.close()
         b2b.close()
         // 云端红人库的同步账本也握着一个句柄（WP118）：跟着这个品牌一起关
         ownCloud.kolSync?.close()
@@ -11485,6 +11801,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP416：同一人合并卡——卡上选「合」= 面板上点「接受」；选「不是同一个人」/ 驳回 = 记下、不再提
     // WP489：导入红人表卡 / 表格与邮件对不上那张卡 / 用邮件更新阶段卡
     if (brand?.kolImport !== undefined && (await brand.kolImport.onDecided(item))) return
+    // WP509：「同步设置」卡——开始同步 / 不用（卡上改过的一并收下）
+    if (brand?.kolSheetSync !== undefined && (await brand.kolSheetSync.onDecided(item))) return
     if (isKolMergeCard(item)) {
       const choice = mergeChoiceOf(item)
       const id = (item.payload as { suggestion_id?: unknown }).suggestion_id
@@ -11521,6 +11839,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           { workspace_id: item.workspace_id, person_id: by, assignment_id, role_id: item.role_id },
           item.id,
         )
+      return
+    }
+    // WP452：广告实验「保留 / 停 / 再测」卡——选了哪个就把结论写回这笔实验（投放岗记忆那一条），不改任何广告
+    if (item.kind === 'ads_experiment_readout') {
+      const result = experimentResultText(item)
+      const id = (item.payload as { experiment_id?: unknown }).experiment_id
+      const by = item.decision?.by
+      if (result === undefined || typeof id !== 'string' || brand === undefined) return
+      await Promise.resolve(
+        brand.adCreativeService.port.updateExperiment(
+          {
+            workspace_id: item.workspace_id,
+            person_id: (by === undefined || by === 'mandate'
+              ? item.routing.recipients[0]?.person
+              : by) as PersonId,
+            assignment_id: item.proposer.assignment_id ?? '',
+            role_id: item.role_id,
+          } as never,
+          id,
+          { result },
+        ),
+      ).catch(() => undefined)
       return
     }
     // WP504（决策 1777 A）：批量开发信卡——批了按名单逐个提（每封不再出第二张卡）；没批就收掉「等你确认」
@@ -11567,6 +11907,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return
     }
     await brand?.seoService.onDecided(item)
+    // WP450：主题簇卡批了 → 排进编辑日历
+    await brand?.seoPlan.onDecided(item)
   }
   /*
    * WP215（52 §4 收口）：每个品牌一套后台。装在品牌容器**之前**——每个品牌装配时就要拿到
@@ -12247,7 +12589,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP154：内容与搜索（这个品牌的 Search Console、订单与问题清单）
     registerSeo(s, {
       daily: async () => {
-        const one = await (await of()).seoService.daily()
+        const b = await of()
+        const one = await b.seoService.daily()
+        // WP450：到日子的编辑日历开写作事项；外链体检到期（每月一次，可关）顺手跑。都不挡每日判断
+        await b.seoPlan.tickCalendar().catch(() => undefined)
+        await b.seoPlan.backlinkDue().catch(() => undefined)
         return {
           brands: 1,
           picks: one.picks,
@@ -16038,6 +16384,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             estimateMailStages: brand.kolImport.estimateMailStages,
             runMailStages: brand.kolImport.runMailStages,
           }),
+      // WP509：红人同步到表格（看 / 停 / 开 / 删 / 现在同步一次；配置在对话里）
+      ...(brand.kolSheetSync === undefined
+        ? {}
+        : {
+            syncs: () => (brand.kolSheetSync as KolSync).list(),
+            syncControl: (
+              _actor: unknown,
+              id: string,
+              action: 'pause' | 'resume' | 'run' | 'remove',
+            ) => (brand.kolSheetSync as KolSync).control(id, action),
+            syncLog: (_actor: unknown, id: string) => (brand.kolSheetSync as KolSync).log(id),
+          }),
       sandboxStatus: () => sandbox.status(),
       sandboxStart: (_actor: unknown, input: { channel: KolChannel }) => sandbox.start(input),
       sandboxAdvance: (_actor: unknown, input: { days: number }) => sandbox.advance(input),
@@ -16234,6 +16592,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   extensionOnboardingRef = extensionOnboarding
   const extensionPortOf = brandExtensionPort({
     store: extensionStore,
+    // WP509：插件「数据同步」那一格（这个品牌把红人同步到哪张表；没装同步 = 回「没配」）
+    syncStatusOf: async (ws) =>
+      (await brandModules.forWorkspace(ws)).kolSheetSync?.status() ?? {
+        feishu: false,
+        google_sheets: false,
+        configured: false,
+        setup_path: '/influencer/sync',
+        syncs: [],
+      },
     serviceOf: async (ws) => {
       const brand = await brandModules.forWorkspace(ws)
       return {
@@ -16342,6 +16709,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   }
   const seoPort: SeoPort = {
+    // WP450：编辑日历、出一组主题、外链体检、llms.txt、改写成社媒稿（请求人所在品牌）
+    calendar: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.calendarView(),
+    planClusters: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.planClusters(),
+    backlinks: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.backlinkView(),
+    setBacklinks: async (actor, patch) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.setBacklinkSettings(patch),
+    runBacklinks: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.backlinkAudit('manual'),
+    llmsTxt: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.llmsView(),
+    generateLlmsTxt: async (actor, input) => {
+      try {
+        return await (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.llmsGenerate(
+          input,
+        )
+      } catch (err) {
+        throw new ApiError('invalid_input', err instanceof Error ? err.message : String(err))
+      }
+    },
+    repurpose: async (actor, input) => {
+      try {
+        return await (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.repurpose({
+          ...(input.change_id === undefined ? {} : { change_id: input.change_id }),
+          ...(input.title === undefined ? {} : { title: input.title }),
+          ...(input.body === undefined ? {} : { body: input.body }),
+          ...(input.url === undefined ? {} : { url: input.url }),
+          ...(input.channels === undefined ? {} : { channels: input.channels }),
+        })
+      } catch (err) {
+        throw new ApiError('invalid_input', err instanceof Error ? err.message : String(err))
+      }
+    },
     geoQuestions: async (actor) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoView(),
     setGeoQuestions: async (actor, input) => {
@@ -18249,6 +18651,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
         const out = await target.decide(...args)
         if (
           out.kind === 'seo_topic' ||
+          // WP450：主题簇卡批了 → 排进编辑日历
+          out.kind === 'seo_cluster' ||
           out.kind === B2B_SENDER_CHOICE_KIND ||
           out.kind === 'inbound_dead_letter' ||
           // WP268：挑图卡 / 超额卡
@@ -18294,8 +18698,13 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'kol_campaign' ||
           // WP504：批量开发信卡批了 → 逐个提；没批 → 名单上的「等你确认」收掉
           out.kind === 'kol_outreach_batch' ||
+          // WP452：广告实验「保留 / 停 / 再测」卡选了 → 结论写回实验记忆
+          out.kind === 'ads_experiment_readout' ||
           // WP416：同一人合并卡选了 → 真合 / 记「不是同一个人」（落盘）
           isKolMergeCard(out) ||
+          // WP489：导入红人表 / 表格与邮件对不上 / 用邮件更新阶段 / 没对上红人的往来（WP509 发现这一跳原来没接上）
+          // WP509：同步设置卡（开始同步 / 不用）
+          isKolSheetCard(out) ||
           // WP421：B2B 的卡被驳回（回写草稿 / 询盘 / 交接单）
           isB2bRejected(out)
         ) {
@@ -18309,6 +18718,18 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
       }
     },
   })
+}
+
+/** WP489 / WP509：红人表格那几张卡（导入、对不上、邮件判阶段、同步设置）——都是系统提议的 `policy_change`。 */
+const KOL_SHEET_PROPOSERS = new Set([
+  'kol-import',
+  'kol-stage',
+  'kol-mail-stage',
+  'kol-mail-match',
+  'kol-sync',
+])
+function isKolSheetCard(item: ApprovalItem): boolean {
+  return item.kind === 'policy_change' && KOL_SHEET_PROPOSERS.has(item.proposer.id)
 }
 
 /** WP421：B2B 库 / 业务那几种账本卡被驳回了（驳回与「改一下」都走这里）。 */

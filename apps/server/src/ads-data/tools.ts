@@ -27,6 +27,7 @@ import { exportPlatformLabel } from './export-ingest.js'
 import { exportAudit, exportCampaigns, exportOverview } from './export-view.js'
 import { type AdsSort, queryAdsRows, resolveAdsWindow } from './query.js'
 import type { AdsDataService } from './service.js'
+import { type AdsSkillToolOptions, runAdsSkillTool } from './skill-tools.js'
 import { dayBefore, yesterdayBasis } from './stop-loss.js'
 import type { AdsDataPlatform } from './store.js'
 
@@ -45,6 +46,8 @@ export interface AdsDataToolsOptions {
   askConnect?(req: RunRequest, why: string): Promise<boolean>
   /** WP447：品牌有没有 App（Apple 那条体检用；品牌档案还没有这一格时不给）。 */
   hasApp?(): boolean | undefined
+  /** WP452：体检 / 保本线 / 落地页一致性 / 实验那几个工具要的宿主能力。 */
+  skills?: Omit<AdsSkillToolOptions, 'hasApp' | 'now'> & { now?(): string }
 }
 
 /** 连接卡上这一样的 kind（服务端复查认它：插件里连上了担着的那几家后台没有）。 */
@@ -196,6 +199,16 @@ export function createAdsDataToolExecutor(options: AdsDataToolsOptions): ToolExe
     if (!adsDataToolsFor(req.actor.role_id).includes(name))
       return { status: 'blocked', reason: '这条职责这一期只读，没有这个工具。' }
     const exportPlatform = adsPlatformOfRole(req.actor.role_id)?.id
+    // WP452：体检十家都给；保本线 / 落地页一致性 / 实验（职责给不给看 `adsDataToolsFor`）
+    if (exportPlatform !== undefined) {
+      const hasApp = options.hasApp?.()
+      const skill = await runAdsSkillTool(name, call.input, req, svc, exportPlatform, {
+        ...(options.skills ?? {}),
+        ...(hasApp === undefined ? {} : { hasApp: () => hasApp }),
+        now: options.skills?.now ?? (() => new Date().toISOString()),
+      })
+      if (skill !== undefined) return skill
+    }
     if (name === READ_ADS_EXPORT_TOOL || name === RUN_ADS_AUDIT_TOOL) {
       if (exportPlatform === undefined || !isExportPlatform(exportPlatform))
         return { status: 'blocked', reason: '这两个工具只给只读的新平台那几条职责。' }

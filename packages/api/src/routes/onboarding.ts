@@ -22,6 +22,7 @@ import type {
   BrandCompetitor,
   BrandInsightField,
   BrandKeywords,
+  BrandOffering,
   BrowserExtensionUse,
   MarketsSource,
   MaybePromise,
@@ -113,6 +114,8 @@ export interface WorkspaceProfileInput {
   currency?: string | undefined
   /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改）。不给 = 不改；给空串 = 清空。 */
   category?: string | undefined
+  /** WP452：卖的是实物 / App / 别的数字产品。不给 = 不改；给空串 = 清空（= 不知道）。 */
+  offering?: BrandOffering | '' | undefined
   /*
    * WP346（决策 872）：品牌档案第二版那几格。不给 = 不改；空串 / `null` / 空数组 = 清空。
    * 从 HTTP 来的值一律算人给的（拿掉「AI 建议」标）。
@@ -160,6 +163,8 @@ export interface WorkspaceProfileView {
   currency?: string
   /** WP335（决策 659）：品类（没写过就没有）。 */
   category?: string
+  /** WP452：卖的是实物 / App / 别的数字产品（没填过就没有 = 不知道）。 */
+  offering?: BrandOffering
   /** WP346：第二版那几格（没写过就没有）。 */
   subcategory?: string
   positioning?: string
@@ -650,6 +655,8 @@ const ProfileBody = z.object({
     .optional(),
   // WP335（决策 659）：品类。不给 = 不改；空串 = 清空
   category: z.string().max(80).optional(),
+  // WP452：卖的是实物 / App / 别的数字产品。不给 = 不改；空串 = 清空
+  offering: z.enum(['physical', 'app', 'digital', '']).optional(),
   // WP424：邮件营销用的哪一家。不给 = 不改；空串 = 清空
   email_service: z.string().max(60).optional(),
   // WP346（决策 872）：第二版那几格。不给 = 不改；空串 / null / 空数组 = 清空
@@ -825,6 +832,7 @@ export function onboardingRoutes(): Route[] {
             ...(input.support_email === undefined ? {} : { support_email: input.support_email }),
             ...(input.currency === undefined ? {} : { currency: input.currency }),
             ...(input.category === undefined ? {} : { category: input.category }),
+            ...(input.offering === undefined ? {} : { offering: input.offering }),
             ...(input.email_service === undefined ? {} : { email_service: input.email_service }),
             // WP346（决策 872）：第二版那几格 + 人点了「对」的那几格
             ...(input.subcategory === undefined ? {} : { subcategory: input.subcategory }),

@@ -12,6 +12,8 @@
  * 思路借 Aleyda Solis《AI Search Optimization Checklist》（aleydasolis.com），用我们自己的话写。
  */
 
+import type { LlmsTxtCheck } from './seo-plan.js'
+
 /** 一个 AI 爬虫是干什么的：进 AI 搜索 / 替用户临时打开 / 拿去训练模型。 */
 export type AiCrawlerPurpose = 'search' | 'user' | 'training'
 
@@ -177,6 +179,11 @@ export interface SiteHealthRun {
   chatgpt_shopping?: ChatGptShoppingAssessment
   /** WP448：技术体检（没收录、规范网址、跳转与死链、站点地图、hreflang、结构化数据、页面速度）。 */
   tech?: TechAuditResult
+  /**
+   * WP450：llms.txt 有没有、内容过不过时（和按店铺结构现生成的那份比：合集 / 政策页少了、写着已经没有的页）。
+   * 没知道网站 / 没抓成 = 不写（`notes` 里说）。
+   */
+  llms_txt?: LlmsTxtCheck
   /** 读不到的地方（人话）。 */
   notes: string[]
   /** 不一致清单派给了网站运营（开了一件事）。 */

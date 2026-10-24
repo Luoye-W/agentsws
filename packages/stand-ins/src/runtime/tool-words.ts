@@ -108,6 +108,13 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   list_design_requests: '设计需求单',
   get_brand_system: '品牌系统',
   request_design: '设计需求单',
+  // WP452：投放第二批技能
+  run_ads_audit: '账户体检',
+  read_ads_export: '广告报表',
+  calc_break_even: '保本线',
+  check_ad_landing: '广告与落地页核对',
+  design_ads_experiment: '实验设计',
+  read_ads_experiment: '「保留 / 停 / 再测」卡',
   // WP441：一句话写消息规则
   propose_message_rule: '「要建这条规则吗」卡',
   list_message_rules: '消息规则清单',

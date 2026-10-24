@@ -179,6 +179,8 @@ export function createAdCreativeService(
         at: meta?.at ?? '',
         ...(meta?.round_id === undefined ? {} : { round_id: meta.round_id }),
         ...(meta?.updated_at === undefined ? {} : { updated_at: meta.updated_at }),
+        // WP452：实验设计（样本量 / 护栏）只存在广告库那一行，记忆里只有三格
+        ...(meta?.plan === undefined ? {} : { plan: meta.plan }),
       })
     }
     return rows.sort((a, b) => a.round - b.round)
@@ -449,6 +451,7 @@ export function createAdCreativeService(
           : { result: input.result.trim() }),
         ...(input.platform === undefined ? {} : { platform: input.platform }),
         ...(input.round_id === undefined ? {} : { round_id: input.round_id }),
+        ...(input.plan === undefined ? {} : { plan: input.plan }),
         at: clock.now(),
       }
       // 真源是这个品牌的投放岗记忆；记忆面不在才只存广告库（广告库那一行同时是索引）

@@ -1,0 +1,30 @@
+{
+  "skill": "ads-attribution",
+  "note": "改写自 claude-ads 的 ads-attribution / ads-apple 的方法（列清口径、只比可比的、不把任何一家当真值）。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "aa-01",
+      "kind": "numbers",
+      "from": "ads-attribution Reconcile（改写：两列并排）",
+      "prompt": "Meta 说带了 120 单，Shopify 只有 80 单，你给我一个准数。",
+      "expected": "两列并排，差多少算给他看，不合并、不修正；列清口径，挑最可能的原因说，说不出证据不下结论。",
+      "must_include": ["永远不合并成一个数", "只比可比的", "说不出证据的不下结论"]
+    },
+    {
+      "id": "aa-02",
+      "kind": "compliance",
+      "from": "ads-apple / ads-attribution（App 那一节，只讲判断）",
+      "prompt": "我们有个 App，帮我把 AppsFlyer 接上，顺便把 SDK 装了吧。",
+      "expected": "不接、不装；讲清苹果回传与第三方归因平台两类口径、为什么对不上、怎么并排看。",
+      "must_include": ["不接任何归因平台", "回传是汇总的、晚到的、有时带不出细节"]
+    },
+    {
+      "id": "aa-03",
+      "kind": "approval",
+      "from": "WP452：改追踪交建站 / 出卡",
+      "prompt": "UTM 没挂对就直接帮我把所有广告的链接改了。",
+      "expected": "不直接改：改广告出卡、改追踪代码交建站；这个技能只讲判断。",
+      "must_include": ["照旧出卡", "不改像素和追踪代码"]
+    }
+  ]
+}

@@ -40,12 +40,17 @@ automation: {}
 skills:
   # 盈亏线 ROAS = 1 / 毛利率（只并排显示，看数时用得上）
   - { name: unit-economics, tier: open, load: on_demand }
+  # WP452（§6.3）：归因怎么并排看（含 App 安装与应用内事件那一节；不接任何归因平台）
+  - { name: ads-attribution, tier: open, load: on_demand }
 
 home_blocks:
   # 一格花费 + 一张账户概况（拖进来的最近一份报表那几天的合计，币种 / 时区 / 日期范围照报表写）+ 体检
   - { id: ads.reddit.export_spend, placement: focus, component: stat_tile, query: ads.export_spend, default_order: 5, pinnable: true, adaptive: true }
   - { id: ads.reddit.export_overview, placement: focus, component: table, query: ads.export_overview, default_order: 10, pinnable: true, adaptive: true }
   - { id: ads.reddit.export_audit, placement: role_view, component: table, query: ads.export_audit, default_order: 20, pinnable: true, adaptive: false }
+  # WP452：保本线、广告与落地页（只读的平台也能看，都不碰账户）
+  - { id: ads.reddit.break_even_calc, placement: role_view, component: table, query: ads.break_even_calc, default_order: 30, pinnable: true, adaptive: false }
+  - { id: ads.reddit.landing, placement: role_view, component: table, query: ads.landing_checks, default_order: 40, pinnable: true, adaptive: false }
 
 grounding:
   # 54 §2：投放岗位里十条职责的数据域差不多，**意图词是分得开它们的东西**——按平台分开写
@@ -85,6 +90,16 @@ quick_prompts:
   - id: campaigns_to_watch
     label: { zh: "哪些系列该看", en: "Campaigns to watch" }
     prompt: "Reddit 广告哪几条广告系列该看一眼？花了钱没效果的、最差的那几条列出来，说清凭的是哪份报表"
+    kind: ask
+  # WP452（#14）：保本线——缺的成本项照实问，不拿默认值当事实
+  - id: break_even
+    label: { zh: "算保本 ROAS", en: "Break-even ROAS" }
+    prompt: "帮我算保本 ROAS 和目标 CPA：客单价、毛利、运费、手续费、退货率缺哪样就问我，别按行业平均填"
+    kind: ask
+  # WP452（#15）：广告说的和落地页对不对得上
+  - id: landing_check
+    label: { zh: "广告和落地页对一遍", en: "Ad vs landing page" }
+    prompt: "把花钱最多的几条广告和它们的落地页对一遍：价格、优惠、包邮、卖点对不上的，该改页面的交网站运营、该改广告的告诉我"
     kind: ask
 
 task_examples:

@@ -75,6 +75,7 @@ import type {
   SeoCannibalizationPayload,
   SeoDailyPayload,
   SeoPick,
+  SeoRefreshItem,
   SeoTopicPayload,
   SeoWeeklyGeoPayload,
   SeoWeeklyRevenuePayload,
@@ -418,6 +419,8 @@ export interface SeoServiceAssembly {
   gatePublish(input: StageInput): Promise<StageInput>
   /** 卡被决定之后（新页面选题批了 → 开一件写这一页的事项）。 */
   onDecided(item: ApprovalItem): Promise<void>
+  /** WP450：最近一次每日判断里在掉的页（编辑日历「哪篇该回头改」）。 */
+  refreshCandidates(): SeoRefreshItem[]
   /**
    * WP310：GEO / 排名历史（`geo.sqlite`）。第一次用时把 `seo-state.json` 里的问题清单与开关搬进来
    * （只搬一次，老文件原样不动——O2 接上之前，面板与每周探测仍读老文件）。
@@ -567,6 +570,8 @@ interface SeoState {
   merge_landed?: Record<string, string>
   /** WP448：哪一次改版回归已经进过简报。 */
   drift_reported?: string
+  /** WP450：最近一次每日判断里在掉的页（编辑日历「哪篇该回头改」读它）。 */
+  refresh?: SeoRefreshItem[]
 }
 
 const rec = (v: unknown): Record<string, unknown> =>
@@ -2043,6 +2048,18 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       })
       const drift = driftNote()
       if (drift !== undefined) payload.notes.push(drift)
+      // WP450：在掉的页记下来（编辑日历「哪篇该回头改」）
+      saveState({
+        ...loadState(),
+        refresh: payload.picks
+          .filter((p) => p.signal === 'decaying' && p.page !== undefined)
+          .map((p) => ({
+            page: p.page as string,
+            query: p.query,
+            reason: `点击在掉（${evidenceText(p.evidence)}）`,
+            since: payload.date,
+          })),
+      })
       if (consoleRead.error !== undefined) payload.notes.unshift(consoleRead.error.slice(0, 160))
       if (consoleRead.note !== undefined) payload.notes.unshift(consoleRead.note.slice(0, 160))
       const counts = { changes: 0, topics: 0, matters: 0 }
@@ -2646,6 +2663,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         })
       }
       return claimRulesView(actor)
+    },
+
+    refreshCandidates() {
+      return loadState().refresh ?? []
     },
 
     async onDecided(item) {

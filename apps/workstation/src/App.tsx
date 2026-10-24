@@ -41,7 +41,7 @@ import { ASSISTANT_PATH, FreeChatPage, LegacyFreeChatRedirect } from '@/pages/fr
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 import { InProgressPage } from '@/pages/in-progress'
-import { InfluencerPage } from '@/pages/influencer'
+import { InfluencerPage, InfluencerSyncPage } from '@/pages/influencer'
 import { JoinByCodePage } from '@/pages/join-code'
 import { KnowledgePage } from '@/pages/knowledge'
 import { LoginPage } from '@/pages/login'
@@ -291,6 +291,8 @@ function Workspace(): ReactNode {
         */}
         <Route path="/influencer/creators" element={<InfluencerPage />} />
         <Route path="/influencer/setup" element={<InfluencerPage setup />} />
+        {/* WP509：插件「数据同步」→ 红人营销岗位，对话框预填「把红人同步到我的飞书表」 */}
+        <Route path="/influencer/sync" element={<InfluencerSyncPage />} />
         <Route
           path="/ui-kit"
           element={

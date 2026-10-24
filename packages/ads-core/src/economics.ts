@@ -17,6 +17,8 @@
  * 纯函数：无 IO、无时钟、无随机。
  */
 import type {
+  AdsBreakEvenInput,
+  AdsBreakEvenResult,
   AdsCaps,
   AdsLineCompareRow,
   AdsLineCompareView,
@@ -235,4 +237,82 @@ export function marginWaterfall(input: {
       margin_pct === undefined ? '' : `，毛利率 ${margin_pct}%`
     }`,
   }
+}
+
+/* ── WP452（docs/109 §5.2 #14）：盈亏平衡与目标（保本 ROAS / 目标 CPA） ─────────── */
+
+/**
+ * 一单扣掉货本、运费、手续费、退货之后，**还没算广告**时剩多少——广告最多花这么多不亏（保本 CPA），
+ * 保本 ROAS = 客单价 ÷ 这个数（平台报的转化金额是按售价算的，所以分子用客单价）。
+ *
+ * 退货按「退款全退、货不回收」算（最保守的那种）：剩下的 = 客单价 ×（1 − 退货率）− 货本 − 运费 − 手续费。
+ * 你的退货能回收的话，把能回收的那部分从货本里扣掉再填。
+ *
+ * **缺的照实问，不拿默认值当事实**：客单价与毛利率 / 货本缺一样就算不了（`computable: false`）；
+ * 运费、手续费、退货率没给的按 0 往下算，但列进 `missing`，卡上写「这几项没算」——和毛利瀑布一个口径。
+ * 只给毛利率、别的都没给时，保本 ROAS 就是 `breakEvenRoas`（1 ÷ 毛利率），两处一个数。
+ *
+ * 方法借鉴 AgriciDaniel/claude-ads（MIT）`skills/ads-math`：每个数都要指得出从哪来、不编缺的输入、
+ * 分母是 0 不藏（THIRD-PARTY-NOTICES）。
+ */
+export function breakEvenTargets(input: AdsBreakEvenInput): AdsBreakEvenResult {
+  const missing: (keyof AdsBreakEvenInput)[] = []
+  const has = (n: number | undefined): n is number => n !== undefined && Number.isFinite(n)
+  const aov = input.aov
+  const margin = isUsableMargin(input.gross_margin_pct) ? input.gross_margin_pct : undefined
+  if (!has(aov) || aov <= 0) missing.push('aov')
+  if (margin === undefined && !has(input.cogs)) missing.push('gross_margin_pct')
+  for (const k of ['shipping', 'payment_fee_pct', 'return_rate_pct'] as const)
+    if (!has(input[k])) missing.push(k)
+  if (!has(aov) || aov <= 0 || (margin === undefined && !has(input.cogs)))
+    return {
+      input,
+      missing,
+      computable: false,
+      formula: '',
+      note: '缺客单价或毛利率 / 货本：这两样有了才算得出来。',
+    }
+  const cogs = margin !== undefined ? round2(aov * (1 - margin / 100)) : (input.cogs as number)
+  const ret = has(input.return_rate_pct) ? input.return_rate_pct / 100 : 0
+  const ship = has(input.shipping) ? input.shipping : 0
+  const fee =
+    (has(input.payment_fee_pct) ? (aov * input.payment_fee_pct) / 100 : 0) +
+    (has(input.payment_fee_fixed) ? input.payment_fee_fixed : 0)
+  const contribution = round2(aov * (1 - ret) - cogs - ship - fee)
+  const parts = [
+    `${round2(aov)}${ret > 0 ? ` ×（1 − 退货 ${round2(ret * 100)}%）` : ''}`,
+    `货本 ${cogs}`,
+    ...(ship > 0 ? [`运费 ${round2(ship)}`] : []),
+    ...(fee > 0 ? [`手续费 ${round2(fee)}`] : []),
+  ]
+  const formula = `每单剩 = ${parts.join(' − ')} = ${contribution}`
+  if (contribution <= 0)
+    return {
+      input,
+      contribution,
+      contribution_pct: round2((contribution / aov) * 100),
+      missing,
+      computable: true,
+      formula,
+      note: '还没算广告就已经不赚钱了：广告花多少都是亏，先看价格或成本。',
+    }
+  const out: AdsBreakEvenResult = {
+    input,
+    contribution,
+    contribution_pct: round2((contribution / aov) * 100),
+    break_even_cpa: contribution,
+    break_even_roas: round2(aov / contribution),
+    missing,
+    computable: true,
+    formula: `${formula}；保本 CPA = ${contribution}，保本 ROAS = ${round2(aov)} ÷ ${contribution} = ${round2(aov / contribution)}`,
+  }
+  if (has(input.target_profit_pct)) {
+    const target_cpa = round2(contribution - (aov * input.target_profit_pct) / 100)
+    if (target_cpa > 0) {
+      out.target_cpa = target_cpa
+      out.target_roas = round2(aov / target_cpa)
+      out.formula += `；想留 ${input.target_profit_pct}% 利润：目标 CPA = ${target_cpa}，目标 ROAS = ${out.target_roas}`
+    } else out.note = `想留 ${input.target_profit_pct}% 的利润，每单剩的不够：广告一分钱都不能花。`
+  }
+  return out
 }

@@ -91,6 +91,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   kol_campaign: 'person',
   // WP504：批量开发信——对外发出的一批信，卡面问「发不发」
   kol_outreach_batch: 'outbound',
+  // WP452：广告实验读结果——三选一（保留 / 停 / 再测），卡上标建议
+  ads_experiment_readout: 'choice',
   // WP144：「让它在接下来 N 分钟操作这台电脑？」——一句话的是非题
   computer_use: 'policy',
   // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）同日报，不进队列（`NOT_A_CARD`）
@@ -99,6 +101,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   weekly_review: 'aftermath',
   // WP154：这个词写不写一页——一道是非题
   seo_topic: 'choice',
+  // WP450：一组主题（总页 + 分页 + 内链 + 排到哪天）——「改东西」家族：就这样 / 去掉几篇再批 / 不要
+  seo_cluster: 'change',
   system_alert: 'aftermath',
   digest: 'aftermath',
   // WP171（docs/84 §11.3）：改收款账户的红卡——信里的原话 + 为什么可疑，人去打电话核实

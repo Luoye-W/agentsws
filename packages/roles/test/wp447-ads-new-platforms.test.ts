@@ -55,11 +55,16 @@ describe('六条新平台职责', () => {
         'account_audit',
         'last_week',
         'campaigns_to_watch',
+        // WP452：保本线、广告与落地页（都不碰账户）
+        'break_even',
+        'landing_check',
       ])
       expect(role.home_blocks.map((b) => b.query)).toEqual([
         'ads.export_spend',
         'ads.export_overview',
         'ads.export_audit',
+        'ads.break_even_calc',
+        'ads.landing_checks',
       ])
       // 「你不负责」里写清：改广告这一期不做
       expect(role.persona.zh).toMatch(/你不负责：改广告（这一期只读/)

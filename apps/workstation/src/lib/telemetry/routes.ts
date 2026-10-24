@@ -47,6 +47,7 @@ export const ROUTE_TEMPLATES = [
   '/brand-assets',
   '/influencer/creators',
   '/influencer/setup',
+  '/influencer/sync',
   '/ui-kit',
 ] as const
 

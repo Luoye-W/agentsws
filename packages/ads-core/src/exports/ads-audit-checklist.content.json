@@ -1,0 +1,889 @@
+{
+  "$comment": [
+    "WP452（docs/109 §5.2 #12 / §6.2 / S7）：投放十个平台共用的账户体检清单——查什么、凭什么。开源基础版只带这一份冻结时的骨架；正式清单（带官方出处与核对日期）随「岗位更新」订阅按品牌覆盖这张表（readContentTable）。",
+    "platform = \"*\" 的几行十家都查；evidence.kind = export 是拿报表能判的（rule 是 audit.ts 里的判法），backend 是要人去后台那一页看一眼的（where）——没证据一律「未知」，不猜。",
+    "这里不写任何带日期的官方事实（门槛数字、某天起的新规矩）。正式清单里的行可带 source { title, url, checked_on }；needs_source: true 的行没有出处就不下结论（标未知）。",
+    "检查项结构与「没证据就标未知、没出处不下结论」的口径借鉴 AgriciDaniel/claude-ads（MIT）的 ads/references/*-audit.md，只借方法，见 THIRD-PARTY-NOTICES。"
+  ],
+  "table": "ads.audit_checklist",
+  "rows": [
+    {
+      "id": "all.fresh_data",
+      "platform": "*",
+      "check": "fresh_data",
+      "title": {
+        "zh": "数是不是新的",
+        "en": "Data is recent"
+      },
+      "evidence": {
+        "kind": "export",
+        "rule": "fresh_data"
+      }
+    },
+    {
+      "id": "all.currency_stated",
+      "platform": "*",
+      "check": "currency_stated",
+      "title": {
+        "zh": "报表写了币种",
+        "en": "Currency is stated"
+      },
+      "evidence": {
+        "kind": "export",
+        "rule": "currency_stated"
+      }
+    },
+    {
+      "id": "all.timezone_stated",
+      "platform": "*",
+      "check": "timezone_stated",
+      "title": {
+        "zh": "报表写了时区",
+        "en": "Time zone is stated"
+      },
+      "evidence": {
+        "kind": "export",
+        "rule": "timezone_stated"
+      }
+    },
+    {
+      "id": "all.conversions_tracked",
+      "platform": "*",
+      "check": "conversions_tracked",
+      "title": {
+        "zh": "花了钱有转化记录",
+        "en": "Spend has conversions recorded"
+      },
+      "evidence": {
+        "kind": "export",
+        "rule": "conversions_tracked"
+      }
+    },
+    {
+      "id": "all.conversion_value",
+      "platform": "*",
+      "check": "conversion_value",
+      "title": {
+        "zh": "转化带了金额",
+        "en": "Conversions carry a value"
+      },
+      "evidence": {
+        "kind": "export",
+        "rule": "conversion_value"
+      }
+    },
+    {
+      "id": "all.zero_conversion_spenders",
+      "platform": "*",
+      "check": "zero_conversion_spenders",
+      "title": {
+        "zh": "花了钱一单没有的系列",
+        "en": "Campaigns spending with no conversions"
+      },
+      "evidence": {
+        "kind": "export",
+        "rule": "zero_conversion_spenders"
+      }
+    },
+    {
+      "id": "microsoft.uet_tag",
+      "platform": "microsoft",
+      "check": "uet_tag",
+      "title": {
+        "zh": "UET 标记在跑",
+        "en": "UET tag is active"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "后台「转化跟踪」页，看 UET 标记的状态",
+          "en": "Conversion tracking → UET tag status"
+        }
+      }
+    },
+    {
+      "id": "microsoft.goal_tracking",
+      "platform": "microsoft",
+      "check": "goal_tracking",
+      "title": {
+        "zh": "转化目标在记录转化",
+        "en": "Conversion goals are recording"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「转化目标」那一栏的跟踪状态",
+          "en": "Conversion goals → Tracking status"
+        }
+      }
+    },
+    {
+      "id": "microsoft.msclkid",
+      "platform": "microsoft",
+      "check": "msclkid",
+      "title": {
+        "zh": "自动标记（MSCLKID）开着",
+        "en": "Auto-tagging (MSCLKID) is on"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "账户设置里的自动标记",
+          "en": "Account settings → Auto-tagging of MSCLKID"
+        }
+      }
+    },
+    {
+      "id": "microsoft.budget_limited",
+      "platform": "microsoft",
+      "check": "budget_limited",
+      "title": {
+        "zh": "没有系列受预算限制",
+        "en": "No campaign is limited by budget"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告系列表的「投放」列",
+          "en": "Campaigns → Delivery column"
+        }
+      }
+    },
+    {
+      "id": "microsoft.disapproved",
+      "platform": "microsoft",
+      "check": "disapproved",
+      "title": {
+        "zh": "没有广告 / 关键词被拒",
+        "en": "No ads or keywords disapproved"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告、关键词表的「投放」列",
+          "en": "Ads / Keywords → Delivery column"
+        }
+      }
+    },
+    {
+      "id": "pinterest.pinterest_tag",
+      "platform": "pinterest",
+      "check": "pinterest_tag",
+      "title": {
+        "zh": "Pinterest 标签装好了",
+        "en": "Pinterest Tag is installed"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "商务后台「转化」页",
+          "en": "Business → Conversions"
+        }
+      }
+    },
+    {
+      "id": "pinterest.conversions_api",
+      "platform": "pinterest",
+      "check": "conversions_api",
+      "title": {
+        "zh": "转化 API 接上了",
+        "en": "Conversions API is set up"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "同一页的转化 API 设置",
+          "en": "Conversions → Conversions API"
+        }
+      }
+    },
+    {
+      "id": "pinterest.catalog",
+      "platform": "pinterest",
+      "check": "catalog",
+      "title": {
+        "zh": "商品目录没有报错",
+        "en": "Catalog has no issues"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「目录与商品组」→「诊断」",
+          "en": "Catalogs → Diagnostics"
+        }
+      }
+    },
+    {
+      "id": "pinterest.ad_review",
+      "platform": "pinterest",
+      "check": "ad_review",
+      "title": {
+        "zh": "没有广告被拒或受限",
+        "en": "No ads disapproved or limited"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "报表与违规记录页",
+          "en": "Reports and violations"
+        }
+      }
+    },
+    {
+      "id": "pinterest.undelivered",
+      "platform": "pinterest",
+      "check": "undelivered",
+      "title": {
+        "zh": "没有系列一直没投出去",
+        "en": "No campaign stuck undelivered"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告管理关掉「隐藏未投放」",
+          "en": "Ads Manager → Hide undelivered toggle"
+        }
+      }
+    },
+    {
+      "id": "reddit.pixel_capi",
+      "platform": "reddit",
+      "check": "pixel_capi",
+      "title": {
+        "zh": "Reddit 像素或转化 API 在收事件",
+        "en": "Reddit Pixel / Conversions API receiving events"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「事件管理器」",
+          "en": "Events Manager"
+        }
+      }
+    },
+    {
+      "id": "reddit.key_events",
+      "platform": "reddit",
+      "check": "key_events",
+      "title": {
+        "zh": "购买 / 线索这些关键事件收到了",
+        "en": "Key events (Purchase / Lead) are received"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理器的事件列表",
+          "en": "Events Manager → events"
+        }
+      }
+    },
+    {
+      "id": "reddit.dedup",
+      "platform": "reddit",
+      "check": "dedup",
+      "title": {
+        "zh": "像素与 API 两边发的去重了",
+        "en": "Pixel and API events are deduplicated"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理器（看转化 ID）",
+          "en": "Events Manager → conversion ID"
+        }
+      }
+    },
+    {
+      "id": "reddit.diagnostics",
+      "platform": "reddit",
+      "check": "diagnostics",
+      "title": {
+        "zh": "事件诊断没有报错",
+        "en": "Event diagnostics are clean"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理器「诊断」页",
+          "en": "Events Manager → Diagnostics"
+        }
+      }
+    },
+    {
+      "id": "reddit.ad_review",
+      "platform": "reddit",
+      "check": "ad_review",
+      "title": {
+        "zh": "没有广告没通过审核",
+        "en": "No ads rejected"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告列表的状态",
+          "en": "Ads tab → status"
+        }
+      }
+    },
+    {
+      "id": "linkedin.insight_tag",
+      "platform": "linkedin",
+      "check": "insight_tag",
+      "title": {
+        "zh": "Insight Tag 在跑",
+        "en": "Insight Tag is active"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「分析」→「转化跟踪」→「数据源」",
+          "en": "Analyze → Conversion tracking → Data sources"
+        }
+      }
+    },
+    {
+      "id": "linkedin.conversions_api",
+      "platform": "linkedin",
+      "check": "conversions_api",
+      "title": {
+        "zh": "转化 API 数据源在跑",
+        "en": "Conversions API source is active"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "同一页的数据源状态",
+          "en": "Data sources → status"
+        }
+      }
+    },
+    {
+      "id": "linkedin.audience_size",
+      "platform": "linkedin",
+      "check": "audience_size",
+      "title": {
+        "zh": "受众不太小",
+        "en": "Audiences are large enough"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "受众页看规模",
+          "en": "Audiences → size"
+        }
+      }
+    },
+    {
+      "id": "linkedin.utc_days",
+      "platform": "linkedin",
+      "check": "utc_days",
+      "title": {
+        "zh": "按天对账时记得报表是 UTC",
+        "en": "Daily reconciliation accounts for UTC"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "报表按 UTC 出，和店铺的日子差几个小时",
+          "en": "Reports run in UTC"
+        }
+      }
+    },
+    {
+      "id": "snapchat.snap_pixel",
+      "platform": "snapchat",
+      "check": "snap_pixel",
+      "title": {
+        "zh": "Snap Pixel 在响",
+        "en": "Snap Pixel is firing"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「事件管理器」的流量视图",
+          "en": "Events Manager → traffic"
+        }
+      }
+    },
+    {
+      "id": "snapchat.conversions_api",
+      "platform": "snapchat",
+      "check": "conversions_api",
+      "title": {
+        "zh": "转化 API 接上了",
+        "en": "Conversions API is set up"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理器里的转化 API",
+          "en": "Events Manager → Conversions API"
+        }
+      }
+    },
+    {
+      "id": "snapchat.not_delivering",
+      "platform": "snapchat",
+      "check": "not_delivering",
+      "title": {
+        "zh": "没有广告组「不投放」",
+        "en": "No ad set is not delivering"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告管理的「投放状态」",
+          "en": "Manage Ads → Delivery Status"
+        }
+      }
+    },
+    {
+      "id": "snapchat.rejected",
+      "platform": "snapchat",
+      "check": "rejected",
+      "title": {
+        "zh": "没有广告被拒",
+        "en": "No ads rejected"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告管理（悬停状态看原因）",
+          "en": "Manage Ads → status"
+        }
+      }
+    },
+    {
+      "id": "snapchat.attribution_window",
+      "platform": "snapchat",
+      "check": "attribution_window",
+      "title": {
+        "zh": "几份导出的归因口径一致",
+        "en": "Exports use the same attribution setting"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "导出时的归因窗口设置",
+          "en": "Attribution window in report settings"
+        }
+      }
+    },
+    {
+      "id": "apple.adservices",
+      "platform": "apple",
+      "check": "adservices",
+      "title": {
+        "zh": "App 里接了 AdServices 归因",
+        "en": "AdServices attribution is integrated in the app"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "App 开发那一侧（不在广告后台）",
+          "en": "In the app (AdServices framework)"
+        }
+      }
+    },
+    {
+      "id": "apple.adattributionkit",
+      "platform": "apple",
+      "check": "adattributionkit",
+      "title": {
+        "zh": "AdAttributionKit / SKAdNetwork 有回传",
+        "en": "AdAttributionKit / SKAdNetwork postbacks arrive"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "App 开发那一侧",
+          "en": "In the app"
+        }
+      }
+    },
+    {
+      "id": "apple.demographic_targeting",
+      "platform": "apple",
+      "check": "demographic_targeting",
+      "title": {
+        "zh": "定向年龄 / 性别的广告组知道拿不到归因",
+        "en": "Age / gender targeting is known to drop attribution"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告组的受众设置",
+          "en": "Ad group → Audience"
+        }
+      }
+    },
+    {
+      "id": "apple.on_hold",
+      "platform": "apple",
+      "check": "on_hold",
+      "title": {
+        "zh": "没有系列「暂停中（On Hold）」",
+        "en": "No campaign On Hold"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告系列表的状态列",
+          "en": "Campaigns → Status"
+        }
+      }
+    },
+    {
+      "id": "apple.impression_share",
+      "platform": "apple",
+      "check": "impression_share",
+      "title": {
+        "zh": "看过展示份额和排名",
+        "en": "Impression share and rank reviewed"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「洞察」→ 高级报表",
+          "en": "Insights → Advanced reports"
+        }
+      }
+    },
+    {
+      "id": "meta.pixel_capi",
+      "platform": "meta",
+      "check": "pixel_capi",
+      "title": {
+        "zh": "Meta 像素或转化 API 在收事件",
+        "en": "Meta Pixel / Conversions API receiving events"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「事件管理工具」的数据源",
+          "en": "Events Manager → Data sources"
+        }
+      }
+    },
+    {
+      "id": "meta.dedup",
+      "platform": "meta",
+      "check": "dedup",
+      "title": {
+        "zh": "像素与转化 API 两边发的去重了",
+        "en": "Pixel and Conversions API events are deduplicated"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理工具里那个事件的「去重」",
+          "en": "Events Manager → event → Deduplication"
+        }
+      }
+    },
+    {
+      "id": "meta.purchase_value",
+      "platform": "meta",
+      "check": "purchase_value",
+      "title": {
+        "zh": "购买事件带了金额和币种",
+        "en": "Purchase events carry value and currency"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理工具里购买事件的参数",
+          "en": "Events Manager → Purchase → parameters"
+        }
+      }
+    },
+    {
+      "id": "meta.domain",
+      "platform": "meta",
+      "check": "domain",
+      "title": {
+        "zh": "网站域名验证过了",
+        "en": "Website domain is verified"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "商务管理平台「品牌安全」→「域名」",
+          "en": "Business settings → Brand safety → Domains"
+        }
+      }
+    },
+    {
+      "id": "meta.ad_review",
+      "platform": "meta",
+      "check": "ad_review",
+      "title": {
+        "zh": "没有广告被拒或账户受限",
+        "en": "No ads rejected, account not restricted"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「账户质量」页",
+          "en": "Account Quality"
+        }
+      }
+    },
+    {
+      "id": "meta.learning_limited",
+      "platform": "meta",
+      "check": "learning_limited",
+      "title": {
+        "zh": "没有广告组卡在「学习受限」",
+        "en": "No ad set stuck in Learning limited"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告管理工具的「投放」列",
+          "en": "Ads Manager → Delivery column"
+        }
+      }
+    },
+    {
+      "id": "google.conversion_actions",
+      "platform": "google",
+      "check": "conversion_actions",
+      "title": {
+        "zh": "转化操作在记录转化",
+        "en": "Conversion actions are recording"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「目标」→「转化」→「摘要」的状态列",
+          "en": "Goals → Conversions → Summary → Status"
+        }
+      }
+    },
+    {
+      "id": "google.auto_tagging",
+      "platform": "google",
+      "check": "auto_tagging",
+      "title": {
+        "zh": "自动标记（GCLID）开着",
+        "en": "Auto-tagging (GCLID) is on"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "账户设置里的自动标记",
+          "en": "Admin → Account settings → Auto-tagging"
+        }
+      }
+    },
+    {
+      "id": "google.enhanced_conversions",
+      "platform": "google",
+      "check": "enhanced_conversions",
+      "title": {
+        "zh": "增强型转化设置过了",
+        "en": "Enhanced conversions are set up"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "转化设置里的增强型转化",
+          "en": "Goals → Settings → Enhanced conversions"
+        }
+      }
+    },
+    {
+      "id": "google.policy",
+      "platform": "google",
+      "check": "policy",
+      "title": {
+        "zh": "没有广告 / 素材被拒或受限",
+        "en": "No ads or assets disapproved or limited"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告列表的「状态」与政策详情",
+          "en": "Ads → Status / Policy details"
+        }
+      }
+    },
+    {
+      "id": "google.budget_limited",
+      "platform": "google",
+      "check": "budget_limited",
+      "title": {
+        "zh": "没有系列「受预算限制」",
+        "en": "No campaign Limited by budget"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告系列表的「状态」列",
+          "en": "Campaigns → Status column"
+        }
+      }
+    },
+    {
+      "id": "google.merchant_center",
+      "platform": "google",
+      "check": "merchant_center",
+      "title": {
+        "zh": "购物广告的商品没有报错（投购物 / 效果最大化时）",
+        "en": "Merchant Center products have no issues (Shopping / PMax)"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "Merchant Center「商品」→「需要关注」",
+          "en": "Merchant Center → Products → Needs attention"
+        }
+      }
+    },
+    {
+      "id": "tiktok.pixel_events_api",
+      "platform": "tiktok",
+      "check": "pixel_events_api",
+      "title": {
+        "zh": "TikTok 像素或事件 API 在收事件",
+        "en": "TikTok Pixel / Events API receiving events"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「事件管理器」",
+          "en": "Events Manager"
+        }
+      }
+    },
+    {
+      "id": "tiktok.event_diagnostics",
+      "platform": "tiktok",
+      "check": "event_diagnostics",
+      "title": {
+        "zh": "事件诊断没有报错",
+        "en": "Event diagnostics are clean"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理器的「诊断」",
+          "en": "Events Manager → Diagnostics"
+        }
+      }
+    },
+    {
+      "id": "tiktok.dedup",
+      "platform": "tiktok",
+      "check": "dedup",
+      "title": {
+        "zh": "像素与事件 API 两边发的去重了",
+        "en": "Pixel and Events API events are deduplicated"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理器（看 event_id）",
+          "en": "Events Manager → event_id"
+        }
+      }
+    },
+    {
+      "id": "tiktok.ad_review",
+      "platform": "tiktok",
+      "check": "ad_review",
+      "title": {
+        "zh": "没有广告没通过审核",
+        "en": "No ads rejected"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告列表的状态（悬停看原因）",
+          "en": "Ads → Status"
+        }
+      }
+    },
+    {
+      "id": "tiktok.delivery",
+      "platform": "tiktok",
+      "check": "delivery",
+      "title": {
+        "zh": "没有广告组「投放受限」",
+        "en": "No ad group with limited delivery"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告组的投放状态",
+          "en": "Ad groups → Delivery status"
+        }
+      }
+    },
+    {
+      "id": "x.x_pixel",
+      "platform": "x",
+      "check": "x_pixel",
+      "title": {
+        "zh": "X 像素在收事件",
+        "en": "X Pixel receiving events"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "「事件管理器」",
+          "en": "Events Manager"
+        }
+      }
+    },
+    {
+      "id": "x.conversion_events",
+      "platform": "x",
+      "check": "conversion_events",
+      "title": {
+        "zh": "转化事件设置过、有记录",
+        "en": "Conversion events are set up and recording"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "事件管理器的事件列表",
+          "en": "Events Manager → events"
+        }
+      }
+    },
+    {
+      "id": "x.ad_review",
+      "platform": "x",
+      "check": "ad_review",
+      "title": {
+        "zh": "没有推广帖没通过审核",
+        "en": "No promoted posts rejected"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告系列里帖子的状态",
+          "en": "Campaigns → Ads → Status"
+        }
+      }
+    },
+    {
+      "id": "x.pacing",
+      "platform": "x",
+      "check": "pacing",
+      "title": {
+        "zh": "没有系列花不出去 / 提前花完",
+        "en": "No campaign under-pacing or exhausting early"
+      },
+      "evidence": {
+        "kind": "backend",
+        "where": {
+          "zh": "广告系列表的投放进度",
+          "en": "Campaigns → Pacing"
+        }
+      }
+    }
+  ]
+}

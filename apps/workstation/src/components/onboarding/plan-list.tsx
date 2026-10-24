@@ -91,6 +91,9 @@ const SKILL_NAMES = new Set([
   // WP317：素材流水线的两个子 Agent
   'ad-descriptions',
   'ad-headlines',
+  // WP452：投放的实验与归因
+  'ads-attribution',
+  'ads-experiment',
   'audience-research',
   'brand-system',
   'brand-voice',

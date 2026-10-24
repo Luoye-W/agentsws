@@ -391,6 +391,7 @@ export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
   create_tracked_link: '追踪链接',
   import_creator_sheet: '红人表',
   update_stages_from_mail: '过往邮件',
+  sync_creators_to_sheet: '同步表格',
 }
 
 const toolZh = (tool: string): string => KOL_TOOL_ZH[tool] ?? '一个工具'
@@ -425,6 +426,7 @@ export const KOL_TOOL_ACTION_ZH: Readonly<Record<string, string>> = {
   create_tracked_link: '建追踪链接',
   import_creator_sheet: '读红人表',
   update_stages_from_mail: '用邮件更新阶段',
+  sync_creators_to_sheet: '设同步到表格',
   search_policies: '查政策',
 }
 
