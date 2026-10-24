@@ -167,7 +167,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "97d28af5c0c255314c59bb9987f74476",
+  "source_digest": "1bac4aacacd83939698681cb6da80b0b",
   "objects": [
     {
       "id": "ad",
@@ -2793,6 +2793,18 @@
         {
           "name": "last_verified_at",
           "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "disabled_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "disabled_by",
+          "type": "PersonId",
           "sensitivity": "internal",
           "optional": true
         },

@@ -150,6 +150,7 @@ describe('WP504 批量开发信确认卡', () => {
   })
 
   it('批了：演练红人按名单逐个提、自动批（不再出第二张要人点的卡）；30 天内联系过的下一批跳过', async () => {
+    // WP506（决策 1788 B）：分时发——批的那一刻只发第一封，其余由每分钟那一拍按节奏发（缺省每小时 10 封 = 6 分钟一封）
     expect((await post('/v1/kol/sandbox', { channel: 'youtube' })).status).toBeLessThan(300)
     const pool = await data<{
       rows: { creator_id: string; has_contact: boolean; collab?: { stage: string } }[]
@@ -164,6 +165,10 @@ describe('WP504 批量开发信确认卡', () => {
     )
     expect(out.ok).toBe(true)
     await decide(out.approval_item_id as string, 'approve')
+    expect(await outreachChanges()).toHaveLength(1)
+    const brand = await server.brands.forWorkspace(server.bootstrap.workspace.id)
+    t += 6 * 60_000
+    await brand.kolService.pumpOutreachBatches()
     const changes = await outreachChanges()
     expect(changes).toHaveLength(2)
     // 人已经在批量卡上点过「发出」：每封都自动批（不再等第二次点头）
@@ -183,7 +188,7 @@ describe('WP504 批量开发信确认卡', () => {
     expect(next.skipped[0]?.reason).toBe('30 天内联系过')
   })
 
-  it('批了但没连发信邮箱：真红人那几封照旧等人（批了也发不出去，卡上照实说）', async () => {
+  it('批了但没连发信邮箱：先不提（提了也发不出去），排着队等连好邮箱（卡上照实说）', async () => {
     const a = await creator('Gadget Jonas')
     const out = await data<BatchView>(
       await post('/v1/kol/outreach/batch', { channel: 'youtube', creator_ids: [a], ...BODY }),
@@ -193,9 +198,12 @@ describe('WP504 批量开发信确认卡', () => {
       '还没连发信邮箱',
     )
     await decide(out.approval_item_id as string, 'approve')
-    const changes = await outreachChanges()
-    expect(changes).toHaveLength(1)
-    expect(changes[0]?.status).toBe('staged')
+    // WP506：不再一封一张卡地出——排着队，进度上写「还没连发信邮箱」
+    expect(await outreachChanges()).toHaveLength(0)
+    const progress = await data<{ state: string; waiting?: string; queued: number }[]>(
+      await api(`/v1/kol/outreach/batches?approval_item_id=${out.approval_item_id}`),
+    )
+    expect(progress[0]).toMatchObject({ state: 'sending', waiting: 'mailbox', queued: 1 })
   })
 
   it('不发：一封都不提，名单上的「等你确认」收掉', async () => {
