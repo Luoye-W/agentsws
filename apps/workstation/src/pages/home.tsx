@@ -111,7 +111,7 @@ function SectionHead({
  */
 function InboxLine(): ReactNode {
   const { t } = useApp()
-  const inbox = useInbox()
+  const inbox = useInbox(true, 'mine')
   const view = inbox.data
   if (view === undefined) return null
   const n = view.counts.all
@@ -522,7 +522,7 @@ export function HomePage(): ReactNode {
   const { solo } = useMode()
   const [range, setRange] = useState<KeyRange>('1d')
   const home = useQuery({ queryKey: ['home', 'yesterday'], queryFn: () => getHome('yesterday') })
-  const inbox = useInbox()
+  const inbox = useInbox(true, 'mine')
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession, retry: false })
   const overview = useQuery({

@@ -287,7 +287,7 @@ function PositionNav({
  * 取不到（没装配 / 还在取）就什么都不画——不报错、不占位。
  */
 function InboxCount({ corner = false }: { corner?: boolean }): ReactNode {
-  const inbox = useInbox()
+  const inbox = useInbox(true, 'mine')
   const siteChat = useSiteChatUnread()
   const n = inbox.data?.counts.all ?? 0
   if (n > 0)

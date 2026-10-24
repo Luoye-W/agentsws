@@ -14,8 +14,13 @@ import { describe, expect, it } from 'vitest'
 import type { DirectMailInput, DirectMailResult } from '../src/channels.js'
 import { OUTBOUND_HALTED } from '../src/channels.js'
 import type { MailAccount } from '../src/index.js'
-import { createMessageFollowUp, type MessageFollowUpService } from '../src/message-follow-up.js'
+import {
+  createMessageFollowUp,
+  type MessageFollowUpOptions,
+  type MessageFollowUpService,
+} from '../src/message-follow-up.js'
 import { createMessages, type MessagesOptions } from '../src/messages.js'
+import { createTeamInbox, type TeamDirectory } from '../src/team-inbox.js'
 
 const WS = 'ws_1'
 const ME = 'hello@shop.example'
@@ -87,6 +92,8 @@ function harness(
     extra?: Partial<MessagesOptions>
     otherFollowUp?: (thread_id: string) => boolean
     noRecipient?: boolean
+    /** WP510：换掉「卡给谁」（邮箱负责人那一条）。 */
+    recipientFor?: MessageFollowUpOptions['recipientFor']
   } = {},
 ) {
   let t = Date.parse(sh('2026-10-23 15:00'))
@@ -164,10 +171,12 @@ function harness(
     tz: () => SH,
     otherFollowUp: (thread_id, refs) =>
       over.otherFollowUp?.(thread_id) === true || messages.otherFollowUp(thread_id, refs),
-    recipientFor: () =>
-      over.noRecipient === true
-        ? undefined
-        : { person_id: OWNER as never, assignment_id: 'asg_1', role_id: 'dtc.store' },
+    recipientFor:
+      over.recipientFor ??
+      (() =>
+        over.noRecipient === true
+          ? undefined
+          : { person_id: OWNER as never, assignment_id: 'asg_1', role_id: 'dtc.store' }),
     approvals: txn.approvals,
     applyApproval: (id) => txn.executor.applyApproval(id, { skip_cancel_window: true }),
     cancelWindowMs: 0,
@@ -620,5 +629,107 @@ describe('WP442：对方回了、别的跟进、再等等、不用跟了、最�
     await h.followUp.sweep()
     expect(h.cards()).toHaveLength(0)
     expect((await h.summary(THREAD))?.follow_up?.state).toBe('waiting')
+  })
+})
+
+describe('WP510（决策 1515）：催促卡按邮箱负责人分', () => {
+  const LIN = 'p_lin'
+  const ZHAO = 'p_zhao'
+  /** ② 同事互联：发起人 OWNER、林峰、赵敏；hello@ 归林峰。 */
+  const setup = (mode: TeamDirectory['mode'] = 'peers') => {
+    let teamRef: ReturnType<typeof createTeamInbox> | undefined
+    const h = harness({
+      recipientFor: async (_position, account) => {
+        const base = { person_id: OWNER as never, assignment_id: 'asg_1', role_id: 'dtc.store' }
+        const owners =
+          account === undefined ? undefined : await teamRef?.nudgeRecipients(account, base.role_id)
+        return owners === undefined ? base : { ...base, recipients: owners }
+      },
+    })
+    const team = createTeamInbox({
+      workspace_id: WS,
+      clock: h.clock,
+      appendEvent: (e) => void h.events.push(e as EventEnvelope),
+      directory: async () => ({
+        mode,
+        members: [
+          { person_id: OWNER, name: '王芳', admin: true },
+          { person_id: LIN, name: '林峰', admin: false },
+          { person_id: ZHAO, name: '赵敏', admin: false },
+        ],
+      }),
+      mailboxes: () => [ME],
+      holdersOf: () => [ZHAO],
+      approvals: h.txn.approvals,
+    })
+    teamRef = team
+    return { h, team }
+  }
+  const recipients = (i: ApprovalItem | undefined): string[] =>
+    (i?.routing.recipients ?? []).map((r) => r.person)
+
+  it('有负责人：卡只给负责人（不给岗位的人）；① 个人照旧给岗位的人', async () => {
+    const { h, team } = setup()
+    await team.update(OWNER, { mailbox: { account: ME, owners: [LIN] } })
+    h.send('q1', '2026-10-23 15:00')
+    await h.poll()
+    h.at(sh('2026-10-28 15:05'))
+    await h.followUp.sweep()
+    expect(recipients(h.cards()[0])).toEqual([LIN])
+    expect(h.cards()[0]?.routing.recipients[0]?.reason).toBeUndefined()
+
+    const solo = setup('solo')
+    solo.h.send('q1', '2026-10-23 15:00')
+    await solo.h.poll()
+    solo.h.at(sh('2026-10-28 15:05'))
+    await solo.h.followUp.sweep()
+    expect(recipients(solo.h.cards()[0])).toEqual([OWNER])
+  })
+
+  it('负责人超过 N 天没上线：新卡给发起人 / 管理员（卡上一句为什么）；改成「同岗位的同事」就给他们', async () => {
+    const { h, team } = setup()
+    await team.update(OWNER, { mailbox: { account: ME, owners: [LIN] } })
+    team.touch(LIN) // 10-23 上线过一次
+    h.send('q1', '2026-10-23 15:00')
+    await h.poll()
+    h.at(sh('2026-10-28 15:05')) // 5 天没上线，缺省 3 天算不在
+    await h.followUp.sweep()
+    const card = h.cards()[0]
+    expect(recipients(card)).toEqual([OWNER])
+    expect(card?.routing.recipients[0]?.reason).toBe('邮箱负责人林峰超过 3 天没上线，先交给你')
+
+    await team.update(OWNER, { fallback: 'position', away_days: 7 })
+    expect(await team.nudgeRecipients(ME, 'dtc.store')).toEqual([{ person: LIN }])
+    await team.update(OWNER, { away_days: 2 })
+    expect((await team.nudgeRecipients(ME, 'dtc.store'))?.map((r) => r.person)).toEqual([ZHAO])
+  })
+
+  it('懒扫：没定的卡跟着负责人走——指定了负责人改派过去；负责人不在了交给兜底的人；回来了交还', async () => {
+    const { h, team } = setup()
+    h.send('q1', '2026-10-23 15:00')
+    await h.poll()
+    h.at(sh('2026-10-28 15:05'))
+    await h.followUp.sweep()
+    expect(recipients(h.cards()[0])).toEqual([OWNER]) // 还没指定负责人：照旧给岗位的人
+
+    await team.update(OWNER, { mailbox: { account: ME, owners: [LIN] } })
+    expect(await team.sweep()).toBe(1)
+    let card = h.cards()[0]
+    expect(recipients(card)).toEqual([LIN])
+    expect(card?.routing.recipients[0]?.reason).toBe('这只邮箱的负责人是你')
+    expect(card?.deliveries.some((d) => d.to === LIN && d.status !== 'expired')).toBe(true)
+    // 30 秒内不重扫
+    expect(await team.sweep()).toBe(0)
+
+    team.touch(LIN)
+    h.at(sh('2026-11-03 15:05')) // 林峰 6 天没上线
+    expect(await team.sweep()).toBe(1)
+    card = h.cards()[0]
+    expect(recipients(card)).toEqual([OWNER])
+
+    team.touch(LIN) // 回来了
+    h.at(sh('2026-11-03 15:10'))
+    expect(await team.sweep()).toBe(1)
+    expect(recipients(h.cards()[0])).toEqual([LIN])
   })
 })

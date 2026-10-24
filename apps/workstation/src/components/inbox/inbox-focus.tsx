@@ -19,9 +19,10 @@ import { useApp } from '@/lib/app-context'
 import { apiErrorText } from '@/lib/error-text'
 import { cn } from '@/lib/utils'
 import type { InboxNotice } from './inbox-actions'
-import { itemTitle, positionLabel, useInboxRefresh } from './inbox-model'
+import { itemTitle, positionLabel, setInboxLooking, useInboxRefresh } from './inbox-model'
 import { DraftPane, InboxPaneItem, isDraftCard } from './inbox-pane'
 import { ItemGlyph, rowPill, rowTag } from './inbox-row'
+import { handledByOther, handledText, TeamLine } from './inbox-team'
 
 type Done = {
   kind: 'skip' | 'done'
@@ -141,6 +142,11 @@ export function InboxFocus({
   useEffect(() => {
     box.current?.focus({ preventScroll: true })
   }, [])
+  // WP510：「我在看」= 这一轮当前那一张（② / ③ 里别人那边出「X 在看」）
+  const lookingId = item?.id
+  useEffect(() => {
+    setInboxLooking(lookingId ?? null)
+  }, [lookingId])
 
   const skip = (): void => {
     if (item === undefined || order.length < 2) return
@@ -221,8 +227,11 @@ export function InboxFocus({
       clearTimeout(timer)
     }
   }, [left])
+  // WP510：这一张是同事处理掉的——「刚才」写他的名字，不给撤回（撤回只认本人那一下）
+  const byOther = latest?.kind === 'done' ? handledByOther(view, latest.item.id) : undefined
   const canUndo =
     latest !== undefined &&
+    byOther === undefined &&
     (latest.kind === 'skip' || (latest.undo !== undefined && (left === undefined || left > 0)))
   const pill = item === undefined ? undefined : rowPill(item, t)
   const posName =
@@ -287,6 +296,7 @@ export function InboxFocus({
           <ArrowRight aria-hidden className="size-3" />
         </button>
       </div>
+      {item === undefined ? null : <TeamLine item={item} className="px-1" />}
       {item === undefined ? null : (
         <div
           className={cn('flex flex-col gap-3', ownShell ? '' : 'ws-card p-5')}
@@ -375,16 +385,19 @@ export function InboxFocus({
           data-testid="inbox-focus-recent"
         >
           {t('inbox.focus.recent', {
-            what: t(
-              latest.kind === 'skip'
-                ? 'inbox.focus.did.skip'
-                : latest.did === 'approve'
-                  ? 'inbox.focus.did.approve'
-                  : latest.did === 'reject'
-                    ? 'inbox.focus.did.reject'
-                    : 'inbox.focus.did.other',
-              { title: itemTitle(latest.item) },
-            ),
+            what:
+              byOther !== undefined
+                ? handledText(byOther, t)
+                : t(
+                    latest.kind === 'skip'
+                      ? 'inbox.focus.did.skip'
+                      : latest.did === 'approve'
+                        ? 'inbox.focus.did.approve'
+                        : latest.did === 'reject'
+                          ? 'inbox.focus.did.reject'
+                          : 'inbox.focus.did.other',
+                    { title: itemTitle(latest.item) },
+                  ),
           })}
           {canUndo ? (
             <button

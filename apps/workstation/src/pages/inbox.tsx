@@ -22,14 +22,18 @@ import { type InboxNotice, InboxToast, useInboxActions } from '@/components/inbo
 import { InboxFocus } from '@/components/inbox/inbox-focus'
 import {
   pushInboxNotice,
+  setInboxLooking,
   setInboxOpen,
+  setInboxScope,
   useInbox,
   useInboxNotice,
   useInboxOpen,
+  useInboxPresence,
 } from '@/components/inbox/inbox-model'
 import { InboxPane } from '@/components/inbox/inbox-pane'
 import { InboxRow, type RowAct } from '@/components/inbox/inbox-row'
 import { InboxBrief, InboxEmpty, InboxFilterBar, InboxSide } from '@/components/inbox/inbox-side'
+import { InboxHandledList, InboxScopeSwitch, InboxTeamButton } from '@/components/inbox/inbox-team'
 import { RecordedRow, useInboxTodo } from '@/components/inbox/inbox-todo'
 import { MessageRulesButton } from '@/components/messages/rules-button'
 import { closeRightPane, currentPane, openRightPane } from '@/components/rail/right-pane'
@@ -51,9 +55,23 @@ function filterOf(params: URLSearchParams): InboxFilter {
 
 export function InboxPage(): ReactNode {
   const { t } = useApp()
-  const inbox = useInbox()
-  const open = useInboxOpen()
   const [params, setParams] = useSearchParams()
+  // WP510（决策 1515）：② / ③ 里「给我的 / 全部」跟着地址走（① 里没有这一格，地址上也不会有）
+  const scope = params.get('scope') === 'all' ? 'all' : 'mine'
+  const inbox = useInbox(true, scope)
+  const open = useInboxOpen()
+  useEffect(() => {
+    setInboxScope(scope)
+  }, [scope])
+  useEffect(
+    () => () => {
+      setInboxScope('mine')
+      setInboxLooking(null)
+    },
+    [],
+  )
+  // WP510：「谁在看」——只在 ② / ③（收件箱回来的有团队那一面）跳心跳
+  useInboxPresence(inbox.data?.team !== undefined)
   const mode: 'list' | 'focus' = params.get('mode') === 'list' ? 'list' : 'focus' // Luoye 10-23：默认「卡片」
   const filter = filterOf(params)
   const pushed = useInboxNotice()
@@ -122,6 +140,10 @@ export function InboxPage(): ReactNode {
   const view = inbox.data
   const items = view === undefined ? [] : filterInbox(view.items, filter)
   const openId = open?.kind === 'item' ? open.id : undefined
+  // WP510：列表里「我在看」= 第三栏开着的那一件（一张一张里由那一面自己报）
+  useEffect(() => {
+    if (mode === 'list') setInboxLooking(openId ?? null)
+  }, [mode, openId])
   const openItem = items.find((i) => i.id === openId)
   // 列表里按 T：把打开的那一行记成待办（打字时不响应；一张一张那一面自己接）
   const recordRef = useRef(todo.record)
@@ -157,6 +179,15 @@ export function InboxPage(): ReactNode {
       }
       actions={
         <>
+          <InboxScopeSwitch
+            view={view}
+            scope={scope}
+            onChange={(v) => {
+              setInboxOpen(null)
+              setParam('scope', v === 'all' ? 'all' : undefined)
+            }}
+          />
+          <InboxTeamButton view={view} />
           <MessageRulesButton />
           <Segmented
             kind="tabs"
@@ -211,6 +242,7 @@ export function InboxPage(): ReactNode {
           )}
           <div className="flex flex-col gap-3">
             <InboxBrief view={view} folded />
+            <InboxHandledList view={view} />
             <InboxSide compact onNotice={say} />
           </div>
         </div>
@@ -245,14 +277,24 @@ export function InboxPage(): ReactNode {
           <div className="flex min-w-0 flex-col gap-5">
             {list}
             {/* 打开第三栏时这两堆挪到队列下面 */}
-            {paneOpen && !inline ? <InboxSide onNotice={say} /> : null}
+            {paneOpen && !inline ? (
+              <>
+                <InboxHandledList view={view} />
+                <InboxSide onNotice={say} />
+              </>
+            ) : null}
           </div>
           {inline && paneOpen ? (
             <aside className="ws-card sticky top-14 p-4" data-testid="inbox-pane-inline">
               <InboxPane inline onNotice={say} />
             </aside>
-          ) : paneOpen ? null : (
+          ) : paneOpen ? null : view.team === undefined ? (
             <InboxSide onNotice={say} />
+          ) : (
+            <div className="flex flex-col gap-5">
+              <InboxHandledList view={view} />
+              <InboxSide onNotice={say} />
+            </div>
           )}
         </div>
       </>

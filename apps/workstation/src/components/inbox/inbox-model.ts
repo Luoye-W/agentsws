@@ -3,24 +3,138 @@
  * 第三栏、左栏徽标、首页那一行共用；批 / 改 / 不要走岗位卡片流同一条决定（`decide`），批完把
  * 收件箱、岗位牌堆、首页、左栏的数一起刷新（「批了两边一起消失」）。
  */
-import { isFollowUpNudgePayload } from '@agentsws/contracts'
-import type { DeckCard, InboxItem, InboxPosition, InboxView } from '@agentsws/deck'
+import {
+  INBOX_PRESENCE_BEAT_MS,
+  type InboxViewer,
+  isFollowUpNudgePayload,
+} from '@agentsws/contracts'
+import type { DeckCard, InboxItem, InboxPosition, InboxScope, InboxView } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSyncExternalStore } from 'react'
-import { type DecideInput, decide, getInbox } from '@/lib/api'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { type DecideInput, decide, getInbox, inboxPresence } from '@/lib/api'
 
 export const INBOX_QUERY = ['inbox'] as const
 
-/** 收件箱那一份（左栏徽标、首页那一行也读它；一分钟内不重复取）。 */
-export function useInbox(enabled = true) {
+/** 一个小的内存仓（同一时间一个值；收件箱页、第三栏、一张一张共用）。 */
+function memoryStore<T>(initial: T) {
+  let state = initial
+  const listeners = new Set<() => void>()
+  const subscribe = (l: () => void): (() => void) => {
+    listeners.add(l)
+    return () => {
+      listeners.delete(l)
+    }
+  }
+  return {
+    get: (): T => state,
+    set(next: T): void {
+      if (Object.is(next, state)) return
+      state = next
+      for (const l of listeners) l()
+    },
+    use: (): T =>
+      useSyncExternalStore(
+        subscribe,
+        () => state,
+        () => state,
+      ),
+  }
+}
+
+/* ── WP510（决策 1515）：「给我的 / 全部」（只在 ② / ③；跟着地址 `?scope=all`，收件箱页写进来） ── */
+
+const scopeStore = memoryStore<InboxScope>('mine')
+
+export function setInboxScope(next: InboxScope): void {
+  scopeStore.set(next)
+}
+
+export function useInboxScope(): InboxScope {
+  return scopeStore.use()
+}
+
+/**
+ * 收件箱那一份（左栏徽标、首页那一行也读它；一分钟内不重复取）。
+ * WP510：`scope` 不给 = 收件箱页现在选的那一格；左栏、首页一律传 `'mine'`（数的是给我的）。
+ * ① 个人里永远是 `mine`，请求与以前一字不差。
+ */
+export function useInbox(enabled = true, scope?: InboxScope) {
+  const current = useInboxScope()
+  const s = scope ?? current
   return useQuery<InboxView>({
-    queryKey: INBOX_QUERY,
-    queryFn: getInbox,
+    queryKey: s === 'all' ? [...INBOX_QUERY, 'all'] : INBOX_QUERY,
+    queryFn: () => (s === 'all' ? getInbox({ scope: 'all' }) : getInbox()),
     enabled,
     retry: false,
     staleTime: 15_000,
     refetchInterval: 60_000,
   })
+}
+
+/* ── WP510：「谁在看」——我现在看着哪一件（第三栏开着的 / 一张一张当前那张），别人看着哪几件 ── */
+
+const lookingStore = memoryStore<string | null>(null)
+const viewersStore = memoryStore<Record<string, InboxViewer[]>>({})
+
+/** 我现在看着哪一件（`null` = 哪件都没看）。 */
+export function setInboxLooking(id: string | null): void {
+  lookingStore.set(id)
+}
+
+/** 这一件有哪几位同事正看着（不含自己；① 永远是空的）。 */
+export function useInboxViewers(id: string | undefined): InboxViewer[] {
+  const all = viewersStore.use()
+  return id === undefined ? NONE : (all[id] ?? NONE)
+}
+const NONE: InboxViewer[] = []
+
+/**
+ * 心跳：开着就 5 秒一跳（「我看着哪一件」），回来的别人那几件放进仓里；换一件立刻跳一下；
+ * 关掉（离开收件箱页、或不是 ② / ③）跳一下 `null`，别人那边马上消失。
+ */
+export function useInboxPresence(enabled: boolean): void {
+  const looking = lookingStore.use()
+  const ref = useRef(looking)
+  ref.current = looking
+  useEffect(() => {
+    if (!enabled) return
+    let live = true
+    const beat = (): void => {
+      inboxPresence(ref.current)
+        .then((v) => {
+          if (live) viewersStore.set(v.viewers)
+        })
+        .catch(() => undefined)
+    }
+    beat()
+    const timer = setInterval(beat, INBOX_PRESENCE_BEAT_MS)
+    return () => {
+      live = false
+      clearInterval(timer)
+      viewersStore.set({})
+      void inboxPresence(null).catch(() => undefined)
+    }
+  }, [enabled])
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    if (!enabled) return
+    inboxPresence(looking)
+      .then((v) => {
+        viewersStore.set(v.viewers)
+      })
+      .catch(() => undefined)
+  }, [enabled, looking])
+}
+
+/** 只给测试用。 */
+export function resetInboxTeamState(): void {
+  scopeStore.set('mine')
+  lookingStore.set(null)
+  viewersStore.set({})
 }
 
 /** 批了 / 改判了之后：收件箱、岗位牌堆、首页、左栏岗位数、消息页一起刷新。 */

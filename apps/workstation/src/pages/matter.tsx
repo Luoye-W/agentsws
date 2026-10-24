@@ -21,6 +21,7 @@ import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { ModelSwitchDivider } from '@/components/free-chat/thread-bits'
+import { useTeamNames } from '@/components/inbox/inbox-team'
 import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
 import { MaskDialog } from '@/components/matter/mask-dialog'
 import { MatterComposer } from '@/components/matter/matter-composer'
@@ -333,6 +334,7 @@ export function MatterPage(): ReactNode {
       ),
     ),
   ]
+  const teamNames = useTeamNames()
   const cardQueries = useQueries({
     queries: cardIds.map((cid) => ({
       queryKey: ['approval', cid, positionId ?? ''],
@@ -353,6 +355,8 @@ export function MatterPage(): ReactNode {
             card: projectCard(item, {
               now: new Date().toISOString(),
               position_id: positionId ?? '',
+              // WP510：② / ③ 里别人定的卡写上是谁（① 不给，卡一字不变）
+              ...(teamNames === undefined ? {} : { personName: teamNames }),
             }),
           }),
     })

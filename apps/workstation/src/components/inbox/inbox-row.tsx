@@ -27,6 +27,7 @@ import {
   shortTime,
   waitedHours,
 } from './inbox-model'
+import { OwnerNote, ViewerChip } from './inbox-team'
 
 export type RowAct =
   /** WP469：记成待办（「⋯」第一项，快捷键 T） */
@@ -232,6 +233,9 @@ export function InboxRow({
               {t('inbox.guess')}
             </button>
           )}
+          {/* WP510：② / ③ 才有（归谁、谁在看）；① 里两样都画空 */}
+          <OwnerNote item={item} />
+          <ViewerChip id={item.id} />
           <span className="ml-auto shrink-0 pl-2 text-xs text-ws-faint" data-slot="status">
             {[where, shortTime(item.at, Date.now(), lang)]
               .filter((x) => x !== undefined && x !== '')

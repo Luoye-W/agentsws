@@ -43,6 +43,7 @@ import {
   useInboxRefresh,
 } from './inbox-model'
 import { ItemGlyph, rowPill, rowTag } from './inbox-row'
+import { handledByOther, handledText, TeamLine } from './inbox-team'
 
 /** 一张卡带不带「原信 + 草稿」那种排版（有草稿、能批、不是去插件发的）。 */
 export function isDraftCard(item: InboxItem): boolean {
@@ -122,8 +123,8 @@ export function InboxPane({
     return (
       <div data-testid="inbox-pane" data-kind="gone" className="flex flex-col">
         <PaneHead icon={null} title="" onClose={inline ? close : undefined} />
-        <p className="text-[13px] text-ws-muted-fg">
-          {inbox.isPending ? '' : t('inbox.pane.gone')}
+        <p className="text-[13px] text-ws-muted-fg" data-testid="inbox-pane-gone">
+          {inbox.isPending ? '' : goneText(inbox.data, open.id, t)}
         </p>
       </div>
     )
@@ -142,6 +143,7 @@ export function InboxPane({
       className="flex min-h-0 flex-col"
     >
       {head}
+      <TeamLine item={item} className="-mt-1 pb-3" />
       {isDraftCard(item) && item.card !== undefined ? (
         <DraftPane
           item={item}
@@ -155,6 +157,16 @@ export function InboxPane({
       )}
     </div>
   )
+}
+
+/** 开着的这一件没了：同事处理掉的写他的名字（WP510），否则照旧「已经处理完了」。 */
+function goneText(
+  view: Parameters<typeof handledByOther>[0],
+  id: string,
+  t: (k: string, v?: Record<string, string | number>) => string,
+): string {
+  const by = handledByOther(view, id)
+  return by === undefined ? t('inbox.pane.gone') : handledText(by, t)
 }
 
 /** 一件的身体（不带草稿排版的卡 = 岗位里那张卡；信 = 三个建议那一套）。一张一张里也用它。 */

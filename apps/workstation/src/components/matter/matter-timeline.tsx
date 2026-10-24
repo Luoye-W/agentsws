@@ -1015,6 +1015,12 @@ export function InlineCard({
         : card.status === 'rejected'
           ? 'matter.card.rejected'
           : 'matter.card.done'
+    // WP510（决策 1515）：② / ③ 里别人定的写上是谁（「林峰批了」）；自己定的、① 里照旧「你批了」
+    const by = setupDone ? undefined : card.decided_by
+    const label =
+      by === undefined
+        ? t(key, { title: card.title })
+        : t(`${key}_by`, { name: by.name, title: card.title })
     const good = setupDone || APPROVED.has(card.status)
     return (
       <AiShell id={event.id} roleId={roleId} name={roleName} at={event.at}>
@@ -1034,7 +1040,7 @@ export function InlineCard({
               good ? 'text-ws-good' : 'text-ws-body',
             )}
           >
-            {t(key, { title: card.title })}
+            {label}
           </span>
           <span className="ml-auto shrink-0 text-[12px] text-ws-muted-fg">
             {clockOf(event.at, lang)}

@@ -7491,7 +7491,24 @@ export const getMessageOverview = (): Promise<MessageOverview> => api('/v1/messa
  * WP459（决策 1497）：收件箱——所有岗位等你批的卡 + 要你判断的信一条队列（要紧 / 今天 / 不急）、
  * 筛选件数、今天 AI 猜着交给岗位的、简报的数。
  */
-export const getInbox = (): Promise<InboxView> => api('/v1/inbox')
+export const getInbox = (opts?: { scope?: 'all' }): Promise<InboxView> =>
+  api(opts?.scope === 'all' ? '/v1/inbox?scope=all' : '/v1/inbox')
+
+/** WP510（决策 1515）：「谁在看」——我开着哪一件（`null` = 没开着），回别人开着哪几件。 */
+export const inboxPresence = (
+  item: string | null,
+): Promise<import('@agentsws/contracts').InboxPresenceView> =>
+  api('/v1/inbox/presence', { method: 'POST', body: { item } })
+
+/** WP510：收件箱分工（邮箱负责人、多少天没上线算不在、不在时交给谁、同事）。 */
+export const getInboxTeam = (): Promise<import('@agentsws/contracts').TeamInboxView> =>
+  api('/v1/inbox/team')
+
+/** WP510：改收件箱分工的一项。 */
+export const setInboxTeam = (
+  patch: import('@agentsws/contracts').TeamInboxPatch,
+): Promise<import('@agentsws/contracts').TeamInboxView> =>
+  api('/v1/inbox/team', { method: 'PUT', body: patch })
 
 /** WP459（决策 1498 / 1504）：改判「AI 猜的」——原岗位没批的卡一起撤掉。 */
 export const rehandMessage = (
