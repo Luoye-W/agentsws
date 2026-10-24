@@ -128,20 +128,32 @@ async function approve(id: string): Promise<void> {
 }
 
 describe('WP506 批量开发信分时发', () => {
-  it('卡上带节奏（缺省每小时 10 封），没批之前能改；批了第一封当场发，其余按间隔一封一封', async () => {
+  it('卡上带节奏（没连邮箱 = 新邮箱，每小时 5 封），没批之前能改；批了第一封当场发，其余按间隔一封一封', async () => {
     await boot()
     const ids = await sandboxIds(3)
     const id = await plan(ids)
     const card = await server.txn.approvals.get(id)
-    const payload = card?.payload as { per_hour: number; cadence: string; quota_remaining: number }
-    expect(payload.per_hour).toBe(10)
-    expect(payload.cadence).toContain('每小时最多 10 封')
+    const payload = card?.payload as {
+      per_hour: number
+      pace_basis: string
+      cadence: string
+      quota_remaining: number
+    }
+    expect(payload.per_hour).toBe(5)
+    expect(payload.pace_basis).toBe('new')
+    expect(payload.cadence).toContain('新邮箱，每小时最多 5 封')
     expect(payload.quota_remaining).toBe(30)
     // 没批之前改成每小时 2 封（= 30 分钟一封）
     const edited = await data<Progress>(
       await post(`/v1/kol/outreach/batches/${id}/control`, { per_hour: 2 }),
     )
-    expect(edited).toMatchObject({ state: 'pending', per_hour: 2, total: 3, sent: 0 })
+    expect(edited).toMatchObject({
+      state: 'pending',
+      per_hour: 2,
+      pace_edited: true,
+      total: 3,
+      sent: 0,
+    })
     // 没批不能暂停 / 取消（不想发就在卡上点「不发」）
     expect((await post(`/v1/kol/outreach/batches/${id}/control`, { action: 'pause' })).status).toBe(
       409,
@@ -298,7 +310,7 @@ describe('WP506 批量开发信分时发', () => {
     ).token
     const res = await post(`/v1/kol/outreach/batches/${id}/control`, { per_hour: 30 }, runtime)
     expect(res.status).toBe(403)
-    expect((await progressOf(id)).per_hour).toBe(10)
+    expect((await progressOf(id)).per_hour).toBe(5)
   })
 
   it('重启后接着发、不重发：发到一半关掉进程，再开起来照节奏发剩下的', async () => {
@@ -310,12 +322,12 @@ describe('WP506 批量开发信分时发', () => {
     expect(await firsts()).toEqual([ids[0]])
     await server.close()
 
-    t += 6 * MIN
+    t += 12 * MIN
     await boot(dir)
     await pump()
     await pump()
     expect(await firsts()).toEqual([ids[0], ids[1]])
-    t += 6 * MIN
+    t += 12 * MIN
     await pump()
     expect(await firsts()).toEqual(ids)
     const p = await progressOf(id)
@@ -349,7 +361,7 @@ describe('WP506 批量开发信分时发', () => {
     expect(await firsts()).toEqual([ids[0]])
     const p = await progressOf(id)
     expect(p.rows.map((r) => r.state)).toEqual(['sent', 'queued', 'queued'])
-    t += 6 * MIN
+    t += 12 * MIN
     await pump()
     expect(await firsts()).toEqual([ids[0], ids[1]])
   })

@@ -101,10 +101,12 @@ const { NOW, ROWS, api, progress } = vi.hoisted(() => {
     listKnowledgeSources: vi.fn(async () => []),
     listRangeGroups: vi.fn(async () => []),
     setKnowledgeCardStage: vi.fn(async () => ({})),
-    setKnowledgeCardsDisabled: vi.fn(async (ids: readonly string[], disabled: boolean) => ({
-      updated: ids.map((id) => ({ id, ...(disabled ? { disabled_at: NOW } : {}) })),
-      missing: [],
-    })),
+    setKnowledgeCardsDisabled: vi.fn(
+      async (ids: readonly string[], disabled: boolean, _a?: string) => ({
+        updated: ids.map((id) => ({ id, ...(disabled ? { disabled_at: NOW } : {}) })),
+        missing: [],
+      }),
+    ),
   }
   return { NOW, ROWS, api, progress }
 })
@@ -115,6 +117,9 @@ vi.mock('@/lib/api', async () => {
 })
 
 const { KolOutreachBatchBody } = await import('@/components/kol/kol-card-bodies')
+const { KnowledgeToggleBody } = await import('@/components/deck/knowledge-toggle-body')
+const { deckActionLabel } = await import('@/components/deck/deck-action-bar')
+const { translate } = await import('@/lib/i18n')
 const { KolLibraryPanel } = await import('@/components/kol/kol-library-panel')
 const { KnowledgeLibraryPanel } = await import('@/components/knowledge/knowledge-library-panel')
 const { clockOf } = await import('@/components/kol/kol-batch-progress')
@@ -137,7 +142,9 @@ const payload = {
   skipped: [],
   letter: '首封合作邀请',
   cadence: '每小时最多 10 封，一封一封发；今天这条职责还能发 28 封，超了明天接着发',
-  per_hour: 10,
+  per_hour: 5,
+  pace_basis: 'new' as const,
+  pace_why: '同步到的已发信最早只到 12 天前（不到 90 天）',
   quota_remaining: 28,
   mailbox: 'connected' as const,
   heads_up: [],
@@ -150,23 +157,27 @@ const card = (actions: string[] = ['approve', 'reject']) =>
   }) as unknown as Pick<DeckCard, 'id' | 'position_id' | 'available_actions'>
 
 describe('1788 B 批量开发信卡：节奏与进度', () => {
-  it('没批：「每小时最多 [10] 封 · 今天还能发 28 封」，改成 5 存到这一批上（回车 / 失焦才存）', async () => {
+  it('没批：「新邮箱，每小时最多 [5] 封 · 今天还能发 28 封」，改成 8 存到这一批上（回车 / 失焦才存）', async () => {
     api.getKolOutreachBatches.mockResolvedValue([
-      progress({ state: 'pending', sent: 0, queued: 3 }),
+      progress({ state: 'pending', sent: 0, queued: 3, per_hour: 5, pace_basis: 'new' }),
     ])
     renderWithProviders(<KolOutreachBatchBody payload={payload} card={card()} />)
     const input = (await screen.findByTestId('kol-batch-pace-input')) as HTMLInputElement
-    expect(input.value).toBe('10')
+    expect(input.value).toBe('5')
+    // 1795 C：缺省节奏的依据——「新邮箱，」写在前面，为什么在悬停里
+    const basis = screen.getByTestId('kol-batch-pace-basis')
+    expect(basis.textContent).toBe('新邮箱，')
+    expect(basis.getAttribute('title')).toContain('不到 90 天')
     const facts = screen.getByTestId('kol-batch-facts').textContent ?? ''
     expect(facts).toContain('每小时最多')
     expect(facts).toContain('今天还能发 28 封，超了明天接着发')
-    fireEvent.change(input, { target: { value: '5' } })
+    fireEvent.change(input, { target: { value: '8' } })
     expect(api.controlKolOutreachBatch).not.toHaveBeenCalled()
     fireEvent.keyDown(input, { key: 'Enter' })
     await waitFor(() => {
       expect(api.controlKolOutreachBatch).toHaveBeenCalledWith(
         'apr_batch',
-        { per_hour: 5 },
+        { per_hour: 8 },
         'asg_yt',
       )
     })
@@ -357,5 +368,82 @@ describe('1789 B 知识库：停用 / 启用', () => {
     renderWithProviders(<KnowledgeLibraryPanel tier="position" pathname="/" />)
     await screen.findAllByTestId('knowledge-row')
     expect(screen.queryByTestId('knowledge-status-disabled')).toBeNull()
+  })
+})
+
+describe('1795 C：老邮箱 / 人改过节奏', () => {
+  it('老邮箱写「老邮箱，」；人改过节奏就不再说依据', async () => {
+    api.getKolOutreachBatches.mockResolvedValue([
+      progress({ state: 'pending', per_hour: 15, pace_basis: 'established' }),
+    ])
+    const first = renderWithProviders(<KolOutreachBatchBody payload={payload} card={card()} />)
+    await waitFor(() => {
+      expect(screen.getByTestId('kol-batch-pace-basis').textContent).toBe('老邮箱，')
+    })
+    expect((screen.getByTestId('kol-batch-pace-input') as HTMLInputElement).value).toBe('15')
+    first.unmount()
+    api.getKolOutreachBatches.mockResolvedValue([
+      progress({ state: 'pending', per_hour: 8, pace_basis: 'new', pace_edited: true }),
+    ])
+    renderWithProviders(<KolOutreachBatchBody payload={payload} card={card()} />)
+    await waitFor(() => {
+      expect((screen.getByTestId('kol-batch-pace-input') as HTMLInputElement).value).toBe('8')
+    })
+    expect(screen.queryByTestId('kol-batch-pace-basis')).toBeNull()
+  })
+})
+
+describe('1796 C：AI 提议停用知识的卡', () => {
+  const toggle = {
+    form: 'knowledge_toggle' as const,
+    action: 'disable' as const,
+    reason: '运费政策 10 月改了',
+    items: [
+      { id: 'k1', statement: '运费统一 9.9 美元（旧口径）' },
+      { id: 'k2', statement: '旧口径：发货走 4PX' },
+    ],
+    before: null,
+    after: '停用 2 条知识',
+  }
+
+  it('列出哪几条与 AI 的理由；主按钮「停用 2 条」、次按钮「不用」；没批时没有撤销', () => {
+    renderWithProviders(
+      <KnowledgeToggleBody
+        card={{ status: 'pending', position_id: 'asg_cs' } as never}
+        payload={toggle}
+      />,
+    )
+    expect(screen.getAllByTestId('knowledge-toggle-item').map((x) => x.textContent)).toEqual([
+      '运费统一 9.9 美元（旧口径）',
+      '旧口径：发货走 4PX',
+    ])
+    expect(screen.getByTestId('knowledge-toggle-reason').textContent).toBe(
+      'AI 的理由：运费政策 10 月改了',
+    )
+    expect(screen.queryByTestId('knowledge-toggle-undo')).toBeNull()
+    const deck = {
+      kind: 'knowledge_update',
+      layout: 'change',
+      available_actions: ['approve', 'reject'],
+      detail: { payload: toggle },
+    } as unknown as DeckCard
+    const zh = (k: string): string => translate('zh', k)
+    expect(deckActionLabel(deck, 'approve', zh)).toBe('停用 2 条')
+    expect(deckActionLabel(deck, 'reject', zh)).toBe('不用')
+  })
+
+  it('批了：「已停用 2 条 · 撤销」——撤销 = 人点启用回来', async () => {
+    renderWithProviders(
+      <KnowledgeToggleBody
+        card={{ status: 'approved', position_id: 'asg_cs' } as never}
+        payload={toggle}
+      />,
+    )
+    expect(screen.getByTestId('knowledge-toggle-done').textContent).toContain('已停用 2 条')
+    fireEvent.click(screen.getByTestId('knowledge-toggle-undo'))
+    await waitFor(() => {
+      expect(api.setKnowledgeCardsDisabled).toHaveBeenCalledWith(['k1', 'k2'], false, 'asg_cs')
+    })
+    expect(await screen.findByText('已撤销')).toBeDefined()
   })
 })

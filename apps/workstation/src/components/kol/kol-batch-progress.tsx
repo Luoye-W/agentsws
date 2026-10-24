@@ -73,11 +73,16 @@ export function BatchPace({
   assignment,
   perHour,
   editable,
+  basis,
+  why,
 }: {
   approval_item_id: string | undefined
   assignment: string | undefined
   perHour: number
   editable: boolean
+  /** WP506（决策 1795 C）：缺省节奏的依据——「新邮箱，」/「老邮箱，」写在前面，依据在悬停里。 */
+  basis?: 'new' | 'established'
+  why?: string
 }): ReactNode {
   const { t } = useApp()
   const [draft, setDraft] = useState(String(perHour))
@@ -96,6 +101,16 @@ export function BatchPace({
   }
   return (
     <span className="inline-flex items-center gap-1" data-testid="kol-batch-pace">
+      {basis === undefined ? null : (
+        <span
+          title={why}
+          data-testid="kol-batch-pace-basis"
+          data-basis={basis}
+          className="text-ws-muted-fg"
+        >
+          {t(`kol.batch.pace.basis.${basis}`)}
+        </span>
+      )}
       {t('kol.batch.pace.pre')}
       {editable && approval_item_id !== undefined ? (
         <input
@@ -215,6 +230,10 @@ export function BatchProgress({
             assignment={assignment}
             perHour={progress.per_hour}
             editable
+            {...(progress.pace_edited === true || progress.pace_basis === undefined
+              ? {}
+              : { basis: progress.pace_basis })}
+            {...(progress.pace_why === undefined ? {} : { why: progress.pace_why })}
           />
           <span className="flex-1" />
           <button

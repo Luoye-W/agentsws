@@ -653,6 +653,13 @@ export interface KolOutreachBatchProgressView {
   channel: KolChannel
   state: 'pending' | 'sending' | 'paused' | 'cancelled' | 'done' | 'rejected'
   per_hour: number
+  /**
+   * WP506（决策 1795 C）：缺省节奏是按哪种邮箱定的——`new` 新邮箱 5 封 / `established` 老邮箱 15 封；
+   * `pace_why` 是那一句依据（卡上悬停看）。人改过节奏（`pace_edited`）卡上就不再说「新邮箱 / 老邮箱」。
+   */
+  pace_basis?: 'new' | 'established'
+  pace_why?: string
+  pace_edited?: boolean
   total: number
   sent: number
   queued: number
@@ -1351,10 +1358,16 @@ const OutreachBatchBody = z.object({
   brand_pitch: z.string().max(500).optional(),
 })
 
-/** WP506（决策 1788 B）：每小时最多几封的上下限（缺省 10；不过每天的额度照样管着）。 */
+/**
+ * WP506（决策 1788 B / 1795 C）：每小时最多几封——上下限 1–30；缺省按发信邮箱的「年龄」定：
+ * 新邮箱（或认不出来）5 封、老邮箱 15 封（怎么认见 `kol-service.ts` 的 `outreachPaceFor`）。每天的额度照样管着。
+ */
 export const OUTREACH_PER_HOUR_MIN = 1
 export const OUTREACH_PER_HOUR_MAX = 30
-export const DEFAULT_OUTREACH_PER_HOUR = 10
+export const OUTREACH_PER_HOUR_NEW = 5
+export const OUTREACH_PER_HOUR_ESTABLISHED = 15
+/** 认不出邮箱的时候（老批次没记节奏时也用它）= 按新邮箱算。 */
+export const DEFAULT_OUTREACH_PER_HOUR = OUTREACH_PER_HOUR_NEW
 
 const OutreachBatchControlBody = z
   .object({

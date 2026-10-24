@@ -150,7 +150,7 @@ describe('WP504 批量开发信确认卡', () => {
   })
 
   it('批了：演练红人按名单逐个提、自动批（不再出第二张要人点的卡）；30 天内联系过的下一批跳过', async () => {
-    // WP506（决策 1788 B）：分时发——批的那一刻只发第一封，其余由每分钟那一拍按节奏发（缺省每小时 10 封 = 6 分钟一封）
+    // WP506（决策 1788 B / 1795 C）：分时发——批的那一刻只发第一封，其余由每分钟那一拍按节奏发（没连邮箱 = 新邮箱，每小时 5 封 = 12 分钟一封）
     expect((await post('/v1/kol/sandbox', { channel: 'youtube' })).status).toBeLessThan(300)
     const pool = await data<{
       rows: { creator_id: string; has_contact: boolean; collab?: { stage: string } }[]
@@ -167,7 +167,7 @@ describe('WP504 批量开发信确认卡', () => {
     await decide(out.approval_item_id as string, 'approve')
     expect(await outreachChanges()).toHaveLength(1)
     const brand = await server.brands.forWorkspace(server.bootstrap.workspace.id)
-    t += 6 * 60_000
+    t += 12 * 60_000
     await brand.kolService.pumpOutreachBatches()
     const changes = await outreachChanges()
     expect(changes).toHaveLength(2)

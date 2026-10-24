@@ -653,6 +653,32 @@ export const isKnowledgeStalePayload = (p: unknown): p is KnowledgeStalePayload 
   (p as { form?: unknown }).form === KNOWLEDGE_STALE_FORM &&
   Array.isArray((p as { recheck_ids?: unknown }).recheck_ids)
 
+/**
+ * WP506（决策 1796 C）：**AI 提议停用 / 启用几条知识**的确认卡（`knowledge_update` + `form: 'knowledge_toggle'`）。
+ *
+ * AI 只能提、不能改：它调 `propose_knowledge_toggle` 出这一张，列出是哪几条、为什么；人在中栏点了才真停用 / 启用
+ * （走和知识库面板同一处 `setDisabled`）。不批什么都不变；批了之后卡上还能「撤销」（人点，走只给人点的那个接口）。
+ */
+export const KNOWLEDGE_TOGGLE_FORM = 'knowledge_toggle'
+
+export interface KnowledgeTogglePayload {
+  form: typeof KNOWLEDGE_TOGGLE_FORM
+  action: 'disable' | 'enable'
+  /** AI 给的理由（一句话，外来文字照资料对待）。 */
+  reason: string
+  items: { id: string; statement: string; stage?: KnowledgeStage }[]
+  before: null
+  after: string
+}
+
+export const isKnowledgeTogglePayload = (p: unknown): p is KnowledgeTogglePayload =>
+  typeof p === 'object' &&
+  p !== null &&
+  (p as { form?: unknown }).form === KNOWLEDGE_TOGGLE_FORM &&
+  ((p as { action?: unknown }).action === 'disable' ||
+    (p as { action?: unknown }).action === 'enable') &&
+  Array.isArray((p as { items?: unknown }).items)
+
 /** 开跑前的预估（花费跟簇数 / 页数走；模型网关的上限照算）。 */
 export interface KnowledgeLearnEstimate {
   source: KnowledgeLearnSource

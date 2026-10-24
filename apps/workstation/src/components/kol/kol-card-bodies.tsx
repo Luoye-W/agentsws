@@ -98,6 +98,9 @@ export interface KolOutreachBatchPayload {
   cadence?: string
   /** WP506（决策 1788 B）：每小时最多几封（卡上能改，改的是这一批上存的那个数）。 */
   per_hour?: number
+  /** WP506（决策 1795 C）：缺省节奏按哪种邮箱定的（新邮箱 5 / 老邮箱 15）与那一句依据。 */
+  pace_basis?: 'new' | 'established'
+  pace_why?: string
   /** WP506：出卡那一刻这条职责今天还能发几封。 */
   quota_remaining?: number
   mailbox?: 'connected' | 'none'
@@ -140,6 +143,10 @@ export function KolOutreachBatchBody({
   const pending = progress === undefined || progress.state === 'pending'
   const decidable = card?.available_actions.includes('approve') === true
   const perHour = progress?.per_hour ?? payload.per_hour
+  // 人改过节奏就不再说「新邮箱 / 老邮箱」（那是缺省值的依据）
+  const basis =
+    progress?.pace_edited === true ? undefined : (progress?.pace_basis ?? payload.pace_basis)
+  const why = progress?.pace_why ?? payload.pace_why
   const creators = Array.isArray(payload.creators) ? payload.creators : []
   const skipped = Array.isArray(payload.skipped) ? payload.skipped : []
   const headsUp = (payload.heads_up ?? []).filter((x): x is string => typeof x === 'string')
@@ -168,6 +175,8 @@ export function KolOutreachBatchBody({
                   assignment={assignment}
                   perHour={perHour}
                   editable={decidable}
+                  {...(basis === undefined ? {} : { basis })}
+                  {...(why === undefined ? {} : { why })}
                 />
                 {payload.quota_remaining === undefined ? null : (
                   <span className="text-xs text-ws-muted-fg">

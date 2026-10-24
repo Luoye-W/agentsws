@@ -51,8 +51,10 @@ import {
   DEFAULT_OUTREACH_PER_HOUR,
   KOL_TAG_MAX_LENGTH,
   KOL_TAGS_MAX,
+  OUTREACH_PER_HOUR_ESTABLISHED,
   OUTREACH_PER_HOUR_MAX,
   OUTREACH_PER_HOUR_MIN,
+  OUTREACH_PER_HOUR_NEW,
 } from '@agentsws/api'
 import type {
   ApprovalBus,
@@ -369,6 +371,61 @@ export interface KolServiceOptions {
    * 一律要人点（不自动批），回执里带 `needs_mailbox` 让对话里就地出连接卡。不给 = 当连着（老装配）。
    */
   mailConnected?(): boolean
+  /**
+   * WP506（决策 1795 C）：发开发信那只邮箱（默认发件那一只）在**已同步的已发信**里有多少封、最早一封是哪天；
+   * B2B 那边人标过「这只邮箱已经正常发信很久」也带上。批量开发信的缺省节奏按它定（{@link outreachPaceFor}）。
+   * 不给 / 没连邮箱 / 还没同步到已发信 = 当新邮箱。
+   */
+  mailboxHistory?(): MaybePromise<MailboxHistory | undefined>
+}
+
+/** WP506（决策 1795 C）：发信邮箱的已发历史（只要几个数，不要信）。 */
+export interface MailboxHistory {
+  address: string
+  /** 已同步的「已发送」里有几封。 */
+  sent: number
+  /** 其中最早一封的时间。 */
+  earliest_sent_at?: string
+  /** B2B 发信邮箱上人标了「已经正常发信很久」（WP176）。 */
+  declared_established?: boolean
+}
+
+/** 老邮箱的门槛：已同步的已发信里最早一封至少这么多天前…… */
+export const ESTABLISHED_MAILBOX_DAYS = 90
+/** ……而且至少发过这么多封。 */
+export const ESTABLISHED_MAILBOX_SENT = 50
+
+/**
+ * WP506（决策 1795 C）：批量开发信缺省每小时几封——按发信邮箱的「年龄」：
+ * - **老邮箱 15 封**：已同步的已发信里最早一封在 90 天以前、且至少 50 封（发了三个月、每周几封以上的正常邮箱）；
+ *   或者人在 B2B 那边标过「这只邮箱已经正常发信很久」；
+ * - **新邮箱 5 封**：不到这两条的、没连邮箱的、还没同步到已发信的（认不出来就按新的算，宁慢勿进垃圾箱）。
+ *
+ * 只看已同步的历史：邮件同步首次只回溯 30 天，刚连上的老邮箱要等历史够 90 天（或在邮件页往前多取一些）才认得出。
+ */
+export function outreachPaceFor(
+  history: MailboxHistory | undefined,
+  now: string,
+): { per_hour: number; basis: 'new' | 'established'; why: string } {
+  const established = { per_hour: OUTREACH_PER_HOUR_ESTABLISHED, basis: 'established' as const }
+  const fresh = { per_hour: OUTREACH_PER_HOUR_NEW, basis: 'new' as const }
+  if (history === undefined) return { ...fresh, why: '还没连发信邮箱，按新邮箱算' }
+  if (history.declared_established === true)
+    return { ...established, why: '这只邮箱标过「已经正常发信很久」' }
+  const first =
+    history.earliest_sent_at === undefined ? Number.NaN : Date.parse(history.earliest_sent_at)
+  if (history.sent === 0 || Number.isNaN(first))
+    return { ...fresh, why: '还没同步到这只邮箱的已发信，按新邮箱算' }
+  const days = Math.floor((Date.parse(now) - first) / 86_400_000)
+  if (days >= ESTABLISHED_MAILBOX_DAYS && history.sent >= ESTABLISHED_MAILBOX_SENT)
+    return { ...established, why: `已发信 ${history.sent} 封，最早一封在 ${days} 天前` }
+  return {
+    ...fresh,
+    why:
+      days < ESTABLISHED_MAILBOX_DAYS
+        ? `同步到的已发信最早只到 ${days} 天前（不到 ${ESTABLISHED_MAILBOX_DAYS} 天）`
+        : `同步到的已发信只有 ${history.sent} 封（不到 ${ESTABLISHED_MAILBOX_SENT} 封）`,
+  }
 }
 
 export interface KolServiceAssembly {
@@ -1439,8 +1496,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
      */
     state: 'pending' | 'approved' | 'rejected' | 'sending' | 'paused' | 'cancelled' | 'done'
     created_at: string
-    /** WP506：每小时最多几封（缺省 {@link DEFAULT_OUTREACH_PER_HOUR}）。 */
+    /** WP506：每小时最多几封（缺省按发信邮箱定，见 {@link outreachPaceFor}；老记录没有 = {@link DEFAULT_OUTREACH_PER_HOUR}）。 */
     per_hour?: number
+    /** WP506（决策 1795 C）：出卡时缺省节奏的依据；人改过节奏记 `pace_edited`。 */
+    pace_basis?: 'new' | 'established'
+    pace_why?: string
+    pace_edited?: boolean
     /** WP506：批了之后才有。 */
     queue?: OutreachQueueEntry[]
     /** WP506：批的那个人与他那条渠道分配（之后逐封提都用它，额度也算在它上）。 */
@@ -1536,8 +1597,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     )
   }
   /** 卡上「节奏」那一句（卡面自己按 `per_hour` / `quota_remaining` 另写；这一句给别的渠道看卡用）。 */
-  const cadenceText = (per_hour: number, remaining: number): string =>
-    `每小时最多 ${per_hour} 封，一封一封发；今天这条职责还能发 ${remaining} 封，超了明天接着发`
+  const cadenceText = (per_hour: number, remaining: number, basis: 'new' | 'established'): string =>
+    `${basis === 'new' ? '新邮箱' : '老邮箱'}，每小时最多 ${per_hour} 封，一封一封发；今天这条职责还能发 ${remaining} 封，超了明天接着发`
 
   const planOutreachBatch = async (
     actor: { person_id: PersonId; assignment_id: AssignmentId; role_id: string },
@@ -1674,7 +1735,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       : []
     const batch_id = nextId('kob')
     const remaining = quota.remaining
-    const per_hour = DEFAULT_OUTREACH_PER_HOUR
+    // WP506（决策 1795 C）：缺省节奏按发信邮箱的「年龄」——新邮箱 5 封、老邮箱 15 封
+    const pace = outreachPaceFor(await options.mailboxHistory?.(), clock.now())
+    const per_hour = pace.per_hour
     const payload = {
       form: 'kol_outreach_batch',
       channel: input.channel,
@@ -1690,8 +1753,10 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       letter: '首封合作邀请 · 每人按他做的内容开头',
       // WP506（决策 1788 B）：分时发——卡上「节奏」一格能改（改的是批次上的 per_hour，见 controlOutreachBatch）
       per_hour,
+      pace_basis: pace.basis,
+      pace_why: pace.why,
       quota_remaining: remaining,
-      cadence: cadenceText(per_hour, remaining),
+      cadence: cadenceText(per_hour, remaining, pace.basis),
       mailbox: noMailbox ? 'none' : 'connected',
       heads_up,
     }
@@ -1747,6 +1812,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         state: 'pending',
         created_at: clock.now(),
         per_hour,
+        pace_basis: pace.basis,
+        pace_why: pace.why,
       },
     ])
     emit('kol.outreach_batch_planned', actor.person_id, {
@@ -2043,6 +2110,9 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       channel: r.channel,
       state,
       per_hour: perHourOf(r),
+      ...(r.pace_basis === undefined ? {} : { pace_basis: r.pace_basis }),
+      ...(r.pace_why === undefined ? {} : { pace_why: r.pace_why }),
+      ...(r.pace_edited === true ? { pace_edited: true } : {}),
       total: rows.length,
       sent: count('sent'),
       // 「在发」那一封还没落定，算在排队里
@@ -2088,7 +2158,13 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       throw new ApiError('conflict', '这一批没在暂停。')
     const next = updateBatch(approval_item_id, (x) => ({
       ...x,
-      ...(input.per_hour === undefined ? {} : { per_hour: clampPerHour(input.per_hour) }),
+      ...(input.per_hour === undefined
+        ? {}
+        : {
+            per_hour: clampPerHour(input.per_hour),
+            // 数真变了才算人改过（卡上从此不再说「新邮箱 / 老邮箱」）
+            ...(clampPerHour(input.per_hour) === perHourOf(x) ? {} : { pace_edited: true }),
+          }),
       ...(action === 'pause' ? { state: 'paused' as const } : {}),
       ...(action === 'resume' ? { state: 'sending' as const } : {}),
       ...(action === 'cancel'

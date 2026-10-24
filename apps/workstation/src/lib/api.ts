@@ -6162,6 +6162,10 @@ export interface KolOutreachBatchProgress {
   channel: KolChannelId
   state: 'pending' | 'sending' | 'paused' | 'cancelled' | 'done' | 'rejected'
   per_hour: number
+  /** WP506（决策 1795 C）：缺省节奏的依据（新邮箱 5 / 老邮箱 15）；人改过就不再说。 */
+  pace_basis?: 'new' | 'established'
+  pace_why?: string
+  pace_edited?: boolean
   total: number
   sent: number
   queued: number
@@ -6180,7 +6184,7 @@ export interface KolOutreachBatchProgress {
 }
 
 /** WP506：每小时最多几封的上下限与缺省（同服务端 `@agentsws/api` 那三个数）。 */
-export const OUTREACH_PER_HOUR = { min: 1, max: 30, fallback: 10 } as const
+export const OUTREACH_PER_HOUR = { min: 1, max: 30, fresh: 5, established: 15 } as const
 
 export const getKolOutreachBatches = (
   filter: { channel?: KolChannelId; approval_item_id?: string } = {},
