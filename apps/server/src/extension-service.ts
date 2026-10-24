@@ -69,7 +69,7 @@ import type {
   KolProfileSnapshot,
   KolStore,
 } from './kol.js'
-import type { KolMediaCache } from './kol-media.js'
+import { KOL_MEDIA_RECENT_COVERS, type KolMediaCache } from './kol-media.js'
 import { CONTACT_SECRET_FIELD, contactSecretId } from './kol-service.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -368,15 +368,12 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     return url === undefined ? rest : { ...rest, url }
   }
 
-  /** WP502（决策 1760 B）：缓存几张近期作品封面（= 红人详情格子里露出来的那几张）。 */
-  const MEDIA_RECENT_COVERS = 6
-
   /** WP502（决策 1760 B）：存入那一刻要缓存的图——头像、横幅、前几张封面。 */
   function mediaUrlsOf(input: ExtensionCreatorSave): (string | undefined)[] {
     return [
       input.avatar_url,
       input.banner_url,
-      ...(input.recent_items ?? []).slice(0, MEDIA_RECENT_COVERS).map((r) => r.thumbnail_url),
+      ...(input.recent_items ?? []).slice(0, KOL_MEDIA_RECENT_COVERS).map((r) => r.thumbnail_url),
     ]
   }
 

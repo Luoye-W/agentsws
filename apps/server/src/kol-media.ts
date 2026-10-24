@@ -15,10 +15,25 @@
  * 同一个地址只存一份（id = 地址的 sha256 前 32 位）。文件放在 `<品牌数据目录>/kol-media/` 下；
  * 没有数据目录（测试 / 一次性进程）就放内存。**下载器是装配时给的**：只有真正的服务进程给（`index.ts`），
  * 测试给本地假响应——从不在测试里去真网站取图。
+ *
+ * WP505：生产的下载器认系统代理（`kol-media-fetch.ts`，决策 1770 B）；缓存记着每张多大、最后一次用是什么时候，
+ * 由 `kol-media-janitor.ts` 清掉没人再引用的、超了总量上限按最久没用的先删（决策 1771 B）。
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
+
+/** WP502：缓存几张近期作品封面（= 红人详情格子里露出来的那几张）。WP505 清理按同一个数认「还在用」。 */
+export const KOL_MEDIA_RECENT_COVERS = 6
 
 /** 单张上限：3 MB（横幅最大的那种也就几百 KB）。 */
 export const KOL_MEDIA_MAX_BYTES = 3 * 1024 * 1024
@@ -88,9 +103,27 @@ export interface KolMediaCache {
   cache(urls: readonly (string | undefined)[]): Promise<void>
   /** 这个外站地址缓存到了没有：有就回本机同源地址（`/v1/kol/media/<id>`）。 */
   localUrlOf(url: string | undefined): string | undefined
-  /** 按 id 读一张（路由那一跳用）。 */
+  /** 按 id 读一张（路由那一跳用）。读一次算「用过」一次（清理时按最久没用的先删）。 */
   read(id: string): { bytes: Uint8Array; content_type: string } | undefined
+  /**
+   * WP505（决策 1771 B）：缓存里现有的每一张——多大、最后一次用（存下或被看）是什么时候。
+   * 给清理那一跳（`kol-media-janitor.ts`）用。
+   */
+  entries(): KolMediaEntry[]
+  /** WP505：删掉一张（只删缓存的图，红人数据一个字不动）。没有就当删过了。 */
+  remove(id: string): void
 }
+
+/** 缓存里的一张（WP505 清理用）。 */
+export interface KolMediaEntry {
+  id: string
+  bytes: number
+  /** 最后一次用（存下或被看）的毫秒时间戳。 */
+  last_used_ms: number
+}
+
+/** 被看的时候多久才改一次文件时间（落盘那一档靠文件时间记「最后一次用」，重启后照样认得）。 */
+const TOUCH_EVERY_MS = 60 * 60 * 1000
 
 export interface KolMediaCacheOptions {
   /** 落盘目录（`<品牌数据目录>/kol-media`）。不给 = 放内存。 */
@@ -100,6 +133,10 @@ export interface KolMediaCacheOptions {
   maxBytes?: number
   timeoutMs?: number
   log?: (line: string) => void
+  /** WP505：新存下一张之后叫一声（清理那一跳据此看看是不是超了总量上限）。 */
+  onStored?: () => void
+  /** 现在几点（毫秒；测试给假的）。 */
+  now?: () => number
 }
 
 /** 外站地址 → id（sha256 前 32 位十六进制）。 */
@@ -125,28 +162,56 @@ const typeOfBytes = (b: Uint8Array): (typeof TYPES)[number] | undefined =>
 export function createKolMediaCache(options: KolMediaCacheOptions = {}): KolMediaCache {
   const maxBytes = options.maxBytes ?? KOL_MEDIA_MAX_BYTES
   const timeoutMs = options.timeoutMs ?? KOL_MEDIA_TIMEOUT_MS
+  const now = options.now ?? Date.now
   const memory = new Map<string, { bytes: Uint8Array; content_type: string }>()
   /** id → 扩展名（落盘档；启动时扫一遍目录）。 */
   const onDisk = new Map<string, string>()
+  /** WP505：id → 多大、最后一次用（落盘档启动时按文件大小与修改时间认）。 */
+  const usage = new Map<string, { bytes: number; last_used_ms: number }>()
   const inFlight = new Map<string, Promise<void>>()
 
   if (options.dir !== undefined && existsSync(options.dir)) {
     for (const name of readdirSync(options.dir)) {
       const m = name.match(/^([a-f0-9]{32})\.(jpg|png|gif|webp)$/)
-      if (m?.[1] !== undefined && m[2] !== undefined) onDisk.set(m[1], m[2])
+      if (m?.[1] === undefined || m[2] === undefined) continue
+      onDisk.set(m[1], m[2])
+      try {
+        const st = statSync(join(options.dir, name))
+        usage.set(m[1], { bytes: st.size, last_used_ms: st.mtimeMs })
+      } catch {
+        usage.set(m[1], { bytes: 0, last_used_ms: 0 })
+      }
     }
   }
 
   const has = (id: string): boolean => memory.has(id) || onDisk.has(id)
 
   const put = (id: string, bytes: Uint8Array, t: (typeof TYPES)[number]): void => {
-    if (options.dir === undefined) {
-      memory.set(id, { bytes, content_type: t.type })
-      return
+    if (options.dir === undefined) memory.set(id, { bytes, content_type: t.type })
+    else {
+      mkdirSync(options.dir, { recursive: true })
+      writeFileSync(join(options.dir, `${id}.${t.ext}`), bytes)
+      onDisk.set(id, t.ext)
     }
-    mkdirSync(options.dir, { recursive: true })
-    writeFileSync(join(options.dir, `${id}.${t.ext}`), bytes)
-    onDisk.set(id, t.ext)
+    usage.set(id, { bytes: bytes.length, last_used_ms: now() })
+    options.onStored?.()
+  }
+
+  /** 被看了一次：记「最后一次用」；落盘的隔一阵改一次文件时间（重启后还认得）。 */
+  const touch = (id: string): void => {
+    const u = usage.get(id)
+    if (u === undefined) return
+    const t = now()
+    const stale = t - u.last_used_ms >= TOUCH_EVERY_MS
+    u.last_used_ms = Math.max(u.last_used_ms, t)
+    const ext = onDisk.get(id)
+    if (!stale || ext === undefined || options.dir === undefined) return
+    try {
+      const at = new Date(t)
+      utimesSync(join(options.dir, `${id}.${ext}`), at, at)
+    } catch {
+      // 改不了文件时间就只记在内存里
+    }
   }
 
   /** 读到上限为止；超了回 `undefined`。 */
@@ -249,18 +314,39 @@ export function createKolMediaCache(options: KolMediaCacheOptions = {}): KolMedi
     read(id) {
       if (!/^[a-f0-9]{32}$/.test(id)) return undefined
       const hit = memory.get(id)
-      if (hit !== undefined) return hit
+      if (hit !== undefined) {
+        touch(id)
+        return hit
+      }
       const ext = onDisk.get(id)
       if (ext === undefined || options.dir === undefined) return undefined
       const t = TYPES.find((x) => x.ext === ext)
       if (t === undefined) return undefined
       try {
-        return {
+        const out = {
           bytes: new Uint8Array(readFileSync(join(options.dir, `${id}.${ext}`))),
           content_type: t.type,
         }
+        touch(id)
+        return out
       } catch {
         return undefined
+      }
+    },
+    entries() {
+      return [...usage].map(([id, u]) => ({ id, bytes: u.bytes, last_used_ms: u.last_used_ms }))
+    },
+    remove(id) {
+      if (!/^[a-f0-9]{32}$/.test(id)) return
+      memory.delete(id)
+      usage.delete(id)
+      const ext = onDisk.get(id)
+      onDisk.delete(id)
+      if (ext === undefined || options.dir === undefined) return
+      try {
+        unlinkSync(join(options.dir, `${id}.${ext}`))
+      } catch {
+        // 已经不在了
       }
     },
   }

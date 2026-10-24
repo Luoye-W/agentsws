@@ -875,10 +875,13 @@ function OutreachSection({
   assignment,
   channel,
   creatorId,
+  rejected = false,
 }: {
   assignment: string
   channel: KolChannelId
   creatorId: string
+  /** WP505（决策 1773 B）：人点过「淘汰」——起草按钮退成次要样式（还能用，只是不再是这一页的主按钮）。 */
+  rejected?: boolean
 }): ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -988,6 +991,7 @@ function OutreachSection({
         <div className="flex justify-end">
           <Button
             size="xs"
+            variant={rejected ? 'outline' : 'default'}
             data-testid="kol-outreach-go"
             disabled={product.trim() === '' || pitch.trim() === '' || outreach.isPending}
             onClick={() => {
@@ -1495,7 +1499,12 @@ export function CreatorInfoCard({
         profileUrl={primary?.url}
       />
 
-      <OutreachSection assignment={assignment} channel={channel} creatorId={view.creator.id} />
+      <OutreachSection
+        assignment={assignment}
+        channel={channel}
+        creatorId={view.creator.id}
+        rejected={view.review?.decision === 'rejected'}
+      />
 
       <TrackedLinksSection links={view.tracked_links} />
 
