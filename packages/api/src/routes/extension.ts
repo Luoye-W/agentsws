@@ -346,6 +346,8 @@ export interface ExtensionCreatorRecentItem {
   published_at?: string
   published_text?: string
   thumbnail_url?: string
+  /** WP502（决策 1764 B，只加）：原作品链接。服务端只认这个平台上的一条作品（认不出就丢、能推就推）。 */
+  url?: string
 }
 
 export interface ExtensionCreatorSaveResult {
@@ -743,6 +745,8 @@ const recentItemSchema = z
     published_at: z.string().max(60).optional(),
     published_text: z.string().max(120).optional(),
     thumbnail_url: z.string().max(600).optional(),
+    // WP502（决策 1764 B，只加；老插件不带）：原作品链接——服务端只认这个平台上的一条作品，认不出就丢
+    url: z.string().max(600).optional(),
   })
   .strict()
 

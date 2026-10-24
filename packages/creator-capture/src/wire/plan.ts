@@ -71,7 +71,7 @@ export function ingestPlanOf(capture: PageCapture, options: IngestPlanOptions): 
     const expanded = expandBioLinks(snap.links, cached)
     if (expanded.length !== snap.links.length) snap = { ...snap, links: expanded }
     plan.creator = snap
-    plan.creator_save = creatorSaveBodyOf(snap, options.now)
+    plan.creator_save = creatorSaveBodyOf(snap, options.now, capture.creator_item_urls)
     plan.observation_batches.push([
       creatorObservationOf(toObservationPayload(snap), publicContactsOfProfile(snap)),
     ])

@@ -67,6 +67,8 @@ export type KolTable =
   | 'bio_link_observation'
   | 'auto_score'
   | 'setting'
+  | 'creator_tag'
+  | 'creator_review'
 
 export const KOL_TABLES: readonly KolTable[] = [
   'creator',
@@ -83,6 +85,10 @@ export const KOL_TABLES: readonly KolTable[] = [
   // WP131：采集后自动评分的结果（每人一行，最近一次）与这个品牌的几个开关
   'auto_score',
   'setting',
+  // WP502（决策 1763 B）：人工标签与审核决定（每人一行，行 id = creator_id）。只在本机：
+  // 不在 `kol-cloud-sync.ts` 的 LOCAL_KINDS 里（不进付费云库），也不进公共红人库的任何一格
+  'creator_tag',
+  'creator_review',
 ]
 
 interface KolBackend {
@@ -216,6 +222,14 @@ export interface KolStore {
   autoScores(filter?: { creator_id?: string; batch_id?: string }): KolAutoScore[]
   /** 按 `creator_id` upsert（行 id 就是 creator_id）。 */
   saveAutoScore(row: KolAutoScore): void
+  /* ── WP502（决策 1763 B）：人工标签与审核决定（只在本机）────────────── */
+  /** 每人一行的人工标签（没打过的人没有这一行）。 */
+  creatorTags(creator_id?: string): KolCreatorTagRow[]
+  /** 整组换掉；`tags` 空了就删掉这一行。 */
+  saveCreatorTags(row: KolCreatorTagRow): void
+  /** 每人一行的审核决定（待审 = 没有这一行）。 */
+  creatorReviews(creator_id?: string): KolCreatorReviewRow[]
+  saveCreatorReview(row: KolCreatorReviewRow): void
   /** 这个品牌的一个开关 / 设置（键值；没设过回 `undefined`）。 */
   setting<T>(key: KolSettingKey): T | undefined
   saveSetting(key: KolSettingKey, value: unknown, at: Iso8601): void
@@ -309,6 +323,8 @@ export interface KolProfileSnapshot {
     published_at?: string
     published_text?: string
     thumbnail_url?: string
+    /** WP502（决策 1764 B）：原作品链接（只认这个平台上的一条作品）。 */
+    url?: string
   }[]
 }
 
@@ -356,6 +372,25 @@ export type KolSettingKey =
   | 'outreach_defaults'
   /** WP416：点过「不是同一个人」的合并建议（以前只记在内存里，重启后又冒出来）。 */
   | 'merge_rejected'
+
+/** WP502（决策 1763 B）：一个人的人工标签（行 id = creator_id）。 */
+export interface KolCreatorTagRow {
+  id: string
+  creator_id: string
+  tags: string[]
+  updated_at: Iso8601
+}
+
+/** WP502（决策 1763 B）：一个人的人工审核决定（行 id = creator_id；待审 = 没有这一行）。 */
+export interface KolCreatorReviewRow {
+  id: string
+  creator_id: string
+  decision: 'approved' | 'rejected'
+  reason?: string
+  decided_at: Iso8601
+  /** 谁定的（person_id；本机记着，不往外送）。 */
+  decided_by?: string
+}
 
 /** `setting` 表里的一行。 */
 export interface KolSettingRow {
@@ -557,6 +592,24 @@ export function createKolStore(options: KolStoreOptions): KolStore {
         .filter((r) => filter?.batch_id === undefined || r.batch_id === filter.batch_id),
     saveAutoScore: (row) =>
       backend.put('auto_score', row.creator_id, { ...row, id: row.creator_id }),
+    creatorTags: (creator_id) =>
+      creator_id === undefined
+        ? backend.all<KolCreatorTagRow>('creator_tag')
+        : [backend.get<KolCreatorTagRow>('creator_tag', creator_id)].filter(
+            (r): r is KolCreatorTagRow => r !== undefined,
+          ),
+    saveCreatorTags: (row) => {
+      if (row.tags.length === 0) backend.remove('creator_tag', row.creator_id)
+      else backend.put('creator_tag', row.creator_id, { ...row, id: row.creator_id })
+    },
+    creatorReviews: (creator_id) =>
+      creator_id === undefined
+        ? backend.all<KolCreatorReviewRow>('creator_review')
+        : [backend.get<KolCreatorReviewRow>('creator_review', creator_id)].filter(
+            (r): r is KolCreatorReviewRow => r !== undefined,
+          ),
+    saveCreatorReview: (row) =>
+      backend.put('creator_review', row.creator_id, { ...row, id: row.creator_id }),
     setting: <T>(key: KolSettingKey) =>
       backend.get<KolSettingRow>('setting', key)?.value as T | undefined,
     saveSetting: (key, value, at) =>
@@ -587,6 +640,31 @@ export function createKolStore(options: KolStoreOptions): KolStore {
         backend.put('creator_contact', c.id, { ...c, creator_id: keep_id })
       for (const c of collaborations().filter((x) => x.creator_id === merge_id))
         backend.put('collaboration', c.id, { ...c, creator_id: keep_id })
+      // WP502：人工标签取并集；审核决定以保留那条为准，它没定过才用被合掉那条的
+      const tagsOf = (id: string): string[] =>
+        backend.get<KolCreatorTagRow>('creator_tag', id)?.tags ?? []
+      const union = [...tagsOf(keep_id)]
+      for (const t of tagsOf(merge_id))
+        if (!union.some((u) => u.toLowerCase() === t.toLowerCase())) union.push(t)
+      if (union.length > 0)
+        backend.put('creator_tag', keep_id, {
+          id: keep_id,
+          creator_id: keep_id,
+          tags: union,
+          updated_at: (options.now ?? nowIso)(),
+        } satisfies KolCreatorTagRow)
+      backend.remove('creator_tag', merge_id)
+      const mergedReview = backend.get<KolCreatorReviewRow>('creator_review', merge_id)
+      if (
+        mergedReview !== undefined &&
+        backend.get<KolCreatorReviewRow>('creator_review', keep_id) === undefined
+      )
+        backend.put('creator_review', keep_id, {
+          ...mergedReview,
+          id: keep_id,
+          creator_id: keep_id,
+        })
+      backend.remove('creator_review', merge_id)
       const merged = applyMerge(keep, merge)
       backend.put('creator', merged.id, merged)
       backend.remove('creator', merge_id)
