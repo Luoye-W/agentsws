@@ -29,6 +29,7 @@ import type {
   KolCampaignView,
   KolCollaborationRow,
   KolContactView,
+  KolCreatorChecksView,
   KolCreatorDetail,
   KolCreatorProfileView,
   KolCreatorRow,
@@ -123,6 +124,7 @@ import {
   byoTestConnection,
 } from './kol-byo.js'
 import type { KolChannelsAssembly } from './kol-channels.js'
+import { creatorChecksOf } from './kol-checks.js'
 import {
   maskAddress,
   PAYMENT_STAGES,
@@ -555,29 +557,61 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       deliverables: store.deliverables().filter((d) => ids.has(d.collaboration_id)),
       tracked_links: store.links().filter((l) => ids.has(l.collaboration_id)),
       ...savedProfilesOf(accounts),
+      ...checksOf(accounts),
+      ...auditOf(creator.id),
     }
+  }
+
+  /**
+   * WP500：每个账号的体检 / 受众真实性 / 频道估值 / 更新规律 / 粉丝 30 天变化（`kol-checks.ts`，插件那几份算法）。
+   * 一个账号一项都算不出来就不带它；全都没有就不带这一格。
+   */
+  const checksOf = (
+    accounts: readonly PlatformAccount[],
+  ): { checks?: Record<string, KolCreatorChecksView> } => {
+    const now = clock.now()
+    const out: Record<string, KolCreatorChecksView> = {}
+    for (const a of accounts) {
+      const observations = store.accountObservations({ account_id: a.id })
+      const latest = latestSavedProfile(observations)
+      const checks = creatorChecksOf(a, latest?.profile, observations, now)
+      if (checks !== undefined) out[a.id] = checks
+    }
+    return Object.keys(out).length === 0 ? {} : { checks: out }
+  }
+
+  /** WP500：「采集后自动评分」做成了的那份云端体检（WP131）。没有就不带。 */
+  const auditOf = (creator_id: string): Pick<KolCreatorDetail, 'audit'> => {
+    const row = store.autoScores().find((r) => r.creator_id === creator_id)
+    const audit = row?.audit
+    if (audit === undefined || audit.health === undefined) return {}
+    return { audit: { health: audit.health, findings: audit.findings ?? [], at: audit.at } }
   }
 
   /**
    * WP498（决策 1752 C）：每个账号最近一次「存入红人池」时记下的主页资料（插件按钮或 ego 自动存入的那一行快照）。
    * 一个都没有就不带这一格。
    */
+  /** 最近一次「存入红人池」那一行（同一刻存了两次取后记的那一行）。 */
+  const latestSavedProfile = (
+    observations: readonly KolAccountObservation[],
+  ): KolAccountObservation | undefined =>
+    observations
+      .filter((o) => o.source === 'manual_save' && o.profile !== undefined)
+      .reduce<KolAccountObservation | undefined>(
+        (best, o) =>
+          best === undefined || Date.parse(o.observed_at) >= Date.parse(best.observed_at)
+            ? o
+            : best,
+        undefined,
+      )
+
   const savedProfilesOf = (
     accounts: readonly PlatformAccount[],
   ): { profiles?: Record<string, KolCreatorProfileView> } => {
     const out: Record<string, KolCreatorProfileView> = {}
     for (const a of accounts) {
-      const latest = store
-        .accountObservations({ account_id: a.id })
-        .filter((o) => o.source === 'manual_save' && o.profile !== undefined)
-        // 最近的那一次（同一刻存了两次取后记的那一行）
-        .reduce<KolAccountObservation | undefined>(
-          (best, o) =>
-            best === undefined || Date.parse(o.observed_at) >= Date.parse(best.observed_at)
-              ? o
-              : best,
-          undefined,
-        )
+      const latest = latestSavedProfile(store.accountObservations({ account_id: a.id }))
       if (latest?.profile !== undefined)
         out[a.id] = { saved_at: latest.observed_at, ...latest.profile }
     }

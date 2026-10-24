@@ -165,7 +165,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   {
     name: 'get_creator',
     description:
-      '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史；存入过红人池的账号还带主页资料（profiles：国家、加入时间、总播放、平均播放、作品数、简介、头像、横幅、近期作品，saved_at 是那一刻）。',
+      '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史；存入过红人池的账号还带主页资料（profiles：国家、加入时间、总播放、平均播放、作品数、简介、头像、横幅、近期作品，saved_at 是那一刻）；算得出来的账号带估算（checks：体检的播放 / 粉丝比、点赞率中位数、单条合作参考价区间（美分）、更新规律、粉丝 30 天变化——都是公开页面上的数推出来的，不是平台官方数据）；自动评分做过云端体检的带 audit。',
     input_schema: {
       type: 'object',
       properties: { creator_id: str('红人 id') },

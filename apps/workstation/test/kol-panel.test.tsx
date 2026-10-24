@@ -474,14 +474,18 @@ describe('WP68 红人岗位面板', () => {
     fireEvent.click(rows[0] as HTMLElement)
     const block = await screen.findByTestId('kol-saved-profile')
     const facts = screen.getByTestId('kol-profile-facts').textContent ?? ''
-    for (const part of ['Germany', '加入于 Mar 3, 2021', '总播放 1.2M', '平均播放 33k', '作品 231'])
+    for (const part of ['加入于 Mar 3, 2021', '总播放 1.2M', '作品 231'])
       expect(facts).toContain(part)
+    // WP500：国家在头部（KOLAgents 放在平台那一行旁边）；平均播放进了顶上那三格数字
+    expect(screen.getByTestId('kol-country').textContent).toContain('Germany')
+    expect(screen.getByTestId('kol-accounts').textContent).toContain('32.5k')
     expect(block.textContent).toContain('存入于 2026-10-23')
     expect(screen.getByTestId('kol-profile-bio').textContent).toContain('Desk setups')
+    // WP500：近期作品是一格一格的（KOLAgents 两列，最多 6 格），没有封面
     const recent = screen.getByTestId('kol-profile-recent')
-    expect(recent.querySelectorAll('li')).toHaveLength(3)
+    expect(screen.getAllByTestId('kol-recent-item')).toHaveLength(4)
     expect(recent.textContent).toContain('39K views · 2 days ago')
-    expect(recent.textContent).toContain('还有 1 条')
+    expect(recent.querySelector('img')).toBeNull()
     // 外站图片不直接加载：头像 / 横幅只是链接
     expect(block.querySelector('img')).toBeNull()
     expect(screen.getByText('头像').getAttribute('href')).toBe('https://yt3.example/avatar.png')

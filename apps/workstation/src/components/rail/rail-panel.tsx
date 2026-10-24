@@ -16,6 +16,7 @@
  */
 import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { InRightPaneContext } from '@/components/rail/in-right-pane'
 import type { RailScope, RailTier } from '@/components/rail/rail-scope'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { useApp } from '@/lib/app-context'
@@ -75,7 +76,8 @@ export function RailPanel({
           onClose === undefined ? 'p-3' : 'px-3 pt-1 pb-3',
         )}
       >
-        {children}
+        {/* WP500：里面的东西知道自己已经在第三栏里（再开详情就在自己里面叠一层，不去换掉自己） */}
+        <InRightPaneContext.Provider value={true}>{children}</InRightPaneContext.Provider>
       </div>
     </section>
   )

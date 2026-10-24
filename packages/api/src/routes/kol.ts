@@ -198,6 +198,53 @@ export interface KolCreatorDetail {
    * 插件按钮或 ego 自动存入）。没存入过的账号没有这一格。工作台红人详情与 `get_creator` 工具都读它。
    */
   profiles?: Record<string, KolCreatorProfileView>
+  /**
+   * WP500（只加）：每个账号的「体检 / 受众真实性 / 频道估值 / 更新规律 / 粉丝 30 天变化」（按 `PlatformAccount.id`）。
+   * 算法是插件面板那几份（`@agentsws/creator-capture` 的 `creatorMetrics`，移植自 KOLAgents），
+   * 数据是本机已有的：存入红人池那一份主页资料 + 粉丝快照历史。一项算不出来就没有那一格；全没有就不带。
+   */
+  checks?: Record<string, KolCreatorChecksView>
+  /** WP500（只加）：「采集后自动评分」跑过的云端体检（WP131）。没跑过 / 没做成就没有。 */
+  audit?: { health: number; findings: string[]; at: Iso8601 }
+}
+
+/**
+ * WP500：一个账号的几项估算（都是公开页面上的数推出来的，不是平台官方数据）。
+ * 数字都是结构化的，文字由界面按语言说——服务端不替界面拼句子。
+ */
+export interface KolCreatorChecksView {
+  /** 体检：近期平均播放 ÷ 粉丝（`computeLocalHealth`）。粉丝或播放缺一个就没有。 */
+  health?: {
+    verdict: 'excellent' | 'normal' | 'weak' | 'suspicious'
+    views_to_followers: number
+    bought_audience_suspected: boolean
+  }
+  /** 受众真实性：近期作品点赞率中位数（≥ 3 条带点赞的作品才有）。 */
+  like_rate?: { median: number; items: number; level: 'good' | 'normal' | 'warning' }
+  /**
+   * 频道估值（单条合作参考价，美分；`estimateLocalValuation`）：近期播放中位数 × 平台 CPM，粉丝数封顶。
+   * 不报价时是 `insufficient` + 原因（作品不够 / 疑似刷粉 / 平台不支持）。
+   */
+  valuation?:
+    | {
+        kind: 'estimated'
+        currency: 'USD'
+        low_cents: number
+        mid_cents: number
+        high_cents: number
+        median_views: number
+        items_used: number
+        cap_applied: boolean
+      }
+    | {
+        kind: 'insufficient'
+        reason: 'thin_views' | 'suspected_fake' | 'unsupported_platform'
+        items_used?: number
+      }
+  /** 更新规律（`assessUploadRegularity`）：判不出来就没有。 */
+  regularity?: { status: 'regular' | 'irregular'; avg_interval_days?: number }
+  /** 最近 30 天里最早与最近两个粉丝快照的差（同插件报告那一格）；快照不足两个就没有。 */
+  follower_trend?: { days: number; delta: number; percent: number }
 }
 
 /** WP498（1752 C）：存入红人池时主页上的资料（页面上公开渲染着的；数字是 `saved_at` 那一刻的）。 */

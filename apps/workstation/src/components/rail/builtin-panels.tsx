@@ -43,6 +43,7 @@ import {
   ScrollText,
   SlidersHorizontal,
   Tags,
+  UserRound,
 } from 'lucide-react'
 import { lazy } from 'react'
 import { registerKeywordBankBlock } from '@/components/amazon/keyword-bank-block'
@@ -141,6 +142,11 @@ const MessageDigestBody = lazy(async () => {
 const InboxItemBody = lazy(async () => {
   const m = await import('@/components/inbox/inbox-pane')
   return { default: m.InboxPaneBody }
+})
+/** WP500：红人详情（候选池点开一个人；只从红人面板开）。 */
+const KolCreatorBody = lazy(async () => {
+  const m = await import('@/components/kol/creator-pane')
+  return { default: m.CreatorPaneBody }
 })
 /** WP372（决策 1019）：报表——全部 + 看板，与看一份。 */
 const ReportsBody = lazy(async () => {
@@ -386,6 +392,17 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('inbox-item', InboxItemBody)
+  // WP500（决策 1758）：红人详情——候选池点开一个人（KOLAgents 的侧边详情，照 WP481 开在第三栏）。
+  // 只从红人面板开（`openCreatorPane`），不上图标轨。
+  registerPanelType({
+    id: 'kol-creator',
+    label: 'rail.panel.kol_creator',
+    icon: UserRound,
+    priority: 'builtin',
+    group: 'context',
+    hidden: true,
+  })
+  registerPanelBody('kol-creator', KolCreatorBody)
   registerPanelType({
     id: 'outputs',
     label: 'rail.panel.outputs',

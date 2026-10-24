@@ -11,13 +11,25 @@
  * - 下一步按工坊的十段阶段机（决策 404）；点了只是**打开**（详情里起草开发信 → 出卡；
  *   线程里推进），卡上不替人做决定（docs/96 P1）；
  * - 颜色换成 `--ws-*` 令牌，`Tooltip` 换成工坊的。
+ *
+ * WP500（决策 1758）再照 KOLAgents 那张卡补齐身份那一行与底下那一排：
+ * - 头像（一个字的圆头像——壳不加载外站图片，见决策 1762）+ 名字 + 平台标志 · @handle（`creators-view.tsx` 的 identity 行）；
+ * - 底下左边是联系方式那一格（KOLAgents `CardEmailSlot` 的「有 / 没有」两态：有 = 一个安静的信封，
+ *   没有 = 灰的；工坊没有「付费取邮箱」那一态的按钮，取邮箱在详情里）和「打开他的主页」，右边是下一步。
+ *   主页链接放在底下而不是 handle 上：上半张卡整块是「点开详情」的按钮，按钮里不能再套链接。
+ * - 三格判断色块（KOLAgents §3「这一条不能砍」）在一行三张卡的宽度（约 300px）下也出：窄到 18rem 以下才退成一行字
+ *   （WP416 原来是 20rem，桌面一行三张时三格全退成了一行字）。
  */
+import { ExternalLink, Mail, MailX } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { BrandIcon } from '@/components/brand-icons'
+import { WsAvatar } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { KolCreatorRowData, KolJudgementLevel } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
+import { CHANNEL_SERVICE } from './kol-channel'
 import { CollabProgress } from './segmented-progress'
 
 /** 绿只是轻轻一层，黄说出来，红大声说（KOLAgents 的同一级差）。 */
@@ -210,9 +222,17 @@ export function CreatorCard({
         onClick={onOpen}
       >
         <span className="flex min-w-0 items-start gap-2">
+          <WsAvatar
+            id={row.creator_id}
+            name={row.display_name}
+            className="size-9 shrink-0 text-sm"
+          />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{row.display_name}</span>
-            <span className="block truncate text-xs text-muted-foreground">{handle}</span>
+            <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+              <BrandIcon provider={CHANNEL_SERVICE[row.channel]} size={12} className="shrink-0" />
+              <span className="truncate">{handle}</span>
+            </span>
           </span>
           {/* 刷粉护栏那一条：数不可信的不给分，理由写在卡上（名字下面整行，不再压在分数那一格里） */}
           {row.blocked === undefined ? (
@@ -225,7 +245,7 @@ export function CreatorCard({
           </span>
         )}
         <span
-          className="flex min-w-0 gap-2 truncate text-xs text-muted-foreground @xs:hidden"
+          className="flex min-w-0 gap-2 truncate text-xs text-muted-foreground @[18rem]:hidden"
           data-testid="kol-card-compact"
         >
           <span className="ws-num">
@@ -237,7 +257,7 @@ export function CreatorCard({
             </span>
           )}
         </span>
-        <span className="hidden grid-cols-3 gap-1 @xs:grid">
+        <span className="hidden grid-cols-3 gap-1 @[18rem]:grid">
           <Stat id="followers" label={t('kol.judge.followers')} value={num(row.followers)} />
           <Stat
             id="engagement"
@@ -266,15 +286,41 @@ export function CreatorCard({
       {row.collab === undefined || row.collab.stage === 'sourced' ? null : (
         <CollabProgress segments={row.collab.segments} dwellDays={row.collab.dwell_days} />
       )}
-      <span className="flex items-center justify-between gap-2">
+      <span className="flex items-center gap-1.5 border-t border-ws-line pt-2">
+        {/* KOLAgents `CardEmailSlot`：联系方式是一个动作的位置，不是一枚红色「无邮箱」标签 */}
+        <span
+          className={cn(
+            'inline-flex size-6 items-center justify-center rounded-md',
+            row.has_contact ? 'text-muted-foreground' : 'text-muted-foreground/50',
+          )}
+          title={row.has_contact ? t('kol.card.email.has') : t('kol.card.email.none')}
+          data-testid="kol-card-email"
+          data-has={row.has_contact ? 'yes' : 'no'}
+        >
+          {row.has_contact ? (
+            <Mail className="size-3.5" aria-label={t('kol.card.email.has')} />
+          ) : (
+            <MailX className="size-3.5" aria-label={t('kol.card.email.none')} />
+          )}
+        </span>
+        <a
+          className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          href={row.url}
+          target="_blank"
+          rel="noreferrer"
+          title={t('kol.card.open_profile')}
+          aria-label={t('kol.card.open_profile')}
+          data-testid="kol-card-profile"
+        >
+          <ExternalLink className="size-3.5" aria-hidden />
+        </a>
         {/* WP131：自动评分跑过的体检概括数（有才显示） */}
-        {row.audit_health === undefined ? (
-          <span />
-        ) : (
+        {row.audit_health === undefined ? null : (
           <span className="text-xs text-muted-foreground" data-testid="kol-audit">
             {t('kol.audit', { n: row.audit_health })}
           </span>
         )}
+        <span className="flex-1" />
         <Button
           size="xs"
           variant={step === 'draft' ? 'default' : 'outline'}
