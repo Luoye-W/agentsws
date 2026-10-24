@@ -3,62 +3,62 @@
     "ads.apple": {
       "zh": "3c243b0ae229f178",
       "en": "2d905fc1bd193813",
-      "content": "7d6ea6471505ad33",
-      "def": "d4b1992fca7f07f4"
+      "content": "0c64d88927d2b3f4",
+      "def": "ed5827fb7e7d8260"
     },
     "ads.google": {
       "zh": "eb17dcc6b25a89bd",
       "en": "8f65221d8f02008e",
-      "content": "67f0ade4ecf68945",
-      "def": "bb0895e6b75bbc22"
+      "content": "5cd230303d06d96a",
+      "def": "84e4d1e4f6d35d19"
     },
     "ads.linkedin": {
       "zh": "8a3e3de17df427cd",
       "en": "ef7d524f67ed37d0",
-      "content": "3ec8873a6b080b5f",
-      "def": "331bcbbf9c043840"
+      "content": "44a9c8a66cabc973",
+      "def": "ef7a20937e68d226"
     },
     "ads.meta": {
       "zh": "acc11f649e8391e8",
       "en": "458dd2a81627cd72",
-      "content": "106ed88902fe7641",
-      "def": "1d876e69cb7b523f"
+      "content": "0e200441e6fc77a3",
+      "def": "b95c43c0e599e4f8"
     },
     "ads.microsoft": {
       "zh": "de4ea1d5fc3062c9",
       "en": "3a2b116eeceb3c3a",
-      "content": "a70e0526656b330a",
-      "def": "f6e9326fa0fcb3f0"
+      "content": "ab629f3d0092681e",
+      "def": "34df699b96675fcd"
     },
     "ads.pinterest": {
       "zh": "1e1b1475aafb09c0",
       "en": "a8b86a6437323edf",
-      "content": "4708ccf6a9e4db45",
-      "def": "87c90b87d5fc365f"
+      "content": "2908dd63032cc1b3",
+      "def": "1355697f2f01a6b0"
     },
     "ads.reddit": {
       "zh": "16881e073ef9c1bf",
       "en": "a1fe871fcc9ba1f5",
-      "content": "db86433352d9dc8a",
-      "def": "28885cc4300170d4"
+      "content": "234bb32a33162daa",
+      "def": "1e988934e0bf0417"
     },
     "ads.snapchat": {
       "zh": "092ca154bac2701f",
       "en": "5210c5565db85570",
-      "content": "3c4d37d7c3540652",
-      "def": "c5e1e0a13ab3a9a0"
+      "content": "9b035c9ce4b98433",
+      "def": "d829734d4c7c01fe"
     },
     "ads.tiktok": {
       "zh": "8c0b55c6ebde25b6",
       "en": "d4ab187d41adb38d",
-      "content": "320ad1fbebeda8a4",
-      "def": "f6994c478b673b6e"
+      "content": "1b1a4acd17b04d55",
+      "def": "2e0633ea4bc451d9"
     },
     "ads.x": {
       "zh": "e6903427751b4794",
       "en": "839ffd80971cd29b",
-      "content": "dc4871177bfcfa66",
-      "def": "3b76f32e071befd9"
+      "content": "2e4e27cb3904ce07",
+      "def": "a2977d4667fe9842"
     },
     "amz.store": {
       "zh": "6155bc5889e503d4",

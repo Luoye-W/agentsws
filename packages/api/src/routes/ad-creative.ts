@@ -122,6 +122,8 @@ export interface AdCreativePort {
       result?: string | undefined
       platform?: AdCreativePlatform | undefined
       round_id?: string | undefined
+      /** WP452：实验设计那一份（服务端内部给；HTTP 不收）。 */
+      plan?: AdExperimentEntry['plan'] | undefined
     },
   ): MaybePromise<AdExperimentEntry>
   updateExperiment(

@@ -27,6 +27,7 @@ import {
   BarChart3,
   BookOpen,
   CalendarClock,
+  CalendarRange,
   FileDiff,
   FileText,
   FolderOpen,
@@ -80,6 +81,7 @@ import { useSchedulesBadge } from '@/components/rail/schedule-count'
 import { REPORT_ADDRESS_PREFIX } from '@/components/reports/report-data'
 import { openRightPane } from '@/components/reports/right-pane'
 import { reportScopeOf } from '@/components/reports/use-report-list'
+import { hasSeoPlanRole, useSeoPlanStatus } from '@/components/seo/seo-plan-status'
 import { settingsHref } from '@/components/settings-panel/route'
 import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
 import { useWorkshopServicesStatus } from '@/components/workshop-services/status'
@@ -178,6 +180,18 @@ const KnowledgeLibraryBody = lazy(async () => {
 const KnowledgeLibraryCardBody = lazy(async () => {
   const m = await import('@/components/knowledge/knowledge-library-panel')
   return { default: m.KnowledgeLibraryCard }
+})
+/**
+ * WP450（docs/109 §5.2，决策 1765）：网站运营岗位第三栏「编辑日历」——日历 / 外链 / llms.txt 三格；
+ * 卡片列一张同名卡（只在有 SEO 与 GEO 或内容与博客的岗位出），批主题簇的卡在中栏。
+ */
+const SeoPlanBody = lazy(async () => {
+  const m = await import('@/components/seo/seo-plan-panel')
+  return { default: m.SeoPlanPanel }
+})
+const SeoPlanCardBody = lazy(async () => {
+  const m = await import('@/components/seo/seo-plan-panel')
+  return { default: m.SeoPlanCard }
 })
 const BrandAssetsLibraryBody = lazy(async () => {
   const m = await import('@/components/brand-assets/brand-assets-library-panel')
@@ -492,6 +506,27 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     minWidth: 560,
   })
   registerPanelBody('brand-assets-library', BrandAssetsLibraryBody)
+  // WP450：编辑日历（资料在右；批主题簇在中栏）
+  registerRailCard({
+    id: 'seo-plan',
+    label: 'rail.card.seo-plan',
+    icon: CalendarRange,
+    order: at('conversations') + 0.5,
+    panel: 'seo-plan',
+    available: hasSeoPlanRole,
+    useStatus: useSeoPlanStatus,
+  })
+  registerRailCardBody('seo-plan', SeoPlanCardBody)
+  registerPanelType({
+    id: 'seo-plan',
+    label: 'rail.panel.seo-plan',
+    icon: CalendarRange,
+    priority: 'builtin',
+    group: 'layer',
+    card: 'seo-plan',
+    minWidth: 480,
+  })
+  registerPanelBody('seo-plan', SeoPlanBody)
   registerPanelType({
     id: 'outputs',
     label: 'rail.panel.outputs',

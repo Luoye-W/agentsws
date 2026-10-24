@@ -3,6 +3,8 @@ export * from './ad-creative.js'
 // 57 §1 投放岗位的四个平台、五个对象与额度（WP75）。与 social.ts / kol.ts 一条都不共用：
 // 那两边的主语是"号"（我们自己的 / 别人的），这边的主语是**广告账户**——一个独立的计费主体。
 export * from './ads.js'
+// WP452：投放第二批技能（实验 / 盈亏平衡 / 落地页一致性 / 素材疲劳 / 卖的是什么）
+export * from './ads-skills.js'
 export * from './ads-wiring.js'
 // WP394（docs/104 一期 B）：Amazon 竞品对标款（Agent 标识、配送邮编、方案卡「什么算重要」）
 export * from './amazon-competitor.js'
@@ -145,6 +147,7 @@ export * from './schedule.js'
 export * from './search-data.js'
 // WP154「内容与搜索」：六个信号、每日 5 件事、收入归因、GEO、发布前质检的形状
 export * from './seo.js'
+export * from './seo-plan.js'
 // WP389（docs/105 §7）：工坊服务——服务目录、订单（托管 / 结算 / 退回）、报价、凭证、消息、验收
 export * from './service-order.js'
 export * from './setup-card.js'

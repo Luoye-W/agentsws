@@ -38,12 +38,16 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'kol_campaign',
   // WP504（决策 1777 A）：红人批量开发信确认卡（批了才逐个起草并发出）
   'kol_outreach_batch',
+  // WP452：广告实验读结果卡（保留 / 停 / 再测；只记结论，不改广告）
+  'ads_experiment_readout',
   // WP144 / docs/80：电脑操控授权卡（批了才挂提供方）
   'computer_use',
   // WP154：搜索报告卡（每日 5 件事 / 每周收入 / 每周 AI 可见度；L3 自动出、看完归档）
   'seo_report',
   // WP154：新页面选题卡（批了开一件写这一页的事项）
   'seo_topic',
+  // WP450：主题簇卡（一组主题批整组，批了排进编辑日历）
+  'seo_cluster',
   // WP171 / docs/84 §11.3：改收款账户的红卡（不采纳信里的账户，只提醒人去核实）
   'b2b_fraud_alert',
   // WP173 / docs/84 §11.1 第 4 条：发信域名选择卡（建议单独域名，由用户选）

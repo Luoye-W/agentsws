@@ -7,6 +7,7 @@
 
 import { ADS_CHANGES_EN, ADS_CHANGES_ZH } from './i18n-ads-changes'
 import { ADS_OVERVIEW_EN, ADS_OVERVIEW_ZH } from './i18n-ads-overview'
+import { ADS_SKILLS_EN, ADS_SKILLS_ZH } from './i18n-ads-skills'
 import { AMAZON_COMPETITORS_EN, AMAZON_COMPETITORS_ZH } from './i18n-amazon-competitors'
 import { AMAZON_KEYWORDS_EN, AMAZON_KEYWORDS_ZH } from './i18n-amazon-keywords'
 import { AMAZON_LISTING_EN, AMAZON_LISTING_ZH } from './i18n-amazon-listing'
@@ -37,6 +38,7 @@ import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { INBOX_EN, INBOX_ZH } from './i18n-inbox'
 import { KNOWLEDGE_LEARN_EN, KNOWLEDGE_LEARN_ZH } from './i18n-knowledge-learn'
 import { KOL_INFO_EN, KOL_INFO_ZH } from './i18n-kol-info'
+import { KOL_SYNC_EN, KOL_SYNC_ZH } from './i18n-kol-sync'
 import { LAYOUT_EN, LAYOUT_ZH } from './i18n-layout'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
@@ -58,6 +60,7 @@ import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
 import { REPORTS_EN, REPORTS_ZH } from './i18n-reports'
+import { SEO_PLAN_EN, SEO_PLAN_ZH } from './i18n-seo-plan'
 import { SERVICES_EN, SERVICES_ZH } from './i18n-services'
 import { SETTINGS_EN, SETTINGS_ZH } from './i18n-settings'
 import { SETUP_EN, SETUP_ZH } from './i18n-setup'
@@ -9109,6 +9112,8 @@ const TABLES: Record<Lang, Table> = {
     ...LIBRARY_ZH,
     // WP504：第三栏库面板、批量条、✦ 问 AI
     ...RAIL_LIBRARY_ZH,
+    // WP509：红人同步到飞书表
+    ...KOL_SYNC_ZH,
     ...CLOUD_AUTH_ZH,
     ...POSITION_ZH,
     ...READ_ROUTES_ZH,
@@ -9157,6 +9162,10 @@ const TABLES: Record<Lang, Table> = {
     ...KNOWLEDGE_LEARN_ZH,
     ...INBOX_ZH,
     ...KOL_INFO_ZH,
+    // WP452：投放第二批技能
+    ...ADS_SKILLS_ZH,
+    // WP450：编辑日历（日历 / 外链 / llms.txt）与「一组主题」卡
+    ...SEO_PLAN_ZH,
     // WP469：日历与待办（待办 + 日历合成一页）
     ...CAL_TODO_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
@@ -9214,6 +9223,7 @@ const TABLES: Record<Lang, Table> = {
     ...en,
     ...LIBRARY_EN,
     ...RAIL_LIBRARY_EN,
+    ...KOL_SYNC_EN,
     ...CLOUD_AUTH_EN,
     ...POSITION_EN,
     ...READ_ROUTES_EN,
@@ -9244,6 +9254,8 @@ const TABLES: Record<Lang, Table> = {
     ...KNOWLEDGE_LEARN_EN,
     ...INBOX_EN,
     ...KOL_INFO_EN,
+    ...ADS_SKILLS_EN,
+    ...SEO_PLAN_EN,
     ...CAL_TODO_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,

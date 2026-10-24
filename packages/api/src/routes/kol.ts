@@ -344,6 +344,65 @@ export interface KolImportView {
 }
 
 /**
+ * WP509（决策 1730 B、1811）：一个「把红人同步到我的在线表」设置——工作台第三栏「连接」/ 红人库 ⋯ 里看、改、停，
+ * 插件「数据同步」那一格也读它（{@link KolSyncStatusView}）。写是经 ego（用户已登录的浏览器）原生粘贴，不要飞书开发者应用。
+ */
+export interface KolSyncView {
+  id: string
+  /** 表的名字（读表时页面标题；用户也可以在对话里改）。 */
+  name: string
+  /** 表格链接（用户贴的那一条）。 */
+  url: string
+  kind: 'bitable' | 'sheet'
+  /** 等你确认 / 在同步 / 停了 / 写不进去。 */
+  state: 'pending_confirm' | 'active' | 'paused' | 'broken'
+  cadence: 'realtime' | 'hourly' | 'daily'
+  what: { new_creators: boolean; stages: boolean; collab_records: boolean }
+  /** 列对照（`field: null` = 这一列不写）。 */
+  columns: { column: string; field: string | null; field_name?: string }[]
+  key_column?: string
+  last_run_at?: Iso8601
+  last_ok_at?: Iso8601
+  /** 写不进去时那一句人话。 */
+  problem?: string
+  /** 有变化等着写。 */
+  pending: boolean
+  totals: { appended: number; updated: number; fallback: number }
+  card_id?: string
+}
+
+export interface KolSyncListView {
+  syncs: KolSyncView[]
+  /** ego 这会儿能不能用（不能用时同步停在原地，照实说）。 */
+  ego: boolean
+  /** 在工坊里配同步的深链（打开红人营销岗位、输入框预填「把红人同步到我的飞书表」）。 */
+  setup_path: string
+}
+
+/** WP509：一次同步的本机留痕（写了谁、哪几格、结果）。 */
+export interface KolSyncLogView {
+  rows: {
+    id: string
+    at: Iso8601
+    trigger: 'auto' | 'manual' | 'first'
+    state: string
+    message: string
+    appended: number
+    updated: number
+    fallback: number
+    failed: number
+    items: {
+      creator_id: string
+      name: string
+      action: 'append' | 'update' | 'progress'
+      result: string
+      cells: Record<string, string>
+      why?: string
+    }[]
+  }[]
+}
+
+/**
  * WP489（决策 1683 / 1684）：表格 / 在线表导入的**预览**——还什么都没写。人看完（可改列、改状态对照）
  * 再点「导入」走 {@link KolImportCommitView}。
  */
@@ -1023,6 +1082,16 @@ export interface KolPort {
     actor: KolActor,
     input: { months?: number | undefined },
   ): MaybePromise<KolMailStageRunView>
+  /** WP509：这个品牌的「红人同步到表格」设置（可选：老装配没有）。 */
+  syncs?(actor: KolActor): MaybePromise<KolSyncListView>
+  /** WP509：停 / 开 / 现在同步一次 / 删掉一个同步。找不到回 `undefined`（路由接 404）。 */
+  syncControl?(
+    actor: KolActor,
+    id: string,
+    action: 'pause' | 'resume' | 'run' | 'remove',
+  ): MaybePromise<KolSyncView | { removed: true } | undefined>
+  /** WP509：一个同步的本机留痕（新的在前）。 */
+  syncLog?(actor: KolActor, id: string): MaybePromise<KolSyncLogView | undefined>
 
   /** 起草一封开发信并提上去（L2 起；禁承诺当场 block）。 */
   outreach(
@@ -2181,6 +2250,90 @@ export function kolRoutes(): Route[] {
         const fn = portOf(deps).runMailStages
         if (fn === undefined) throw new ApiError('not_implemented', '这个服务进程没有邮件判阶段。')
         return ok(c, await fn.call(portOf(deps), actorOf(c), await body(c, MailStageBody)))
+      },
+    ),
+
+    /* ── WP509：红人同步到表格（经 ego；配置在对话里，这里只看 / 停 / 开 / 删 / 现在同步一次）──── */
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/sync',
+        operationId: 'listKolSyncs',
+        summary:
+          '这个品牌的「红人同步到表格」设置：同步到哪张表、同步什么、多久一次、上次同步时间、写不进去的原因（WP509）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_COLLAB,
+        returns: 'KolSyncListView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).syncs
+        if (fn === undefined) throw new ApiError('not_implemented', '这个服务进程没有红人同步。')
+        return ok(c, await fn.call(portOf(deps), actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/sync/:id/log',
+        operationId: 'getKolSyncLog',
+        summary: '一个同步的本机留痕：每一次写了谁、哪几格、结果与失败的原因（新的在前，WP509）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_COLLAB,
+        returns: 'KolSyncLogView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).syncLog
+        if (fn === undefined) throw new ApiError('not_implemented', '这个服务进程没有红人同步。')
+        const got = await fn.call(portOf(deps), actorOf(c), param(c, 'id'))
+        if (got === undefined) throw new ApiError('not_found', '没有这个同步')
+        return ok(c, got)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/sync/:id/:action',
+        operationId: 'controlKolSync',
+        summary: '停 / 开 / 现在同步一次（pause / resume / run）（WP509）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        returns: 'KolSyncView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).syncControl
+        if (fn === undefined) throw new ApiError('not_implemented', '这个服务进程没有红人同步。')
+        const action = param(c, 'action')
+        if (action !== 'pause' && action !== 'resume' && action !== 'run')
+          throw new ApiError('invalid_input', '只认 pause / resume / run')
+        const got = await fn.call(portOf(deps), actorOf(c), param(c, 'id'), action)
+        if (got === undefined) throw new ApiError('not_found', '没有这个同步')
+        return ok(c, got)
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/kol/sync/:id',
+        operationId: 'removeKolSync',
+        summary: '删掉一个同步（不再写；表格里已经写进去的不动；本机留痕一起删）（WP509）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        returns: 'KolSyncRemovedView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).syncControl
+        if (fn === undefined) throw new ApiError('not_implemented', '这个服务进程没有红人同步。')
+        const got = await fn.call(portOf(deps), actorOf(c), param(c, 'id'), 'remove')
+        if (got === undefined) throw new ApiError('not_found', '没有这个同步')
+        return ok(c, got)
       },
     ),
 

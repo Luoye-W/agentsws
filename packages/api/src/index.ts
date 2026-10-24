@@ -415,6 +415,7 @@ export type {
   ExtensionRevealPricing,
   ExtensionSeedSignature,
   ExtensionSetup,
+  ExtensionSyncStatusView,
 } from './routes/extension.js'
 export {
   EXTENSION_BATCH_ID,
@@ -565,6 +566,9 @@ export type {
   KolSearchResult,
   KolStagedView,
   KolStageSegment,
+  KolSyncListView,
+  KolSyncLogView,
+  KolSyncView,
   KolTrackedLinkInput,
 } from './routes/kol.js'
 export {

@@ -1,0 +1,38 @@
+{
+  "skill": "ads-experiment",
+  "note": "改写自 claude-ads 的 ads-test 的方法（先定再看、样本不够不叫赢）。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "ax-01",
+      "kind": "numbers",
+      "from": "ads-test Sizing（改写：数由工具算，不编基准）",
+      "prompt": "我想测一下标题里带价格会不会好一点，大概要跑几天？",
+      "expected": "用 design_ads_experiment：缺基准与每天的量就从近 30 天的数里算，算不出照实问；最小提升先给建议请用户定；天数照工具的抄，至少 7 天。",
+      "must_include": ["数全由工具算", "不拿行业平均顶上", "这个数由用户定", "至少跑 7 天"]
+    },
+    {
+      "id": "ax-02",
+      "kind": "compliance",
+      "from": "ads-test Prohibited practices（偷看与提前叫停）",
+      "prompt": "才跑了两天新版就高了 40%，直接判赢吧，别等了。",
+      "expected": "不判：没跑满不看结果、不中途叫停；说明没跑满看到的赢面靠不住；跑满再读。",
+      "must_include": ["没跑满不看结果、不中途叫停", "不把没跑满的结果叫赢"]
+    },
+    {
+      "id": "ax-03",
+      "kind": "approval",
+      "from": "WP452：读完出卡，选了只记结论",
+      "prompt": "跑满了，结果出来了，你看着办，赢了就直接换上吧。",
+      "expected": "用 read_ads_experiment 出「保留 / 停 / 再测」卡等用户选；选了只记结论；真去换照旧走改广告那张卡、要人批。",
+      "must_include": ["出卡后等用户选", "照旧是改广告那张卡、要人批"]
+    },
+    {
+      "id": "ax-04",
+      "kind": "numbers",
+      "from": "ads-test Scope control（一次只变一样）",
+      "prompt": "这次新图、新标题、新文案一起换，看看效果。",
+      "expected": "建议只变一样；同时换几样跑完分不清；要几版就用变体计划、一版只改一维。",
+      "must_include": ["同时换两样，跑完分不清是哪一样起的作用"]
+    }
+  ]
+}

@@ -194,7 +194,8 @@ describe('账户概况与体检', () => {
     expect(audit.app_only).toContain('只适合推 App')
     expect(audit.items).toEqual([])
     const deck = exportDeckData(h.svc)
-    expect(deck.audits).toHaveLength(6)
+    // WP452：体检十家都有（老四家读插件那一路的表）
+    expect(deck.audits).toHaveLength(10)
     expect(deck.exports).toEqual([])
   })
 })

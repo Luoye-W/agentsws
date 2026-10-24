@@ -71,6 +71,14 @@ export type ApprovalKind =
    */
   | 'kol_outreach_batch'
   /**
+   * WP452（docs/109 §5.2 #13）：**广告实验读结果卡**——「保留 / 停 / 再测」三选一。
+   *
+   * 数是规则算的（`@agentsws/ads-core` 的 `readExperiment`：样本到没到、差得显不显著、护栏破没破），卡上标建议；
+   * 人选了哪个就把结论写回这笔实验（投放岗记忆里那一条），**不改任何广告**——要停 / 换照旧走改广告那张卡。
+   * payload = `AdsExperimentReadoutPayload`。
+   */
+  | 'ads_experiment_readout'
+  /**
    * WP144 / docs/80 §3：**电脑操控授权卡**。
    *
    * Agent 第一次要动这台电脑（或者遇到登录 / 密码 / 支付 / 验证码停下来请人接手）时出，
@@ -97,6 +105,12 @@ export type ApprovalKind =
    * payload = `SeoTopicPayload`。
    */
   | 'seo_topic'
+  /**
+   * WP450（docs/109 §5.2 #9）：**主题簇卡**——一组主题（一篇总页 + 几篇分页 + 内链怎么连），按搜索结果重叠度分组（规则算）。
+   * 一张卡批整组：批了按每天 2 篇额度排进编辑日历，到日子给「内容与博客」开一件写作事项；驳回就是「这组不写」。
+   * payload = `SeoClusterPayload`。
+   */
+  | 'seo_cluster'
   /**
    * WP171（docs/84 §11.3）：**B2B 防诈骗红卡**。
    *

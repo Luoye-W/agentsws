@@ -381,6 +381,52 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
       },
     },
   },
+  {
+    name: 'sync_creators_to_sheet',
+    description:
+      'WP509：用户说「把红人同步到我这张飞书表 <链接>」这类话（之后红人新增、合作阶段变化、合作记录自动写进那张表）：' +
+      '工坊在用户已登录的浏览器（ego）里读那张表的表头，按表头对好「哪一列放什么」，出一张「同步设置」卡，人点了才开始同步；' +
+      '不需要飞书开发者应用。表头认不出的列可以在 columns 里提议放哪个字段（name 名字 / channel 平台 / handle 账号 / url 主页链接 / ' +
+      'followers 粉丝数 / engagement 互动率 / email 邮箱 / category 类目 / region 地区 / language 语言 / stage 合作阶段 / ' +
+      'stage_date 阶段更新日期 / last_activity 最近往来 / amount 金额 / currency 币种 / sample_tracking 寄样单号 / ' +
+      'content_url 发布链接 / tags 标签 / progress 最新进展 / synced_at 同步时间）。' +
+      '用户只问「同步得怎么样」就给 action=status（不用链接）。读不了会回一句原因（ego 里没登录 / 没权限 / ego 用不了），照原话转告。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: str('表格链接（用户贴的原样；飞书多维表格 / 电子表格）'),
+        action: {
+          type: 'string',
+          enum: ['setup', 'status'],
+          description: 'setup = 配一个同步（默认）；status = 看现在同步得怎么样',
+        },
+        instruction: str('用户的原话（照抄）'),
+        new_creators: {
+          type: 'boolean',
+          description: '新进红人库的人要不要写进去（用户没说就不填）',
+        },
+        stages: { type: 'boolean', description: '合作阶段变化要不要写（用户没说就不填）' },
+        collab_records: {
+          type: 'boolean',
+          description:
+            '合作记录（金额 / 寄样单号 / 发布链接 / 最近往来）要不要写（用户没说就不填）',
+        },
+        cadence: {
+          type: 'string',
+          enum: ['realtime', 'hourly', 'daily'],
+          description: '多久写一次：realtime 有变化几分钟内一批 / hourly / daily（用户没说就不填）',
+        },
+        columns: {
+          type: 'array',
+          description: '表头认不出的列，提议放哪个字段（列名与表头一字不差）',
+          items: {
+            type: 'object',
+            properties: { column: str('列名'), field: str('字段 id') },
+          },
+        },
+      },
+    },
+  },
 ]
 
 /** 全部红人工具的名字（已排序，进 `tools.allow` 的那一份）。 */

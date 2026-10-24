@@ -36,6 +36,8 @@ export interface AdsMetrics {
   conversions?: number
   conversion_value?: number
   roas?: number
+  /** WP452：频次（展示 ÷ 覆盖人数，平台给的那个数；是比例，跨天 / 跨行不相加）。 */
+  frequency?: number
 }
 
 export interface AdsReportRow {
@@ -127,6 +129,8 @@ export function adsReportRows(
       const n = parseExportNumber(v[k])
       if (n !== undefined) metrics[k] = n
     }
+    const frequency = parseExportNumber(v.frequency)
+    if (frequency !== undefined) metrics.frequency = frequency
     const platformRoas = parseExportNumber(v.roas)
     const computed = roasOf(metrics)
     if (platformRoas !== undefined) metrics.roas = platformRoas

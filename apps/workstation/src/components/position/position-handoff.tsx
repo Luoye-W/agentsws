@@ -19,7 +19,7 @@
  *
  * **WP437（Luoye 10-21）**：挪到中栏底部居中、悬浮在内容之上——页面把它放在内容最后（根加 `DOCK_PAGE`）。
  */
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { AskSuggestions, useComposerRefs } from '@/components/ask-ai/composer-refs'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { MatterComposer } from '@/components/matter/matter-composer'
@@ -31,6 +31,7 @@ import { HandoffError } from '@/components/work/handoff-error'
 import { usePositionOpen } from '@/components/work/use-position-open'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useComposerPrefill } from '@/lib/composer-prefill'
 import type { ReasoningEffort } from '@/lib/free-chat'
 import { TASK_TEXT_MAX } from '@/lib/handoff'
 import { LandingActions, useLandingActions } from './landing-actions'
@@ -72,6 +73,22 @@ export function PositionHandoff({
       clearError()
     },
   })
+
+  /*
+   * WP509：深链 `?ask=…`（插件「数据同步」→ 红人营销岗位，预填「把红人同步到我的飞书表」）与页面里的「去设同步」
+   * 都把一句话填进这个框（不发出去），光标放进框里等人贴链接。
+   */
+  useComposerPrefill(
+    useCallback((prefill: string) => {
+      setText(prefill.slice(0, TASK_TEXT_MAX))
+      requestAnimationFrame(() => {
+        const el = area.current
+        if (el === null) return
+        el.focus()
+        el.setSelectionRange(el.value.length, el.value.length)
+      })
+    }, []),
+  )
 
   const mine = view.roles.filter(
     (r) => r.my_assignment_id !== undefined && (role_id === undefined || r.role_id === role_id),

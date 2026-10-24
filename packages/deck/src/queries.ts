@@ -1568,9 +1568,10 @@ const ADS_QUERIES: QueryDef[] = [
  * 都走 `ads` 这个源（我们自己的库，永远算连上）：没有报表时概况那块照实空着、体检那块每一项写「未知」并说
  * 去哪导；Apple 没有 App 时体检整块就一行「这条只适合推 App」（不出一张全是未知的空表）。
  */
+/** WP452：结果写成三态（过 / 不过 / 未知；这家没这一项的写「不适用」）。 */
 const AUDIT_STATUS_ZH: Record<string, string> = {
-  ok: '没问题',
-  look: '要看一眼',
+  ok: '过',
+  look: '不过',
   unknown: '未知',
   not_applicable: '不适用',
 }
@@ -1667,6 +1668,122 @@ ADS_QUERIES.push(
         })),
       }
     },
+  },
+)
+
+/*
+ * WP452（docs/109 §5.2 #14–16）：保本线、素材疲劳、广告与落地页核对——三块都是资料（右栏），决定照旧在中栏出卡。
+ * 都走 `ads` 这个源（我们自己的库）；没算过 / 没核过就是空表，不编。
+ */
+const BREAK_EVEN_FIELD_ZH: Record<string, string> = {
+  aov: '客单价',
+  gross_margin_pct: '毛利率',
+  cogs: '一单货本',
+  shipping: '运费',
+  payment_fee_pct: '支付手续费 %',
+  payment_fee_fixed: '每单固定手续费',
+  return_rate_pct: '退货率 %',
+  target_profit_pct: '想留的利润 %',
+}
+const FATIGUE_SIGNAL_ZH: Record<string, string> = {
+  ctr_declining: '点击率连降',
+  frequency_rising: '频次在涨',
+  long_running: '跑得久',
+}
+const LANDING_VERDICT_ZH: Record<string, string> = {
+  ok: '对得上',
+  mismatch: '页上写的不一样',
+  js_only: '只有开 JS 才看得到',
+  missing: '页上没写',
+  unknown: '页没抓到',
+}
+ADS_QUERIES.push(
+  {
+    name: 'ads.break_even_calc',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => {
+      const columns = [
+        { key: 'item', label: '项' },
+        { key: 'value', label: '数' },
+      ]
+      const be = ctx.ads?.break_even_calc
+      if (be === undefined) return { columns, rows: [] }
+      const fmt = (n: number | undefined): string => (n === undefined ? '' : String(n))
+      const given = Object.entries(BREAK_EVEN_FIELD_ZH).map(([k, label]) => {
+        const v = (be.input as Record<string, unknown>)[k]
+        const missing = (be.missing as readonly string[]).includes(k)
+        return {
+          item: label,
+          value:
+            typeof v === 'number'
+              ? `${v}${k === 'gross_margin_pct' && be.margin_from !== undefined ? `（${be.margin_from}）` : ''}`
+              : missing
+                ? '没给，没算'
+                : '—',
+        }
+      })
+      const out = [
+        ...given.filter((g) => g.value !== '—'),
+        { item: '保本 CPA', value: fmt(be.break_even_cpa) || (be.note ?? '算不了') },
+        { item: '保本 ROAS', value: fmt(be.break_even_roas) || '—' },
+        ...(be.target_cpa === undefined
+          ? []
+          : [
+              { item: '目标 CPA', value: fmt(be.target_cpa) },
+              { item: '目标 ROAS', value: fmt(be.target_roas) },
+            ]),
+        ...(be.formula === '' ? [] : [{ item: '算式', value: be.formula }]),
+      ]
+      return { columns, rows: out }
+    },
+  },
+  {
+    name: 'ads.creative_fatigue',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'ad', label: '广告' },
+        { key: 'signals', label: '迹象' },
+        { key: 'evidence', label: '凭什么' },
+        { key: 'suggestion', label: '建议' },
+        { key: 'request', label: '换素材单' },
+      ],
+      rows: ofPlatform(ctx.ads?.fatigue ?? [], ctx).map((r) => ({
+        ad: r.campaign === undefined ? r.ad : `${r.ad}（${r.campaign}）`,
+        signals: r.signals.map((x) => FATIGUE_SIGNAL_ZH[x] ?? x).join('、'),
+        evidence: r.evidence.join('；'),
+        suggestion: r.suggestion,
+        request: r.design_request_id === undefined ? '没下' : '已下给设计岗',
+      })),
+    }),
+  },
+  {
+    name: 'ads.landing_checks',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'ad', label: '广告' },
+        { key: 'claim', label: '广告说' },
+        { key: 'verdict', label: '落地页' },
+        { key: 'fix', label: '谁改' },
+        { key: 'note', label: '凭什么' },
+      ],
+      rows: ofPlatform(
+        (ctx.ads?.landing ?? []).map((c) => ({ ...c, platform: c.platform ?? '' })),
+        ctx,
+      ).flatMap((c) =>
+        c.items.map((i) => ({
+          ad: c.ad_label,
+          claim: i.claim.text,
+          verdict: LANDING_VERDICT_ZH[i.verdict] ?? i.verdict,
+          fix: i.fix === 'page' ? '网站运营改页面' : i.fix === 'ad' ? '改广告' : '',
+          note: i.note,
+        })),
+      ),
+    }),
   },
 )
 

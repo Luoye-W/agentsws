@@ -17,6 +17,10 @@ import { ExternalLink } from 'lucide-react'
 import { useId } from 'react'
 import { AdsChangeBody, isAdsChangePayload } from '@/components/ads/ads-change-body'
 import { AdsSheetBody, isAdsSheetPayload } from '@/components/ads/ads-sheet-body'
+import {
+  ExperimentReadoutBody,
+  isExperimentReadoutPayload,
+} from '@/components/ads/experiment-readout-body'
 import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { openExternal } from '@/components/connections/bridge'
 import { DigestCardBody } from '@/components/content-updates/digest-card-body'
@@ -29,6 +33,7 @@ import {
   KolReviewBody,
 } from '@/components/kol/kol-card-bodies'
 import { isKolMailMatchPayload, KolMailMatchBody } from '@/components/kol/kol-mail-match-body'
+import { isKolSyncPayload, KolSyncBody } from '@/components/kol/kol-sync-body'
 import { FollowUpCardBody } from '@/components/messages/follow-up-card-body'
 import { isMessageRuleCardPayload, MessageRuleCardBody } from '@/components/messages/rule-card-body'
 import {
@@ -36,6 +41,7 @@ import {
   isGoogleAlertChangePayload,
 } from '@/components/pr/google-alert-change-body'
 import { GeoWatchCardBody, isGeoWatchPayload } from '@/components/seo/geo-watch-card-body'
+import { isSeoClusterPayload, SeoClusterCardBody } from '@/components/seo/seo-cluster-card-body'
 import { SetupDeckBody } from '@/components/setup/setup-deck-body'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
@@ -417,6 +423,17 @@ export function DeckCardBody({
                 option={option}
                 onOption={onOption}
               />
+            ) : isExperimentReadoutPayload(card.detail.payload) ? (
+              // WP452：广告实验「保留 / 停 / 再测」——每一版的数与为什么，下面照旧是三个选项
+              <>
+                <ExperimentReadoutBody payload={card.detail.payload} />
+                <OptionList
+                  options={options}
+                  option={option}
+                  onOption={onOption}
+                  kind={card.kind}
+                />
+              </>
             ) : (
               <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />
             )}
@@ -448,6 +465,9 @@ export function DeckCardBody({
           return <KnowledgeStaleBody card={card} payload={payload} />
         // WP335：AI 回答监测的设定卡 / 竞品卡——几行要点 + 就地「改」（改好了带着改过的策略批）
         if (isGeoWatchPayload(payload)) return <GeoWatchCardBody card={card} payload={payload} />
+        // WP450：一组主题——总页 + 分页（哪天写、回头改哪页）、内链几条、凭什么分成一组；可去掉几篇再批
+        if (isSeoClusterPayload(payload))
+          return <SeoClusterCardBody card={card} payload={payload} />
         // WP387：在你的 Google 账号里建 / 改 N 条提醒——每条可勾掉、一次确认（主按钮在卡身里）
         if (isGoogleAlertChangePayload(payload))
           return <GoogleAlertChangeBody card={card} payload={payload} />
@@ -490,6 +510,8 @@ export function DeckCardBody({
         // WP489（决策 1709）：对不上红人的往来 / 没找到往来的红人——卡里就地选、补邮箱（「记下」在卡身里）
         if (isKolMailMatchPayload(payload))
           return <KolMailMatchBody card={card} payload={payload} />
+        // WP509：「把红人同步到这张飞书表」——列对应、按哪列认人、同步什么、多久一次、对不上的阶段（「开始同步」在卡身里）
+        if (isKolSyncPayload(payload)) return <KolSyncBody card={card} payload={payload} />
         // WP322：「这份表按问答导入」——列对照、一两行预览、几条（按钮就是选项）
         if (isFaqImportPayload(payload)) return <FaqImportBody payload={payload} />
         // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，
@@ -844,7 +866,9 @@ export function DeckCardBody({
     // WP323：记录去处那张「记下 / 不用」
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'record_sink' ||
     // WP441：「要建这条规则吗」（建 / 不要都在卡身里）
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'message_rule'
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'message_rule' ||
+    // WP509：同步设置卡（「开始同步」在卡身里，「不用」= 卡底的驳回）
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'kol_sync'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (

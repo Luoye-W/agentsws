@@ -187,6 +187,9 @@ export interface AdsDataService {
   scanMail(platforms?: AdsDataPlatform[]): Promise<number>
   /** 本地「今天」。 */
   today(): string
+  /** WP452：这个品牌看数据的状态格（保本线、素材疲劳、落地页核对的最近一次结论存这里）。 */
+  getState?<T>(key: string): T | undefined
+  setState?(key: string, value: unknown): void
   /** 库里的行（查数工具用）。 */
   rows: AdsDataStore['rows']
   /** 担着哪几家。 */
@@ -777,6 +780,8 @@ export function createAdsDataService(options: AdsDataOptions): AdsDataService {
     scanMail,
     today,
     rows: (f) => store.rows(f),
+    getState: <T>(key: string) => store.getState<T>(key),
+    setState: (key, value) => store.setState(key, value),
     wanted: () => options.wanted(),
     actionAccount,
     backendReady: () => {

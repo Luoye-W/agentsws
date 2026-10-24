@@ -36,10 +36,13 @@ import type {
   TechAuditOwner,
 } from '@agentsws/contracts'
 import {
+  checkLlmsTxt,
   compareDrift,
   driftCounts,
   driftLine,
   effectiveReferrers,
+  llmsKnownPaths,
+  llmsStructureFromUrls,
   summarizeAiTraffic,
   type TrafficOrder,
   type TrafficSessions,
@@ -136,6 +139,8 @@ export interface SiteHealthServiceOptions {
   markets?(): number
   /** WP448：一页的 PageSpeed Insights 回包（真实用户数据 + 实验室数）；不给 = 不量速度。 */
   pageSpeed?(url: string): Promise<unknown>
+  /** WP450：llms.txt 里写的店名与一句话介绍（品牌档案）；不给按网站主机名。 */
+  llmsBrand?(): Promise<{ name: string; summary?: string } | undefined>
   /**
    * WP448：技术问题 / 严重回归交给建站（按担哪一条：整站搭建 / 主题）开一件事；没人担回 `undefined`。
    */
@@ -163,6 +168,8 @@ interface Persisted {
   drift_dispatched?: { key: string; at: string; matter_id: string }
   /** WP448：上一次看到店里装了哪些 App（变了就跑一次改版回归）。 */
   apps_seen?: string[]
+  /** WP450：上一次站点地图里的地址（llms.txt 生成与「过不过时」用）。 */
+  sitemap_urls?: { origin: string; urls: string[]; at: string }
 }
 
 const KEEP_RUNS = 10
@@ -203,6 +210,10 @@ export interface SiteHealthService {
   driftView(): SeoDriftView
   /** WP448：店里装的 App 这一刻是哪些（巡检读到的）；和上次不一样就跑一次改版回归。 */
   appsSeen(ids: readonly string[]): Promise<DriftRun | undefined>
+  /**
+   * WP450：网站结构（站点地图里的地址）。体检读过就用那一份；没读过（或 `fresh`）现读一次。不知道网站回 `undefined`。
+   */
+  sitemapUrls(fresh?: boolean): Promise<{ origin: string; urls: string[] } | undefined>
 }
 
 function load(file: string | undefined): Persisted {
@@ -220,6 +231,7 @@ function load(file: string | undefined): Persisted {
       ...(Array.isArray(p.drift_runs) ? { drift_runs: p.drift_runs } : {}),
       ...(p.drift_dispatched === undefined ? {} : { drift_dispatched: p.drift_dispatched }),
       ...(Array.isArray(p.apps_seen) ? { apps_seen: p.apps_seen } : {}),
+      ...(p.sitemap_urls === undefined ? {} : { sitemap_urls: p.sitemap_urls }),
     }
   } catch {
     return { settings: {}, runs: [] }
@@ -532,6 +544,50 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
     }
   }
 
+  /** WP450：llms.txt 那一项（读不到照实写；永不抛）。 */
+  const llmsCheck = async (
+    run: SiteHealthRun,
+    origin: string,
+    host: string,
+    sitemap: SitemapRead,
+  ): Promise<void> => {
+    try {
+      if (sitemap.state === 'found')
+        state.sitemap_urls = { origin, urls: sitemap.urls.slice(0, 2000), at: now() }
+      const url = `${origin}/llms.txt`
+      const page = await fetchPage(options.fetch, url)
+      const fetched = page.ok
+        ? {
+            status: page.status,
+            body: page.html,
+            ...(page.final_url === undefined ? {} : { final_url: page.final_url }),
+          }
+        : page.status === 404 || page.status === 410
+          ? { status: page.status }
+          : undefined
+      const brand = await options.llmsBrand?.().catch(() => undefined)
+      const s = llmsStructureFromUrls({
+        name: brand?.name ?? host,
+        origin,
+        urls: sitemap.urls,
+      })
+      const known =
+        sitemap.state === 'found' && sitemap.truncated !== true
+          ? llmsKnownPaths(sitemap.urls, origin)
+          : undefined
+      run.llms_txt = checkLlmsTxt({
+        url,
+        origin,
+        fetched,
+        expected: [...s.collections, ...s.policies].map((l) => l.url),
+        ...(known === undefined ? {} : { known }),
+        at: now(),
+      })
+    } catch {
+      run.notes.push('这次没看 llms.txt')
+    }
+  }
+
   /** 技术体检（在 WP381 那一轮里跑；读不到的写进 notes，永不抛）。 */
   const techAudit = async (
     run: SiteHealthRun,
@@ -626,6 +682,8 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
         speed_enabled: options.pageSpeed !== undefined,
       })
       if (sitemap.state === 'unknown') run.notes.push('这次没读到站点地图')
+      // WP450：llms.txt 有没有、内容过不过时（和按站点地图现生成的那份比）
+      await llmsCheck(run, origin, host, sitemap)
       await handoffTech(run, run.tech)
     } catch {
       run.notes.push('这次技术体检没跑完')
@@ -1056,7 +1114,31 @@ export function createSiteHealthService(options: SiteHealthServiceOptions): Site
     return summary
   }
 
+  /** WP450：网站结构（站点地图里的地址）。 */
+  const sitemapUrls = async (
+    fresh = false,
+  ): Promise<{ origin: string; urls: string[] } | undefined> => {
+    const origin = (await options.origin().catch(() => undefined))?.replace(/\/+$/, '')
+    if (origin === undefined || hostOf(origin) === undefined) return undefined
+    const kept = state.sitemap_urls
+    if (!fresh && kept !== undefined && kept.origin === origin && kept.urls.length > 0)
+      return { origin, urls: kept.urls }
+    let robots: string | undefined
+    try {
+      robots = await robotsOf(origin)
+    } catch {
+      robots = undefined
+    }
+    const sm = await readSitemap(origin, robots)
+    if (sm.state === 'found') {
+      state.sitemap_urls = { origin, urls: sm.urls.slice(0, 2000), at: now() }
+      save()
+    }
+    return { origin, urls: sm.urls }
+  }
+
   return {
+    sitemapUrls,
     latest: () => state.runs[0],
     runs: () => [...state.runs],
     settings: () => state.settings,

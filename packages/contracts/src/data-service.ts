@@ -479,6 +479,37 @@ export const DATA_CAPABILITY_CATALOG: readonly DataCapabilitySpec[] = [
       { name: 'limit', type: 'number', min: 1, max: 1000, label_zh: '最多几行' },
     ],
   },
+  // WP450：外链体检读的概况（云上 WP300 已开通的那一项；按次计，结果都是估算、不带来源名）
+  {
+    id: 'seo.backlink_summary',
+    label_zh: '外链概况',
+    label_en: 'Backlink summary',
+    group: 'seo',
+    mode: 'sync',
+    unit: 'call',
+    input: [{ name: 'target', type: 'string', required: true, max: 500, label_zh: '域名或网址' }],
+  },
+  // WP450：主题簇规划读的关键词概况（搜索量 / 意图 / 难度，估算；云上 WP300 已开通）
+  {
+    id: 'seo.keyword_overview',
+    label_zh: '关键词概况',
+    label_en: 'Keyword overview',
+    group: 'seo',
+    mode: 'sync',
+    unit: 'call',
+    input: [
+      {
+        name: 'keywords',
+        type: 'string[]',
+        required: true,
+        max: 80,
+        max_count: 100,
+        label_zh: '关键词',
+      },
+      COUNTRY,
+      LANGUAGE,
+    ],
+  },
   {
     id: 'seo.domain_rating',
     label_zh: '域名权重',

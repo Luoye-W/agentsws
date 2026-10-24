@@ -96,6 +96,10 @@ export function BrandProfileSettings({ ownerId }: { ownerId?: string }): React.R
           ...(draft.category.trim() === (onboarding.data?.profile?.category ?? '')
             ? {}
             : { category: draft.category.trim() }),
+          // WP452：卖的是什么——只在改过时发（空 = 清空 = 不知道）
+          ...((draft.offering ?? '') === (onboarding.data?.profile?.offering ?? '')
+            ? {}
+            : { offering: draft.offering ?? '' }),
           ...(draft.support_email.trim() === (onboarding.data?.profile?.support_email ?? '')
             ? {}
             : { support_email: draft.support_email.trim() }),

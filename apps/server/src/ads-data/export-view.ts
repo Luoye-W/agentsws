@@ -5,6 +5,7 @@
  * 概况按**最近一份报表覆盖的那几天**算：同一家同一账户的行先取广告系列那一层（没有就由广告组 / 广告加上去），
  * 不同层不相加（加了就重复算）。币种、时区、日期范围照最近那份报表写；没写的就是没写。
  */
+
 import {
   type AdsAuditResult,
   type AdsMetrics,
@@ -15,6 +16,7 @@ import {
   runAdsAudit,
   sumAdsMetrics,
 } from '@agentsws/ads-core'
+import { ADS_PLATFORM_IDS, type AdsPlatform } from '@agentsws/contracts'
 import type { AdsDataImport, AdsDataRow, AdsDataStore } from './store.js'
 
 /** 读这两样只要库的这一面（服务与测试都满足）。 */
@@ -51,7 +53,7 @@ const dayAdd = (day: string, n: number): string =>
 /** 一家的最近一份报表（没有回 `undefined`）。 */
 export function latestExport(
   src: ExportViewSource,
-  platform: ExportPlatform,
+  platform: AdsPlatform,
 ): AdsDataImport | undefined {
   return src.imports({ platform, limit: 1 })[0]
 }
@@ -114,11 +116,14 @@ export function exportCampaigns(
     .slice(0, limit)
 }
 
-/** 一家的体检（最近 30 天的行 + 最近那份报表上写的币种 / 时区 / 日期）。 */
+/**
+ * 一家的体检（最近 30 天的行 + 最近那份报表上写的币种 / 时区 / 日期）。
+ * WP452：十家都走这里（老四家的行是插件每天导的同一张表）；`brand` 给了按品牌读订阅来的正式清单。
+ */
 export function exportAudit(
   src: ExportViewSource,
-  platform: ExportPlatform,
-  opts: { has_app?: boolean } = {},
+  platform: AdsPlatform,
+  opts: { has_app?: boolean; brand?: string } = {},
 ): AdsAuditResult {
   const today = src.today()
   const rows = src.rows({ since: dayAdd(today, -30), until: today, platform })
@@ -145,19 +150,20 @@ export function exportAudit(
           },
         }),
     ...(opts.has_app === undefined ? {} : { has_app: opts.has_app }),
+    ...(opts.brand === undefined ? {} : { brand: opts.brand }),
   })
 }
 
-/** 投放面板要的那两份（六家都给；面板那一层按职责筛）。 */
+/** 投放面板要的那两份（概况六家、体检十家；面板那一层按职责筛）。 */
 export function exportDeckData(
   src: ExportViewSource,
-  opts: { has_app?: boolean } = {},
+  opts: { has_app?: boolean; brand?: string } = {},
 ): {
   exports: ExportOverviewRow[]
   audits: AdsAuditResult[]
 } {
   return {
     exports: EXPORT_PLATFORMS.flatMap((p) => exportOverview(src, p)),
-    audits: EXPORT_PLATFORMS.map((p) => exportAudit(src, p, opts)),
+    audits: ADS_PLATFORM_IDS.map((p) => exportAudit(src, p, opts)),
   }
 }
