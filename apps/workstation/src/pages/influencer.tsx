@@ -17,6 +17,8 @@ import { KOL_LIBRARY } from '@/components/kol/kol-library-status'
 import { channelOfRole } from '@/components/kol/kol-panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPositions } from '@/lib/api'
+import { useApp } from '@/lib/app-context'
+import { PREFILL_PARAM } from '@/lib/composer-prefill'
 
 /** 跳到哪（纯函数，测试用）。 */
 export function influencerTarget(
@@ -54,4 +56,40 @@ export function InfluencerPage({ setup = false }: { setup?: boolean }): React.Re
       </div>
     )
   return <Navigate replace to={influencerTarget(positions.data?.positions ?? [], search, setup)} />
+}
+
+/**
+ * WP509：插件「数据同步」那一格的「去后台连接」落点 `/influencer/sync`（深链长期留着）——
+ * 打开红人营销岗位、对话框里预填「把红人同步到我的飞书表」（`?ask=`，不发出去，人贴上链接再发）；
+ * 铃铛里「同步停了」那条带 `?status=1`：打开岗位第三栏的「连接」那一格看同步状态。
+ */
+export function influencerSyncTarget(
+  positions: readonly { position_id: string; role_id: string }[],
+  search: URLSearchParams,
+  prefill: string,
+): string {
+  const kol = positions.find((p) => channelOfRole(p.role_id) !== undefined)
+  const next = new URLSearchParams()
+  if (search.get('status') === '1') next.set('panel', 'connections')
+  else next.set(PREFILL_PARAM, prefill)
+  const base = kol === undefined ? '/' : `/positions/${encodeURIComponent(kol.position_id)}`
+  return `${base}?${next.toString()}`
+}
+
+export function InfluencerSyncPage(): React.ReactNode {
+  const { t } = useApp()
+  const [search] = useSearchParams()
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  if (positions.isPending)
+    return (
+      <div className="flex flex-col gap-3" data-testid="influencer-redirecting">
+        <Skeleton className="h-8 w-64" />
+      </div>
+    )
+  return (
+    <Navigate
+      replace
+      to={influencerSyncTarget(positions.data?.positions ?? [], search, t('kolsync.prefill'))}
+    />
+  )
 }

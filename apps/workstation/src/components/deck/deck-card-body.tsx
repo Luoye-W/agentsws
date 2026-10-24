@@ -33,6 +33,7 @@ import {
   KolReviewBody,
 } from '@/components/kol/kol-card-bodies'
 import { isKolMailMatchPayload, KolMailMatchBody } from '@/components/kol/kol-mail-match-body'
+import { isKolSyncPayload, KolSyncBody } from '@/components/kol/kol-sync-body'
 import { FollowUpCardBody } from '@/components/messages/follow-up-card-body'
 import { isMessageRuleCardPayload, MessageRuleCardBody } from '@/components/messages/rule-card-body'
 import {
@@ -509,6 +510,8 @@ export function DeckCardBody({
         // WP489（决策 1709）：对不上红人的往来 / 没找到往来的红人——卡里就地选、补邮箱（「记下」在卡身里）
         if (isKolMailMatchPayload(payload))
           return <KolMailMatchBody card={card} payload={payload} />
+        // WP509：「把红人同步到这张飞书表」——列对应、按哪列认人、同步什么、多久一次、对不上的阶段（「开始同步」在卡身里）
+        if (isKolSyncPayload(payload)) return <KolSyncBody card={card} payload={payload} />
         // WP322：「这份表按问答导入」——列对照、一两行预览、几条（按钮就是选项）
         if (isFaqImportPayload(payload)) return <FaqImportBody payload={payload} />
         // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，
@@ -863,7 +866,9 @@ export function DeckCardBody({
     // WP323：记录去处那张「记下 / 不用」
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'record_sink' ||
     // WP441：「要建这条规则吗」（建 / 不要都在卡身里）
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'message_rule'
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'message_rule' ||
+    // WP509：同步设置卡（「开始同步」在卡身里，「不用」= 卡底的驳回）
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'kol_sync'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (

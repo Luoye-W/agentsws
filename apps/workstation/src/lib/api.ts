@@ -6345,6 +6345,75 @@ export const runKolMailStages = (
     ...withAssignment(assignment),
   })
 
+/** WP509：一个「把红人同步到我的在线表」设置（第三栏「连接」/ 红人库 ⋯ 里看、停、开、删）。 */
+export interface KolSyncData {
+  id: string
+  name: string
+  url: string
+  kind: 'bitable' | 'sheet'
+  state: 'pending_confirm' | 'active' | 'paused' | 'broken'
+  cadence: 'realtime' | 'hourly' | 'daily'
+  what: { new_creators: boolean; stages: boolean; collab_records: boolean }
+  columns: { column: string; field: string | null; field_name?: string }[]
+  key_column?: string
+  last_run_at?: string
+  last_ok_at?: string
+  problem?: string
+  pending: boolean
+  totals: { appended: number; updated: number; fallback: number }
+  card_id?: string
+}
+
+export interface KolSyncListData {
+  syncs: KolSyncData[]
+  ego: boolean
+  setup_path: string
+}
+
+/** WP509：一次同步的本机留痕。 */
+export interface KolSyncLogRow {
+  id: string
+  at: string
+  trigger: 'auto' | 'manual' | 'first'
+  state: string
+  message: string
+  appended: number
+  updated: number
+  fallback: number
+  failed: number
+  items: {
+    creator_id: string
+    name: string
+    action: 'append' | 'update' | 'progress'
+    result: string
+    cells: Record<string, string>
+    why?: string
+  }[]
+}
+
+export const getKolSyncs = (assignment?: string): Promise<KolSyncListData> =>
+  api('/v1/kol/sync', withAssignment(assignment))
+
+export const getKolSyncLog = (
+  id: string,
+  assignment?: string,
+): Promise<{ rows: KolSyncLogRow[] }> =>
+  api(`/v1/kol/sync/${encodeURIComponent(id)}/log`, withAssignment(assignment))
+
+export const controlKolSync = (
+  id: string,
+  action: 'pause' | 'resume' | 'run',
+  assignment?: string,
+): Promise<KolSyncData> =>
+  api(`/v1/kol/sync/${encodeURIComponent(id)}/${action}`, {
+    method: 'POST',
+    body: {},
+    ...withAssignment(assignment),
+  })
+
+export const removeKolSync = (id: string, assignment?: string): Promise<{ removed: true }> =>
+  api(`/v1/kol/sync/${encodeURIComponent(id)}`, { method: 'DELETE', ...withAssignment(assignment) })
+
 export const planKolCampaign = (
   input: {
     goal: string

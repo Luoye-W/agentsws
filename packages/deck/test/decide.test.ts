@@ -204,3 +204,22 @@ describe('错误码表', () => {
     expect(errorCodeFor('UNKNOWN_QUERY')).toBe('not_found')
   })
 })
+
+describe('WP509：「同步设置」卡（就地改的设置卡，不挂选项）', () => {
+  const sync = (): DeckCard =>
+    projectCard(
+      policyItem({
+        payload: { form: 'kol_sync', sync_id: 'ksync_1', columns: [], stage_map: [] },
+      }),
+      ctx,
+    )
+  it('「开始同步」带着卡上改过的那一份批（不被原样那一份顶掉）', () => {
+    const edited = { form: 'kol_sync', sync_id: 'ksync_1', cadence: 'hourly' }
+    expect(resolveDecision(sync(), { action: 'approve', edited_payload: edited }, options)).toEqual(
+      {
+        action: 'approve_edited',
+        edited_payload: edited,
+      },
+    )
+  })
+})

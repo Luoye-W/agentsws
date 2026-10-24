@@ -31,6 +31,7 @@ import { sanitizePublicContacts } from '@agentsws/contracts'
 import { KOL_TOOL_NAMES, kolChannelOfRole } from '@agentsws/kol-core'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 import type { KolImportAssembly } from './kol-import.js'
+import type { KolSync } from './kol-sync/service.js'
 
 export interface KolToolsOptions {
   workspace_id: WorkspaceId
@@ -38,6 +39,8 @@ export interface KolToolsOptions {
   port(): KolPort | undefined
   /** WP489：表格导入 / 邮件判阶段（懒取；没装就没有）。 */
   importer?(): KolImportAssembly | undefined
+  /** WP509：红人同步到表格（懒取；没装就没有）。 */
+  sync?(): Pick<KolSync, 'propose' | 'describe'> | undefined
   /** 现在几点（登记交付物没给 `due_at` 时按「一周后」兜底）。 */
   now(): Iso8601
   /**
@@ -236,6 +239,48 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         if (importer === undefined) return { status: 'error', reason: '这个进程没装表格导入。' }
         const message = await importer.previewCard(actor, { filename: url, url })
         return { status: 'ok', data: { kind: 'kol_import_preview', message } }
+      }
+      // WP509：「把红人同步到我这张飞书表 <链接>」→ 在 ego 里读表头 → 「同步设置」卡（人点了才开始同步）
+      case 'sync_creators_to_sheet': {
+        const sync = options.sync?.()
+        if (sync === undefined) return { status: 'error', reason: '这个进程没装红人同步。' }
+        if (input.action === 'status')
+          return { status: 'ok', data: { kind: 'kol_sync_status', message: sync.describe() } }
+        const url = str(input.url)
+        if (url === undefined) return missing('表格链接')
+        const what = {
+          ...(typeof input.new_creators === 'boolean' ? { new_creators: input.new_creators } : {}),
+          ...(typeof input.stages === 'boolean' ? { stages: input.stages } : {}),
+          ...(typeof input.collab_records === 'boolean'
+            ? { collab_records: input.collab_records }
+            : {}),
+        }
+        const cadence = (['realtime', 'hourly', 'daily'] as const).find((c) => c === input.cadence)
+        const hints = Array.isArray(input.columns)
+          ? input.columns.flatMap((raw) => {
+              const o =
+                raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+              return typeof o.column === 'string' ? [{ column: o.column, field: o.field }] : []
+            })
+          : []
+        const got = await sync.propose(actor, {
+          url,
+          ...(str(input.instruction) === undefined
+            ? {}
+            : { instruction: str(input.instruction) as string }),
+          what,
+          ...(cadence === undefined ? {} : { cadence }),
+          hints,
+        })
+        return {
+          status: 'ok',
+          data: {
+            kind: 'kol_sync_setup',
+            ok: got.ok,
+            message: got.message,
+            ...(got.card_id === undefined ? {} : { approval_item_id: got.card_id }),
+          },
+        }
       }
       case 'update_stages_from_mail': {
         const importer = options.importer?.()

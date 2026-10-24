@@ -643,6 +643,9 @@ import {
   kolSandboxIntercept,
 } from './kol-sandbox.js'
 import { CONTACT_SECRET_FIELD, contactSecretId, createKolService } from './kol-service.js'
+import { runEgoSheetWrite } from './kol-sync/runner.js'
+import { createKolSync, type KolSync, type KolSyncEgo } from './kol-sync/service.js'
+import { createKolSyncStore } from './kol-sync/store.js'
 import { createKolToolExecutor, observeViaIngest } from './kol-tools.js'
 import {
   canEditMemory,
@@ -1799,6 +1802,11 @@ export interface ServerOptions {
    */
   egoWriter?: EgoWriter & { wanted?(): boolean }
   /**
+   * WP509：红人同步到飞书表的那只 ego 手（读表头 + 写）。测试 / 截图塞一个跑本机假飞书页的假 ego；
+   * 生产不传，读走 WP493 只读通道、写走 `runEgoSheetWrite`（同样按浏览器设置探本机的 `ego-browser`）。
+   */
+  kolSheetEgo?: KolSyncEgo
+  /**
    * WP386：信息监控拉 feed 的那一跳（测试 / 演示塞录好的 feed，不联网）。生产不传，走全局 fetch。
    */
   feedFetch?: AlertsTransport['fetch']
@@ -2662,6 +2670,35 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     probe: (path) => probeEgoConnection(path),
   })
   const egoSheetReader = createEgoSheetReader({ ego: egoReader })
+  /*
+   * WP509：红人同步到飞书表的 ego 那只手——读表头走只读通道（`egoReader`，一次一趟），写走 `runEgoSheetWrite`
+   * （整台机器排一条队：同一时刻只有一趟在用户的 ego 里写表）。写要「发帖那一路」开着（`AGENTSWS_EGO_WRITE=off` 整条关）。
+   */
+  let kolSheetQueue: Promise<unknown> = Promise.resolve()
+  const kolSheetEgo: KolSyncEgo = options.kolSheetEgo ?? {
+    available: () =>
+      env.AGENTSWS_EGO_WRITE !== 'off' &&
+      browserSettings.egoWritePath() !== undefined &&
+      egoReadPath() !== undefined,
+    read: (call) => egoReader.run(call),
+    write: (call) => {
+      const task = async () => {
+        const egoPath =
+          env.AGENTSWS_EGO_WRITE === 'off' ? undefined : browserSettings.egoWritePath()
+        if (egoPath === undefined)
+          return {
+            state: 'unavailable' as const,
+            why: 'ego 没装好或没选用',
+            duration_ms: 0,
+            ops: [],
+          }
+        return runEgoSheetWrite({ egoPath, call })
+      }
+      const next = kolSheetQueue.then(task, task)
+      kolSheetQueue = next.catch(() => undefined)
+      return next
+    },
+  }
   /**
    * WP496：ego 路采集红人——插件同一套采集器 + 插件同一个入口（`extensionPortOf` 按会话里的品牌分派；
    * 那一份在后面才建，这里取值函数只在真调工具时才取）。
@@ -6448,6 +6485,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 卡给拖表的那个人（用他在红人岗位上的那条分配）。
      */
     const kolImportLate: { current?: KolImportAssembly } = {}
+    /** WP509：红人同步到飞书表（在下面才建；工具只在真调的那一刻取）。 */
+    const kolSheetSyncLate: { current?: KolSync } = {}
     const kolSheetIntake = createKolSheetIntake({
       importer: () => kolImportLate.current,
       actorOf: (person_id) => {
@@ -7745,6 +7784,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               workspace_id: ws,
               port: () => kolService.port,
               importer: () => kolImportLate.current,
+              // WP509：「把红人同步到我这张飞书表 <链接>」
+              sync: () => kolSheetSyncLate.current,
               now: () => clock.now(),
               // WP346（决策 872）：模型没给关键词时按品牌档案里的品类关键词搜
               brandQuery: () => brandSearchQuery(onboardingRef?.brandProfile(ws) ?? {}),
@@ -10584,6 +10625,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       }),
     })
     kolImportLate.current = kolImport
+    /*
+     * WP509（决策 1730 B、1811）：红人同步到用户自己的飞书表——经 ego（用户已登录的浏览器），不要飞书开发者应用。
+     * 本机档才有（ego 装在用户电脑上）；每分钟看一拍红人库，按「多久一次」攒成一批写。
+     */
+    const kolSheetSync =
+      hostedBoot !== undefined
+        ? undefined
+        : createKolSync({
+            workspace_id: ws,
+            store: createKolSyncStore(dir === undefined ? {} : { dbDir: dir }),
+            kol,
+            secrets: brandSecrets,
+            clock,
+            ...(txn.approvals === undefined ? {} : { approvals: txn.approvals }),
+            random,
+            ego: kolSheetEgo,
+            appendEvent,
+            tzOffsetMinutes: () => outboundTz.get(ws) ?? 0,
+          })
+    kolSheetSync?.start()
+    if (kolSheetSync !== undefined) kolSheetSyncLate.current = kolSheetSync
     const amazonOwnHolder = ():
       | { person_id: string; assignment_id: string; role_id: string }
       | undefined => {
@@ -11469,6 +11531,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kolSandbox,
       kolMail,
       kolImport,
+      ...(kolSheetSync === undefined ? {} : { kolSheetSync }),
       kolPublic,
       searchData,
       ...(webBrowser === undefined ? {} : { webBrowser }),
@@ -11615,6 +11678,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         liveData?.close()
         connections.close()
         kol.close()
+        kolSheetSync?.close()
         b2b.close()
         // 云端红人库的同步账本也握着一个句柄（WP118）：跟着这个品牌一起关
         ownCloud.kolSync?.close()
@@ -11737,6 +11801,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP416：同一人合并卡——卡上选「合」= 面板上点「接受」；选「不是同一个人」/ 驳回 = 记下、不再提
     // WP489：导入红人表卡 / 表格与邮件对不上那张卡 / 用邮件更新阶段卡
     if (brand?.kolImport !== undefined && (await brand.kolImport.onDecided(item))) return
+    // WP509：「同步设置」卡——开始同步 / 不用（卡上改过的一并收下）
+    if (brand?.kolSheetSync !== undefined && (await brand.kolSheetSync.onDecided(item))) return
     if (isKolMergeCard(item)) {
       const choice = mergeChoiceOf(item)
       const id = (item.payload as { suggestion_id?: unknown }).suggestion_id
@@ -16318,6 +16384,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             estimateMailStages: brand.kolImport.estimateMailStages,
             runMailStages: brand.kolImport.runMailStages,
           }),
+      // WP509：红人同步到表格（看 / 停 / 开 / 删 / 现在同步一次；配置在对话里）
+      ...(brand.kolSheetSync === undefined
+        ? {}
+        : {
+            syncs: () => (brand.kolSheetSync as KolSync).list(),
+            syncControl: (
+              _actor: unknown,
+              id: string,
+              action: 'pause' | 'resume' | 'run' | 'remove',
+            ) => (brand.kolSheetSync as KolSync).control(id, action),
+            syncLog: (_actor: unknown, id: string) => (brand.kolSheetSync as KolSync).log(id),
+          }),
       sandboxStatus: () => sandbox.status(),
       sandboxStart: (_actor: unknown, input: { channel: KolChannel }) => sandbox.start(input),
       sandboxAdvance: (_actor: unknown, input: { days: number }) => sandbox.advance(input),
@@ -16514,6 +16592,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   extensionOnboardingRef = extensionOnboarding
   const extensionPortOf = brandExtensionPort({
     store: extensionStore,
+    // WP509：插件「数据同步」那一格（这个品牌把红人同步到哪张表；没装同步 = 回「没配」）
+    syncStatusOf: async (ws) =>
+      (await brandModules.forWorkspace(ws)).kolSheetSync?.status() ?? {
+        feishu: false,
+        google_sheets: false,
+        configured: false,
+        setup_path: '/influencer/sync',
+        syncs: [],
+      },
     serviceOf: async (ws) => {
       const brand = await brandModules.forWorkspace(ws)
       return {
@@ -18615,6 +18702,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'ads_experiment_readout' ||
           // WP416：同一人合并卡选了 → 真合 / 记「不是同一个人」（落盘）
           isKolMergeCard(out) ||
+          // WP489：导入红人表 / 表格与邮件对不上 / 用邮件更新阶段 / 没对上红人的往来（WP509 发现这一跳原来没接上）
+          // WP509：同步设置卡（开始同步 / 不用）
+          isKolSheetCard(out) ||
           // WP421：B2B 的卡被驳回（回写草稿 / 询盘 / 交接单）
           isB2bRejected(out)
         ) {
@@ -18628,6 +18718,18 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
       }
     },
   })
+}
+
+/** WP489 / WP509：红人表格那几张卡（导入、对不上、邮件判阶段、同步设置）——都是系统提议的 `policy_change`。 */
+const KOL_SHEET_PROPOSERS = new Set([
+  'kol-import',
+  'kol-stage',
+  'kol-mail-stage',
+  'kol-mail-match',
+  'kol-sync',
+])
+function isKolSheetCard(item: ApprovalItem): boolean {
+  return item.kind === 'policy_change' && KOL_SHEET_PROPOSERS.has(item.proposer.id)
 }
 
 /** WP421：B2B 库 / 业务那几种账本卡被驳回了（驳回与「改一下」都走这里）。 */

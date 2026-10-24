@@ -78,6 +78,8 @@ function rowActions(card: DeckCard): DeckAction[] {
     form === 'message_rule' ||
     // WP489：「没对上红人的往来」那张卡的「记下」要带上卡里选的 / 填的，在卡身里
     form === 'kol_mail_match' ||
+    // WP509：同步设置卡的「开始同步」要带上卡上改过的列对应 / 勾 / 阶段，在卡身里
+    form === 'kol_sync' ||
     // WP442：催促卡的「发出」「修改」都在卡身里（就地改字、带着改过的那一版批）
     form === FOLLOW_UP_CARD_FORM ||
     // WP488：「学到 N 条」的「采纳」要带上卡上改过的范围 / 去掉的几条；「可能过期」两个选项也在卡身里
@@ -93,7 +95,8 @@ function rowActions(card: DeckCard): DeckAction[] {
           !(
             (form === 'message_rule' ||
               form === FOLLOW_UP_CARD_FORM ||
-              form === 'kol_mail_match') &&
+              form === 'kol_mail_match' ||
+              form === 'kol_sync') &&
             a === 'instruct'
           ),
       )

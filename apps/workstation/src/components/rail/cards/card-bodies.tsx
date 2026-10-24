@@ -12,6 +12,7 @@ import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'rea
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
 import { MODEL_CHOICES_KEY } from '@/components/free-chat/model-picker'
+import { KolSyncRows } from '@/components/kol/kol-sync-panel'
 import { PrWatchSources } from '@/components/pr/pr-watch-sources'
 import { useScopeMonitor } from '@/components/pr/use-scope-monitor'
 import { connectionNeedsYou, useScopeConnections, whenLabel } from '@/components/rail/card-status'
@@ -418,6 +419,8 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
   const monitor = useScopeMonitor(scope)
   // WP420：要插件的这一层，先列插件那几行（配对、后台在插件里连上没有）
   const extension = useScopeExtension(scope)
+  /** WP509：这一层里本人持有的红人职责（有才出「同步到表格」那几行）。 */
+  const kolAssignment = scope?.roles?.find((r) => r.role_id.startsWith('kol.'))?.assignment
   return (
     <div className="flex flex-col gap-1.5" data-testid="connections-card">
       {live ? (
@@ -435,6 +438,8 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
         <MonitorRow assignment={monitor.assignment} view={monitor.view} />
       )}
       {extension === undefined ? null : <ExtensionRows rows={extension} />}
+      {/* WP509：红人同步到表格（红人营销这一层才有；一个同步一行，点开就地停 / 开 / 现在同步 / 删） */}
+      {kolAssignment === undefined ? null : <KolSyncRows assignment={kolAssignment} />}
       {/* WP392：竞品监控各监控源的状态（坏了亮红点、照实说是哪家） */}
       {competitorAssignmentOf(scope) === undefined ? null : (
         <ul className="flex flex-col gap-px">
@@ -446,6 +451,7 @@ export function ConnectionsCard(props: RailCardBodyProps): ReactNode {
         !ready ||
         monitor !== undefined ||
         extension !== undefined ||
+        kolAssignment !== undefined ||
         competitorAssignmentOf(scope) !== undefined ? null : (
           <Empty text={t('conncard.empty')} />
         )
