@@ -65,11 +65,14 @@ export function rightPaneRoute(pane: RightPane): { panel: string } | { address: 
   }
 }
 
-/** 第三栏这一格要多宽：报表那两格至少 {@link REPORT_PANE_MIN_WIDTH}，别的照拖出来的宽度。 */
-export function paneWidth(panel: string | undefined, width: number): number {
-  return panel !== undefined && REPORT_PANELS.includes(panel)
-    ? Math.max(width, REPORT_PANE_MIN_WIDTH)
-    : width
+/**
+ * 第三栏这一格要多宽：报表那两格至少 {@link REPORT_PANE_MIN_WIDTH}；WP504 起面板自己声明的 `minWidth`
+ * （库面板）也算；别的照拖出来的宽度。
+ */
+export function paneWidth(panel: string | undefined, width: number, minWidth?: number): number {
+  const floor =
+    panel !== undefined && REPORT_PANELS.includes(panel) ? REPORT_PANE_MIN_WIDTH : (minWidth ?? 0)
+  return Math.max(width, floor)
 }
 
 export interface PaneState {

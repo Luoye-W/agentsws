@@ -1,121 +1,57 @@
 /**
- * WP119c：**插件深链的落点**（docs/76 §10）。
+ * WP119c / WP131：**插件深链的落点**（docs/76 §10）——插件版本里写死了这几条，路由要长期留着。
  *
- * 完整版面板的「去工作台看」会打开这五条路径里的前两条：
+ * WP504（决策 1765「资料在右、决策在中」、1778 A）：红人库搬进红人营销岗位的第三栏，这两条路改成**跳转**：
  *
- * - `/influencer/creators?creator=<handle|id>`——落到红人面板，能带出那一个人的
- *   详情（认得 handle 也认得 creator_id）；
- * - `/influencer/setup`——同一条面板，默认落在「导入与 campaign」那一格。
- * - `/influencer/creators?batch=<bt_…>[&channel=<渠道>]`（WP131）——插件列表采集完点
- *   「回作战室看这批」：候选池只列这一次收进来的人；带了 `channel` 就落到那条渠道的职责上。
+ * - `/influencer/creators?creator=<handle|id>` → 岗位页 `?panel=kol-library&creator=…`：开红人库、叠开那个人（认 handle 也认 id）；
+ * - `/influencer/creators?batch=<bt_…>[&channel=…]`（插件「回作战室看这批」）→ 库里带「这一批」筛选签，
+ *   带了 `channel` 就落到那条渠道的职责上；
+ * - `/influencer/setup` → 开到「活动」那一格；老的 `?kol=threads` → 「合作」那一格。
  *
- * `/settings/credits`、`/settings/billing`、`/settings/apikeys` 三条直接复用设置页
- * 的「账号与积分」那一档（App.tsx 里接的），不经过这个文件。
- *
- * 深链的对象是**从插件跳过来的人**：他刚在页面上存了一个红人，想看工作台里
- * 长什么样。所以这里的空态要说清"为什么这里没有东西、去哪儿配"，而不是一张
- * 干巴巴的 404。
+ * 落到哪个岗位页：带了 `channel` 先找那条渠道的红人职责，找不到退回第一条（与原来一样）；
+ * 一条红人职责都没有就跳首页、照样开那一格——面板照实说「还没有红人营销岗位」。
  */
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
-import { PageHeader } from '@/components/design/kit'
-import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import { KOL_LIBRARY } from '@/components/kol/kol-library-status'
+import { channelOfRole } from '@/components/kol/kol-panel'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getKolCreators, getPositions } from '@/lib/api'
-import { useApp } from '@/lib/app-context'
+import { getPositions } from '@/lib/api'
 
-export function InfluencerPage({ setup = false }: { setup?: boolean }): React.ReactNode {
-  const { t } = useApp()
-  const [search] = useSearchParams()
-  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
-
-  if (positions.isLoading) {
-    return (
-      <div className="flex flex-col gap-3">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    )
-  }
-
-  // 红人面板按渠道分职责（kol.youtube → youtube）。有多条就取第一条——
-  // 深链要的是一个"能看"的地方，不是一道选择题。WP131：深链带了 `channel`
-  // （插件那一批来自哪条渠道）就先找那条渠道的职责，找不到再退回第一条。
+/** 跳到哪（纯函数，测试用）。 */
+export function influencerTarget(
+  positions: readonly { position_id: string; role_id: string }[],
+  search: URLSearchParams,
+  setup: boolean,
+): string {
   const wanted = search.get('channel')
-  const kolPositions = (positions.data?.positions ?? []).filter(
-    (p) => channelOfRole(p.role_id) !== undefined,
+  const kols = positions.filter((p) => channelOfRole(p.role_id) !== undefined)
+  const kol = kols.find((p) => wanted !== null && channelOfRole(p.role_id) === wanted) ?? kols[0]
+  const next = new URLSearchParams()
+  next.set('panel', KOL_LIBRARY)
+  const view = search.get('kol')
+  next.set(
+    'tab',
+    setup || view === 'campaign' ? 'campaign' : view === 'threads' ? 'collab' : 'creators',
   )
-  const kol =
-    kolPositions.find((p) => wanted !== null && channelOfRole(p.role_id) === wanted) ??
-    kolPositions[0]
-  if (kol === undefined) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">{t('influencer.empty.title')}</CardTitle>
-        </CardHeader>
-        {/* WP157：写死的中文走 i18n；空态那一句不再露职责 id */}
-        <CardContent className="text-sm text-muted-foreground">{t('influencer.empty')}</CardContent>
-      </Card>
-    )
+  for (const key of ['creator', 'batch'] as const) {
+    const v = search.get(key)
+    if (v !== null && v !== '') next.set(key, v)
   }
-
-  const channel = channelOfRole(kol.role_id)
-  if (channel === undefined) return null
-
-  return (
-    <div className="flex flex-col gap-3">
-      {/* WP416（自查 kol U9）：页面有标题，一上来知道自己在哪 */}
-      <PageHeader title={t('influencer.title')} titleTestId="influencer-title" />
-      <KolPanelLoader
-        assignment={kol.position_id}
-        channel={channel}
-        {...(search.get('creator') === null
-          ? {}
-          : { focusCreator: search.get('creator') as string })}
-        {...(setup ? { defaultSubview: 'campaign' as const } : {})}
-      />
-    </div>
-  )
+  const channel = kol === undefined ? undefined : channelOfRole(kol.role_id)
+  if (channel !== undefined) next.set('channel', channel)
+  const base = kol === undefined ? '/' : `/positions/${encodeURIComponent(kol.position_id)}`
+  return `${base}?${next.toString()}`
 }
 
-/**
- * 深链里的 `?creator=` 可能是 handle（插件那边的习惯）也可能是 creator_id
- * （工作台数据那边的习惯）。这里对一次红人库清单，把两种都翻成 creator_id；
- * 对不上就当没给——面板照常打开，比报错有用。
- */
-function KolPanelLoader({
-  assignment,
-  channel,
-  focusCreator,
-  defaultSubview,
-}: {
-  assignment: string
-  channel: 'youtube' | 'facebook' | 'instagram' | 'tiktok' | 'x'
-  focusCreator?: string
-  defaultSubview?: 'pool' | 'campaign' | 'threads'
-}): React.ReactNode {
-  const library = useQuery({
-    queryKey: ['kol-creators', assignment, channel],
-    queryFn: () => getKolCreators({ channel }, assignment),
-  })
-  const rows = library.data?.rows ?? []
-  const needle = focusCreator?.trim().toLowerCase()
-  const resolved =
-    needle === undefined || needle === ''
-      ? undefined
-      : (
-          rows.find((r) => r.creator_id.toLowerCase() === needle) ??
-          rows.find((r) => r.handle.replace(/^@+/, '').toLowerCase() === needle)
-        )?.creator_id
-
-  return (
-    <KolPanel
-      assignment={assignment}
-      channel={channel}
-      {...(resolved === undefined ? {} : { initialOpenCreator: resolved })}
-      {...(defaultSubview === undefined ? {} : { defaultSubview })}
-    />
-  )
+export function InfluencerPage({ setup = false }: { setup?: boolean }): React.ReactNode {
+  const [search] = useSearchParams()
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  if (positions.isPending)
+    return (
+      <div className="flex flex-col gap-3" data-testid="influencer-redirecting">
+        <Skeleton className="h-8 w-64" />
+      </div>
+    )
+  return <Navigate replace to={influencerTarget(positions.data?.positions ?? [], search, setup)} />
 }

@@ -6266,6 +6266,8 @@ export const planKolCampaign = (
     channels: KolChannelId[]
     headcount: number
     criteria?: { category?: string }
+    /** WP504：库里多选「移入活动」的那批人——清单只在这几个人里挑。 */
+    creator_ids?: string[]
   },
   assignment?: string,
 ): Promise<KolCampaignData> =>

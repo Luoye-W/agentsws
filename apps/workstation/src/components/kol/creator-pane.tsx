@@ -11,11 +11,12 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { type ReactNode, useSyncExternalStore } from 'react'
 import { EmptyState, SkeletonList } from '@/components/design'
-import { openRightPane } from '@/components/rail/right-pane'
+import { openLibrary } from '@/components/library/library-intent'
 import { Button } from '@/components/ui/button'
 import { getKolCreator, type KolChannelId } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { CreatorInfoCard } from './creator-info-card'
+import { KOL_LIBRARY } from './kol-library-status'
 import { errorText, KolError } from './kol-shared'
 
 /** 第三栏那一格的面板 id（`builtin-panels.tsx` 注册）。 */
@@ -49,11 +50,15 @@ export function useCreatorPaneTarget(): CreatorPaneTarget | undefined {
   )
 }
 
-/** 在第三栏开这个人。回 `false` = 没有外壳的第三栏（调用方就地画）。 */
+/**
+ * 在第三栏开这个人。回 `false` = 没有外壳的第三栏（调用方就地画）。
+ *
+ * WP504（决策 1761 A 推广）：不再单开一格——开**红人库**、详情叠在库上（← 回到库）。
+ */
 export function openCreatorPane(next: CreatorPaneTarget): boolean {
   const before = target
   publish(next)
-  const opened = openRightPane({ kind: 'panel', id: KOL_CREATOR_PANE })
+  const opened = openLibrary(KOL_LIBRARY, { item: next.id, params: { channel: next.channel } })
   if (!opened) publish(before)
   return opened
 }

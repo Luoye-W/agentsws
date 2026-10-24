@@ -9,7 +9,7 @@
  * 输入框那一侧认 `[data-ask-ai-target]`（`MatterComposer` 给了 `refs` 时挂上）。
  */
 import { Sparkles } from 'lucide-react'
-import type { MouseEvent, ReactNode } from 'react'
+import { type MouseEvent, type ReactNode, useRef, useState } from 'react'
 import { readMotionPref } from '@/components/design/motion-pref'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
@@ -161,5 +161,88 @@ export function AskAiButton({
     >
       <Sparkles aria-hidden className="size-3.5" />
     </button>
+  )
+}
+
+/**
+ * WP504（F2 第 4 条）：详情里**每个区块**悬停也有 ✦——不用每一节自己加：包一层，鼠标移到哪一节
+ * （`section` 或带 `data-ask-block` 的元素）就在那一节右上角出一颗 ✦；点了 = 问这个对象的这一节
+ * （引用小卡 = 对象本身 + 这一节的标题与文字，结构化摘要，不是截图）。
+ */
+export function AskAiSections({
+  base,
+  fallback,
+  children,
+}: {
+  /** 这个对象本身（红人）。 */
+  base: () => ContextRef
+  fallback?: () => void
+  children: ReactNode
+}): ReactNode {
+  const { t } = useApp()
+  const box = useRef<HTMLDivElement | null>(null)
+  const [at, setAt] = useState<{ el: HTMLElement; top: number; right: number } | undefined>(
+    undefined,
+  )
+  const pick = (target: EventTarget | null): void => {
+    const root = box.current
+    if (root === null || !(target instanceof Element)) return
+    const el = target.closest<HTMLElement>('section, [data-ask-block]')
+    if (el === null || !root.contains(el) || el === root) return
+    if (at?.el === el) return
+    const r = el.getBoundingClientRect()
+    const o = root.getBoundingClientRect()
+    setAt({ el, top: r.top - o.top, right: o.right - r.right })
+  }
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: 只是找鼠标 / 焦点落在哪一节（✦ 本身是真按钮，键盘到得了）
+    <div
+      ref={box}
+      className="relative"
+      data-testid="ask-ai-sections"
+      onMouseOver={(e) => {
+        pick(e.target)
+      }}
+      onFocus={(e) => {
+        pick(e.target)
+      }}
+      onMouseLeave={() => {
+        setAt(undefined)
+      }}
+    >
+      {children}
+      {at === undefined ? null : (
+        <button
+          type="button"
+          aria-label={t('ask_ai.label')}
+          title={t('ask_ai.label')}
+          data-testid="ask-ai-section"
+          className="absolute z-10 grid size-6 place-items-center rounded-full border border-ws-line bg-ws-card text-ws-brand shadow-ws focus-visible:outline-2 focus-visible:outline-ring"
+          style={{ top: Math.max(0, at.top - 8), right: Math.max(0, at.right - 8) }}
+          onClick={() => {
+            const el = at.el
+            const title = el.querySelector('h3, h4, [data-slot="title"]')?.textContent?.trim() ?? ''
+            const text = (el.innerText ?? el.textContent ?? '').replace(/\s+\n/gu, '\n').trim()
+            const self = base()
+            askAi(
+              [
+                {
+                  ...self,
+                  id: `${self.id}#${title === '' ? 'block' : title}`,
+                  ...(title === '' ? {} : { sub: title }),
+                  facts: [
+                    ...self.facts,
+                    { k: title === '' ? '区块' : title, v: text.slice(0, 480) },
+                  ],
+                },
+              ],
+              { from: el, ...(fallback === undefined ? {} : { fallback }) },
+            )
+          }}
+        >
+          <Sparkles aria-hidden className="size-3.5" />
+        </button>
+      )}
+    </div>
   )
 }

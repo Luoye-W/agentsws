@@ -123,6 +123,11 @@ export interface PanelTypeDefinition {
    * 右侧面板改成**展开那张卡并滚到那一条**，不再单独开一格。
    */
   card?: string
+  /**
+   * WP504：这一格至少多宽（库面板两列卡片要 560 左右）。人拖得更宽照旧记住；不给 = 照拖出来的宽度。
+   * 原来只有报表那两格写死在 `right-pane.ts`，现在谁要谁声明。
+   */
+  minWidth?: number
 }
 
 /**
@@ -170,6 +175,13 @@ export interface RailCardDefinition {
     /** WP456-T3：展开这张卡时带的意图（卡身体自己认，如 `compose`）。 */
     intent?: string
   }
+  /**
+   * WP504（决策 1778 A）：这张卡**只在某些岗位出**（红人库只在有红人职责的岗位、知识库在客服 / B2B / 网站运营……）。
+   * 纯函数，只看这一页的 `scope`（岗位 id、本人那几条职责）；回 `false` = 这一页的卡片列里没有它。不给 = 哪儿都出。
+   */
+  available?(props: RailPanelBodyProps): boolean
+  /** WP504：没记过展开态时默认展开（库卡上那三行数字一眼要看到）。 */
+  defaultOpen?: boolean
 }
 
 /** 卡标题行的状态点：红 = 坏了要修（连接过期），黄 = 等你看。 */

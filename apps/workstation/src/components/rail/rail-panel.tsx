@@ -15,8 +15,9 @@
  * WP433（Luoye 10-21 澄清）：卡片列属于中栏、不再用这个壳；这个壳只给**第三栏**那一格用：头上「名字 · 哪一层」+ 右边 ×。
  */
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { InRightPaneContext } from '@/components/rail/in-right-pane'
+import { PanelHeaderContext, type PanelHeaderHost } from '@/components/rail/panel-header'
 import type { RailScope, RailTier } from '@/components/rail/rail-scope'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { useApp } from '@/lib/app-context'
@@ -41,22 +42,48 @@ export function RailPanel({
   onClose?: () => void
 }): ReactNode {
   const { t } = useApp()
+  /*
+   * WP504：头里留一格给面板自己（库面板的「红人库 · 红人营销」+ ↑ ⋯、详情的「← 红人库 / 名字」）；
+   * 有面板往里送东西时默认标题让位。
+   */
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+  const [claims, setClaims] = useState(0)
+  const host = useMemo<PanelHeaderHost>(
+    () => ({
+      slot,
+      claim: () => {
+        setClaims((n) => n + 1)
+        return () => {
+          setClaims((n) => n - 1)
+        }
+      },
+    }),
+    [slot],
+  )
+  const custom = claims > 0
   return (
     <section className="flex h-full min-h-0 flex-col" data-testid={testId} data-tier={tier}>
       {onClose === undefined ? null : (
         <header className="flex h-10 shrink-0 items-center gap-1.5 px-3">
           {/* WP213：这一格说的是哪个岗位 / 哪条职责，先用图标认（docs/36 §8.3） */}
-          {scope === undefined ? null : scope.tier === 'role' ? (
+          {custom || scope === undefined ? null : scope.tier === 'role' ? (
             <DutyIcon role_id={scope.scope_id} className="text-ws-muted-fg" />
           ) : (
             <PositionIcon position_id={scope.scope_id} className="text-ws-muted-fg" />
           )}
-          <h2
-            className="min-w-0 flex-1 truncate text-[13px] font-medium"
-            data-testid="rail-panel-title"
-          >
-            {scope === undefined ? title : `${title} · ${scope.name}`}
-          </h2>
+          {custom ? null : (
+            <h2
+              className="min-w-0 flex-1 truncate text-[13px] font-medium"
+              data-testid="rail-panel-title"
+            >
+              {scope === undefined ? title : `${title} · ${scope.name}`}
+            </h2>
+          )}
+          <div
+            ref={setSlot}
+            className={cn('flex min-w-0 items-center gap-1', custom ? 'flex-1' : 'hidden')}
+            data-testid="rail-panel-head-slot"
+          />
           {/* WP433：第三栏是点了才弹出的一格，右上角一个 × 收起（卡片列一直在中栏里，不用「←」回去） */}
           <button
             type="button"
@@ -77,7 +104,13 @@ export function RailPanel({
         )}
       >
         {/* WP500：里面的东西知道自己已经在第三栏里（再开详情就在自己里面叠一层，不去换掉自己） */}
-        <InRightPaneContext.Provider value={true}>{children}</InRightPaneContext.Provider>
+        <InRightPaneContext.Provider value={true}>
+          {onClose === undefined ? (
+            children
+          ) : (
+            <PanelHeaderContext.Provider value={host}>{children}</PanelHeaderContext.Provider>
+          )}
+        </InRightPaneContext.Provider>
       </div>
     </section>
   )
