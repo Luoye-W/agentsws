@@ -36,6 +36,8 @@ import type {
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
+  KolOutreachBatchSendView,
+  KolOutreachBatchView,
   KolOutreachDefaultsView,
   KolOutreachView,
   KolPort,
@@ -427,6 +429,13 @@ const SEQUENCE_LABEL: Readonly<Record<OutreachStep, string>> = {
 }
 
 /** WP295：缺了哪一格说人话（以前原样露出 `brand_pitch` 这种字段名）。 */
+/** WP504：跳过的人按原因数一下（「没邮箱 2 · 30 天内联系过 1」）。 */
+export function reasonSummary(skipped: readonly { reason: string }[]): string {
+  const counts = new Map<string, number>()
+  for (const s of skipped) counts.set(s.reason, (counts.get(s.reason) ?? 0) + 1)
+  return [...counts].map(([r, n]) => `${r} ${n}`).join(' · ')
+}
+
 const OUTREACH_VAR_ZH: Readonly<Record<string, string>> = {
   creator_name: '红人名字',
   brand: '品牌名',
@@ -923,6 +932,11 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     step: OutreachStep
     /** WP416：「一句话介绍我们」是哪来的（品牌档案 / AI 写的），卡上说一句。 */
     pitch_note?: string
+    /**
+     * WP504（决策 1777 A）：人已经在批量确认卡上点过「发出」——这一封不再出第二张卡，按 L2 走（低风险自动批）。
+     * 没连邮箱的照旧 L1（批了也发不出去，要人先连）。
+     */
+    preapproved?: boolean
     vars: {
       product: string
       reason: string
@@ -1052,7 +1066,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       notes: [`给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`, ...headsUp],
       created_by: { kind: 'agent', id: `agent_${input.actor.role_id}` },
       mandate,
-      level: sandboxDrill || noMailbox ? 'L1' : level,
+      level: noMailbox ? 'L1' : input.preapproved === true ? 'L2' : sandboxDrill ? 'L1' : level,
       provenance: provenanceOf(run_id, [target, { type: 'creator', id: input.creator.id }]),
       approval: {
         title: `开发信：${input.creator.display_name}（${SEQUENCE_TITLE[draft.step]}）`,
@@ -1283,6 +1297,387 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     ],
   })
 
+  /**
+   * 一封开发信那几格变量（WP416 / WP295 的取法：介绍取存过的 → 品牌档案；英文信不署中文名；
+   * `reason` 写一句给红人看的「为什么找你」）。单封与批量（WP504）共用这一份。
+   */
+  const outreachVarsOf = async (
+    actor: { person_id: PersonId },
+    creator: Creator,
+    input: {
+      channel: KolChannel
+      product: string
+      reason?: string | undefined
+      brand_pitch?: string | undefined
+      sender_name?: string | undefined
+      pitch_by_ai?: boolean | undefined
+    },
+  ): Promise<{
+    vars: {
+      product: string
+      reason: string
+      brand_pitch?: string
+      sender_name: string
+      language?: OutreachLanguage
+    }
+    pitch_note?: string
+  }> => {
+    const account = store.accounts({ creator_id: creator.id, channel: input.channel })[0]
+    const language = outreachLanguageOf(account?.language)
+    /*
+     * WP416（决策 531，自查 kol A1）：「一句话介绍我们」不给就**从品牌这边补**——先取你存过的，
+     * 再取品牌档案里的一句话介绍。都没有才照旧说缺（AI 起草时会自己写一句传进来，卡上标出来让你看）。
+     */
+    const defaults = outreachDefaultsOf()
+    const given = input.brand_pitch?.trim()
+    const brand_pitch =
+      given !== undefined && given !== ''
+        ? given
+        : defaults.brand_pitch === ''
+          ? undefined
+          : defaults.brand_pitch
+    const pitch_note =
+      given !== undefined && given !== ''
+        ? input.pitch_by_ai === true
+          ? '「一句话介绍我们」是 AI 按品牌情况写的（品牌档案里还没有这一句）；不对就点「修改」。'
+          : undefined
+        : brand_pitch === undefined
+          ? undefined
+          : defaults.source === 'brand_profile'
+            ? '「一句话介绍我们」取自品牌档案；不对就点「修改」。'
+            : undefined
+    // WP416（自查 kol U-x5）：英文信默认不署中文名——取不到英文名就用「品牌名 + team」
+    const person = input.sender_name ?? (await options.personName(actor.person_id))
+    const sender_name =
+      input.sender_name === undefined && language === 'en' && hasCjk(person)
+        ? `The ${options.brandName()} team`
+        : person
+    return {
+      vars: {
+        product: input.product,
+        /*
+         * WP295：`reason` 不给就写一句**给红人看的**「为什么找你」（按他做的内容）。
+         * 打分理由是我们挑人的内部理由，仍在卡的依据里，不进正文。
+         */
+        reason:
+          input.reason ??
+          outreachReason({ channel: input.channel, language, category: account?.category }),
+        language,
+        /*
+         * **`brand_pitch` 没有默认值**：「我们是做什么的」只有用户自己知道。缺了就照 `draftOutreach`
+         * 的规矩走：不起草，把缺的那一格说出来。
+         */
+        ...(brand_pitch === undefined ? {} : { brand_pitch }),
+        sender_name,
+      },
+      ...(pitch_note === undefined ? {} : { pitch_note }),
+    }
+  }
+
+  /* ── WP504（决策 1777 A）：批量开发信——先出一张确认卡，批了才逐个提 ─────────────── */
+
+  interface OutreachBatchRecord {
+    batch_id: string
+    approval_item_id: string
+    channel: KolChannel
+    creator_ids: string[]
+    product: string
+    brand_pitch?: string
+    state: 'pending' | 'approved' | 'rejected'
+    created_at: string
+  }
+  const BATCH_SETTING = 'outreach_batches'
+  /** 一封首封之后多久内算「刚联系过」（批量里跳过）。 */
+  const RECENT_CONTACT_DAYS = 30
+  const batchesOf = (): OutreachBatchRecord[] => {
+    try {
+      return store.setting<OutreachBatchRecord[]>(BATCH_SETTING) ?? []
+    } catch {
+      return []
+    }
+  }
+  const saveBatches = (rows: OutreachBatchRecord[]): void => {
+    // 只留最近 50 批（定了的只是记一笔；名单上的「等你确认」只看 pending 的）
+    store.saveSetting(BATCH_SETTING, rows.slice(-50), clock.now())
+  }
+  const setBatchState = (approval_item_id: string, state: OutreachBatchRecord['state']): void => {
+    const rows = batchesOf()
+    if (!rows.some((r) => r.approval_item_id === approval_item_id)) return
+    saveBatches(rows.map((r) => (r.approval_item_id === approval_item_id ? { ...r, state } : r)))
+  }
+  /** 还在一张没定的批量卡上的人（红人库卡上标「等你确认」）。 */
+  const awaitingInBatches = (): Set<string> =>
+    new Set(batchesOf().flatMap((r) => (r.state === 'pending' ? r.creator_ids : [])))
+
+  const planOutreachBatch = async (
+    actor: { person_id: PersonId; assignment_id: AssignmentId; role_id: string },
+    input: {
+      channel: KolChannel
+      creator_ids: string[]
+      product?: string | undefined
+      brand_pitch?: string | undefined
+    },
+  ): Promise<KolOutreachBatchView> => {
+    const mine = assignmentForChannel(actor.person_id, input.channel)
+    if (mine === undefined)
+      throw new ApiError(
+        'forbidden',
+        `你名下没有「${channelLabel(input.channel)} 红人」这条职责，发不了这条渠道的开发信。`,
+      )
+    const defaults = outreachDefaultsOf()
+    const product = (input.product ?? defaults.product).trim()
+    const ids = [...new Set(input.creator_ids)]
+    if (product === '')
+      return {
+        ok: false,
+        sending: [],
+        skipped: [],
+        message:
+          '还差「想聊的产品」：先在任意一位红人那里起草一封开发信、填上产品（会记成默认值），再批量发。',
+      }
+    const quota = await outreachQuotaOf(mine.id)
+    const suppressed = suppressedRefs()
+    const pendingElsewhere = awaitingInBatches()
+    const since = Date.parse(clock.now()) - RECENT_CONTACT_DAYS * 86_400_000
+    const recent = new Set(
+      (await ledger.list({ workspace_id, kind: 'kol_outreach' }))
+        .filter((c) => Date.parse(c.created_at) >= since)
+        .map((c) => (c.after as { creator_id?: unknown } | null)?.creator_id)
+        .filter((id): id is string => typeof id === 'string'),
+    )
+    const sending: KolOutreachBatchView['sending'] = []
+    const skipped: KolOutreachBatchView['skipped'] = []
+    let sample: { creator_name: string; subject: string; body: string } | undefined
+    const stageActor = { ...actor, assignment_id: mine.id, role_id: mine.role_id }
+    for (const id of ids) {
+      const creator = store.creator(id)
+      if (creator === undefined) {
+        skipped.push({ creator_id: id, display_name: id, reason: '不在库里了' })
+        continue
+      }
+      const skip = (reason: string): void => {
+        skipped.push({ creator_id: id, display_name: creator.display_name, reason })
+      }
+      const contact = contactOf(id)
+      if (contact === undefined) {
+        skip('没邮箱')
+        continue
+      }
+      const collabs = store
+        .collaborations({ channel: input.channel })
+        .filter((c) => c.creator_id === id)
+      if (
+        suppressed.some((ref) => ref === contact.value_ref) ||
+        collabs.some((c) => c.stage === 'declined')
+      ) {
+        skip('谢绝过')
+        continue
+      }
+      if (collabs.some((c) => c.stage !== 'sourced' && c.stage !== 'closed')) {
+        skip('已经在谈')
+        continue
+      }
+      if (recent.has(id)) {
+        skip(`${RECENT_CONTACT_DAYS} 天内联系过`)
+        continue
+      }
+      if (pendingElsewhere.has(id)) {
+        skip('在另一张没定的卡上')
+        continue
+      }
+      if (sending.length >= quota.remaining) {
+        skip('今天额度不够')
+        continue
+      }
+      const { vars } = await outreachVarsOf(stageActor, creator, {
+        channel: input.channel,
+        product,
+        brand_pitch: input.brand_pitch,
+      })
+      const postal_address = options.brandProfile?.().postal_address?.trim()
+      const draft = draftOutreach('first', {
+        creator_name: creator.display_name,
+        brand: options.brandName(),
+        channel: input.channel,
+        ...vars,
+        ...(postal_address === undefined || postal_address === '' ? {} : { postal_address }),
+      })
+      if (!draft.ok) {
+        // 禁承诺 / 缺格对整批都一样：直接说，不出卡
+        if (draft.forbidden_hits.length > 0)
+          return {
+            ok: false,
+            sending: [],
+            skipped: [],
+            message: `信里写了「${draft.forbidden_hits.join('」「')}」这类承诺。给钱、白送样品、保证效果都要走"建一条合作"那条路，不能在信里写死。`,
+          }
+        if (draft.missing_vars.includes('brand_pitch') || draft.missing_vars.includes('product'))
+          return {
+            ok: false,
+            sending: [],
+            skipped: [],
+            message: `还差几格没填：${draft.missing_vars.map((k) => OUTREACH_VAR_ZH[k] ?? k).join('、')}。先在一位红人那里起草一封开发信、填好（会记成默认值），再批量发。`,
+          }
+        skip('信没写成')
+        continue
+      }
+      sample ??= { creator_name: creator.display_name, subject: draft.subject, body: draft.body }
+      sending.push({ creator_id: id, display_name: creator.display_name })
+    }
+    if (sending.length === 0 || sample === undefined)
+      return {
+        ok: false,
+        sending,
+        skipped,
+        message:
+          skipped.length === 0
+            ? '没有选人。'
+            : `选的 ${ids.length} 位都发不了（${reasonSummary(skipped)}），没出卡。`,
+      }
+
+    const noMailbox = options.mailConnected?.() === false
+    const heads_up = noMailbox
+      ? ['还没连发信邮箱：现在批了也发不出去。先在连接里连好邮箱，再点「发出」。']
+      : []
+    const batch_id = nextId('kob')
+    const remaining = quota.remaining
+    const payload = {
+      form: 'kol_outreach_batch',
+      channel: input.channel,
+      batch_id,
+      creators: sending.map((c) => ({
+        creator_id: c.creator_id,
+        display_name: c.display_name,
+        initial: [...c.display_name.trim()][0]?.toUpperCase() ?? '?',
+      })),
+      skipped,
+      count: sending.length,
+      sample,
+      letter: '首封合作邀请 · 每人按他做的内容开头',
+      cadence: `批了就发；今天这条职责还能发 ${remaining} 封`,
+      mailbox: noMailbox ? 'none' : 'connected',
+      heads_up,
+    }
+    const item = await approvals.create({
+      workspace_id,
+      schema_version: 1,
+      kind: 'kol_outreach_batch',
+      role_id: mine.role_id,
+      subject: { object: { type: 'kol_outreach_batch', id: batch_id } },
+      dedupe_key: `${workspace_id}:kol_outreach_batch:${batch_id}`,
+      title: `给 ${ids.length} 位红人发首封开发信？`,
+      summary: '发出去收不回。',
+      payload,
+      evidence: {
+        source_events: [],
+        provenance: {
+          seen: sending.map((c): ObjectRef => ({ type: 'creator', id: c.creator_id })),
+        },
+        diff: {
+          before: null,
+          after: { outreach: sending.length },
+          summary: `批了就按名单逐个起草并发出 ${sending.length} 封首封开发信`,
+        },
+        precheck: {},
+      },
+      proposer: { kind: 'person', id: actor.person_id, assignment_id: mine.id },
+      // L1：对外发出、收不回——一定要人点（决策 1777 A）
+      automation: { level_at_creation: 'L1' },
+      routing: {
+        recipients: [{ person: actor.person_id, via: 'role_holder' }],
+        rule: 'role_holder',
+        escalation: {
+          after_hours: 48,
+          business_hours: true,
+          chain: ['scope_manager'],
+          escalated_at: [],
+        },
+        separation_of_duties: false,
+      },
+      priority: 'queue',
+    })
+    if (item.state === 'blocked')
+      return { ok: false, sending: [], skipped, message: '这张卡被拦下了，没出。' }
+    saveBatches([
+      ...batchesOf(),
+      {
+        batch_id,
+        approval_item_id: item.id,
+        channel: input.channel,
+        creator_ids: sending.map((c) => c.creator_id),
+        product,
+        ...(input.brand_pitch === undefined ? {} : { brand_pitch: input.brand_pitch }),
+        state: 'pending',
+        created_at: clock.now(),
+      },
+    ])
+    emit('kol.outreach_batch_planned', actor.person_id, {
+      batch_id,
+      approval_item_id: item.id,
+      sending: sending.length,
+      skipped: skipped.length,
+    })
+    return { ok: true, approval_item_id: item.id, batch_id, sending, skipped }
+  }
+
+  const sendOutreachBatchOf = async (
+    actor: { person_id: PersonId; assignment_id: AssignmentId; role_id: string },
+    approval_item_id: string,
+  ): Promise<KolOutreachBatchSendView> => {
+    const record = batchesOf().find((r) => r.approval_item_id === approval_item_id)
+    if (record === undefined) throw new ApiError('not_found', '没有这张批量开发信卡')
+    if (record.state !== 'pending') return { batch_id: record.batch_id, staged: [], skipped: [] }
+    // 先记成「批了」：中途出错也不会被再批一遍、重发一轮
+    setBatchState(approval_item_id, 'approved')
+    const mine = assignmentForChannel(actor.person_id, record.channel)
+    const staged: KolOutreachBatchSendView['staged'] = []
+    const skipped: KolOutreachBatchSendView['skipped'] = []
+    if (mine === undefined) {
+      for (const id of record.creator_ids)
+        skipped.push({ creator_id: id, reason: '你名下已经没有这条渠道职责了。' })
+      return { batch_id: record.batch_id, staged, skipped }
+    }
+    const stageActor = { ...actor, assignment_id: mine.id, role_id: mine.role_id }
+    for (const id of record.creator_ids) {
+      const creator = store.creator(id)
+      if (creator === undefined) {
+        skipped.push({ creator_id: id, reason: '这个人已经不在库里了。' })
+        continue
+      }
+      // 批的时候再过一遍单封那几道闸（联系方式、额度、谢绝名单、禁承诺）：stageOutreach 自己会拦
+      const { vars, pitch_note } = await outreachVarsOf(stageActor, creator, {
+        channel: record.channel,
+        product: record.product,
+        brand_pitch: record.brand_pitch,
+      })
+      const out = await stageOutreach({
+        actor: stageActor,
+        creator,
+        channel: record.channel,
+        step: 'first',
+        ...(pitch_note === undefined ? {} : { pitch_note }),
+        preapproved: true,
+        vars,
+      })
+      if (!out.staged) {
+        skipped.push({ creator_id: id, reason: out.message ?? '没提上去。' })
+        continue
+      }
+      staged.push({
+        creator_id: id,
+        ...(out.change_id === undefined ? {} : { change_id: out.change_id }),
+        ...(out.approval_item_id === undefined ? {} : { approval_item_id: out.approval_item_id }),
+      })
+    }
+    emit('kol.outreach_batch_sent', actor.person_id, {
+      batch_id: record.batch_id,
+      approval_item_id,
+      staged: staged.length,
+      skipped: skipped.length,
+    })
+    return { batch_id: record.batch_id, staged, skipped }
+  }
+
   const port: KolPort = {
     creators(_actor, filter) {
       const now = clock.now()
@@ -1312,6 +1707,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           return filter.review === 'pending' ? decided === undefined : decided === filter.review
         })
       const hasContact = new Set(store.contacts().map((ct) => ct.creator_id))
+      // WP504：还在一张没定的批量开发信卡上的人（卡上标「等你确认」）
+      const awaiting = awaitingInBatches()
       // WP131：自动评分跑出来的体检概括数（做成了的才有）
       const audits = new Map(
         store
@@ -1342,6 +1739,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           score: score.total,
           ...(score.blocked === undefined ? {} : { blocked: score.blocked }),
           has_contact: hasContact.has(account.creator_id),
+          ...(awaiting.has(account.creator_id) ? { awaiting_confirm: true as const } : {}),
           ...(() => {
             const avatar = avatarMediaOf(account.id)
             const tags = tagRows.get(account.creator_id) ?? []
@@ -2393,63 +2791,27 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
 
     async outreach(actor, input) {
       const creator = creatorOr404(input.creator_id)
-      const account = store.accounts({ creator_id: creator.id, channel: input.channel })[0]
-      const language = outreachLanguageOf(account?.language)
-      /*
-       * WP416（决策 531，自查 kol A1）：「一句话介绍我们」不给就**从品牌这边补**——先取你存过的，
-       * 再取品牌档案里的一句话介绍。都没有才照旧说缺（AI 起草时会自己写一句传进来，卡上标出来让你看）。
-       */
-      const defaults = outreachDefaultsOf()
-      const given = input.brand_pitch?.trim()
-      const brand_pitch =
-        given !== undefined && given !== ''
-          ? given
-          : defaults.brand_pitch === ''
-            ? undefined
-            : defaults.brand_pitch
-      const pitch_note =
-        given !== undefined && given !== ''
-          ? input.pitch_by_ai === true
-            ? '「一句话介绍我们」是 AI 按品牌情况写的（品牌档案里还没有这一句）；不对就点「修改」。'
-            : undefined
-          : brand_pitch === undefined
-            ? undefined
-            : defaults.source === 'brand_profile'
-              ? '「一句话介绍我们」取自品牌档案；不对就点「修改」。'
-              : undefined
-      // WP416（自查 kol U-x5）：英文信默认不署中文名——取不到英文名就用「品牌名 + team」
-      const person = input.sender_name ?? (await options.personName(actor.person_id))
-      const sender_name =
-        input.sender_name === undefined && language === 'en' && hasCjk(person)
-          ? `The ${options.brandName()} team`
-          : person
+      const { vars, pitch_note } = await outreachVarsOf(actor, creator, input)
       return stageOutreach({
         actor,
         creator,
         channel: input.channel,
         step: input.step ?? 'first',
         ...(pitch_note === undefined ? {} : { pitch_note }),
-        vars: {
-          product: input.product,
-          /*
-           * WP295：`reason` 不给就写一句**给红人看的**「为什么找你」（按他做的内容）。
-           * 以前用打分里最高那一项的说明（「372,274 粉，正好在想要的区间里。」）——那是我们挑人的
-           * 内部理由，原样进了发给对方的信。打分理由仍在卡的依据里，不进正文。
-           */
-          reason:
-            input.reason ??
-            outreachReason({ channel: input.channel, language, category: account?.category }),
-          language,
-          /*
-           * **`brand_pitch` 没有默认值**。"我们是做什么的"这句话只有用户自己知道，
-           * 编一个出来最好的情况也是废话（"我是 NordVolt 的王岚。我们是 NordVolt。"），
-           * 最坏的情况是替他向红人说了一句不实的话。缺了就照 `draftOutreach`
-           * 的规矩走：不起草，把缺的那一格说出来。
-           */
-          ...(brand_pitch === undefined ? {} : { brand_pitch }),
-          sender_name,
-        },
+        vars,
       })
+    },
+
+    async outreachBatch(actor, input) {
+      return planOutreachBatch(actor, input)
+    },
+
+    async sendOutreachBatch(actor, approval_item_id) {
+      return sendOutreachBatchOf(actor, approval_item_id)
+    },
+
+    dropOutreachBatch(approval_item_id) {
+      setBatchState(approval_item_id, 'rejected')
     },
 
     async planCampaign(actor, input) {

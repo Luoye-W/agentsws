@@ -10,7 +10,12 @@
  * 同一时间只留最近一个（Luoye：只留最近一个回答）；只在内存里——刷新后到岗位「记录」里找。
  */
 import { useSyncExternalStore } from 'react'
-import { type OpenAtPositionData, openMatterAtPosition, type PositionAnswerData } from '@/lib/api'
+import {
+  type ContextRefInput,
+  type OpenAtPositionData,
+  openMatterAtPosition,
+  type PositionAnswerData,
+} from '@/lib/api'
 import { handoffInput } from '@/lib/handoff'
 
 export interface QuickAnswerEntry {
@@ -84,6 +89,8 @@ export async function askAtPosition(input: {
   effort?: string
   /** WP357：附上的资料（base64） */
   files?: { name: string; data: string }[]
+  /** WP504：第三栏「问 AI」引用的卡 */
+  context?: ContextRefInput[]
 }): Promise<QuickAnswerEntry | undefined> {
   seq += 1
   const nonce = seq
@@ -112,6 +119,9 @@ export async function askAtPosition(input: {
         ? {}
         : { model_effort: input.effort }),
       ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
+      ...(input.context === undefined || input.context.length === 0
+        ? {}
+        : { context: input.context }),
     })
     if (out.ambiguous && out.approval_item_id !== undefined)
       return settle({ ...base, status: 'choice', matter_id: out.matter.id, open: out })

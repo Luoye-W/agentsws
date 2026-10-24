@@ -37,14 +37,14 @@ export function formatRatio(ratio: number): string {
 export function formatCents(cents: number): string {
   const dollars = cents / 100
   if (dollars <= 0) return '$0'
-  const rounded =
+  const roundedDollars =
     dollars < 10
       ? Math.round(dollars)
       : (() => {
           const magnitude = 10 ** Math.max(0, Math.floor(Math.log10(dollars)) - 1)
           return Math.round(dollars / magnitude) * magnitude
         })()
-  return `$${new Intl.NumberFormat('en-US').format(rounded)}`
+  return `$${new Intl.NumberFormat('en-US').format(roundedDollars)}`
 }
 
 /** `2026-10-23T…` → `2026-10-23`。 */

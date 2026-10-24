@@ -132,6 +132,21 @@ export const KOL_INFO_ZH: Record<string, string> = {
   'kol.info.recent.views': '{n} 播放',
   'kol.info.recent.likes': '{n} 赞',
   'kol.info.recent.comments': '{n} 评论',
+  // WP504（决策 1777 A）：批量开发信确认卡
+  'kind.kol_outreach_batch': '批量开发信',
+  'category.outreach_batch': '批量发出',
+  'kol.batch.send': '发出 {n} 封',
+  'kol.batch.list': '看名单',
+  'kol.batch.list.hide': '收起名单',
+  'kol.batch.sender': '发件',
+  'kol.batch.sender.connected': '已连的发信邮箱',
+  'kol.batch.sender.none': '还没连邮箱',
+  'kol.batch.letter': '信',
+  'kol.batch.cadence': '节奏',
+  'kol.batch.skipped': '跳过',
+  'kol.batch.skipped.none': '没有',
+  'kol.batch.skipped.n': '{n} 人（{why}）',
+  'kol.batch.sample': '样信 · {name}',
 }
 
 export const KOL_INFO_EN: Record<string, string> = {
@@ -272,4 +287,19 @@ export const KOL_INFO_EN: Record<string, string> = {
   'kol.info.recent.views': '{n} views',
   'kol.info.recent.likes': '{n} likes',
   'kol.info.recent.comments': '{n} comments',
+  // WP504 (decision 1777 A): batch outreach confirmation card
+  'kind.kol_outreach_batch': 'Batch outreach',
+  'category.outreach_batch': 'Batch send',
+  'kol.batch.send': 'Send {n}',
+  'kol.batch.list': 'See list',
+  'kol.batch.list.hide': 'Hide list',
+  'kol.batch.sender': 'From',
+  'kol.batch.sender.connected': 'Connected mailbox',
+  'kol.batch.sender.none': 'No mailbox yet',
+  'kol.batch.letter': 'Letter',
+  'kol.batch.cadence': 'Pace',
+  'kol.batch.skipped': 'Skipped',
+  'kol.batch.skipped.none': 'None',
+  'kol.batch.skipped.n': '{n} ({why})',
+  'kol.batch.sample': 'Sample · {name}',
 }

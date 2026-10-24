@@ -16,6 +16,7 @@ import { Archive, CircleCheck } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { GenuiHostProvider } from '@/components/answer/genui/genui-host'
+import { AskSuggestions, useComposerRefs } from '@/components/ask-ai/composer-refs'
 import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
@@ -59,6 +60,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { isServiceCard } from '@/components/workshop-services/service-card-body'
 import {
   BRAND_ASSET_MAX_BYTES,
+  type ContextRefInput,
   closeMatter,
   completeTodo,
   decide,
@@ -97,7 +99,9 @@ import {
 const POLL_MS = 1500
 
 /** WP357：说的一句（带不带附上的资料）。 */
-type Said = string | { text: string; files: FreeChatFile[] }
+type Said =
+  | string
+  | { text: string; files: FreeChatFile[]; context?: ContextRefInput[] | undefined }
 const names = (files: readonly { name: string }[]): string =>
   files.map((f) => `「${f.name}」`).join('')
 
@@ -108,6 +112,9 @@ export function MatterPage(): ReactNode {
   const params = useParams()
   const id = params.id ?? ''
   const [text, setText] = useState('')
+  /** WP504（决策 1775 A）：第三栏点 ✦ 的卡落在这个框里（引用小卡、建议问题、`@`、拖进来）。 */
+  const askArea = useRef<HTMLTextAreaElement>(null)
+  const asked = useComposerRefs({ area: askArea, onChange: setText })
   const [limit, setLimit] = useState(20)
   const [closing, setClosing] = useState(false)
   // WP276：「交给同事」（⋯ 菜单或 ⌘K 带 `?handoff=1` 进来时打开）
@@ -249,6 +256,7 @@ export function MatterPage(): ReactNode {
             id,
             value.text,
             value.files.map((f) => ({ name: f.name, data: f.data })),
+            value.context,
           ),
     // 发出去就清空（一次运行可能要跑几分钟，请求一直挂着）；没发成再放回框里
     onMutate: () => {
@@ -407,13 +415,16 @@ export function MatterPage(): ReactNode {
     if (queued === undefined || running) return
     setQueued(undefined)
     // WP357：排队的那句带着资料的，资料一起发
-    if (queuedFiles.length > 0) {
+    // WP504：排队时框里还挂着引用的卡，一起发
+    const context = asked.payload()
+    if (queuedFiles.length > 0 || context !== undefined) {
       setQueuedFiles([])
-      say.mutate({ text: queued, files: queuedFiles })
+      asked.clear()
+      say.mutate({ text: queued, files: queuedFiles, context })
       return
     }
     say.mutate(queued)
-  }, [queued, queuedFiles, running, say])
+  }, [queued, queuedFiles, running, say, asked])
 
   if (matter.isPending) return <Skeleton className="h-64 w-full" />
   if (matter.error !== null || view === undefined)
@@ -500,6 +511,13 @@ export function MatterPage(): ReactNode {
     const files = docs.docs
     if (value === '' && files.length === 0) return
     setAttached([])
+    // WP504（决策 1775 A）：第三栏「问 AI」引用的卡随这句话交出去（运行中先排着，跟排队那句一起发）
+    const context = running ? undefined : asked.payload()
+    if (context !== undefined) {
+      asked.clear()
+      say.mutate({ text: value, files: files.length > 0 ? docs.take() : [], context })
+      return
+    }
     if (files.length > 0) {
       const said: Said = { text: value, files: docs.take() }
       if (running) {
@@ -847,17 +865,34 @@ export function MatterPage(): ReactNode {
         <ComposerDock
           testId="matter-dock"
           above={
-            say.error === null ? null : (
-              <p role="alert" className="text-center text-[13px] text-destructive">
-                {say.error.message}
-              </p>
-            )
+            <>
+              {/* WP504：有引用时框上面出按这几张卡的建议问题（点了直接问） */}
+              <AskSuggestions
+                items={asked.suggestions}
+                onPick={(q) => {
+                  const context = asked.payload()
+                  asked.clear()
+                  say.mutate({ text: q, files: [], context })
+                }}
+              />
+              {say.error === null ? null : (
+                <p role="alert" className="text-center text-[13px] text-destructive">
+                  {say.error.message}
+                </p>
+              )}
+            </>
           }
         >
           <MatterComposer
             docked={false}
             value={text}
-            onChange={setText}
+            onChange={asked.onChange}
+            askTarget
+            areaRef={askArea}
+            chips={asked.chips}
+            overlay={asked.overlay}
+            onKeyDownFirst={asked.onKeyDownFirst}
+            onRefDrop={asked.onRefDrop}
             onSend={send}
             onStop={() => {
               stop.mutate()

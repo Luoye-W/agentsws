@@ -179,6 +179,11 @@ export interface KolCreatorRow {
   tags?: string[]
   /** WP502（决策 1763 B，只加）：人工审核决定（只在本机）。没有 = 待审。 */
   review?: KolCreatorReviewView
+  /**
+   * WP504（决策 1777 A，只加）：这个人在一张**还没定**的开发信卡上（批量那张或单封那张）——
+   * 红人库卡上标「等你确认」。卡定了（发 / 不发）就不再带。
+   */
+  awaiting_confirm?: true
 }
 
 /** WP502（决策 1763 B）：人工审核决定——通过 / 淘汰，一句理由可选。重置为待审 = 删掉这一行。 */
@@ -599,6 +604,32 @@ export interface KolCampaignView {
   approval_item_id?: string
 }
 
+/**
+ * WP504（决策 1777 A）：红人库里多选后「发开发信」——出一张批量确认卡（`kol_outreach_batch`）。
+ *
+ * 不发任何东西：只在中栏「要你处理」里问一次。`sending` 是卡上「发出 N 封」的那 N 个人，
+ * `skipped` 是没进名单的人与一句原因（没邮箱 / 30 天内联系过 / 谢绝过 / 今天额度不够……）。
+ * 一个能发的都没有、或缺「想聊的产品」时不出卡（`ok: false` + 那一句话）。
+ */
+export interface KolOutreachBatchView {
+  ok: boolean
+  /** 出了卡才有。 */
+  approval_item_id?: string
+  batch_id?: string
+  sending: { creator_id: string; display_name: string }[]
+  skipped: { creator_id: string; display_name: string; reason: string }[]
+  /** 没出卡时那一句人话。 */
+  message?: string
+}
+
+/** WP504：批量开发信卡批了之后真提上去了几封（每封走开发信那条账本路）。 */
+export interface KolOutreachBatchSendView {
+  batch_id: string
+  staged: { creator_id: string; change_id?: string; approval_item_id?: string }[]
+  /** 批的时候已经发不了的（联系方式没了 / 额度到顶 / 刚被谢绝）。 */
+  skipped: { creator_id: string; reason: string }[]
+}
+
 /** 接受一张清单卡之后真建出来了什么。 */
 export interface KolCampaignAcceptView {
   campaign_id: string
@@ -957,6 +988,26 @@ export interface KolPort {
   ): MaybePromise<KolOutreachView>
   /** WP416（决策 531）：起草那两格的默认值（存过的 → 品牌档案 → 空）。可选：老装配没有。 */
   outreachDefaults?(actor: KolActor): MaybePromise<KolOutreachDefaultsView>
+  /**
+   * WP504（决策 1777 A）：一批人发首封开发信——**只出一张确认卡**（`kol_outreach_batch`），不发。
+   * 可选：老装配没有。
+   */
+  outreachBatch?(
+    actor: KolActor,
+    input: {
+      channel: KolChannel
+      creator_ids: string[]
+      product?: string | undefined
+      brand_pitch?: string | undefined
+    },
+  ): MaybePromise<KolOutreachBatchView>
+  /** WP504：那张批量卡批了（服务进程在卡定了之后调，HTTP 不开这一口）。 */
+  sendOutreachBatch?(
+    actor: KolActor,
+    approval_item_id: string,
+  ): MaybePromise<KolOutreachBatchSendView>
+  /** WP504：那张批量卡没批 / 过期了——名单上的「等你确认」收掉。 */
+  dropOutreachBatch?(approval_item_id: string): MaybePromise<void>
   /** WP416：把起草那两格存成这个品牌的设置（下次每个红人都预填它）。 */
   saveOutreachDefaults?(
     actor: KolActor,
@@ -1234,6 +1285,15 @@ const OutreachBody = z.object({
   reason: z.string().max(500).optional(),
   brand_pitch: z.string().max(500).optional(),
   sender_name: z.string().max(100).optional(),
+})
+
+/** WP504：批量开发信（只出一张确认卡）。 */
+const OutreachBatchBody = z.object({
+  channel: ChannelSchema,
+  creator_ids: z.array(z.string().min(1)).min(1).max(200),
+  /** 想聊的那个产品；不给就用存过的默认值，都没有就不出卡。 */
+  product: z.string().min(1).max(200).optional(),
+  brand_pitch: z.string().max(500).optional(),
 })
 
 const OutreachDefaultsBody = z.object({
@@ -2071,6 +2131,27 @@ export function kolRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).outreach(actorOf(c), await body(c, OutreachBody)), 201),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/outreach/batch',
+        operationId: 'batchKolOutreach',
+        summary:
+          '红人库多选后「发开发信」：**只出一张确认卡**（名单、跳过谁和原因、样信、「发出 N 封」），批了才逐个起草并发出（决策 1777 A）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTACT,
+        body: OutreachBatchBody,
+        returns: 'KolOutreachBatchView',
+      },
+      async (c, deps) => {
+        const fn = portOf(deps).outreachBatch
+        if (fn === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有批量开发信这一项。')
+        return ok(c, await fn.call(portOf(deps), actorOf(c), await body(c, OutreachBatchBody)), 201)
+      },
     ),
     route(
       {

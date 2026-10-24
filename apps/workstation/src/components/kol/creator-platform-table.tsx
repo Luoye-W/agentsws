@@ -92,7 +92,7 @@ export function CreatorPlatformBreakdown({
                       {atHandle(a.handle)}
                     </a>
                     {a.id === primaryId ? (
-                      <CategoryTag className="h-[18px] px-1 text-[11px]">
+                      <CategoryTag className="h-[18px] px-1 text-ws-tiny">
                         {t('kol.info.table.primary')}
                       </CategoryTag>
                     ) : null}

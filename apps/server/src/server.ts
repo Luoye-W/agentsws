@@ -11449,6 +11449,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         )
       return
     }
+    // WP504（决策 1777 A）：批量开发信卡——批了按名单逐个提（每封不再出第二张卡）；没批就收掉「等你确认」
+    if (item.kind === 'kol_outreach_batch') {
+      const by = item.decision?.by
+      const assignment_id = item.proposer.assignment_id
+      const port = brand?.kolService.port
+      if (port === undefined) return
+      if (
+        (item.state === 'approved' || item.state === 'approved_edited') &&
+        by !== undefined &&
+        by !== 'mandate' &&
+        assignment_id !== undefined
+      )
+        await port.sendOutreachBatch?.(
+          { workspace_id: item.workspace_id, person_id: by, assignment_id, role_id: item.role_id },
+          item.id,
+        )
+      else if (item.state !== 'pending') await port.dropOutreachBatch?.(item.id)
+      return
+    }
     // WP421（自查 general 2.3）：B2B 库 / 业务的卡被驳回 → 回写（面板不再永远挂「待审」）
     if (isB2bRejected(item)) {
       brand?.b2bService.onRejected({
@@ -15415,6 +15434,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(effort === undefined ? {} : { model_effort: effort }),
           // WP357：附上的资料（宿主按助理那套读成文字）
           ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
+          // WP504：第三栏「问 AI」引用的卡（结构化摘要）
+          ...(input.context === undefined || input.context.length === 0
+            ? {}
+            : { context: input.context }),
         })
         return {
           mode: out.mode,
@@ -18140,6 +18163,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           // WP416：建合作卡点了「不要」→ 那一行删掉；挑人清单卡批了 → 按清单建合作
           isKolCollaborationCard(out) ||
           out.kind === 'kol_campaign' ||
+          // WP504：批量开发信卡批了 → 逐个提；没批 → 名单上的「等你确认」收掉
+          out.kind === 'kol_outreach_batch' ||
           // WP416：同一人合并卡选了 → 真合 / 记「不是同一个人」（落盘）
           isKolMergeCard(out) ||
           // WP421：B2B 的卡被驳回（回写草稿 / 询盘 / 交接单）

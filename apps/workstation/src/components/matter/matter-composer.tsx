@@ -30,6 +30,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { type ContextRef, REF_MIME } from '@/components/ask-ai/ask-ai-store'
 import { AuthedImage } from '@/components/images/authed-image'
 import { useDockReport } from '@/components/shell/composer-dock'
 import {
@@ -75,6 +76,8 @@ export function MatterComposer({
   onPasteText,
   areaRef,
   notice,
+  askTarget = false,
+  onRefDrop,
 }: {
   value: string
   onChange: (v: string) => void
@@ -127,6 +130,13 @@ export function MatterComposer({
   areaRef?: RefObject<HTMLTextAreaElement | null> | undefined
   /** WP456-T8：框里说一句（看不了图、图太大……），和收不下文件那一句同一个位置。 */
   notice?: string | undefined
+  /**
+   * WP504（决策 1775 A）：第三栏点 ✦「问 AI」时引用小卡飞进**这个**框（挂 `data-ask-ai-target`）。
+   * 一页只该有一个框给它（岗位 / 职责 / 事项页的完整对话框）。
+   */
+  askTarget?: boolean
+  /** WP504（F4c）：第三栏的卡拖进来（`application/x-agentsws-ref`）= 和点 ✦ 一样。 */
+  onRefDrop?: ((refs: ContextRef[]) => void) | undefined
 }): ReactNode {
   const { t } = useApp()
   const ownArea = useRef<HTMLTextAreaElement>(null)
@@ -142,6 +152,10 @@ export function MatterComposer({
     (canDocs && (docs ?? []).length > 0)
   /** WP357：认不出的文件说一句（不静默）。 */
   const [rejected, setRejected] = useState(false)
+  /** WP504：一张卡正拖在框上（框亮一圈「放这里」）。 */
+  const [refOver, setRefOver] = useState(false)
+  const isRefDrag = (types: readonly string[]): boolean =>
+    onRefDrop !== undefined && types.includes(REF_MIME)
   /** 一把文件分成图 / 资料两路；认不出的记一下。回有没有收下任何一个。 */
   const take = (list: FileList | null | undefined): boolean => {
     const all = [...(list ?? [])]
@@ -230,14 +244,46 @@ export function MatterComposer({
     >
       <form
         data-testid="matter-say"
+        data-ask-ai-target={askTarget ? '' : undefined}
+        data-ref-over={refOver ? 'true' : undefined}
         onSubmit={(e) => {
           e.preventDefault()
           submit()
         }}
         onDragOver={(e) => {
-          if (canAttach && [...e.dataTransfer.types].includes('Files')) e.preventDefault()
+          const types = [...e.dataTransfer.types]
+          if (isRefDrag(types)) {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'copy'
+            if (!refOver) setRefOver(true)
+            return
+          }
+          if (canAttach && types.includes('Files')) e.preventDefault()
+        }}
+        onDragLeave={() => {
+          if (refOver) setRefOver(false)
         }}
         onDrop={(e) => {
+          if (isRefDrag([...e.dataTransfer.types])) {
+            e.preventDefault()
+            setRefOver(false)
+            try {
+              const raw: unknown = JSON.parse(e.dataTransfer.getData(REF_MIME))
+              const list = (Array.isArray(raw) ? raw : [raw]).filter(
+                (r): r is ContextRef =>
+                  typeof r === 'object' &&
+                  r !== null &&
+                  typeof (r as ContextRef).kind === 'string' &&
+                  typeof (r as ContextRef).id === 'string' &&
+                  typeof (r as ContextRef).label === 'string' &&
+                  Array.isArray((r as ContextRef).facts),
+              )
+              if (list.length > 0) onRefDrop?.(list)
+            } catch {
+              // 拖进来的不是一张卡：当没拖
+            }
+            return
+          }
           if (!canAttach || e.dataTransfer.files.length === 0) return
           // 拖进来的文件一律接住（不让浏览器把它当页面打开）；收不下的说一句
           e.preventDefault()
@@ -253,6 +299,7 @@ export function MatterComposer({
         className={cn(
           'ws-composer group/cmp relative rounded-[20px] bg-ws-card transition-[box-shadow,background-color]',
           has && 'is-has',
+          refOver && 'ring-2 ring-ws-brand/50',
         )}
       >
         {overlay === undefined || overlay === null ? null : (
