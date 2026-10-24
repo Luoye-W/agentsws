@@ -121,6 +121,37 @@ export interface ExtensionAutoScoreView {
   note: string
 }
 
+/**
+ * WP509：插件「数据同步」那一格问的状态（`GET /v1/extension/sync-status`）。
+ *
+ * 前两格与旧版 `GET /api/plugin/sync-status` 同形（`{ feishu, google_sheets }`），老面板照旧认得；
+ * 其余几格是新的：配没配、上次同步时间、写不进去的原因、去工坊配同步的深链（`setup_path`，接在工坊地址后面）。
+ */
+export interface ExtensionSyncStatusView {
+  /** 有一个在同步（或写不进去、等人处理）的飞书表。 */
+  feishu: boolean
+  /** Google 表格这一版不接（永远 false；旧面板认这一格）。 */
+  google_sheets: boolean
+  /** 配了至少一个同步（不管停没停）。 */
+  configured: boolean
+  /** 第一个同步（插件只画一行）。 */
+  name?: string
+  state?: 'pending_confirm' | 'active' | 'paused' | 'broken'
+  last_sync_at?: string
+  /** 写不进去时那一句人话。 */
+  problem?: string
+  /** 打开工坊红人营销岗位、输入框预填「把红人同步到我的飞书表」。 */
+  setup_path: string
+  syncs: {
+    id: string
+    name: string
+    kind: 'bitable' | 'sheet'
+    state: 'pending_confirm' | 'active' | 'paused' | 'broken'
+    last_sync_at?: string
+    problem?: string
+  }[]
+}
+
 /** 一次采集的排队回执。 */
 export interface ExtensionAutoScoreQueued {
   /** 这一次排进队的人数。 */
@@ -269,6 +300,11 @@ export interface ExtensionPort {
     session: ExtensionSession,
     input: { enabled: boolean },
   ): MaybePromise<ExtensionAutoScoreView>
+
+  /* ── WP509（只加；可选）：「数据同步」那一格的只读状态 ──────────────────── */
+
+  /** 这个品牌把红人同步到哪张表、上次什么时候、写不进去的原因。 */
+  syncStatus?(session: ExtensionSession): MaybePromise<ExtensionSyncStatusView>
 
   /* ── WP202（只加；可选——老装配不实现，就不出那一格）──────────────────── */
 
@@ -1275,6 +1311,26 @@ export function extensionRoutes(): Route[] {
         if (port.setAutoScore === undefined)
           throw new ApiError('not_implemented', '这个本机服务版本还没有「采集后自动评分」。')
         return ok(c, await port.setAutoScore(session, { enabled: input.enabled }))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/extension/sync-status',
+        operationId: 'extensionSyncStatus',
+        summary:
+          '「数据同步」那一格：红人同步到哪张表、上次同步时间、写不进去的原因、去工坊配同步的深链（只读，WP509）',
+        tag: 'extension',
+        auth: 'public',
+        returns: 'ExtensionSyncStatusView',
+      },
+      async (c, deps) => {
+        const session = sessionOf(c, deps)
+        requireScope(session, 'kol.read', '读同步状态')
+        const port = portOf(deps)
+        if (port.syncStatus === undefined)
+          throw new ApiError('not_implemented', '这个本机服务版本还没有红人同步。')
+        return ok(c, await port.syncStatus(session))
       },
     ),
     route(

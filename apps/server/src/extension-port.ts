@@ -10,7 +10,7 @@
  * 它自己不实现任何业务，业务在 `extension-service.ts` 里。
  */
 
-import type { ExtensionPort, ExtensionStore } from '@agentsws/api'
+import type { ExtensionPort, ExtensionStore, ExtensionSyncStatusView } from '@agentsws/api'
 import type { WorkspaceId } from '@agentsws/contracts'
 import { withCloudAttribution } from './cloud-attribution.js'
 import type { ExtensionServiceOptions } from './extension-service.js'
@@ -23,6 +23,8 @@ export interface BrandExtensionPortOptions {
   serviceOf(
     workspace_id: WorkspaceId,
   ): Promise<Omit<ExtensionServiceOptions, 'store' | 'workspace_id'>>
+  /** WP509：「数据同步」那一格（这个品牌把红人同步到哪张表）。不给 = 这条路回 not_implemented。 */
+  syncStatusOf?(workspace_id: WorkspaceId): Promise<ExtensionSyncStatusView>
 }
 
 export function brandExtensionPort(options: BrandExtensionPortOptions): ExtensionPort {
@@ -107,6 +109,16 @@ export function brandExtensionPort(options: BrandExtensionPortOptions): Extensio
       if (port.setAutoScore === undefined) throw new Error('auto-score not wired')
       return port.setAutoScore(session, input)
     },
+
+    /* ── WP509：「数据同步」那一格（按 session 上的品牌取那一份；只读） ── */
+    ...(options.syncStatusOf === undefined
+      ? {}
+      : {
+          syncStatus: (session) =>
+            (options.syncStatusOf as NonNullable<typeof options.syncStatusOf>)(
+              session.workspace_id,
+            ),
+        }),
 
     /* ── WP202：这个品牌有没有人持有红人职责（按工作区取那一套） ── */
     kolRoleHeld: async (workspace_id) =>

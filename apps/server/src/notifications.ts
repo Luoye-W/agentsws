@@ -250,6 +250,13 @@ const REDDIT_SETTLED = new Set(['reddit.write_sent', 'reddit.write_failed', 'red
 export const REDDIT_EGO_HUMAN_EVENT = 'reddit.write_needs_human'
 export const REDDIT_EGO_STOPPED_EVENT = 'reddit.write_ego_stopped'
 
+/**
+ * WP509：红人同步到表格第一次写不进去（ego 里没登录飞书 / 没权限 / 列没了…）——告诉配同步的那个人一声；
+ * 之后再同步成功就收成已读（key `kolsync:<同步 id>`）。
+ */
+export const KOL_SYNC_FAILED_EVENT = 'kol.sync_failed'
+export const KOL_SYNC_RUN_EVENT = 'kol.sync_run'
+
 /** 卡的地址。 */
 export const cardHref = (id: string): string => `/cards/${encodeURIComponent(id)}`
 
@@ -417,6 +424,22 @@ export async function notificationsOfEvent(
       text: `你的 ${source}${/[A-Za-z0-9]$/.test(source) ? ' ' : ''}要重新登录`,
       href: '/settings/models',
       key: `relogin:${source}`,
+    }))
+  }
+
+  if (e.type === KOL_SYNC_FAILED_EVENT) {
+    const id = str(p.sync_id)
+    if (id === undefined) return []
+    const person = str(p.person_id)
+    const people = person !== undefined ? [person as PersonId] : await ctx.owners()
+    const table = short(str(p.name) ?? '飞书表', 30)
+    return people.map((person_id) => ({
+      workspace_id: ws,
+      person_id,
+      category: 'connection' as const,
+      text: short(`红人同步到「${table}」停了：${str(p.message) ?? '去看一眼'}`, 90),
+      href: '/influencer/sync?status=1',
+      key: `kolsync:${id}`,
     }))
   }
 
@@ -674,6 +697,13 @@ export function createNotifications(options: NotificationsOptions): Notification
       if (gone) settle(e.workspace_id, `outbound:${e.subject.id}`)
       return
     }
+    // WP509：同步又写进去了 → 「停了」那条收成已读
+    if (e.type === KOL_SYNC_RUN_EVENT) {
+      const p = (e.payload ?? {}) as Record<string, unknown>
+      const id = str(p.sync_id)
+      if (id !== undefined && p.state === 'ok') settle(e.workspace_id, `kolsync:${id}`)
+      return
+    }
     // WP432：等你发的那一条有了结局 → 那条通知收成已读
     if (REDDIT_SETTLED.has(e.type)) {
       const id = str((e.payload as Record<string, unknown> | undefined)?.approval_item_id)
@@ -693,6 +723,7 @@ export function createNotifications(options: NotificationsOptions): Notification
       // WP445：同一条「等你发」（插件里批了又进「等你打开」）还没读时不再加一条
       if (
         (STATE_EVENTS.has(e.type) ||
+          e.type === KOL_SYNC_FAILED_EVENT ||
           e.type === REDDIT_AWAITING_EVENT ||
           e.type === REDDIT_EGO_HUMAN_EVENT) &&
         n.key !== undefined
@@ -715,6 +746,8 @@ export function createNotifications(options: NotificationsOptions): Notification
     REDDIT_AWAITING_EVENT,
     REDDIT_EGO_HUMAN_EVENT,
     REDDIT_EGO_STOPPED_EVENT,
+    KOL_SYNC_FAILED_EVENT,
+    KOL_SYNC_RUN_EVENT,
     ...REDDIT_SETTLED,
     ...CARD_SETTLED,
   ])

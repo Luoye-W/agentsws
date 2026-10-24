@@ -64,6 +64,7 @@ import type { KolMailAssembly } from './kol-mail.js'
 import type { KolMediaCache } from './kol-media.js'
 import type { KolSandboxAssembly } from './kol-sandbox.js'
 import type { KolServiceAssembly } from './kol-service.js'
+import type { KolSync } from './kol-sync/service.js'
 import type { LiveDataSource } from './live-data.js'
 import type { MessageFollowUpService } from './message-follow-up.js'
 import type { MessagesAssembly } from './messages.js'
@@ -197,6 +198,8 @@ export interface BrandModuleSet {
   kolMail?: KolMailAssembly
   /** WP489：红人表格 / 在线表导入、读过往邮件判合作阶段。可选：老装配没有它。 */
   kolImport?: KolImportAssembly
+  /** WP509：红人同步到用户自己的飞书表（经 ego）。可选：老装配 / 托管实例没有它。 */
+  kolSheetSync?: KolSync
   /**
    * WP131：这个品牌连云端公共红人库的那个客户端（`kol-public-client`）。插件「采集后
    * 自动评分」的体检那一半经它走（令牌是这个品牌那一把）。可选：老装配没有它。
