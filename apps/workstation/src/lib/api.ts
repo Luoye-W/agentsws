@@ -5671,9 +5671,58 @@ export interface KolCreatorDetailData {
   contacts: KolContactData[]
   collaborations: KolCollaborationData[]
   deliverables: KolDeliverableData[]
-  tracked_links: { id: string; url: string; clicks: number; orders: number; revenue: number }[]
+  tracked_links: {
+    id: string
+    collaboration_id?: string
+    url: string
+    affiliate_code?: string
+    clicks: number
+    orders: number
+    revenue: number
+  }[]
   /** WP498（决策 1752 C）：每个账号最近一次「存入红人池」时主页上的资料（按账号 id；没存入过的没有）。 */
   profiles?: Record<string, KolCreatorProfileData>
+  /** WP299：每个账号的打分明细（按账号 id）——五项各拿多少、为什么；`blocked` = 刷粉护栏那一句。 */
+  scores?: Record<
+    string,
+    {
+      total: number
+      factors: { id: string; label: string; score: number; why: string }[]
+      blocked?: string
+    }
+  >
+  /** WP500：每个账号的体检 / 受众真实性 / 频道估值 / 更新规律 / 粉丝 30 天变化（按账号 id；算不出来的没有）。 */
+  checks?: Record<string, KolCreatorChecksData>
+  /** WP500：「采集后自动评分」跑过的云端体检（WP131）。没有就没有。 */
+  audit?: { health: number; findings: string[]; at: string }
+}
+
+/** WP500：一个账号的几项估算（插件那几份算法，服务端算好；都是公开页面上的数推出来的）。 */
+export interface KolCreatorChecksData {
+  health?: {
+    verdict: 'excellent' | 'normal' | 'weak' | 'suspicious'
+    views_to_followers: number
+    bought_audience_suspected: boolean
+  }
+  like_rate?: { median: number; items: number; level: 'good' | 'normal' | 'warning' }
+  valuation?:
+    | {
+        kind: 'estimated'
+        currency: 'USD'
+        low_cents: number
+        mid_cents: number
+        high_cents: number
+        median_views: number
+        items_used: number
+        cap_applied: boolean
+      }
+    | {
+        kind: 'insufficient'
+        reason: 'thin_views' | 'suspected_fake' | 'unsupported_platform'
+        items_used?: number
+      }
+  regularity?: { status: 'regular' | 'irregular'; avg_interval_days?: number }
+  follower_trend?: { days: number; delta: number; percent: number }
 }
 
 /** WP498：存入红人池时主页上的资料（页面原文 / 那一刻的数）。 */
@@ -5691,6 +5740,9 @@ export interface KolCreatorProfileData {
     title: string
     views?: number
     views_text?: string
+    likes?: number
+    comments?: number
+    published_at?: string
     published_text?: string
   }[]
 }

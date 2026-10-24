@@ -36,6 +36,7 @@ import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { INBOX_EN, INBOX_ZH } from './i18n-inbox'
 import { KNOWLEDGE_LEARN_EN, KNOWLEDGE_LEARN_ZH } from './i18n-knowledge-learn'
+import { KOL_INFO_EN, KOL_INFO_ZH } from './i18n-kol-info'
 import { LAYOUT_EN, LAYOUT_ZH } from './i18n-layout'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
@@ -9150,6 +9151,7 @@ const TABLES: Record<Lang, Table> = {
     ...FOLLOW_UP_ZH,
     ...KNOWLEDGE_LEARN_ZH,
     ...INBOX_ZH,
+    ...KOL_INFO_ZH,
     // WP469：日历与待办（待办 + 日历合成一页）
     ...CAL_TODO_ZH,
     // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
@@ -9235,6 +9237,7 @@ const TABLES: Record<Lang, Table> = {
     ...FOLLOW_UP_EN,
     ...KNOWLEDGE_LEARN_EN,
     ...INBOX_EN,
+    ...KOL_INFO_EN,
     ...CAL_TODO_EN,
     ...COMPANY_EN,
     ...REDDIT_WRITE_EN,

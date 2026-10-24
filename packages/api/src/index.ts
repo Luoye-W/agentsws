@@ -538,6 +538,7 @@ export type {
   KolCollaborationInput,
   KolCollaborationRow,
   KolContactView,
+  KolCreatorChecksView,
   KolCreatorDetail,
   KolCreatorInput,
   KolCreatorPatch,

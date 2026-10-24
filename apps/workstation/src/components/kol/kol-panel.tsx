@@ -17,38 +17,29 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Coins, Mail, Megaphone, Search, Upload, Users } from 'lucide-react'
+import { ChevronRight, Coins, Megaphone, Search, Upload, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AutopilotStrip } from '@/components/autopilot/autopilot-strip'
+import { useInRightPane } from '@/components/rail/in-right-pane'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Textarea } from '@/components/ui/textarea'
 import {
   acceptKolCampaign,
-  addKolContact,
   addKolCreator,
-  draftKolOutreach,
   getKolCollaborations,
-  getKolCreator,
   getKolCreators,
-  getKolOutreachDefaults,
   type KolCampaignData,
   type KolChannelId,
-  type KolCreatorProfileData,
-  type KolOutreachData,
   type KolSearchData,
   planKolCampaign,
   revealKolContact,
-  saveKolOutreachDefaults,
   searchKolCreators,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { tOr } from '@/lib/humanize'
 import { CollabThread } from './collab-thread'
 import {
   COLLAB_GROUPS,
@@ -59,13 +50,12 @@ import {
   tierRank,
 } from './collab-tier'
 import { CreatorCard, stepOpensThread } from './creator-card'
+import { CreatorDetailView, openCreatorPane } from './creator-pane'
+import { ALL_CHANNELS, atHandle, CHANNEL_SERVICE } from './kol-channel'
 import { KolSandboxBar } from './kol-sandbox-bar'
 import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
 import { KolSheetImport } from './kol-sheet-import'
 import { CollabProgress } from './segmented-progress'
-
-/** 五条渠道（真源是契约的 `KOL_CHANNEL_IDS`；工作台不依赖服务端包，这里照抄一份）。 */
-const ALL_CHANNELS: readonly KolChannelId[] = ['youtube', 'facebook', 'instagram', 'tiktok', 'x']
 
 /** 职责 id → 渠道（`kol.youtube` → `youtube`）。不是红人职责就回 `undefined`。 */
 export function channelOfRole(role_id: string | undefined): KolChannelId | undefined {
@@ -74,25 +64,7 @@ export function channelOfRole(role_id: string | undefined): KolChannelId | undef
   return ALL_CHANNELS.find((c) => c === id)
 }
 
-/**
- * WP142：搜不了时那两个按钮去哪。关联官方账号 → 设置「账号与积分」；
- * 接自己的数据接口 → 连接页这条渠道的那张卡（卡里有「自带数据接口」）。
- */
-const CHANNEL_SERVICE: Readonly<Record<KolChannelId, string>> = {
-  youtube: 'youtube_data',
-  instagram: 'instagram_graph',
-  facebook: 'facebook_graph',
-  tiktok: 'tiktok_research',
-  x: 'x_api',
-}
-
-/**
- * WP201：显示用的 `@handle`。插件从 YouTube 收进来的 handle 自带 `@`（YouTube 自己就这么写），
- * 导入的与公共库来的不带——显示时统一成一个 `@`，别出现 `@@TheTechReviewer`。库里的值不动。
- */
-export function atHandle(handle: string | undefined): string {
-  return handle === undefined || handle === '' ? '—' : `@${handle.replace(/^@+/, '')}`
-}
+export { atHandle }
 
 export function entryHref(id: 'link_account' | 'byo', channel: KolChannelId): string {
   return id === 'link_account'
@@ -425,388 +397,6 @@ function Discovery({
             ))}
           </ol>
         </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-/** 大数缩写（总播放动辄上百万）。 */
-const compact = (n: number): string =>
-  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : num(n)
-
-/**
- * WP498（决策 1752 C）：存入红人池时主页上的资料——一行数字、两行简介、前三条近期作品。
- * 头像 / 横幅只给链接：工坊的壳不加载外站图片（`img-src 'self' blob: data:`）。
- */
-function SavedProfile({ profile: p }: { profile: KolCreatorProfileData }): React.ReactNode {
-  const { t } = useApp()
-  const facts = [
-    p.country,
-    p.joined_date === undefined ? undefined : t('kol.profile.joined', { at: p.joined_date }),
-    p.total_views === undefined
-      ? undefined
-      : t('kol.profile.total_views', { n: compact(p.total_views) }),
-    p.avg_views === undefined ? undefined : t('kol.profile.avg_views', { n: compact(p.avg_views) }),
-    p.video_count === undefined ? undefined : t('kol.profile.videos', { n: String(p.video_count) }),
-  ].filter((x): x is string => x !== undefined)
-  const recent = p.recent_items ?? []
-  return (
-    <div className="flex w-full flex-col gap-1 text-xs" data-testid="kol-saved-profile">
-      <div className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
-        <span data-testid="kol-profile-facts">{facts.join(' · ')}</span>
-        <span>{t('kol.profile.saved_at', { at: p.saved_at.slice(0, 10) })}</span>
-        {p.avatar_url === undefined ? null : (
-          <a className="underline" href={p.avatar_url} target="_blank" rel="noreferrer">
-            {t('kol.profile.avatar')}
-          </a>
-        )}
-        {p.banner_url === undefined ? null : (
-          <a className="underline" href={p.banner_url} target="_blank" rel="noreferrer">
-            {t('kol.profile.banner')}
-          </a>
-        )}
-        {p.avatar_url === undefined && p.banner_url === undefined ? null : (
-          <Hint text={t('kol.profile.images.hint')} testId="kol-profile-images-hint" />
-        )}
-      </div>
-      {p.bio === undefined ? null : (
-        <p className="line-clamp-2 text-muted-foreground" data-testid="kol-profile-bio">
-          {p.bio}
-        </p>
-      )}
-      {recent.length === 0 ? null : (
-        <div data-testid="kol-profile-recent">
-          <span className="text-muted-foreground">{t('kol.profile.recent')}</span>
-          <ul className="flex flex-col">
-            {recent.slice(0, 3).map((r, i) => (
-              <li key={`${String(i)}-${r.title}`} className="truncate">
-                {r.title}
-                <span className="ml-2 text-muted-foreground">
-                  {[
-                    r.views_text ?? (r.views === undefined ? undefined : compact(r.views)),
-                    r.published_text,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {recent.length > 3 ? (
-            <span className="text-muted-foreground">
-              {t('kol.profile.more', { n: String(recent.length - 3) })}
-            </span>
-          ) : null}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ── 红人详情（资料快照 / 联系方式脱敏 / 合作历史）───────────────────── */
-
-function CreatorDetail({
-  assignment,
-  channel,
-  id,
-  onClose,
-}: {
-  assignment: string
-  channel: KolChannelId
-  id: string
-  onClose: () => void
-}): React.ReactNode {
-  const { t } = useApp()
-  const client = useQueryClient()
-  const [email, setEmail] = useState('')
-  const [product, setProduct] = useState('')
-  /*
-   * WP416（决策 531，自查 kol U17）：「我们是做什么的」「想聊的产品」两格**预填**——存过的优先，
-   * 没存过从品牌档案拿；改了的起草成功后记成品牌设置，下一个红人就不用再填一遍。
-   */
-  const [pitch, setPitch] = useState('')
-  const defaults = useQuery({
-    queryKey: ['kol-outreach-defaults', assignment],
-    queryFn: () => getKolOutreachDefaults(assignment),
-  })
-  const prefilled = useRef(false)
-  useEffect(() => {
-    const d = defaults.data
-    if (d === undefined || prefilled.current) return
-    prefilled.current = true
-    setPitch((p) => (p === '' ? d.brand_pitch : p))
-    setProduct((p) => (p === '' ? d.product : p))
-  }, [defaults.data])
-  const [draft, setDraft] = useState<KolOutreachData | undefined>(undefined)
-  const [error, setError] = useState<string | undefined>(undefined)
-  const [receipt, setReceipt] = useState<string | undefined>(undefined)
-
-  const detail = useQuery({
-    queryKey: ['kol-creator', id],
-    queryFn: () => getKolCreator(id, assignment),
-  })
-
-  /*
-   * 66 断点 #6：这一跳以前 400 了界面什么都不显示，邮箱还留在框里像是成功了。
-   * 现在两件事都做对：成功才清空输入框，失败照实说服务端那句话
-   * （「这台机器的加密库没开」这种，用户看得懂该去干什么）。
-   */
-  const addContact = useMutation({
-    mutationFn: () => addKolContact(id, { kind: 'email', value: email }, assignment),
-    onSuccess: (contact) => {
-      setError(undefined)
-      setReceipt(`加好了：${contact.masked}。现在可以起开发信了。`)
-      setEmail('')
-      void client.invalidateQueries({ queryKey: ['kol-creator', id] })
-      void client.invalidateQueries({ queryKey: ['kol-creators'] })
-    },
-    onError: (e: unknown) => {
-      setReceipt(undefined)
-      setError(errorText(e, '这条联系方式没加上。'))
-    },
-  })
-
-  /*
-   * 66 断点 #7：接口回了 201，界面却显示失败——因为这里只认 `draft.staged`，
-   * 而真正的失败（异常）根本没人接。现在分成三种：成功出卡、被拦下
-   * （`staged: false` + 一句人话）、这一跳没打通（异常）。
-   */
-  const outreach = useMutation({
-    mutationFn: () =>
-      draftKolOutreach({ creator_id: id, channel, product, brand_pitch: pitch }, assignment),
-    onSuccess: (out) => {
-      setError(undefined)
-      setDraft(out)
-      // 两格跟存着的不一样：记成品牌设置（下一个红人预填它）
-      const d = defaults.data
-      if (
-        out.staged &&
-        d !== undefined &&
-        (d.brand_pitch !== pitch.trim() || d.product !== product.trim())
-      )
-        void saveKolOutreachDefaults(
-          { brand_pitch: pitch.trim(), product: product.trim() },
-          assignment,
-        ).then(() => client.invalidateQueries({ queryKey: ['kol-outreach-defaults'] }))
-      setReceipt(
-        out.staged
-          ? out.auto_approved === true
-            ? '这封信已经排进出站队列。'
-            : '起草好了，在卡片里等你批。批了才发。'
-          : undefined,
-      )
-      void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
-      refreshCards(client)
-    },
-    onError: (e: unknown) => {
-      setDraft(undefined)
-      setReceipt(undefined)
-      setError(errorText(e, '这封信没起草成。'))
-    },
-  })
-
-  if (detail.isPending) return <Skeleton className="h-48 w-full" />
-  const view = detail.data
-  if (view === undefined) return null
-
-  return (
-    <Card data-testid="kol-creator-detail" data-creator={id}>
-      <CardHeader className="flex flex-row items-center justify-between gap-2">
-        <CardTitle className="text-sm">{view.creator.display_name}</CardTitle>
-        <Button size="xs" variant="ghost" data-testid="kol-detail-close" onClick={onClose}>
-          {t('kol.detail.close')}
-        </Button>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 text-sm">
-        {/* ① 资料快照：`observed_at` 一定露在外面——半年前的粉丝数拿来打分，与编一个数没区别 */}
-        <section data-testid="kol-accounts">
-          <h4 className="mb-1 text-xs font-medium text-muted-foreground">
-            {t('kol.detail.profile')}
-          </h4>
-          {view.accounts.map((a) => (
-            <div key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <a className="underline" href={a.url} target="_blank" rel="noreferrer">
-                {atHandle(a.handle)}
-              </a>
-              <span className="text-xs text-muted-foreground">
-                {t(`kol.channel.${a.channel}`)} · {t('kol.followers', { n: num(a.followers) })} ·
-                {t('kol.engagement', {
-                  n:
-                    a.engagement_rate === undefined
-                      ? '—'
-                      : `${(a.engagement_rate * 100).toFixed(1)}%`,
-                })}
-              </span>
-              <span className="text-xs text-muted-foreground" data-testid="kol-observed-at">
-                {t('kol.observed_at', { at: a.observed_at.slice(0, 10) })}
-              </span>
-              {view.profiles?.[a.id] === undefined ? null : (
-                <SavedProfile profile={view.profiles[a.id] as KolCreatorProfileData} />
-              )}
-            </div>
-          ))}
-        </section>
-
-        {/* ② 联系方式：**只有脱敏形态**（这个组件里拿不到明文，服务端也不给） */}
-        <section data-testid="kol-contacts">
-          <h4 className="mb-1 flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            {t('kol.detail.contacts')}
-            {/* WP416（自查 kol U10）：「只显示脱敏形态…」收进问号，不常驻一整句 */}
-            <Hint text={t('kol.detail.contacts.note')} testId="kol-contacts-note" />
-          </h4>
-          {view.contacts.length === 0 ? (
-            <p className="text-muted-foreground">{t('kol.detail.contacts.empty')}</p>
-          ) : (
-            <ul className="flex flex-col gap-0.5">
-              {view.contacts.map((c) => (
-                <li key={c.id} className="font-mono text-xs" data-testid="kol-contact">
-                  {c.masked}
-                  <span className="ml-2 font-sans text-muted-foreground">
-                    {/* WP141：没登记的来源不把 i18n 键印上屏（走查第 19 步的 kol.contact.source.sandbox） */}
-                    {tOr(t, `kol.contact.source.${c.source}`, t('kol.contact.source.other'))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <KolError error={error} testid="kol-detail-error" />
-          <KolReceipt text={receipt} testid="kol-detail-receipt" />
-          <div className="mt-1 flex items-center gap-2">
-            <Input
-              value={email}
-              placeholder="name@example.com"
-              data-testid="kol-contact-input"
-              onChange={(e) => {
-                setEmail(e.target.value)
-              }}
-            />
-            <Button
-              size="xs"
-              variant="outline"
-              data-testid="kol-contact-save"
-              disabled={email.trim() === '' || addContact.isPending}
-              onClick={() => {
-                addContact.mutate()
-              }}
-            >
-              {t('kol.detail.contacts.add')}
-            </Button>
-          </div>
-        </section>
-
-        {/* ③ 建联：开发信草稿卡 */}
-        <section data-testid="kol-outreach">
-          <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Mail className="size-3" aria-hidden />
-            {t('kol.detail.outreach')}
-          </h4>
-          <div className="flex flex-col gap-1">
-            <Input
-              value={pitch}
-              placeholder={t('kol.detail.outreach.pitch')}
-              aria-label={t('kol.detail.outreach.pitch')}
-              data-testid="kol-outreach-pitch"
-              onChange={(e) => {
-                setPitch(e.target.value)
-              }}
-            />
-            <Input
-              value={product}
-              placeholder={t('kol.detail.outreach.product')}
-              aria-label={t('kol.detail.outreach.product')}
-              data-testid="kol-outreach-product"
-              onChange={(e) => {
-                setProduct(e.target.value)
-              }}
-            />
-            {defaults.data?.source === 'brand_profile' ? (
-              <p className="text-xs text-muted-foreground" data-testid="kol-outreach-prefilled">
-                {t('kol.detail.outreach.prefilled')}
-              </p>
-            ) : null}
-            {defaults.data?.mailbox_connected === false ? (
-              <p
-                className="flex flex-wrap items-center gap-1 text-xs text-[var(--ws-warn)]"
-                data-testid="kol-outreach-no-mailbox"
-              >
-                {t('kol.detail.outreach.no_mailbox')}
-                <Link to="/connections?service=imap_smtp" className="underline underline-offset-2">
-                  {t('kol.detail.outreach.connect_mailbox')}
-                </Link>
-              </p>
-            ) : null}
-            <div className="flex justify-end">
-              <Button
-                size="xs"
-                data-testid="kol-outreach-go"
-                disabled={product.trim() === '' || pitch.trim() === '' || outreach.isPending}
-                onClick={() => {
-                  outreach.mutate()
-                }}
-              >
-                {t('kol.detail.outreach.draft')}
-              </Button>
-            </div>
-          </div>
-          {draft === undefined ? null : (
-            <div className="mt-2 rounded-sm border p-2" data-testid="kol-outreach-draft">
-              {draft.staged ? (
-                <>
-                  <div className="text-xs font-medium">{draft.subject}</div>
-                  <Textarea className="mt-1 text-xs" readOnly rows={6} value={draft.body} />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {draft.auto_approved === true
-                      ? t('kol.detail.outreach.auto')
-                      : t('kol.detail.outreach.queued')}
-                    {' · '}
-                    {t('kol.detail.outreach.quota', {
-                      n: draft.quota.remaining,
-                      cap: draft.quota.cap,
-                    })}
-                  </p>
-                  {draft.needs_mailbox === true ? (
-                    <p className="mt-1 text-xs text-[var(--ws-warn)]">
-                      {t('kol.detail.outreach.no_mailbox')}
-                    </p>
-                  ) : null}
-                </>
-              ) : (
-                // 禁承诺是 block 不是转人审：这一封根本没进队列，理由照实说
-                <p className="text-xs text-destructive" data-testid="kol-outreach-blocked">
-                  {draft.message}
-                </p>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* ④ 合作历史 */}
-        <section data-testid="kol-history">
-          <h4 className="mb-1 text-xs font-medium text-muted-foreground">
-            {t('kol.detail.history')}
-          </h4>
-          {view.collaborations.length === 0 ? (
-            <p className="text-muted-foreground">{t('kol.detail.history.empty')}</p>
-          ) : (
-            <ul className="flex flex-col gap-0.5 text-xs">
-              {view.collaborations.map((c) => (
-                <li key={c.id}>
-                  {t(`kol.channel.${c.channel}`)} · {t(`kol.stage.${c.stage}`)}
-                  {c.budget === undefined ? '' : ` · ${c.budget} ${c.currency}`}
-                </li>
-              ))}
-            </ul>
-          )}
-          {view.deliverables.length === 0 ? null : (
-            <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
-              {view.deliverables.map((d) => (
-                <li key={d.id}>
-                  {d.kind} · {t(`kol.review.${d.review}`)} · {d.due_at.slice(0, 10)}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </CardContent>
     </Card>
   )
@@ -1434,8 +1024,25 @@ export function KolPanel({
   const [search, setSearch] = useSearchParams()
   const raw = search.get('kol') ?? defaultSubview ?? 'pool'
   const view: SubviewId = SUBVIEWS.some((v) => v.id === raw) ? (raw as SubviewId) : 'pool'
-  /** 点开的那一个人（候选池里）。 */
-  const [openCreator, setOpenCreator] = useState<string | undefined>(initialOpenCreator)
+  /**
+   * 点开的那一个人（候选池里）。WP500：平常开在第三栏（{@link openCreatorPane}）；这里只记
+   * 「开不出第三栏时就地画」与「我自己已经在第三栏里、叠一层」那两种。
+   */
+  const inPane = useInRightPane()
+  const [openCreator, setOpenCreator] = useState<string | undefined>(
+    inPane ? initialOpenCreator : undefined,
+  )
+  const openDetail = (id: string): void => {
+    if (inPane || !openCreatorPane({ assignment, channel, id })) setOpenCreator(id)
+  }
+  // WP119c 深链 ?creator= 带进来的人：进面板就点开（第三栏开不出来就就地画）
+  const deepLinked = useRef(false)
+  useEffect(() => {
+    if (deepLinked.current || inPane || initialOpenCreator === undefined) return
+    deepLinked.current = true
+    if (!openCreatorPane({ assignment, channel, id: initialOpenCreator }))
+      setOpenCreator(initialOpenCreator)
+  }, [assignment, channel, inPane, initialOpenCreator])
   /** 点开的那一条合作（合作线程里）。 */
   const [openCollab, setOpenCollab] = useState<string | undefined>(undefined)
   /** WP131：插件深链 `?batch=` 带来的采集批次（候选池只列这一批）。 */
@@ -1484,24 +1091,29 @@ export function KolPanel({
 
       {view === 'pool' ? (
         <>
-          <Discovery
-            assignment={assignment}
-            channel={channel}
-            onOpen={setOpenCreator}
-            onThread={(collab) => {
-              setOpenCollab(collab)
-              go('threads')
-            }}
-            {...(batch === undefined || batch === '' ? {} : { batch, onClearBatch: clearBatch })}
-          />
+          {/* 已经在第三栏里时，详情叠在候选池上面（← 返回），不去换掉第三栏自己 */}
+          {inPane && openCreator !== undefined ? null : (
+            <Discovery
+              assignment={assignment}
+              channel={channel}
+              onOpen={openDetail}
+              onThread={(collab) => {
+                setOpenCollab(collab)
+                go('threads')
+              }}
+              {...(batch === undefined || batch === '' ? {} : { batch, onClearBatch: clearBatch })}
+            />
+          )}
           {openCreator === undefined ? null : (
-            <CreatorDetail
+            <CreatorDetailView
+              key={openCreator}
               assignment={assignment}
               channel={channel}
               id={openCreator}
-              onClose={() => {
+              onBack={() => {
                 setOpenCreator(undefined)
               }}
+              onRepoint={setOpenCreator}
             />
           )}
         </>
