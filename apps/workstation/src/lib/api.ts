@@ -4229,6 +4229,8 @@ export interface WorkspaceProfileView {
   currency?: string
   /** WP335（决策 659）：品类（品牌分析时 AI 填、人可改；没写过就没有）。 */
   category?: string
+  /** WP452：卖的是实物 / App / 别的数字产品（没填过就没有 = 不知道）。 */
+  offering?: import('@agentsws/contracts').BrandOffering
   /** WP346（决策 872）：第二版那几格（没写过就没有）。 */
   subcategory?: string
   positioning?: string
@@ -4498,6 +4500,8 @@ export const setWorkspaceProfile = (
     currency?: string
     /** WP335（决策 659）：品类（不给 = 不改；空串 = 清空）。 */
     category?: string
+    /** WP452：卖的是什么（不给 = 不改；空串 = 清空 = 不知道）。 */
+    offering?: import('@agentsws/contracts').BrandOffering | ''
     /** WP346（决策 872）：第二版那几格（不给 = 不改；空串 / null / 空数组 = 清空）。 */
     subcategory?: string
     positioning?: string

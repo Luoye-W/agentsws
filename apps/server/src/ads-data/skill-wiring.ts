@@ -63,7 +63,10 @@ export function experimentReadoutCard(
     payload,
     // 建议的那一个排第一（主按钮）
     options: [payload.recommended, ...VERDICTS.filter((v) => v !== payload.recommended)].map(
-      (v) => ({ id: v, label: EXPERIMENT_VERDICT_LABEL[v] }),
+      (v) => ({
+        id: v,
+        label: `${EXPERIMENT_VERDICT_LABEL[v]}${v === payload.recommended ? '（建议）' : ''}`,
+      }),
     ),
     evidence: {
       run_id: req.id as never,

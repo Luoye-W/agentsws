@@ -5,6 +5,7 @@
     "packages/connect-adapter/action-side-effects.yml",
     "packages/connect-adapter/src/shopify-actions.ts",
     "packages/contracts/src/ad-creative.ts",
+    "packages/contracts/src/ads-skills.ts",
     "packages/contracts/src/ads-wiring.ts",
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/amazon-competitor.ts",
@@ -167,7 +168,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "3e01246c38d264d3e78459b763939283",
+  "source_digest": "756d9babb7a550a16ba130b5e2424ae9",
   "objects": [
     {
       "id": "ad",
@@ -252,17 +253,20 @@
         }
       ],
       "read_via": [
+        "ads.break_even_calc",
         "ads.campaigns",
         "ads.conversions.google",
         "ads.conversions.meta",
         "ads.conversions.tiktok",
         "ads.conversions.x",
         "ads.cpa",
+        "ads.creative_fatigue",
         "ads.ctr",
         "ads.daily_report",
         "ads.export_audit",
         "ads.export_overview",
         "ads.export_spend",
+        "ads.landing_checks",
         "ads.line_compare",
         "ads.pending_changes",
         "ads.pixel_health.google",
@@ -6051,7 +6055,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "ad.ad_set_id",
-      "lookup": ["ads.campaigns", "ads.conversions.google"]
+      "lookup": ["ads.break_even_calc", "ads.campaigns"]
     },
     {
       "from": "ad_set",
@@ -6683,7 +6687,7 @@
       "direction": "in",
       "cardinality": "many",
       "via": "ad.campaign_id",
-      "lookup": ["ads.campaigns", "ads.conversions.google"]
+      "lookup": ["ads.break_even_calc", "ads.campaigns"]
     },
     {
       "from": "campaign",
