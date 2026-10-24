@@ -20,6 +20,9 @@
  */
 import type {
   AssignmentId,
+  BacklinkAuditRun,
+  BacklinkAuditSettings,
+  BacklinkAuditView,
   ClaimMarketGroup,
   ClaimRulesView,
   GeoAnswerDetail,
@@ -39,9 +42,14 @@ import type {
   GeoWatchRunResult,
   GeoWatchSuggestion,
   GeoWatchView,
+  LlmsTxtView,
   MaybePromise,
   PersonId,
+  RepurposeChannel,
+  RepurposeResult,
   RoleId,
+  SeoCalendarView,
+  SeoClusterPlanResult,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { z } from 'zod'
@@ -182,7 +190,78 @@ export interface SeoPort {
   ): MaybePromise<GeoConsistencyRun | undefined>
   /** WP380：登记一条复查（改了什么、看哪个数、几天后）。 */
   watchRecheck?(actor: SeoActor, input: GeoRecheckInput): MaybePromise<GeoRecheck>
+  /** WP450：第三栏「编辑日历」（下几周写什么、哪篇该回头改、最近发布、出一组的估算）。 */
+  calendar?(actor: SeoActor): MaybePromise<SeoCalendarView>
+  /** WP450：出一组主题（按搜索结果重叠度分组，出一张 `seo_cluster` 卡）。 */
+  planClusters?(actor: SeoActor): MaybePromise<SeoClusterPlanResult>
+  /** WP450：外链体检（设置、上一次、一次大概花多少）。 */
+  backlinks?(actor: SeoActor): MaybePromise<BacklinkAuditView>
+  setBacklinks?(
+    actor: SeoActor,
+    patch: Partial<BacklinkAuditSettings>,
+  ): MaybePromise<BacklinkAuditView>
+  /** WP450：现在体检一次外链。 */
+  runBacklinks?(actor: SeoActor): MaybePromise<BacklinkAuditRun>
+  /** WP450：llms.txt（生成的那份、体检里那一项、怎么放）。 */
+  llmsTxt?(actor: SeoActor): MaybePromise<LlmsTxtView>
+  /** WP450：生成一份 llms.txt；`handoff` 交建站放上去。 */
+  generateLlmsTxt?(actor: SeoActor, input: { handoff?: boolean }): MaybePromise<LlmsTxtView>
+  /** WP450：一篇已发布的文章起草社媒稿（只起草），开事项交社媒运营。 */
+  repurpose?(
+    actor: SeoActor,
+    input: {
+      change_id?: string | undefined
+      title?: string | undefined
+      body?: string | undefined
+      url?: string | undefined
+      channels?: RepurposeChannel[] | undefined
+    },
+  ): MaybePromise<RepurposeResult>
 }
+
+/** WP450：没装就 501。 */
+function planPortOf<
+  K extends
+    | 'calendar'
+    | 'planClusters'
+    | 'backlinks'
+    | 'setBacklinks'
+    | 'runBacklinks'
+    | 'llmsTxt'
+    | 'generateLlmsTxt'
+    | 'repurpose',
+>(deps: GatewayDeps, key: K): NonNullable<SeoPort[K]> {
+  const p = portOf(deps)
+  const f = p[key]
+  if (f === undefined)
+    throw new ApiError(
+      'not_implemented',
+      '这个服务进程没有装配主题簇 / 外链体检 / llms.txt 那一层。',
+    )
+  return (f as (...args: never[]) => unknown).bind(p) as NonNullable<SeoPort[K]>
+}
+
+const BacklinkSettingsBody = z.object({
+  enabled: z.boolean().optional(),
+  every_days: z.number().int().min(7).max(90).optional(),
+  competitors: z.array(z.string().min(1).max(200)).max(3).optional(),
+})
+const LlmsBody = z.object({ handoff: z.boolean().optional() })
+const RepurposeBody = z
+  .object({
+    change_id: z.string().min(1).max(200).optional(),
+    title: z.string().min(1).max(300).optional(),
+    body: z.string().max(200_000).optional(),
+    url: z.string().max(2000).optional(),
+    channels: z
+      .array(z.enum(['x', 'linkedin', 'reddit', 'short_video']))
+      .min(1)
+      .max(4)
+      .optional(),
+  })
+  .refine((b) => b.change_id !== undefined || (b.title !== undefined && b.body !== undefined), {
+    message: '给 change_id，或者给 title + body',
+  })
 
 /** WP159：改规则表（三件事一次给一件就行）。 */
 export interface ClaimRulesPatch {
@@ -900,6 +979,156 @@ export function seoRoutes(): Route[] {
           c,
           await googlePortOf(deps).setGoogleSources(actorOf(c), await body(c, GoogleSourcesBody)),
         ),
+    ),
+    // ── WP450：主题簇与编辑日历、外链体检、llms.txt、改写成社媒稿 ──
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/calendar',
+        operationId: 'getSeoCalendar',
+        summary:
+          'WP450：编辑日历（下几周写什么、哪篇该回头改、最近发布的文章、出一组主题大概花多少）——第三栏那一块',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        returns: 'SeoCalendarView',
+      },
+      async (c, deps) => ok(c, await planPortOf(deps, 'calendar')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/clusters/plan',
+        operationId: 'planSeoClusters',
+        summary:
+          'WP450：出一组主题——按搜索结果重叠度把词分组（规则算），出一张「一组主题」卡批整组（查搜索结果要花积分）',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        returns: 'SeoClusterPlanResult',
+      },
+      async (c, deps) => ok(c, await planPortOf(deps, 'planClusters')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/backlinks',
+        operationId: 'getBacklinkAudit',
+        summary: 'WP450：外链体检——设置（每月一次、可关）、上一次的结论、一次大概花多少积分',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        returns: 'BacklinkAuditView',
+      },
+      async (c, deps) => ok(c, await planPortOf(deps, 'backlinks')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/seo/backlinks',
+        operationId: 'setBacklinkAudit',
+        summary: 'WP450：改外链体检的设置（开关、几天一次、比哪几家竞品）',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: BacklinkSettingsBody,
+        returns: 'BacklinkAuditView',
+      },
+      async (c, deps) => {
+        const b = await body(c, BacklinkSettingsBody)
+        return ok(
+          c,
+          await planPortOf(deps, 'setBacklinks')(actorOf(c), {
+            ...(b.enabled === undefined ? {} : { enabled: b.enabled }),
+            ...(b.every_days === undefined ? {} : { every_days: b.every_days }),
+            ...(b.competitors === undefined ? {} : { competitors: b.competitors }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/backlinks/run',
+        operationId: 'runBacklinkAudit',
+        summary: 'WP450：现在体检一次外链（照官方数据接口的价目扣积分；竞品差距交公关）',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        returns: 'BacklinkAuditRun',
+      },
+      async (c, deps) => ok(c, await planPortOf(deps, 'runBacklinks')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/llms-txt',
+        operationId: 'getLlmsTxt',
+        summary: 'WP450：llms.txt——生成的那份、体检里「有没有、过不过时」、在 Shopify 上怎么放',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        returns: 'LlmsTxtView',
+      },
+      async (c, deps) => ok(c, await planPortOf(deps, 'llmsTxt')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/llms-txt',
+        operationId: 'generateLlmsTxt',
+        summary: 'WP450：按店铺结构与政策页生成一份 llms.txt；`handoff: true` 开一件事交建站放上去',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: LlmsBody,
+        returns: 'LlmsTxtView',
+      },
+      async (c, deps) => {
+        const b = await body(c, LlmsBody)
+        return ok(
+          c,
+          await planPortOf(deps, 'generateLlmsTxt')(
+            actorOf(c),
+            b.handoff === undefined ? {} : { handoff: b.handoff },
+          ),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/seo/repurpose',
+        operationId: 'repurposePost',
+        summary:
+          'WP450：一篇已发布的文章起草 X / LinkedIn / Reddit / 短视频脚本（只起草、不编经历与数字），每个渠道开一件事项交社媒运营',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: RepurposeBody,
+        returns: 'RepurposeResult',
+      },
+      async (c, deps) => {
+        const b = await body(c, RepurposeBody)
+        return ok(
+          c,
+          await planPortOf(deps, 'repurpose')(actorOf(c), {
+            ...(b.change_id === undefined ? {} : { change_id: b.change_id }),
+            ...(b.title === undefined ? {} : { title: b.title }),
+            ...(b.body === undefined ? {} : { body: b.body }),
+            ...(b.url === undefined ? {} : { url: b.url }),
+            ...(b.channels === undefined ? {} : { channels: b.channels }),
+          }),
+        )
+      },
     ),
   ]
 }

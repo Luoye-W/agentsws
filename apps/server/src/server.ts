@@ -922,10 +922,12 @@ import {
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { driftAlertCards } from './seo-drift-alerts.js'
+import { createSeoPlan } from './seo-plan.js'
 import {
   claimRuleCard,
   createSeoService,
   pickRoleHolder,
+  type SeoBrandInfo,
   type SeoServiceAssembly,
 } from './seo-service.js'
 import { createSetupCards, type SetupCardsAssembly } from './setup-cards.js'
@@ -8407,6 +8409,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             pageSpeed: options.siteHealthPageSpeed ?? pageSpeedReader(globalThis.fetch as never),
           }),
       handoff: (input) => siteHandoff(input),
+      // WP450：llms.txt 里写的店名与一句话介绍
+      llmsBrand: async () => {
+        const b = await seoBrandInfo()
+        return { name: b.name, ...(b.one_liner === undefined ? {} : { summary: b.one_liner }) }
+      },
       renderer: () =>
         options.siteHealthRenderer === false || hostedInstance
           ? undefined
@@ -8448,6 +8455,52 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           payload,
         }),
     })
+    // WP450：SEO 与 GEO 的品牌信息（主题簇 / 外链 / llms.txt / 社媒稿那一层也读它）
+    const seoBrandInfo = async (): Promise<SeoBrandInfo> => {
+      const w = await identity.getWorkspace(ws)
+      const domain = w?.profile?.domain?.trim()
+      return {
+        name: w?.brand?.name ?? w?.name ?? ws,
+        language: 'en' as const,
+        domains: domain === undefined || domain === '' ? [] : [domain],
+        shop_host: domain === undefined || domain === '' ? 'shop.invalid' : domain,
+        currency: w?.base_currency ?? workData.base_currency,
+        country: 'us',
+        // WP159：品牌分析确认时写进档案的目标市场（违规宣称规则按它开市场组）
+        ...(() => {
+          const markets = onboardingRef?.brandProfile(ws).markets
+          return markets === undefined ? {} : { markets }
+        })(),
+        // WP169：档案里按市场覆盖的探测语言（没覆盖过就按每个市场的第一语言）
+        ...(() => {
+          const market_languages = onboardingRef?.brandProfile(ws).market_languages
+          return market_languages === undefined ? {} : { market_languages }
+        })(),
+        // WP321：品牌一句话介绍（AI 给 GEO 策略时认品类用）
+        ...(() => {
+          const one_liner = onboardingRef?.brandProfile(ws).one_liner
+          return one_liner === undefined || one_liner.trim() === '' ? {} : { one_liner }
+        })(),
+        // WP335（决策 659）：品牌档案里的「品类」（AI 给 GEO 策略时直接读它，不再从一句话里猜）
+        ...(() => {
+          const category = onboardingRef?.brandProfile(ws).category
+          return category === undefined || category.trim() === '' ? {} : { category }
+        })(),
+        // WP346（决策 872）：品牌档案里的人群 / 关键词 / 竞品（GEO 建议先读它们）
+        ...(() => {
+          const p = onboardingRef?.brandProfile(ws)
+          return {
+            ...(p?.audience === undefined ? {} : { audience: p.audience }),
+            ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
+            ...(p?.competitors === undefined ? {} : { competitors: p.competitors }),
+            // WP380：官方事实表要的子品类、价格带、定位
+            ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
+            ...(p?.price_band === undefined ? {} : { price_band: p.price_band }),
+            ...(p?.positioning === undefined ? {} : { positioning: p.positioning }),
+          }
+        })(),
+      }
+    }
     const seoService = createSeoService({
       workspace_id: ws,
       // WP381：周报里和引用数并排的 AI 来源流量（实测）
@@ -8499,51 +8552,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             currency: o.currency,
           }))
       },
-      brand: async () => {
-        const w = await identity.getWorkspace(ws)
-        const domain = w?.profile?.domain?.trim()
-        return {
-          name: w?.brand?.name ?? w?.name ?? ws,
-          language: 'en' as const,
-          domains: domain === undefined || domain === '' ? [] : [domain],
-          shop_host: domain === undefined || domain === '' ? 'shop.invalid' : domain,
-          currency: w?.base_currency ?? workData.base_currency,
-          country: 'us',
-          // WP159：品牌分析确认时写进档案的目标市场（违规宣称规则按它开市场组）
-          ...(() => {
-            const markets = onboardingRef?.brandProfile(ws).markets
-            return markets === undefined ? {} : { markets }
-          })(),
-          // WP169：档案里按市场覆盖的探测语言（没覆盖过就按每个市场的第一语言）
-          ...(() => {
-            const market_languages = onboardingRef?.brandProfile(ws).market_languages
-            return market_languages === undefined ? {} : { market_languages }
-          })(),
-          // WP321：品牌一句话介绍（AI 给 GEO 策略时认品类用）
-          ...(() => {
-            const one_liner = onboardingRef?.brandProfile(ws).one_liner
-            return one_liner === undefined || one_liner.trim() === '' ? {} : { one_liner }
-          })(),
-          // WP335（决策 659）：品牌档案里的「品类」（AI 给 GEO 策略时直接读它，不再从一句话里猜）
-          ...(() => {
-            const category = onboardingRef?.brandProfile(ws).category
-            return category === undefined || category.trim() === '' ? {} : { category }
-          })(),
-          // WP346（决策 872）：品牌档案里的人群 / 关键词 / 竞品（GEO 建议先读它们）
-          ...(() => {
-            const p = onboardingRef?.brandProfile(ws)
-            return {
-              ...(p?.audience === undefined ? {} : { audience: p.audience }),
-              ...(p?.keywords === undefined ? {} : { keywords: p.keywords }),
-              ...(p?.competitors === undefined ? {} : { competitors: p.competitors }),
-              // WP380：官方事实表要的子品类、价格带、定位
-              ...(p?.subcategory === undefined ? {} : { subcategory: p.subcategory }),
-              ...(p?.price_band === undefined ? {} : { price_band: p.price_band }),
-              ...(p?.positioning === undefined ? {} : { positioning: p.positioning }),
-            }
-          })(),
-        }
-      },
+      brand: seoBrandInfo,
       knowledge: async (actor) => {
         const config = roles.effectiveConfig(actor.assignment_id)
         // WP506：停用的那几条不当规则用
@@ -8712,6 +8721,74 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
     seoLate.current = seoService
+    /*
+     * WP450（docs/109 §5.2 #9–11、17）：主题簇与编辑日历、外链体检、llms.txt、改写成社媒稿。
+     * 和 SEO 与 GEO 共用担当人、搜索数据口与品牌信息；官方数据接口没关联账号时给 undefined（外链体检照实说）。
+     */
+    const seoPlan = createSeoPlan({
+      workspace_id: ws,
+      clock,
+      approvals,
+      holderOf,
+      work: { createMatter: (input) => work.createMatter(input) },
+      searchConsole: searchConsoleOf,
+      searchData: () => options.searchDataFor?.(ws) ?? searchData,
+      dataService: () => (ownCloud.linked() ? createDataService(ownCloud) : undefined),
+      brand: seoBrandInfo,
+      competitors: async () =>
+        ((await seoService.geoHistory()).watch()?.competitors ?? []).flatMap((c) => c.domains),
+      refreshCandidates: () => seoService.refreshCandidates(),
+      publishedPosts: async () => {
+        const changes = await txn.ledger.list({
+          workspace_id: ws,
+          kind: 'publish_post',
+          status: ['applied'],
+        })
+        const domain = (await seoBrandInfo()).domains[0]
+        return changes
+          .flatMap((c) => {
+            const after = (c.after ?? {}) as Record<string, unknown>
+            if (after.published !== true || typeof after.title !== 'string') return []
+            const handle = typeof after.handle === 'string' ? after.handle : undefined
+            const blog = typeof after.blog_handle === 'string' ? after.blog_handle : 'news'
+            const url =
+              typeof after.url === 'string'
+                ? after.url
+                : handle !== undefined && domain !== undefined
+                  ? `https://${domain}/blogs/${blog}/${handle}`
+                  : undefined
+            return [
+              {
+                change_id: c.id,
+                title: after.title,
+                published_at: c.apply?.at ?? c.updated_at,
+                ...(url === undefined ? {} : { url }),
+                ...(typeof after.body === 'string' ? { body: after.body } : {}),
+              },
+            ]
+          })
+          .sort((a, b) => b.published_at.localeCompare(a.published_at))
+      },
+      drafter: ({ actor, run_id }) => seoModel(actor, run_id),
+      siteUrls: () => siteHealth.sitemapUrls(),
+      llmsLive: () => siteHealth.latest()?.llms_txt,
+      perDay: () => {
+        const a = roles.roles.get('dtc.content')?.actions.find((x) => x.id === 'stage_publish_post')
+        const cap = a?.mandate.caps.max_posts_per_day
+        return typeof cap === 'number' ? cap : 2
+      },
+      event: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'seo_plan' },
+          subject: { type: 'seo_plan', id: ws },
+          correlation: { trace_id: `tr_seo_plan_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+      ...(dir === undefined ? {} : { dir }),
+    })
     /*
      * WP69（54 §1 / §3）岗位面：与这个品牌的 `Work` 绑在一起建（事项与 Run 都落在它里面）。
      *
@@ -11233,6 +11310,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       b2bOutbound,
       b2bSales,
       seoService,
+      // WP450：主题簇与编辑日历、外链体检、llms.txt、改写成社媒稿
+      seoPlan,
       // WP381：网站 / 商品体检与 AI 来源流量
       siteHealth,
       // WP335：品牌分析认品类用的模型口（与内容与搜索同一个口）
@@ -11567,6 +11646,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return
     }
     await brand?.seoService.onDecided(item)
+    // WP450：主题簇卡批了 → 排进编辑日历
+    await brand?.seoPlan.onDecided(item)
   }
   /*
    * WP215（52 §4 收口）：每个品牌一套后台。装在品牌容器**之前**——每个品牌装配时就要拿到
@@ -12247,7 +12328,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP154：内容与搜索（这个品牌的 Search Console、订单与问题清单）
     registerSeo(s, {
       daily: async () => {
-        const one = await (await of()).seoService.daily()
+        const b = await of()
+        const one = await b.seoService.daily()
+        // WP450：到日子的编辑日历开写作事项；外链体检到期（每月一次，可关）顺手跑。都不挡每日判断
+        await b.seoPlan.tickCalendar().catch(() => undefined)
+        await b.seoPlan.backlinkDue().catch(() => undefined)
         return {
           brands: 1,
           picks: one.picks,
@@ -16342,6 +16427,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   }
   const seoPort: SeoPort = {
+    // WP450：编辑日历、出一组主题、外链体检、llms.txt、改写成社媒稿（请求人所在品牌）
+    calendar: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.calendarView(),
+    planClusters: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.planClusters(),
+    backlinks: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.backlinkView(),
+    setBacklinks: async (actor, patch) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.setBacklinkSettings(patch),
+    runBacklinks: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.backlinkAudit('manual'),
+    llmsTxt: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.llmsView(),
+    generateLlmsTxt: async (actor, input) => {
+      try {
+        return await (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.llmsGenerate(
+          input,
+        )
+      } catch (err) {
+        throw new ApiError('invalid_input', err instanceof Error ? err.message : String(err))
+      }
+    },
+    repurpose: async (actor, input) => {
+      try {
+        return await (await brandModules.forWorkspace(actor.workspace_id)).seoPlan.repurpose({
+          ...(input.change_id === undefined ? {} : { change_id: input.change_id }),
+          ...(input.title === undefined ? {} : { title: input.title }),
+          ...(input.body === undefined ? {} : { body: input.body }),
+          ...(input.url === undefined ? {} : { url: input.url }),
+          ...(input.channels === undefined ? {} : { channels: input.channels }),
+        })
+      } catch (err) {
+        throw new ApiError('invalid_input', err instanceof Error ? err.message : String(err))
+      }
+    },
     geoQuestions: async (actor) =>
       (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoView(),
     setGeoQuestions: async (actor, input) => {

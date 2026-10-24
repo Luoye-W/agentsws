@@ -8,7 +8,7 @@
  * 搜索结果故意凑成：一个总页（「usb c charger」，「best usb c charger」和它前 10 名重叠 7 个、并成同一篇）+ 两个小组
  * （GaN 两篇重叠 ≥ 4、笔记本瓦数两篇重叠 ≥ 4）+ 一个和谁都不重叠的词 + 一个品牌词——一组主题的样子一眼看得出来。
  */
-import type { DataCallResult, SeoClusterKeyword } from '@agentsws/contracts'
+import type { DataCallResult, SerpResult, SeoClusterKeyword } from '@agentsws/contracts'
 
 const R = (n: number): string => `https://retail-${String(n)}.example/usb-c-chargers`
 const B = (n: number): string => `https://review-${String(n)}.example/best-chargers`
@@ -191,3 +191,43 @@ export const BACKLINK_SAMPLE_COMPETITORS: ReadonlyMap<string, DataCallResult> = 
     ),
   ],
 ])
+
+/**
+ * 搜索数据替身用的样本（`standInSearchData({ serp })`）：每个词一页结果、每次 0.2 积分（示意价）；
+ * 品类词「usb c charger」那一页的「大家还问」= 其余几个候选词。
+ */
+export function planSampleSerp(): Record<string, Omit<SerpResult, 'query'>> {
+  const out: Record<string, Omit<SerpResult, 'query'>> = {}
+  for (const [k, urls] of PLAN_SAMPLE_SERPS)
+    out[k] = {
+      items: urls.map((url, i) => ({
+        position: i + 1,
+        url,
+        domain: new URL(url).hostname,
+        title: `Result ${String(i + 1)}`,
+        type: 'organic' as const,
+      })),
+      ...(k === 'usb c charger'
+        ? {
+            people_also_ask: PLAN_SAMPLE_KEYWORDS.map((x) => x.keyword).filter(
+              (x) => x !== 'usb c charger',
+            ),
+          }
+        : {}),
+      fetched_at: at,
+      source: 'official',
+      credits: 0.2,
+    }
+  return out
+}
+
+/** 录好的回包：关键词概况（量是编的估算）。 */
+export const PLAN_SAMPLE_OVERVIEW: DataCallResult = call(
+  'seo.keyword_overview',
+  PLAN_SAMPLE_KEYWORDS.filter((k) => k.volume !== undefined).map((k) => ({
+    keyword: k.keyword,
+    search_volume: k.volume,
+    estimate: true,
+  })),
+  0.88,
+)

@@ -127,7 +127,9 @@ const STRUCTURE_PATH =
 export function checkLlmsTxt(input: {
   url: string
   origin: string
-  fetched: { status: number; body?: string; content_type?: string } | undefined
+  fetched:
+    | { status: number; body?: string; content_type?: string; final_url?: string }
+    | undefined
   expected: readonly string[]
   known?: ReadonlySet<string>
   at: string
@@ -149,7 +151,11 @@ export function checkLlmsTxt(input: {
   }
   if (reasons.length > 0) return { ...base, state: 'invalid', reasons }
   const generated_by: 'shopify' | 'custom' =
-    /\/agents\.md\b/i.test(body) || /\b(ucp|mcp)\b/i.test(body) ? 'shopify' : 'custom'
+    /\/agents\.md$/i.test(f.final_url ?? '') ||
+    /\/agents\.md\b/i.test(body) ||
+    /\b(ucp|mcp)\b/i.test(body)
+      ? 'shopify'
+      : 'custom'
   const have = new Set(
     llmsLinks(body)
       .map((u) => pathOf(u, input.origin))

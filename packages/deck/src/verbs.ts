@@ -259,6 +259,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   // WP224：本周经营一页纸
   weekly_review: 'weekly_review',
   seo_topic: 'seo_topic',
+  // WP450：主题簇
+  seo_cluster: 'seo_cluster',
   digest: 'digest',
   // WP171（docs/84 §11.3）：改收款账户红卡
   b2b_fraud_alert: 'fraud_alert',
