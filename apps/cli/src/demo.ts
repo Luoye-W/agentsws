@@ -294,6 +294,10 @@ export interface DemoOptions {
     'knowledgeLearnMail' | 'knowledgeLearnModel' | 'knowledgeSiteFetch'
   >
   /**
+   * WP502（决策 1760 B）：存入红人池时取红人图片的下载器（截图脚本注入一个本地假下载器；不给 = demo 不下载、不出网）。
+   */
+  kolMedia?: ServerOptions['kolMedia']
+  /**
    * WP66（52 O1）：多造一个品牌，用来看"一个进程装多套品牌模块"长什么样。
    *
    * **默认不造**（`false`）：demo 的本分是把一个品牌的活演完整，多一个品牌只会
@@ -1723,6 +1727,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     random: world.random,
     mount,
     ...(options.knowledgeLearn ?? {}),
+    ...(options.kolMedia === undefined ? {} : { kolMedia: options.kolMedia }),
     ...(options.execution === undefined ? {} : { execution: options.execution }),
     competitorAdapters: () => ({ shop_catalog: competitorShop }),
     // WP393：自家店的几件商品（比价用；demo 不连真店）；探平台不出网（demo 竞品都是 `.example` 保留域）
