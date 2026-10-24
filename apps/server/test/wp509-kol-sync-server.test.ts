@@ -188,7 +188,6 @@ describe('WP509 × 真服务', () => {
       method: 'POST',
       body: JSON.stringify({
         action: 'approve',
-        selected_option_id: 'start',
         edited_payload: card?.payload,
         via: 'workstation',
       }),

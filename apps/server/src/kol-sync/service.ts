@@ -328,7 +328,6 @@ export interface KolSyncCardPayload {
   allow_new_options: boolean
   counts: { table_rows: number; in_scope: number; matched: number; to_append: number }
   preview: [string, string][]
-  options: { id: string; label: string }[]
   actor: KolActor
 }
 
@@ -692,10 +691,6 @@ function createCardSide(
       allow_new_options: false,
       counts,
       preview,
-      options: [
-        { id: 'start', label: '开始同步' },
-        { id: 'cancel', label: '不用' },
-      ],
       actor,
     }
     const summary = [
@@ -727,7 +722,8 @@ function createCardSide(
       automation: { level_at_creation: 'L1' },
       routing: routing(actor),
       priority: 'queue',
-      options: payload.options,
+      // 不挂选项列表：挂了，工作台「批」那一跳会拿卡上原样那一份顶掉人改过的（选择题卡的规矩）；
+      // 「开始同步」= 批（带着卡上改过的那一份）；不想要就「稍后」、放着过期（没批的同步一格不写）
     })
     const saved = store.sink(sink.id) ?? sink
     store.putSink(

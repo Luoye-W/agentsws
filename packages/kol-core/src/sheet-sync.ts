@@ -117,7 +117,7 @@ const FROM_SHEET: Partial<Record<SheetField, SyncField>> = {
   amount: 'amount',
   currency: 'currency',
   date: 'stage_date',
-  notes: 'progress',
+  // 「备注」不自动当「最新进展」：那是用户自己写的话，覆盖掉就丢了（要写进展，用户在卡上指一下）
   content_url: 'content_url',
 }
 

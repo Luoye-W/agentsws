@@ -58,7 +58,7 @@ export function fakeFeishuHtml(token: string, t: FakeTable): string {
 <style>body{margin:0;font-family:system-ui;background:#fff} header{height:44px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid #ddd;gap:12px}
 #c{display:block} #add{margin:6px 0 0 40px;border:0;background:none;color:#3370ff;font-size:13px;cursor:pointer} #edit{position:absolute;display:none;border:2px solid #3370ff;background:#fff;font:13px system-ui;padding:6px}</style></head>
 <body><header><b>${t.title}</b><span>${t.kind === 'bitable' ? '多维表格 · 表格视图' : '电子表格'}</span></header>
-<canvas id="c" width="900" height="480"></canvas>${t.addButton === true ? '<button id="add" type="button">+ 添加记录</button>' : ''}<div id="edit"></div>
+<canvas id="c" width="900" height="480"></canvas><textarea id="sink" aria-hidden="true" style="position:fixed;left:-9999px;top:0;width:10px;height:10px;opacity:0"></textarea>${t.addButton === true ? '<button id="add" type="button">+ 添加记录</button>' : ''}<div id="edit"></div>
 <script>
 const TOKEN = ${JSON.stringify(token)};
 const S = ${esc(JSON.stringify(t))};
@@ -93,7 +93,12 @@ function draw() {
   if (editing && sel) { const rc = cv.getBoundingClientRect(); ed.style.display = 'block'; ed.style.left = rc.left + X0 + sel.c * CW + 'px'; ed.style.top = rc.top + window.scrollY + H0 + (sel.r - scrollRow) * RH + 'px'; ed.textContent = buf; } else ed.style.display = 'none';
 }
 const keepVisible = () => { if (!sel) return; if (sel.r < scrollRow) scrollRow = sel.r; if (sel.r >= scrollRow + visibleRows()) scrollRow = sel.r - visibleRows() + 1; };
+// 画布表格的老办法：点格子时把焦点放进一个看不见的输入框，里面留一个选中的字——原生复制 / 粘贴才会触发
+const sink = document.getElementById('sink');
+const arm = () => { sink.value = ' '; sink.focus(); sink.select(); };
 cv.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  setTimeout(arm, 0);
   const rc = cv.getBoundingClientRect();
   const x = e.clientX - rc.left, y = e.clientY - rc.top;
   if (y < H0 || x < X0) return;
@@ -116,7 +121,7 @@ document.addEventListener('keydown', (e) => {
   all = false;
   if (mod) { if (mv[0] < 0) sel.r = 0; if (mv[0] > 0) sel.r = last; if (mv[1] < 0) sel.c = 0; if (mv[1] > 0) sel.c = width() - 1; }
   else { sel.r = Math.min(Math.max(0, sel.r + mv[0]), rowCount() - 1); sel.c = Math.min(Math.max(0, sel.c + mv[1]), width() - 1); }
-  keepVisible(); draw(); e.preventDefault();
+  keepVisible(); draw(); e.preventDefault(); arm();
 });
 const tsv = (rows) => rows.map((r) => r.map((v) => (/[\\t\\n"]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v)).join('\\t')).join('\\n');
 document.addEventListener('copy', (e) => {
@@ -134,6 +139,7 @@ document.addEventListener('copy', (e) => {
     }
   } else e.clipboardData.setData('text/plain', String(cellOf(sel.r, sel.c)));
   e.preventDefault();
+  setTimeout(arm, 0);
 });
 const parse = (t) => { const out = []; let row = [], cell = '', q = false; t = t.replace(/\\r\\n?/g, '\\n'); for (let i = 0; i < t.length; i++) { const ch = t[i]; if (q) { if (ch === '"' && t[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') q = false; else cell += ch; continue; } if (ch === '"' && cell === '') q = true; else if (ch === '\\t') { row.push(cell); cell = ''; } else if (ch === '\\n') { row.push(cell); out.push(row); row = []; cell = ''; } else cell += ch; } if (cell !== '' || row.length) { row.push(cell); out.push(row); } return out; };
 document.addEventListener('paste', (e) => {
@@ -155,7 +161,7 @@ document.addEventListener('paste', (e) => {
     while (S.rows[r].length <= c) S.rows[r].push('');
     S.rows[r][c] = v;
   }));
-  save(); draw();
+  save(); draw(); setTimeout(arm, 0);
 });
 const add = document.getElementById('add');
 if (add) add.addEventListener('click', () => { snap(); S.rows.push(new Array(width()).fill('')); save(); draw(); });

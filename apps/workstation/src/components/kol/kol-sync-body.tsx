@@ -100,7 +100,6 @@ export function KolSyncBody({
           action: 'approve',
           version: card.version,
           via: 'workstation',
-          selected_option_id: 'start',
           edited_payload: {
             ...payload,
             columns: payload.columns.map((c) => ({ name: c.name, field: fields[c.name] ?? null })),

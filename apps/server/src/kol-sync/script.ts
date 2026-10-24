@@ -103,6 +103,11 @@ const wait = (ms) => page.waitForTimeout(ms);
 const report = { kind: CFG.kind, header: [], before_rows: [], after_rows: [], mutations: 0, tactic: undefined };
 const done = async (state, why, extra) => {
   let closed = false;
+  if (CFG.shot && page) {
+    try {
+      await page.screenshot({ path: CFG.shot });
+    } catch {}
+  }
   if (task && state !== "needs_human") {
     try {
       await task.finish({ keep: [] });

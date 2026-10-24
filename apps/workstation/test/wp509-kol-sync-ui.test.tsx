@@ -109,7 +109,7 @@ describe('WP509 同步设置卡', () => {
       edited_payload: Record<string, unknown>
     }
     expect(body.action).toBe('approve')
-    expect(body.selected_option_id).toBe('start')
+    expect(body.selected_option_id).toBeUndefined()
     expect(body.edited_payload.columns).toContainEqual({ name: '我也不知道', field: 'tags' })
     expect(body.edited_payload.what).toEqual({
       new_creators: false,
