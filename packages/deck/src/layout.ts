@@ -101,6 +101,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   weekly_review: 'aftermath',
   // WP154：这个词写不写一页——一道是非题
   seo_topic: 'choice',
+  // WP450：一组主题（总页 + 分页 + 内链 + 排到哪天）——「改东西」家族：就这样 / 去掉几篇再批 / 不要
+  seo_cluster: 'change',
   system_alert: 'aftermath',
   digest: 'aftermath',
   // WP171（docs/84 §11.3）：改收款账户的红卡——信里的原话 + 为什么可疑，人去打电话核实

@@ -560,6 +560,8 @@ describe('积木', () => {
       'kol-library',
       'knowledge-library',
       'brand-assets-library',
+      // WP450：编辑日历（只在有 SEO 与 GEO / 内容与博客的岗位出）
+      'seo-plan',
       'reports',
       'outputs',
       'connections',

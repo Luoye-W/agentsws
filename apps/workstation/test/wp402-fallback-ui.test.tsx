@@ -210,9 +210,9 @@ describe('WP402 · 决策 1132：第七张卡「工坊服务」留着', () => {
     ensureBuiltinPanels()
     const ids = listRailCards().map((c) => c.id)
     expect(ids.at(-1)).toBe('workshop-services')
-    // WP504：多了三张库卡（红人库 / 知识库 / 素材，只在用它的岗位出），原来那 7 张不变
-    expect(ids).toHaveLength(10)
-    expect(ids.filter((id) => !id.endsWith('-library'))).toHaveLength(7)
+    // WP504：多了三张库卡（红人库 / 知识库 / 素材，只在用它的岗位出）；WP450 多一张「编辑日历」（同理），原来那 7 张不变
+    expect(ids).toHaveLength(11)
+    expect(ids.filter((id) => !id.endsWith('-library') && id !== 'seo-plan')).toHaveLength(7)
     expect(listRailCards(['workshop-services'])[0]?.id).toBe('workshop-services')
     expect(cardOpen({}, 'workshop-services')).toBe(false)
   })

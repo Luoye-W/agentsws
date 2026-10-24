@@ -36,6 +36,13 @@ This product includes software developed by third parties under their own licens
   https://github.com/AgriciDaniel/claude-ads @ fc3908e786c318776df89a3a098333da377364be: ads/references/*-audit.md, skills/ads-test,
   ads-math, ads-landing, ads-creative, ads-monitor, ads-attribution, ads-apple -> packages/ads-core/src/{exports/audit-skeleton,
   experiment-design,economics,landing,fatigue}.ts and packages/skills/bundled/{ads-experiment,ads-attribution}/SKILL.md (WP452)
+- Methods adapted (ideas only, no code imported) from AgriciDaniel/claude-seo @ 4b99de2f7de7e7d5247042e5fb5b4ea9368ef734
+  (MIT): skills/seo-cluster (SERP-overlap thresholds 7/4/2, pillar choice, link matrix), seo-backlinks (anchor classes,
+  15% exact-match review line, referring-domain gap), seo-agentic (llms.txt structure and checks) ->
+  packages/seo-core/src/{cluster,backlinks,llms-txt}.ts (WP450)
+- Methods adapted (ideas only, no code imported) from AgriciDaniel/claude-blog @ 354442348815a7f0327077ad89af2c43cf4b4ab4
+  (MIT): skills/blog-cluster, blog-calendar, blog-strategy (pillar first, cadence, refresh list), blog-repurpose
+  (per-platform formats, "never invent experiences or numbers") -> packages/seo-core/src/{cluster,repurpose}.ts (WP450)
 - @adobe/structured-data-validator (Apache-2.0, Copyright 2025 Adobe) - https://github.com/adobe/structured-data-validator
   (Google rich-result checks for structured data in the site technical audit, packages/site-core; npm dependency, unmodified)
 See each package's LICENSE for details.

@@ -81,6 +81,7 @@ import type { RedditWriteService } from './reddit-write/service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SearchDataService } from './search-data.js'
 import type { SecretStore } from './secret-store.js'
+import type { SeoPlanAssembly } from './seo-plan.js'
 import type { SeoServiceAssembly } from './seo-service.js'
 import type { SiteServiceAssembly, SiteStore } from './site.js'
 import type { SiteHealthService } from './site-health.js'
@@ -289,6 +290,8 @@ export interface BrandModuleSet {
    * 这个品牌的目录下。
    */
   seoService: SeoServiceAssembly
+  /** WP450：主题簇与编辑日历、外链体检、llms.txt、改写成社媒稿。 */
+  seoPlan: SeoPlanAssembly
   /** WP381：这个品牌的网站 / 商品体检与 AI 来源流量（`site-health.json` 落在这个品牌的目录下）。 */
   siteHealth?: SiteHealthService
   /**
