@@ -40,9 +40,10 @@ import {
   Wrench,
 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { CountBadge } from '@/components/design/kit'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { intentFromSearch, setLibraryIntent } from '@/components/library/library-intent'
 import { type ColumnsLayout, columnsLayout, useShellSize } from '@/components/rail/board-fit'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
@@ -153,7 +154,7 @@ function useColumns(): ColumnsLayout & {
     rail.open === null || rail.open === RAIL_CARDS ? undefined : resolvePanelId(rail.open).id
   const thirdOpen = openId !== undefined && panelType(openId) !== undefined
   // 报表那两格至少 560 宽（right-pane.ts），按它要的宽度算挤不挤得下
-  const want = thirdOpen ? paneWidth(openId, rail.width) : null
+  const want = thirdOpen ? paneWidth(openId, rail.width, panelType(openId)?.minWidth) : null
   const layout = columnsLayout({
     size,
     third: mode === 'pending' ? null : want,
@@ -423,6 +424,7 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
   useSidePaneSync(cols.want)
   // WP353：联网搜索被人机验证拦下、要人点时，自动打开「浏览器」（平时静默，不弹）
   useOpenBrowserOnHandover()
+  useOpenPanelFromSearch()
   const ctx = useRailContext(instances)
   /**
    * WP431：卡片列只在岗位 / 职责 / 事项页上有；第三栏（浏览器、变更审阅、「显示更多」那一格……）哪儿都能开。
@@ -485,7 +487,7 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
   }, [setWidth, plain])
 
   // WP437：报表那两格至少 560 宽（人拖得更宽照旧）
-  const width = paneWidth(definition?.id, plain)
+  const width = paneWidth(definition?.id, plain, definition?.minWidth)
   const scoped = definition?.scoped === true
   const body: RailPanelBodyProps = {
     ...(scope === undefined ? {} : { scope }),
@@ -683,6 +685,35 @@ export function RailHost({ instances }: { instances?: PositionInstanceData[] }):
       {panel}
     </>
   )
+}
+
+/**
+ * WP504：地址栏带 `?panel=<面板 id>`（旧整页路由跳过来的：`/influencer/creators` → 岗位页 `?panel=kol-library&creator=…`）
+ * → 在第三栏开那一格，`tab` / `item` / 其余参数交给那个面板（`library-intent.ts`），然后从地址栏收掉这一组。
+ * 在外壳里做，所以哪一页都认（没有红人营销岗位时跳首页也开得出那一格）。
+ */
+function useOpenPanelFromSearch(): void {
+  const rail = useRailState()
+  const location = useLocation()
+  const navigate = useNavigate()
+  /** 同一个地址只认一次（地址栏收回去之前这一格可能再渲染几次）。 */
+  const handled = useRef('')
+  useEffect(() => {
+    const search = new URLSearchParams(location.search)
+    const hit = intentFromSearch(search)
+    const key = `${location.pathname}?${location.search}`
+    if (hit === undefined || handled.current === key) return
+    handled.current = key
+    setLibraryIntent(hit.panel, hit.intent)
+    rail.show(hit.panel)
+    for (const key of ['panel', 'tab', 'item', ...Object.keys(hit.intent.params ?? {})])
+      search.delete(key)
+    const rest = search.toString()
+    void navigate(
+      { pathname: location.pathname, search: rest === '' ? '' : `?${rest}` },
+      { replace: true },
+    )
+  }, [location.search, location.pathname, navigate, rail])
 }
 
 /**

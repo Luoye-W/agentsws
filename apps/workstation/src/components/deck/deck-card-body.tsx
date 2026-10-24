@@ -21,8 +21,10 @@ import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { openExternal } from '@/components/connections/bridge'
 import { DigestCardBody } from '@/components/content-updates/digest-card-body'
 import {
+  isKolOutreachBatchPayload,
   isKolOutreachPayload,
   isKolReviewPayload,
+  KolOutreachBatchBody,
   KolOutreachBody,
   KolReviewBody,
 } from '@/components/kol/kol-card-bodies'
@@ -807,6 +809,8 @@ export function DeckCardBody({
         // WP442：催促卡——「X 还没回」：你哪天发的、催促草稿（就地修改）、「发出」在卡身里
         if (isFollowUpNudgePayload(payload))
           return <FollowUpCardBody card={card} payload={payload} />
+        // WP504（决策 1777 A）：批量开发信——名单、发件 / 信 / 节奏 / 跳过、样信（F3）
+        if (isKolOutreachBatchPayload(payload)) return <KolOutreachBatchBody payload={payload} />
         // WP416：红人开发信——卡面直接放正文（前 6 行可展开）与要先看一眼的几句
         if (isKolOutreachPayload(payload)) return <KolOutreachBody payload={payload} />
         return (

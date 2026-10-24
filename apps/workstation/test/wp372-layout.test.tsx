@@ -556,6 +556,10 @@ describe('积木', () => {
     expect(listRailCards(['plans', 'nope', 'plans']).map((c) => c.id)).toEqual([
       'plans',
       'conversations',
+      // WP504：三张库卡默认排在「对话」后面（只在用它的岗位出——那是 `available` 的事，这里不带页面）
+      'kol-library',
+      'knowledge-library',
+      'brand-assets-library',
       'reports',
       'outputs',
       'connections',

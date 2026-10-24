@@ -380,6 +380,7 @@ export function describeKolRun(input: {
 export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
   search_creators: '红人库',
   get_creator: '红人资料',
+  tag_creators: '红人标签',
   list_collaborations: '合作清单',
   list_deliverables: '交付物清单',
   list_tracked_links: '归因',
@@ -411,6 +412,7 @@ const BUDGET_ZH: Readonly<Record<string, string>> = {
 export const KOL_TOOL_ACTION_ZH: Readonly<Record<string, string>> = {
   search_creators: '找人',
   get_creator: '看这个人的资料',
+  tag_creators: '打标签',
   list_collaborations: '看合作清单',
   list_deliverables: '看交付物',
   list_tracked_links: '看归因',

@@ -832,6 +832,8 @@ export const openMatterAtPosition = (
     model_effort?: string
     /** WP357：附上的资料（base64；服务端按助理那套读成文字） */
     files?: { name: string; data: string }[]
+    /** WP504（决策 1775 A）：第三栏「问 AI」引用的卡（结构化摘要，服务端记在这句话上交给模型）。 */
+    context?: ContextRefInput[]
   },
 ): Promise<OpenAtPositionData> =>
   api<OpenAtPositionData>(`/v1/positions/${encodeURIComponent(id)}/matters`, {
@@ -1254,11 +1256,28 @@ export const postMatterMessage = (
   text: string,
   /** WP357：这句话附上的资料（base64；服务端按助理那套读成文字） */
   files?: { name: string; data: string }[],
+  /** WP504：第三栏「问 AI」引用的卡（结构化摘要）。 */
+  context?: ContextRefInput[],
 ): Promise<{ event: MatterEvent; run_id?: string }> =>
   api(`/v1/matters/${encodeURIComponent(id)}/messages`, {
     method: 'POST',
-    body: files === undefined || files.length === 0 ? { text } : { text, files },
+    body: {
+      text,
+      ...(files === undefined || files.length === 0 ? {} : { files }),
+      ...(context === undefined || context.length === 0 ? {} : { context }),
+    },
   })
+
+/**
+ * WP504（决策 1775 A）：一张被引用的卡交给服务端的样子——是什么、叫什么、一排「字段：值」。
+ * 服务端把它记在那句话上（像附件那样围起来），运行拿到「话 + 引用的卡」。
+ */
+export interface ContextRefInput {
+  kind: string
+  id: string
+  label: string
+  facts: { k: string; v: string }[]
+}
 
 /** WP341（决策 847）：对话里点了「调工具」的 genui 按钮（只读当场跑；会改外部的出卡、挂进这件事的时间线）。 */
 export const runGenuiTool = (id: string, input: GenuiToolInput): Promise<GenuiToolOutcome> =>
@@ -5629,7 +5648,25 @@ export interface KolCreatorRowData {
     segments: KolStageSegmentData[]
     dwell_days?: number
   }
+  /** WP502（1760 B）：缓存到本机的头像（同源地址，要登录令牌）。没缓存到就没有。 */
+  avatar_media_url?: string
+  /** WP502（1763 B）：人工标签。 */
+  tags?: string[]
+  /** WP502（1763 B）：人工审核决定（没有 = 待审）。 */
+  review?: KolCreatorReviewData
+  /** WP504（1777 A）：在一张还没定的批量开发信卡上（卡上标「等你确认」）。 */
+  awaiting_confirm?: boolean
 }
+
+/** WP502（1763 B）：人工审核决定——通过 / 淘汰，一句理由可选。 */
+export interface KolCreatorReviewData {
+  decision: 'approved' | 'rejected'
+  reason?: string
+  decided_at: string
+}
+
+/** WP502：候选池按审核决定筛。 */
+export type KolReviewFilter = 'approved' | 'rejected' | 'pending'
 
 /** WP302：分段进度条的一段（服务端用 kol-core 算好）。 */
 export interface KolStageSegmentData {
@@ -5695,6 +5732,10 @@ export interface KolCreatorDetailData {
   checks?: Record<string, KolCreatorChecksData>
   /** WP500：「采集后自动评分」跑过的云端体检（WP131）。没有就没有。 */
   audit?: { health: number; findings: string[]; at: string }
+  /** WP502（1763 B）：人工标签（只在本机）。 */
+  tags?: string[]
+  /** WP502（1763 B）：人工审核决定（没有 = 待审）。 */
+  review?: KolCreatorReviewData
 }
 
 /** WP500：一个账号的几项估算（插件那几份算法，服务端算好；都是公开页面上的数推出来的）。 */
@@ -5736,6 +5777,9 @@ export interface KolCreatorProfileData {
   bio?: string
   avatar_url?: string
   banner_url?: string
+  /** WP502（1760 B）：缓存到本机的头像 / 横幅（同源地址，要登录令牌）。 */
+  avatar_media_url?: string
+  banner_media_url?: string
   recent_items?: {
     title: string
     views?: number
@@ -5744,6 +5788,12 @@ export interface KolCreatorProfileData {
     comments?: number
     published_at?: string
     published_text?: string
+    /** 外站封面地址（只记着，界面不加载）。 */
+    thumbnail_url?: string
+    /** WP502（1760 B）：缓存到本机的封面（同源地址）。 */
+    thumbnail_media_url?: string
+    /** WP502（1764 B）：原作品链接。 */
+    url?: string
   }[]
 }
 
@@ -5941,20 +5991,68 @@ export interface KolMergeSuggestionData {
 }
 
 export const getKolCreators = (
-  filter: { channel?: KolChannelId; q?: string; batch?: string } = {},
+  filter: {
+    channel?: KolChannelId
+    q?: string
+    batch?: string
+    /** WP502：按人工标签 / 审核决定筛。 */
+    tag?: string
+    review?: KolReviewFilter
+  } = {},
   assignment?: string,
-): Promise<{ rows: KolCreatorRowData[] }> => {
+): Promise<{ rows: KolCreatorRowData[]; tags?: string[] }> => {
   const q = new URLSearchParams()
   if (filter.channel !== undefined) q.set('channel', filter.channel)
   if (filter.q !== undefined && filter.q !== '') q.set('q', filter.q)
   // WP131：插件「回作战室看这批」——只看这一次列表采集收进来的人
   if (filter.batch !== undefined && filter.batch !== '') q.set('batch', filter.batch)
+  if (filter.tag !== undefined && filter.tag !== '') q.set('tag', filter.tag)
+  if (filter.review !== undefined) q.set('review', filter.review)
   const s = q.toString()
   return api(`/v1/kol/creators${s === '' ? '' : `?${s}`}`, withAssignment(assignment))
 }
 
 export const getKolCreator = (id: string, assignment?: string): Promise<KolCreatorDetailData> =>
   api(`/v1/kol/creators/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+/** WP502（1763 B）：整组换掉一个红人的人工标签。 */
+export const setKolCreatorTags = (
+  id: string,
+  tags: string[],
+  assignment?: string,
+): Promise<KolCreatorDetailData> =>
+  api(`/v1/kol/creators/${encodeURIComponent(id)}/tags`, {
+    method: 'PUT',
+    body: { tags },
+    ...withAssignment(assignment),
+  })
+
+/** WP502（1763 B）：人工审核——通过 / 淘汰（理由可选）/ 重置为待审。 */
+export const reviewKolCreator = (
+  id: string,
+  input: { decision: 'approved' | 'rejected' | 'pending'; reason?: string },
+  assignment?: string,
+): Promise<KolCreatorDetailData> =>
+  api(`/v1/kol/creators/${encodeURIComponent(id)}/review`, {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/**
+ * WP502（1760 B）：取一张缓存在本机的红人图片（`/v1/kol/media/<id>`），换成页面内的 `blob:` 地址。
+ * 带令牌与分配头，`<img src>` 带不了——同素材库那一张图的做法（`brandAssetObjectUrl`）。
+ */
+export async function kolMediaObjectUrl(media_url: string, assignment?: string): Promise<string> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  const asg = assignment ?? currentAssignment
+  if (asg !== null) headers.set('X-Assignment', asg)
+  const res = await fetch(media_url, { headers })
+  if (!res.ok) throw new ApiClientError(res.status, { code: 'not_found', message: '' } as never)
+  return URL.createObjectURL(await res.blob())
+}
 
 export const searchKolCreators = (
   input: { channel: KolChannelId; q: string },
@@ -6007,6 +6105,29 @@ export const draftKolOutreach = (
   assignment?: string,
 ): Promise<KolOutreachData> =>
   api('/v1/kol/outreach', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+/** WP504（决策 1777 A）：批量开发信——只出一张确认卡（`kol_outreach_batch`），批了才逐个发。 */
+export interface KolOutreachBatchData {
+  ok: boolean
+  approval_item_id?: string
+  batch_id?: string
+  sending: { creator_id: string; display_name: string }[]
+  skipped: { creator_id: string; display_name: string; reason: string }[]
+  /** 没出卡时那一句人话。 */
+  message?: string
+}
+
+export const batchKolOutreach = (
+  input: {
+    channel: KolChannelId
+    creator_ids: string[]
+    /** 想聊的产品；不给用存过的默认值。 */
+    product?: string
+    brand_pitch?: string
+  },
+  assignment?: string,
+): Promise<KolOutreachBatchData> =>
+  api('/v1/kol/outreach/batch', { method: 'POST', body: input, ...withAssignment(assignment) })
 
 export const getKolCollaborations = (
   filter: { channel?: KolChannelId } = {},
@@ -6145,6 +6266,8 @@ export const planKolCampaign = (
     channels: KolChannelId[]
     headcount: number
     criteria?: { category?: string }
+    /** WP504：库里多选「移入活动」的那批人——清单只在这几个人里挑。 */
+    creator_ids?: string[]
   },
   assignment?: string,
 ): Promise<KolCampaignData> =>

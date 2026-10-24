@@ -19,16 +19,21 @@
  *   主页链接放在底下而不是 handle 上：上半张卡整块是「点开详情」的按钮，按钮里不能再套链接。
  * - 三格判断色块（KOLAgents §3「这一条不能砍」）在一行三张卡的宽度（约 300px）下也出：窄到 18rem 以下才退成一行字
  *   （WP416 原来是 20rem，桌面一行三张时三格全退成了一行字）。
+ *
+ * WP502：头像换成存入时缓存到本机的那张（决策 1760 B，没缓存到照旧一个字）；名字下面一行是人自己打的标签
+ * （前 3 个 + 「+N」，一行锁死——KOLAgents「Operator labels」那一行），底下一排补「已通过 / 已淘汰」（1763 B；
+ * 待审不画，只把定过的那几个标出来）。
  */
 import { ExternalLink, Mail, MailX } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
-import { WsAvatar } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { KolCreatorRowData, KolJudgementLevel } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
+import { CreatorAvatar } from './creator-media'
+import { ReviewBadge } from './creator-review'
 import { CHANNEL_SERVICE } from './kol-channel'
 import { CollabProgress } from './segmented-progress'
 
@@ -75,8 +80,15 @@ const NEXT_BY_STAGE: Readonly<Record<string, NextStep>> = {
   declined: 'view',
 }
 
-/** 这张卡的主按钮。数不可信的先人工看；还没合作的起草开发信。 */
-export function nextStepOf(row: Pick<KolCreatorRowData, 'blocked' | 'collab'>): NextStep {
+/**
+ * 这张卡的主按钮。数不可信的先人工看；还没合作的起草开发信。
+ * WP505（决策 1773 B）：人点过「淘汰」的，还没合作时主按钮是「看看」（打开详情），不再催起草开发信；
+ * 已经在谈的合作照旧按阶段走（淘汰只是标记，进行中的事不替人停）。
+ */
+export function nextStepOf(
+  row: Pick<KolCreatorRowData, 'blocked' | 'collab'> & Partial<Pick<KolCreatorRowData, 'review'>>,
+): NextStep {
+  if (row.collab === undefined && row.review?.decision === 'rejected') return 'view'
   if (row.blocked !== undefined) return 'blocked'
   if (row.collab === undefined) return 'draft'
   return NEXT_BY_STAGE[row.collab.stage] ?? 'view'
@@ -189,16 +201,25 @@ function Stat({
 export function CreatorCard({
   row,
   handle,
+  assignment,
   onOpen,
   onNext,
+  as: Tag = 'li',
+  leading,
 }: {
   row: KolCreatorRowData
+  /** 取本机缓存的头像要带的分配（不给就用当前那条）。 */
+  assignment?: string
   /** 显示用的 `@handle`（调用方统一过 `@`）。 */
   handle: string
   /** 点卡：打开详情。 */
   onOpen: () => void
   /** 点主按钮。 */
   onNext: (step: NextStep) => void
+  /** WP504：在库面板里外面已经有一层 `<li>`（`LibraryItemFrame`），这里画成 `div`。 */
+  as?: 'li' | 'div'
+  /** WP504：名字前面那一格（多选时的勾）。 */
+  leading?: ReactNode
 }): ReactNode {
   const { t } = useApp()
   const step = nextStepOf(row)
@@ -207,13 +228,17 @@ export function CreatorCard({
   // 格子里写他做什么（「数码」）；没判的（没限类目 / 认不出）不画色块——中间分不是结论
   const catLevel = cat === undefined || cat.unknown === true ? undefined : levelOfFactor(cat.score)
   return (
-    <li
+    <Tag
       // WP416（自查 kol U1）：卡在窄的右栏里时（容器查询）只出一行「粉丝 · 互动」，三格数字不挤成一团
-      className="@container flex min-w-0 flex-col gap-2 rounded-[var(--ws-radius-card)] border bg-card p-2.5"
+      className="@container relative flex min-w-0 flex-col gap-2 rounded-[var(--ws-radius-card)] border bg-card p-2.5"
       data-testid="kol-creator-card"
       data-creator={row.creator_id}
       data-next={step}
     >
+      {/* WP504：多选时的勾放在卡左上角（不能套在下面那个按钮里） */}
+      {leading == null ? null : (
+        <span className="absolute top-3.5 left-3 z-10 flex">{leading}</span>
+      )}
       <button
         type="button"
         className="flex min-w-0 flex-col gap-2 rounded-sm text-left hover:bg-muted/50"
@@ -221,10 +246,12 @@ export function CreatorCard({
         data-creator={row.creator_id}
         onClick={onOpen}
       >
-        <span className="flex min-w-0 items-start gap-2">
-          <WsAvatar
+        <span className={cn('flex min-w-0 items-start gap-2', leading != null && 'pl-6')}>
+          <CreatorAvatar
             id={row.creator_id}
             name={row.display_name}
+            mediaUrl={row.avatar_media_url}
+            assignment={assignment}
             className="size-9 shrink-0 text-sm"
           />
           <span className="min-w-0 flex-1">
@@ -242,6 +269,29 @@ export function CreatorCard({
         {row.blocked === undefined ? null : (
           <span className="text-xs leading-snug text-ws-bad" data-testid="kol-blocked">
             {row.blocked}
+          </span>
+        )}
+        {/* 人自己打的标签：一行锁死，前 3 个 + 「+N」（全的在详情里） */}
+        {(row.tags ?? []).length === 0 ? null : (
+          <span
+            className="flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden"
+            data-testid="kol-card-tags"
+          >
+            {(row.tags ?? []).slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                title={tag}
+                className="min-w-0 shrink truncate rounded-full bg-muted px-1.5 text-xs leading-[1.5]"
+                data-testid="kol-card-tag"
+              >
+                {tag}
+              </span>
+            ))}
+            {(row.tags ?? []).length > 3 ? (
+              <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                {t('kol.tags.more', { n: (row.tags ?? []).length - 3 })}
+              </span>
+            ) : null}
           </span>
         )}
         <span
@@ -314,6 +364,22 @@ export function CreatorCard({
         >
           <ExternalLink className="size-3.5" aria-hidden />
         </a>
+        {/* WP504（1777 A）：在一张还没定的批量开发信卡上——标「等你确认」 */}
+        {row.awaiting_confirm === true ? (
+          <span
+            className="inline-flex h-5 items-center gap-1 rounded-full bg-ws-warn-bg px-1.5 text-xs font-medium text-ws-warn"
+            data-testid="kol-card-awaiting"
+          >
+            <i aria-hidden className="size-1.5 rounded-full bg-ws-warn" />
+            {t('library.awaiting')}
+          </span>
+        ) : null}
+        {/* WP502：定过的才标（通过 / 淘汰）；理由在悬停里 */}
+        {row.review === undefined ? null : (
+          <span title={row.review.reason} className="inline-flex">
+            <ReviewBadge review={row.review} />
+          </span>
+        )}
         {/* WP131：自动评分跑过的体检概括数（有才显示） */}
         {row.audit_health === undefined ? null : (
           <span className="text-xs text-muted-foreground" data-testid="kol-audit">
@@ -333,6 +399,6 @@ export function CreatorCard({
           {t(`kol.card.next.${step}`)}
         </Button>
       </span>
-    </li>
+    </Tag>
   )
 }

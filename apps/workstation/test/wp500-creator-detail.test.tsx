@@ -372,7 +372,7 @@ describe('WP500 红人详情（移植自 KOLAgents 红人信息卡）', () => {
 })
 
 describe('WP500 详情开在哪', () => {
-  it('有外壳：点卡开在第三栏（kol-creator 那一格），候选池原样留着', async () => {
+  it('有外壳：点卡开在第三栏（WP504 起是红人库那一格、详情叠在库上），候选池原样留着', async () => {
     const opened: unknown[] = []
     const unbind = bindRightPaneHost({
       open: (route) => {
@@ -393,7 +393,7 @@ describe('WP500 详情开在哪', () => {
       </>,
     )
     fireEvent.click((await screen.findAllByTestId('kol-library-row'))[0] as HTMLElement)
-    expect(opened).toEqual([{ panel: 'kol-creator' }])
+    expect(opened).toEqual([{ panel: 'kol-library' }])
     await waitFor(() => {
       expect(seen).toBe('cre_1')
     })

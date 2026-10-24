@@ -10,7 +10,9 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
-import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
+import { KOL_LIBRARY } from '@/components/kol/kol-library-status'
+import { channelOfRole } from '@/components/kol/kol-panel'
+import { openLibrary } from '@/components/library/library-intent'
 import { SITE_CHAT_HREF, SITE_CHAT_SETTINGS_HREF } from '@/components/messages/site-chat'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { OwnSubQueue } from '@/components/social/own-sub-queue'
@@ -54,6 +56,26 @@ export function ChatWindowEntry(): ReactNode {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+/** WP504：「快捷视图 · 红人」→ 在第三栏开红人库（那条渠道）。 */
+function KolLibraryEntry({ channel }: { channel: string }): ReactNode {
+  const { t } = useApp()
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="kol-library-entry">
+      <span className="text-ws-muted-fg">{t('kol.lib.moved')}</span>
+      <Button
+        size="sm"
+        variant="outline"
+        data-testid="kol-library-entry-open"
+        onClick={() => {
+          openLibrary(KOL_LIBRARY, { tab: 'creators', params: { channel } })
+        }}
+      >
+        {t('kol.lib.open')}
+      </Button>
+    </div>
   )
 }
 
@@ -104,10 +126,9 @@ function QuickBody({ view }: { view: QuickView }): ReactNode {
         <SocialBroadcast assignment={view.assignment_id} channel={social} />
       )
     case 'kol': {
+      // WP504（决策 1765 / 1778 A）：红人工作台搬进了红人库（第三栏）——这里只留一个进去的口子
       const channel = channelOfRole(view.role_id)
-      return channel === undefined ? null : (
-        <KolPanel assignment={view.assignment_id} channel={channel} />
-      )
+      return channel === undefined ? null : <KolLibraryEntry channel={channel} />
     }
     case 'reddit_watch':
       return <RedditWatch assignment={view.assignment_id} />

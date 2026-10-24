@@ -63,6 +63,14 @@ export type ApprovalKind =
    */
   | 'kol_campaign'
   /**
+   * WP504（决策 1777 A）：**红人批量开发信确认卡**——在红人库里多选、点「发开发信」出这一张。
+   *
+   * 对外发出、收不回，所以在中栏「要你处理」里问一次：名单、跳过谁和原因、样信、「发出 N 封」。
+   * 批了才按名单逐个起草并发出（每封仍走开发信那条账本路，额度 / 谢绝名单照旧）；不批什么都不发。
+   * payload = `{ form: 'kol_outreach_batch', channel, batch_id, creators, skipped, count, sample, letter, cadence, heads_up }`。
+   */
+  | 'kol_outreach_batch'
+  /**
    * WP144 / docs/80 §3：**电脑操控授权卡**。
    *
    * Agent 第一次要动这台电脑（或者遇到登录 / 密码 / 支付 / 验证码停下来请人接手）时出，

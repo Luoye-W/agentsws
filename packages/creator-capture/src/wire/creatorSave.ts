@@ -17,6 +17,7 @@
 import type { CreatorSnapshot, RecentItem } from '../kol/utils/creatorSnapshot.js'
 import type { PageObservation } from '../kol/utils/pageObservation.js'
 import { toWorkspacePayload } from '../kol/workspacePayload.js'
+import { contentUrlOf, derivedContentUrlOf } from './contentUrl.js'
 
 /** 近期作品一条（蛇形；全是页面上本来就渲染着的东西）。 */
 export interface CreatorSaveRecentItem {
@@ -28,6 +29,11 @@ export interface CreatorSaveRecentItem {
   published_at?: string
   published_text?: string
   thumbnail_url?: string
+  /**
+   * WP502（决策 1764 B，只加）：原作品链接（页面上读到的，读不到就从封面 / 短码推；推不出来不带）。
+   * 只认这个平台上的一条作品（`contentUrlOf`）。
+   */
+  url?: string
 }
 
 /** `POST /v1/extension/creators` 的请求体。 */
@@ -114,9 +120,17 @@ export function pluginCreatorSaveBodyOf(
 }
 
 /** 近期作品一条 → 蛇形（只带读到了的格子；标题空的不带）。 */
-function recentItemOf(item: RecentItem): CreatorSaveRecentItem | undefined {
+function recentItemOf(
+  item: RecentItem,
+  platform: string,
+  pageUrl: string | null | undefined,
+): CreatorSaveRecentItem | undefined {
   const title = item.title?.trim()
   if (!title) return undefined
+  // WP502（1764 B）：页面上读到的链接优先；读不到就从封面地址 / 短码推
+  const url =
+    contentUrlOf(pageUrl ?? undefined, platform) ??
+    derivedContentUrlOf(platform, { title, thumbnail_url: item.thumbnailUrl })
   return {
     title: title.slice(0, 300),
     ...(num(item.views) === undefined || (item.views as number) < 0
@@ -140,20 +154,26 @@ function recentItemOf(item: RecentItem): CreatorSaveRecentItem | undefined {
     ...(str(item.thumbnailUrl) === undefined || (item.thumbnailUrl as string).length > 600
       ? {}
       : { thumbnail_url: item.thumbnailUrl as string }),
+    ...(url === undefined ? {} : { url }),
   }
 }
 
 /**
  * 「存入红人池」的整份请求体：插件那一段 + 1740 B 多存的加入时间与近期作品。
- * `observedAt` = 这一刻（ISO 时间）。
+ * `observedAt` = 这一刻（ISO 时间）。`itemUrls`（WP502，1764 B）= 页面上读到的近期作品链接
+ * （`PageCapture.creator_item_urls`，与 `snap.recentItems` 一一对应）；不给就只靠推。
  */
-export function creatorSaveBodyOf(snap: CreatorSnapshot, observedAt: string): CreatorSaveBody {
+export function creatorSaveBodyOf(
+  snap: CreatorSnapshot,
+  observedAt: string,
+  itemUrls?: readonly (string | null)[],
+): CreatorSaveBody {
   const body: CreatorSaveBody = pluginCreatorSaveBodyOf(toWorkspacePayload(snap), observedAt)
   const joined = str(snap.joinedDate)?.trim()
   if (joined) body.joined_date = joined.slice(0, 80)
   const recent = (snap.recentItems ?? [])
     .slice(0, SAVE_RECENT_ITEMS_MAX)
-    .map(recentItemOf)
+    .map((item, i) => recentItemOf(item, snap.platform, itemUrls?.[i]))
     .filter((x): x is CreatorSaveRecentItem => x !== undefined)
   if (recent.length > 0) body.recent_items = recent
   return body

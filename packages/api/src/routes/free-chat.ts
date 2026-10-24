@@ -494,6 +494,16 @@ export const AttachedFileBody = z.object({
   name: z.string().trim().min(1).max(200),
   data: z.string().min(1).max(MAX_IMAGE_CHARS),
 })
+/**
+ * WP504（决策 1775 A）：第三栏点 ✦「问 AI」引用的一张卡——**结构化摘要**（是什么、叫什么、一排「字段：值」），
+ * 不是截图。宿主把它像附件那样记在那句话上、围起来交给模型。
+ */
+export const ContextRefBody = z.object({
+  kind: z.string().trim().min(1).max(40),
+  id: z.string().trim().min(1).max(200),
+  label: z.string().trim().min(1).max(200),
+  facts: z.array(z.object({ k: z.string().trim().min(1).max(60), v: z.string().max(500) })).max(40),
+})
 const FileBody = AttachedFileBody
 /** WP357：改一条助理记的口径。 */
 const NoteBody = z.object({ statement: z.string().min(1).max(300) })

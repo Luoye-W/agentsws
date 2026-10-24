@@ -563,6 +563,8 @@ export async function main(): Promise<void> {
       readNet: {},
       // WP353：联网搜索后端（工坊内置浏览器 → 云端 Google → 公开搜索服务）——同样只在真正的服务进程里装
       webSearch: {},
+      // WP502（决策 1760 B）：存入红人池时把头像 / 横幅 / 作品封面缓存到本机——同样只在真正的服务进程里下载
+      kolMedia: {},
       ...(staticDir === undefined ? {} : { staticDir }),
       ...(profileDir === undefined || profileDir === ''
         ? {}

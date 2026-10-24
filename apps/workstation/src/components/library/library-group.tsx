@@ -79,14 +79,20 @@ export function LibrarySearch({
   value,
   onChange,
   testId = 'library-search',
+  placeholder,
+  wide = false,
 }: {
   value: string
   onChange(next: string): void
   testId?: string
+  /** WP504：库面板各说各的（「搜名字、品类、标签」）；不给 = 通用那句。 */
+  placeholder?: string
+  /** WP504：库面板里占满一行（页面上最宽 20rem）。 */
+  wide?: boolean
 }): ReactNode {
   const { t } = useApp()
   return (
-    <div className="relative min-w-0 flex-1 sm:max-w-xs">
+    <div className={cn('relative min-w-0 flex-1', !wide && 'sm:max-w-xs')}>
       <Search
         aria-hidden
         className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ws-muted-fg"
@@ -95,8 +101,8 @@ export function LibrarySearch({
         type="search"
         value={value}
         data-testid={testId}
-        aria-label={t('library.search')}
-        placeholder={t('library.search')}
+        aria-label={placeholder ?? t('library.search')}
+        placeholder={placeholder ?? t('library.search')}
         className="bg-ws-card pl-8"
         onChange={(e) => {
           onChange(e.target.value)

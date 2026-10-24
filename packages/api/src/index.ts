@@ -543,6 +543,7 @@ export type {
   KolCreatorInput,
   KolCreatorPatch,
   KolCreatorProfileView,
+  KolCreatorReviewView,
   KolCreatorRow,
   KolImportCommitView,
   KolImportPreviewView,
@@ -550,17 +551,20 @@ export type {
   KolMailStageEstimateView,
   KolMailStageRunView,
   KolMergeSuggestionView,
+  KolOutreachBatchSendView,
+  KolOutreachBatchView,
   KolOutreachDefaultsView,
   KolOutreachView,
   KolPort,
   KolRevealPrice,
+  KolReviewFilter,
   KolSearchHit,
   KolSearchResult,
   KolStagedView,
   KolStageSegment,
   KolTrackedLinkInput,
 } from './routes/kol.js'
-export { kolRoutes } from './routes/kol.js'
+export { KOL_TAG_MAX_LENGTH, KOL_TAGS_MAX, kolRoutes } from './routes/kol.js'
 export type {
   MeetingIngestInput,
   MeetingProcessOutcome,

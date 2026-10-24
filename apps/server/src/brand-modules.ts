@@ -61,6 +61,7 @@ import type { GoogleReads } from './google-reads.js'
 import type { KolStore } from './kol.js'
 import type { KolImportAssembly } from './kol-import.js'
 import type { KolMailAssembly } from './kol-mail.js'
+import type { KolMediaCache } from './kol-media.js'
 import type { KolSandboxAssembly } from './kol-sandbox.js'
 import type { KolServiceAssembly } from './kol-service.js'
 import type { LiveDataSource } from './live-data.js'
@@ -172,6 +173,8 @@ export interface BrandModuleSet {
    * 品牌 A 的红人、联系方式引用与合作预算，在 B 的任何路由里都读不到。
    */
   kol: KolStore
+  /** WP502（决策 1760 B）：这个品牌的红人图片缓存（存入红人池时下载，详情 / 候选池同源显示）。 */
+  kolMedia: KolMediaCache
   /**
    * WP68（48 §5.4）：这个品牌红人库的 `/v1` 面（端口 + 起草那一跳取明文的口子）。
    *

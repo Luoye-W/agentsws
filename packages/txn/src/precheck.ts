@@ -36,6 +36,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'daily_report',
   // WP68 / 48 §5.2：campaign 挑人清单卡（接受才按渠道分别建合作）
   'kol_campaign',
+  // WP504（决策 1777 A）：红人批量开发信确认卡（批了才逐个起草并发出）
+  'kol_outreach_batch',
   // WP144 / docs/80：电脑操控授权卡（批了才挂提供方）
   'computer_use',
   // WP154：搜索报告卡（每日 5 件事 / 每周收入 / 每周 AI 可见度；L3 自动出、看完归档）

@@ -53,6 +53,7 @@ import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { PR_MENTIONS_EN, PR_MENTIONS_ZH } from './i18n-pr-mentions'
 import { PR_WATCH_EN, PR_WATCH_ZH } from './i18n-pr-watch'
+import { RAIL_LIBRARY_EN, RAIL_LIBRARY_ZH } from './i18n-rail-library'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { REDDIT_WATCH_EN, REDDIT_WATCH_ZH } from './i18n-reddit-watch'
 import { REDDIT_WRITE_EN, REDDIT_WRITE_ZH } from './i18n-reddit-write'
@@ -9104,6 +9105,8 @@ const TABLES: Record<Lang, Table> = {
   zh: {
     ...zh,
     ...LIBRARY_ZH,
+    // WP504：第三栏库面板、批量条、✦ 问 AI
+    ...RAIL_LIBRARY_ZH,
     ...CLOUD_AUTH_ZH,
     ...POSITION_ZH,
     ...READ_ROUTES_ZH,
@@ -9208,6 +9211,7 @@ const TABLES: Record<Lang, Table> = {
   en: {
     ...en,
     ...LIBRARY_EN,
+    ...RAIL_LIBRARY_EN,
     ...CLOUD_AUTH_EN,
     ...POSITION_EN,
     ...READ_ROUTES_EN,

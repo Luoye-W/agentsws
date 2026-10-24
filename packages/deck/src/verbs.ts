@@ -251,6 +251,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   review: 'recap',
   membership: 'join',
   kol_campaign: 'creator_list',
+  // WP504：「红人营销 · 批量发出」
+  kol_outreach_batch: 'outreach_batch',
   computer_use: 'computer_use',
   // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）
   seo_report: 'seo_report',

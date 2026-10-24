@@ -64,7 +64,12 @@ import {
   type Work,
 } from '@agentsws/work'
 import { type AdsExportIntake, withIntakeNote } from './ads-data/export-intake.js'
-import { attachedLine, attachmentsBrief, readAssistantFile } from './assistant-files.js'
+import {
+  attachedLine,
+  attachmentsBrief,
+  contextAttachment,
+  readAssistantFile,
+} from './assistant-files.js'
 import { offsetToTz, reviewWindow } from './schedule.js'
 import { createWorkHoursStore, type WorkHoursStore } from './work-hours.js'
 
@@ -423,7 +428,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       const events = work.store.listMatterEvents(id, opts)
       return { events, has_more: work.store.countMatterEvents(id) > events.length }
     },
-    say: async (actor, id, text, files) => {
+    say: async (actor, id, text, files, context) => {
       // WP357：附上的资料与助理同一套读法（抹口令、截断、读不出照实说），运行拿到「话 + 附件」
       // WP447：拖进来的是投放平台的报表就先入库，那一句写在附件文字前面
       const m0 = work.getMatter(id)
@@ -437,9 +442,11 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
                 ? {}
                 : { position_template_id: m0.position_template_id }),
             })
-      const attachments = (files ?? []).map((f, i) =>
-        withIntakeNote(readAssistantFile(f), intake[i]),
-      )
+      const attachments = [
+        // WP504：第三栏「问 AI」引用的卡（结构化摘要）排在附件前面
+        ...(context ?? []).map(contextAttachment),
+        ...(files ?? []).map((f, i) => withIntakeNote(readAssistantFile(f), intake[i])),
+      ]
       const attached =
         attachments.length === 0
           ? undefined

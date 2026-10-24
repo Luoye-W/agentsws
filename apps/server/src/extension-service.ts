@@ -57,6 +57,7 @@ import {
   type PublicContactLink,
   sanitizePublicContacts,
 } from '@agentsws/contracts'
+import { contentUrlOf, derivedContentUrlOf } from '@agentsws/creator-capture'
 import { type PublicLibraryClient, scoreCreator } from '@agentsws/kol-core'
 import type {
   KolAccountObservation,
@@ -68,6 +69,7 @@ import type {
   KolProfileSnapshot,
   KolStore,
 } from './kol.js'
+import { KOL_MEDIA_RECENT_COVERS, type KolMediaCache } from './kol-media.js'
 import { CONTACT_SECRET_FIELD, contactSecretId } from './kol-service.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -236,6 +238,11 @@ export interface ExtensionServiceOptions {
   /** WP201：每一轮公共库转发记一行（几条 2xx、几条待重试、几条云端不收）。不给就不记。 */
   log?: (line: string) => void
   /**
+   * WP502（决策 1760 B）：存入红人池那一刻把头像、横幅、前几张作品封面缓存到本机（`kol-media.ts`）。
+   * 不给 = 不缓存（界面照旧一个字的头像、色块封面）。不等它：存入的回执不因为取图慢而慢。
+   */
+  media?: Pick<KolMediaCache, 'cache'> | undefined
+  /**
    * WP202：这个品牌里有没有人持有红人职责（`kol.*` 任一条的活分配）。hello 与工作台
    * 「连接 → 浏览器插件」据此说「你还没有红人营销岗位」。不给就不出这一格。
    */
@@ -340,9 +347,34 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       ...(input.video_count === undefined ? {} : { video_count: input.video_count }),
       ...(input.recent_items === undefined || input.recent_items.length === 0
         ? {}
-        : { recent_items: input.recent_items.slice(0, 12) }),
+        : {
+            recent_items: input.recent_items.slice(0, 12).map((r) => withWorkUrl(input.channel, r)),
+          }),
     }
     return Object.keys(profile).length === 0 ? undefined : profile
+  }
+
+  /**
+   * WP502（决策 1764 B）：近期作品的原作品链接——送来的只认这个平台上的一条作品（`contentUrlOf`，
+   * 规整掉分享参数）；没送或认不出就从封面地址（YouTube）/ 短码（Instagram）推；都不行就不带。
+   * 老插件不送这一格，YouTube / Instagram 照样推得出来。
+   */
+  function withWorkUrl(
+    channel: KolChannel,
+    item: NonNullable<ExtensionCreatorSave['recent_items']>[number],
+  ): NonNullable<KolProfileSnapshot['recent_items']>[number] {
+    const { url: sent, ...rest } = item
+    const url = contentUrlOf(sent, channel) ?? derivedContentUrlOf(channel, item)
+    return url === undefined ? rest : { ...rest, url }
+  }
+
+  /** WP502（决策 1760 B）：存入那一刻要缓存的图——头像、横幅、前几张封面。 */
+  function mediaUrlsOf(input: ExtensionCreatorSave): (string | undefined)[] {
+    return [
+      input.avatar_url,
+      input.banner_url,
+      ...(input.recent_items ?? []).slice(0, KOL_MEDIA_RECENT_COVERS).map((r) => r.thumbnail_url),
+    ]
   }
 
   /** WP498：这个账号「存入红人池」过没有（插件按钮或 ego 自动存入；看有没有 `manual_save` 那一行快照）。 */
@@ -1144,6 +1176,8 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       if (input.contact !== undefined) storeContact(creator.id, input.contact)
       // WP131：显式存入也是「收进红人库」——开关开着就排队自动评分
       enqueueAutoScore([{ creator_id: creator.id, account_id: account.id }])
+      // WP502（1760 B）：头像 / 横幅 / 封面缓存到本机（不等；取不到不影响存入）
+      if (options.media !== undefined) void options.media.cache(mediaUrlsOf(input))
       return {
         status: existingBefore === undefined ? 'ok' : 'deduped',
         creator_id: creator.id,

@@ -27,6 +27,7 @@ import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsw
 import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { type FootAction, FootButton } from '@/components/deck/card-foot'
+import { kolBatchCount } from '@/components/kol/kol-card-bodies'
 import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
@@ -124,6 +125,10 @@ export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) 
     if (a === 'snooze') return t('follow_up.verb.wait')
     if (a === 'reject') return t('follow_up.verb.stop')
   }
+  // WP504（决策 1777 A）：批量开发信卡上主按钮写「发出 N 封」（N = 名单上真要发的人数）
+  const batch = kolBatchCount(card.detail.payload)
+  if (batch !== undefined && a === 'approve')
+    return t('kol.batch.send').replace('{n}', String(batch))
   if (themePublish(card)) {
     if (a === 'approve') return t('verb.publish_theme.approve')
     if (a === 'reject') return t('verb.publish_theme.reject')

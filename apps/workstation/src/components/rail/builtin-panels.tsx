@@ -25,6 +25,7 @@
 import {
   Activity,
   BarChart3,
+  BookOpen,
   CalendarClock,
   FileDiff,
   FileText,
@@ -32,6 +33,7 @@ import {
   Globe,
   GraduationCap,
   Handshake,
+  Images,
   Inbox,
   ListChecks,
   MessageSquareQuote,
@@ -47,6 +49,12 @@ import {
 } from 'lucide-react'
 import { lazy } from 'react'
 import { registerKeywordBankBlock } from '@/components/amazon/keyword-bank-block'
+import {
+  useKnowledgeLibraryStatus,
+  usesBrandAssets,
+  usesKnowledge,
+} from '@/components/knowledge/knowledge-library-status'
+import { hasKolRole, useKolLibraryStatus } from '@/components/kol/kol-library-status'
 import { MESSAGE_DIGEST_ADDRESS, MESSAGE_RULES_ADDRESS } from '@/components/messages/rules-address'
 import {
   useConnectionsStatus,
@@ -143,10 +151,30 @@ const InboxItemBody = lazy(async () => {
   const m = await import('@/components/inbox/inbox-pane')
   return { default: m.InboxPaneBody }
 })
-/** WP500：红人详情（候选池点开一个人；只从红人面板开）。 */
-const KolCreatorBody = lazy(async () => {
-  const m = await import('@/components/kol/creator-pane')
-  return { default: m.CreatorPaneBody }
+/**
+ * WP504（决策 1765「资料在右、决策在中」、1778 A）：岗位第三栏的**库面板**——红人库（红人营销）、知识库（客服；
+ * B2B / 网站运营同一个面板按本岗位筛）、素材（设计）。卡片列各一张同名卡（只在用它的岗位出），点了在第三栏开。
+ * WP500 的「红人详情」那一格（`kol-creator`）并进红人库：详情叠在库上（1761 A），旧 id 留作别名。
+ */
+const KolLibraryBody = lazy(async () => {
+  const m = await import('@/components/kol/kol-library-panel')
+  return { default: m.KolLibraryPanel }
+})
+const KolLibraryCardBody = lazy(async () => {
+  const m = await import('@/components/kol/kol-library-panel')
+  return { default: m.KolLibraryCard }
+})
+const KnowledgeLibraryBody = lazy(async () => {
+  const m = await import('@/components/knowledge/knowledge-library-panel')
+  return { default: m.KnowledgeLibraryPanel }
+})
+const KnowledgeLibraryCardBody = lazy(async () => {
+  const m = await import('@/components/knowledge/knowledge-library-panel')
+  return { default: m.KnowledgeLibraryCard }
+})
+const BrandAssetsLibraryBody = lazy(async () => {
+  const m = await import('@/components/brand-assets/brand-assets-library-panel')
+  return { default: m.BrandAssetsLibraryPanel }
 })
 /** WP372（决策 1019）：报表——全部 + 看板，与看一份。 */
 const ReportsBody = lazy(async () => {
@@ -392,17 +420,71 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('inbox-item', InboxItemBody)
-  // WP500（决策 1758）：红人详情——候选池点开一个人（KOLAgents 的侧边详情，照 WP481 开在第三栏）。
-  // 只从红人面板开（`openCreatorPane`），不上图标轨。
+  // ── WP504：库面板（决策 1778 A：一个岗位一个库面板、里面分格；卡片列一张同名卡进） ──
+  registerRailCard({
+    id: 'kol-library',
+    label: 'rail.card.kol-library',
+    icon: UserRound,
+    // 对话卡后面、报表卡前面（F1）
+    order: at('conversations') + 0.5,
+    panel: 'kol-library',
+    available: hasKolRole,
+    defaultOpen: true,
+    useStatus: useKolLibraryStatus,
+  })
+  registerRailCardBody('kol-library', KolLibraryCardBody)
   registerPanelType({
-    id: 'kol-creator',
-    label: 'rail.panel.kol_creator',
+    id: 'kol-library',
+    label: 'rail.panel.kol-library',
     icon: UserRound,
     priority: 'builtin',
-    group: 'context',
-    hidden: true,
+    group: 'layer',
+    card: 'kol-library',
+    // 两列红人卡放得下（F1）
+    minWidth: 680,
   })
-  registerPanelBody('kol-creator', KolCreatorBody)
+  registerPanelBody('kol-library', KolLibraryBody)
+  // WP500 的「红人详情」那一格：旧 id 落到红人库（详情叠在库上）
+  registerPanelAlias({ id: 'kol-creator', panel: 'kol-library' })
+  registerRailCard({
+    id: 'knowledge-library',
+    label: 'rail.card.knowledge-library',
+    icon: BookOpen,
+    order: at('conversations') + 0.5,
+    panel: 'knowledge-library',
+    available: usesKnowledge,
+    defaultOpen: true,
+    useStatus: useKnowledgeLibraryStatus,
+  })
+  registerRailCardBody('knowledge-library', KnowledgeLibraryCardBody)
+  registerPanelType({
+    id: 'knowledge-library',
+    label: 'rail.panel.knowledge-library',
+    icon: BookOpen,
+    priority: 'builtin',
+    group: 'layer',
+    card: 'knowledge-library',
+    minWidth: 520,
+  })
+  registerPanelBody('knowledge-library', KnowledgeLibraryBody)
+  registerRailCard({
+    id: 'brand-assets-library',
+    label: 'rail.card.brand-assets-library',
+    icon: Images,
+    order: at('conversations') + 0.5,
+    panel: 'brand-assets-library',
+    available: usesBrandAssets,
+  })
+  registerPanelType({
+    id: 'brand-assets-library',
+    label: 'rail.panel.brand-assets-library',
+    icon: Images,
+    priority: 'builtin',
+    group: 'layer',
+    card: 'brand-assets-library',
+    minWidth: 560,
+  })
+  registerPanelBody('brand-assets-library', BrandAssetsLibraryBody)
   registerPanelType({
     id: 'outputs',
     label: 'rail.panel.outputs',
@@ -440,8 +522,10 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
   })
   registerPanelBody('settings', SettingsBody)
   // WP335：「关注设置」（只在「内容与搜索」职责层出那个标签）也落在「设定」里
-  for (const sub of ['role', 'memory', 'knowledge', 'skills', 'caps', 'geo-watch'])
+  for (const sub of ['role', 'memory', 'skills', 'caps', 'geo-watch'])
     registerPanelAlias({ id: sub, panel: 'settings', sub })
+  // WP504（决策 1779 A）：「设定 → 知识」与「⋮ → 知识」改成跳到知识库面板
+  registerPanelAlias({ id: 'knowledge', panel: 'knowledge-library' })
   // WP456-T3（决策 1448）：「连接」合进清单卡后，它的完整一格（第三栏）——原来卡里那几行 + 连接卡就地连
   registerPanelType({
     id: 'connections',

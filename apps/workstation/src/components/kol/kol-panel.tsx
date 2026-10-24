@@ -16,7 +16,7 @@
  *    灰显 + 一句话，而不是悄悄少几行。
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Coins, Megaphone, Search, Upload, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -34,6 +34,7 @@ import {
   getKolCreators,
   type KolCampaignData,
   type KolChannelId,
+  type KolReviewFilter,
   type KolSearchData,
   planKolCampaign,
   revealKolContact,
@@ -77,13 +78,14 @@ const num = (n: number | undefined): string =>
 
 /* ── 找人 ─────────────────────────────────────────────────────────────── */
 
-function Discovery({
+export function Discovery({
   assignment,
   channel,
   onOpen,
   onThread,
   batch,
   onClearBatch,
+  searchOnly = false,
 }: {
   assignment: string
   channel: KolChannelId
@@ -93,6 +95,8 @@ function Discovery({
   /** WP131：插件「回作战室看这批」带来的采集批次——只列这一批。 */
   batch?: string
   onClearBatch?: () => void
+  /** WP504：库面板里「找新红人」那一层——只要外面的搜索，不再列一遍自己的库。 */
+  searchOnly?: boolean
 }): React.ReactNode {
   const { t } = useApp()
   const openConnect = useOpenConnect()
@@ -107,18 +111,26 @@ function Discovery({
    * 以前搜「数码」只回一句「现在搜不了」，下面「我的红人库」照旧列全部——人得自己一行一行找。
    */
   const [libraryQ, setLibraryQ] = useState('')
+  /* WP502（决策 1763 B）：按审核决定 / 人工标签筛候选池（KOLAgents 红人池那两个筛） */
+  const [reviewFilter, setReviewFilter] = useState<KolReviewFilter | 'all'>('all')
+  const [tagFilter, setTagFilter] = useState('')
   const library = useQuery({
-    queryKey: ['kol-creators', assignment, channel, batch ?? '', libraryQ],
+    queryKey: ['kol-creators', assignment, channel, batch ?? '', libraryQ, reviewFilter, tagFilter],
     queryFn: () =>
       getKolCreators(
         {
           channel,
           ...(batch === undefined ? {} : { batch }),
           ...(libraryQ === '' ? {} : { q: libraryQ }),
+          ...(reviewFilter === 'all' ? {} : { review: reviewFilter }),
+          ...(tagFilter === '' ? {} : { tag: tagFilter }),
         },
         assignment,
       ),
+    // WP502：换筛选时先留着上一份（筛选条与标签下拉不跟着闪没）
+    placeholderData: keepPreviousData,
   })
+  const poolFiltered = reviewFilter !== 'all' || tagFilter !== ''
 
   const search = useMutation({
     mutationFn: () => searchKolCreators({ channel, q }, assignment),
@@ -317,7 +329,7 @@ function Discovery({
           </div>
         ) : null}
 
-        <div className="mt-1">
+        <div className="mt-1" hidden={searchOnly}>
           {batch === undefined ? (
             <div className="mb-1 flex items-center gap-2">
               <h4 className="text-xs font-medium text-muted-foreground">
@@ -353,6 +365,50 @@ function Discovery({
               </Button>
             </div>
           )}
+          {/* WP502：审核决定四个筛 + 标签下拉（库里一个标签都没有就不出下拉） */}
+          {!poolFiltered && (library.data?.rows ?? []).length === 0 ? null : (
+            <div className="mb-2 flex flex-wrap items-center gap-1" data-testid="kol-pool-filters">
+              {(['all', 'pending', 'approved', 'rejected'] as const).map((r) => (
+                <Button
+                  key={r}
+                  size="xs"
+                  variant={reviewFilter === r ? 'secondary' : 'ghost'}
+                  aria-pressed={reviewFilter === r}
+                  data-testid="kol-pool-review-filter"
+                  data-review={r}
+                  onClick={() => {
+                    setReviewFilter(r)
+                  }}
+                >
+                  {t(`kol.pool.review.${r}`)}
+                </Button>
+              ))}
+              {(library.data?.tags ?? []).length === 0 && tagFilter === '' ? null : (
+                <select
+                  className="h-6 rounded-md border border-ws-line bg-background px-1.5 text-xs"
+                  aria-label={t('kol.pool.tag')}
+                  title={t('kol.pool.tag')}
+                  value={tagFilter}
+                  data-testid="kol-pool-tag-filter"
+                  onChange={(e) => {
+                    setTagFilter(e.target.value)
+                  }}
+                >
+                  <option value="">{t('kol.pool.tag.all')}</option>
+                  {[
+                    ...new Set([
+                      ...(library.data?.tags ?? []),
+                      ...(tagFilter === '' ? [] : [tagFilter]),
+                    ]),
+                  ].map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
           {library.isPending ? <Skeleton className="h-16 w-full" /> : null}
           {/*
             36 §3 的同一条规矩，**查询这一侧**：取不回来不等于库里没人。
@@ -370,7 +426,11 @@ function Discovery({
           (library.data?.rows ?? []).length === 0 &&
           !library.isPending ? (
             <p className="text-sm text-muted-foreground" data-testid="kol-library-empty">
-              {batch === undefined ? t('kol.library.empty') : t('kol.library.batch.empty')}
+              {poolFiltered
+                ? t('kol.pool.filtered.empty')
+                : batch === undefined
+                  ? t('kol.library.empty')
+                  : t('kol.library.batch.empty')}
             </p>
           ) : null}
           {/*
@@ -386,6 +446,7 @@ function Discovery({
                 key={row.creator_id}
                 row={row}
                 handle={`${atHandle(row.handle)}`}
+                assignment={assignment}
                 onOpen={() => {
                   onOpen(row.creator_id)
                 }}
@@ -434,7 +495,7 @@ const STAGE_FILTERS = [
 /** 「其他」那一组折起来时露几条。 */
 const IDLE_PREVIEW = 3
 
-function Collaborations({
+export function Collaborations({
   assignment,
   channel,
   onOpen,
@@ -662,12 +723,20 @@ function Collaborations({
 
 /* ── 导入与 campaign ──────────────────────────────────────────────────── */
 
-function ImportAndCampaign({
+export function ImportAndCampaign({
   assignment,
   channel,
+  named,
+  onClearNamed,
+  onGo,
 }: {
   assignment: string
   channel: KolChannelId
+  /** WP504：库里多选「移入活动」的那批人（清单只在他们里面挑）。 */
+  named?: readonly { creator_id: string; display_name: string }[] | undefined
+  onClearNamed?: () => void
+  /** WP504：在库面板里时「去合作 / 找更多人」切格子（不改地址栏）。 */
+  onGo?: (view: 'threads' | 'pool') => void
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -679,6 +748,10 @@ function ImportAndCampaign({
    */
   const [allExisting, setAllExisting] = useState<number | undefined>(undefined)
   const goView = (view: 'threads' | 'pool'): void => {
+    if (onGo !== undefined) {
+      onGo(view)
+      return
+    }
     setSearch((prev) => {
       const next = new URLSearchParams(prev)
       next.set('kol', view)
@@ -705,6 +778,9 @@ function ImportAndCampaign({
           budget: Number(budget),
           channels,
           headcount: Number(headcount),
+          ...(named === undefined || named.length === 0
+            ? {}
+            : { creator_ids: named.map((n) => n.creator_id) }),
         },
         assignment,
       ),
@@ -773,6 +849,26 @@ function ImportAndCampaign({
           <h4 className="mb-1 text-xs font-medium text-muted-foreground">
             {t('kol.campaign.title')}
           </h4>
+          {/* WP504：库里多选「移入活动」带过来的那批人——清单只在他们里面挑 */}
+          {named === undefined || named.length === 0 ? null : (
+            <div
+              className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg bg-ws-tint px-2 py-1.5 text-xs"
+              data-testid="kol-campaign-named"
+              data-count={named.length}
+            >
+              <span className="font-medium text-ws-brand">
+                {t('kol.lib.campaign.picked', { n: named.length })}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-ws-body">
+                {named.map((n) => n.display_name).join('、')}
+              </span>
+              {onClearNamed === undefined ? null : (
+                <Button size="xs" variant="ghost" onClick={onClearNamed}>
+                  {t('kol.lib.campaign.picked.clear')}
+                </Button>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Input
               className="min-w-40 flex-1"

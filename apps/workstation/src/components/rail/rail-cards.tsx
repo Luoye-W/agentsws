@@ -81,7 +81,8 @@ export function StatusDot({
 export function RailCards(props: RailPanelBodyProps): ReactNode {
   const rail = useRailState()
   const { t } = useApp()
-  const all = listRailCards(rail.order)
+  // WP504（决策 1778 A）：只在某些岗位出的卡（库卡）按这一页的岗位筛
+  const all = listRailCards(rail.order).filter((c) => c.available?.(props) ?? true)
   // WP456-T3（决策 1448）：有内容的各占一张（可拖）；只有一行标题的合进最底下那张清单卡
   const cards = all.filter((c) => c.list !== true)
   const listed = all.filter((c) => c.list === true)
