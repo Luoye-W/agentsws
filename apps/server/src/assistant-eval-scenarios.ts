@@ -110,8 +110,8 @@ export function evalScenarios(
   opts: { seed?: number; size?: number; chatterPerDay?: number } = {},
 ): EvalScenario[] {
   const rand = seeded(opts.seed ?? 42)
-  const size = opts.size ?? 160
-  const per = opts.chatterPerDay ?? 12
+  const size = opts.size ?? 200
+  const per = opts.chatterPerDay ?? 24
   const returns: EvalScenario = {
     id: 'returns-policy',
     title: '退货口径与价格（跨 5 天，中途改过一次口径）',

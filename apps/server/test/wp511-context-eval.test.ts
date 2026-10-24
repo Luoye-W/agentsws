@@ -42,7 +42,8 @@ describe('WP511 助理上下文评测（替身）', () => {
     // 全量是上限参照：替身在全量里全对
     for (const r of rows.filter((x) => x.mode === 'full')) expect(r.recall).toBe(1)
     const layers = rows.filter((x) => x.mode === 'layers')
-    expect(layers.every((r) => r.summary_calls > 0)).toBe(true)
+    // 话题小结与段内压缩都真的发生了（默认 6K 窗口、每天 24 句填充）
+    expect(layers.every((r) => r.summary_calls > 0 && r.compactions > 0)).toBe(true)
     // 管道回归：信息都还留在上下文里或取得回来（替身答对 = 没在压缩 / 卸载里丢）
     for (const r of layers) expect(r.recall).toBe(1)
     expect(layers.every((r) => r.cache_ratio > 0.5)).toBe(true)

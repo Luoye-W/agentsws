@@ -22,7 +22,8 @@ import { createFreeChatStore } from './free-chat-store.js'
 
 /** 一次模型调用记下的用量（替身按估算报，真模型照它报的）。 */
 export interface EvalCall {
-  kind: 'chat' | 'summary' | 'full'
+  /** `summary` = 一段收起时的话题小结；`compact` = 段内压缩（原话超预算）。 */
+  kind: 'chat' | 'summary' | 'compact' | 'full'
   input_tokens: number
   cached_tokens: number
   output_tokens: number
@@ -69,9 +70,9 @@ const textOf = (m: ChatMessage): string =>
     ? m.content
     : m.content.map((p) => (p.type === 'text' ? p.text : '')).join('\n')
 
-const isSummaryCall = (messages: readonly ChatMessage[]): boolean => {
+const summaryKind = (messages: readonly ChatMessage[]): 'summary' | 'compact' | undefined => {
   const sys = messages[0] === undefined ? '' : textOf(messages[0])
-  return sys.includes('话题小结') || sys.includes('压缩前半段')
+  return sys.includes('压缩前半段') ? 'compact' : sys.includes('话题小结') ? 'summary' : undefined
 }
 
 /**
@@ -120,7 +121,8 @@ export function evalStubProvider(probes: readonly EvalProbe[], calls: EvalCall[]
     async complete(req) {
       const messages = req.messages
       const tools = (req.tools ?? []).map((t) => t.name)
-      if (isSummaryCall(messages)) {
+      const sk = summaryKind(messages)
+      if (sk !== undefined) {
         const body = textOf(messages.at(-1) as ChatMessage)
         const keep = body
           .split('\n')
@@ -128,7 +130,7 @@ export function evalStubProvider(probes: readonly EvalProbe[], calls: EvalCall[]
           .slice(-12)
           .map((l) => `- ${l.replace(/^[^：:]*[：:]/u, '').slice(0, 120)}`)
         const out = ['对话小结', '## 定了什么', ...(keep.length === 0 ? ['- 无'] : keep)].join('\n')
-        return { text: out, usage: usage(messages, req.tools, out, 'summary') }
+        return { text: out, usage: usage(messages, req.tools, out, sk) }
       }
       const lastUser = [...messages].reverse().find((m) => m.role === 'user')
       const asked =
@@ -181,7 +183,7 @@ const evalAssistant = {
 } as unknown as Assistant
 
 export interface EvalOptions {
-  /** 模型窗口（小一点才压得出来；默认 12K → 原话预算 6K）。 */
+  /** 模型窗口（小一点才压得出来；默认 6K → 原话预算 3K）。 */
   window?: number
   /** 给真模型用：换掉替身。`calls` 由调用方在 provider 里记。 */
   provider?: (probes: readonly EvalProbe[], calls: EvalCall[]) => ModelProvider
@@ -224,7 +226,7 @@ export async function runLayers(scenario: EvalScenario, opts: EvalOptions = {}):
     tzOffsetMin: 480,
     timeZone: () => 'Asia/Shanghai',
     memory: { auto: () => true, changed: () => undefined },
-    contextWindow: opts.window ?? 12_000,
+    contextWindow: opts.window ?? 6000,
   })
   const actor = { workspace_id: 'ws_eval', person_id: 'per_eval', assignment_id: 'asg_eval' }
   const sid = (await port.thread?.(actor))?.session.id ?? ''
@@ -324,6 +326,7 @@ export function summarizeRun(run: EvalRun) {
     wrong: run.probes.filter((p) => p.wrong).length,
     calls: run.calls.length,
     summary_calls: run.calls.filter((c) => c.kind === 'summary').length,
+    compactions: run.calls.filter((c) => c.kind === 'compact').length,
     input_tokens: input,
     cached_tokens: sum((c) => c.cached_tokens),
     output_tokens: sum((c) => c.output_tokens),
@@ -360,7 +363,9 @@ export function estimateCost(
       cached += Math.floor(c.cached_tokens * (opts.cacheDiscount ?? 0.8))
       output += Math.max(
         c.output_tokens,
-        c.kind === 'summary' ? (opts.outputPerSummary ?? 400) : (opts.outputPerCall ?? 300),
+        c.kind === 'summary' || c.kind === 'compact'
+          ? (opts.outputPerSummary ?? 400)
+          : (opts.outputPerCall ?? 300),
       )
     }
   const usd = ((input - cached) * price.in + cached * price.cached + output * price.out) / 1_000_000

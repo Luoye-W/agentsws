@@ -30,13 +30,13 @@ const arg = (name, fallback) => {
 }
 const runtime = arg('runtime', 'stub')
 const model = arg('model', 'deepseek-flash')
-const window = Number(arg('window', '12000'))
+const window = Number(arg('window', '6000'))
 const seed = Number(arg('seed', '42'))
 const json = args.includes('--json')
 
 // 每句填充多少字、每天几句填充（撑长对话、逼出压缩；越大越贵）
-const size = Number(arg('size', '160'))
-const chatterPerDay = Number(arg('chatter', '12'))
+const size = Number(arg('size', '200'))
+const chatterPerDay = Number(arg('chatter', '24'))
 const scenarios = evalScenarios({ seed, size, chatterPerDay })
 
 async function runAll(provider) {
@@ -104,7 +104,11 @@ const real = (_probes, calls) => {
       if (spent > approved) throw new Error(`已花 $${spent.toFixed(4)}，到上限 $${approved}，停`)
       const out = await inner.complete(req)
       const sys = typeof req.messages[0]?.content === 'string' ? req.messages[0].content : ''
-      const kind = sys.includes('话题小结') || sys.includes('压缩前半段') ? 'summary' : 'chat'
+      const kind = sys.includes('压缩前半段')
+        ? 'compact'
+        : sys.includes('话题小结')
+          ? 'summary'
+          : 'chat'
       const u = out.usage
       calls.push({
         kind,
