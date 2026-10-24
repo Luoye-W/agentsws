@@ -91,6 +91,11 @@ export interface FollowUpPosition {
   person_id: PersonId
   assignment_id: string
   role_id: RoleId | string
+  /**
+   * WP510（决策 1515）：② / ③ 里这只邮箱有负责人——卡发给负责人（一人或多人；负责人都不在时是兜底的人，
+   * 带一句为什么）。不给 = 发给 `person_id`（老行为，① 永远不给）。
+   */
+  recipients?: { person: PersonId; reason?: string }[]
 }
 
 export interface MessageFollowUpOptions {
@@ -109,7 +114,11 @@ export interface MessageFollowUpOptions {
    * 卡给谁：会话归某岗位 → 做那个岗位的人；没归属（`undefined`）→ 品牌里第一个持岗位的人。
    * 回 `undefined` = 没人可给，不出卡（下一拍再看）。
    */
-  recipientFor(position_id: string | undefined): FollowUpPosition | undefined
+  recipientFor(
+    position_id: string | undefined,
+    /** WP510：从哪只邮箱发（按这只邮箱的负责人分）。 */
+    account?: string,
+  ): FollowUpPosition | undefined | Promise<FollowUpPosition | undefined>
   /** 卡片出口（同一条审批总线）。 */
   approvals: {
     create<P>(input: CreateApprovalInput<P>): Promise<ApprovalItem<P>>
@@ -422,7 +431,7 @@ export function createMessageFollowUp(options: MessageFollowUpOptions): MessageF
   /* ── 出卡 ────────────────────────────────────────────────────────── */
 
   const card = async (row: Row, messages: readonly MessageRecord[]): Promise<boolean> => {
-    const position = options.recipientFor(row.position_id)
+    const position = await options.recipientFor(row.position_id, row.account)
     if (position === undefined) return false
     const now = clock.now()
     const tz = options.tz()
@@ -533,7 +542,14 @@ export function createMessageFollowUp(options: MessageFollowUpOptions): MessageF
         sampling: { selected: false },
       },
       routing: {
-        recipients: [{ person: position.person_id, via: 'role_holder' }],
+        recipients:
+          position.recipients === undefined || position.recipients.length === 0
+            ? [{ person: position.person_id, via: 'role_holder' }]
+            : position.recipients.map((r) =>
+                r.reason === undefined
+                  ? { person: r.person, via: 'explicit' as const }
+                  : { person: r.person, via: 'explicit' as const, reason: r.reason },
+              ),
         rule: 'role_holder',
         escalation: { after_hours: 48, business_hours: true, chain: [], escalated_at: [] },
         separation_of_duties: false,

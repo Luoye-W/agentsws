@@ -14,27 +14,35 @@
  */
 import type {
   ApprovalItem,
+  ApprovalState,
   MessageGuessRow,
   MessageOverview,
   MessagePositionOption,
   MessageThreadSummary,
+  OwnerRoute,
   PositionInstance,
+  TeamMember,
 } from '@agentsws/contracts'
 import { isFollowUpNudgePayload, isPluginDeskCard } from '@agentsws/contracts'
 import {
   DECIDABLE_STATES,
   type DeckCard,
   foldCards,
+  handledAction,
   type InboxGuess,
+  type InboxHandled,
   type InboxItem,
   type InboxMail,
+  type InboxPerson,
   type InboxPosition,
+  type InboxScope,
   type InboxView,
   inboxCounts,
   inboxUrgencyOfCard,
   inboxUrgencyOfMail,
   isQueueCard,
   projectCard,
+  scopeInbox,
   sortCards,
   sortInbox,
 } from '@agentsws/deck'
@@ -97,10 +105,62 @@ function mailRow(t: MessageThreadSummary): InboxMail | undefined {
   }
 }
 
+/**
+ * WP510（决策 1515）：收件箱的团队那一面要的东西——这个品牌里是 ② / ③、有哪些同事。
+ * ① 个人、没装配、读不到都回 `undefined`（收件箱和以前一模一样）。
+ */
+export interface InboxTeamContext {
+  mode: 'peers' | 'company'
+  me: string
+  members: TeamMember[]
+  /** 人 id → 名字（看的人自己回 `undefined`：自己定的卡不写名字）。 */
+  nameOf(id: string): string | undefined
+}
+
+export async function inboxTeamOf(
+  deps: GatewayDeps,
+  actor: WorkstationActor,
+): Promise<InboxTeamContext | undefined> {
+  const port = deps.teamInbox
+  if (port === undefined) return undefined
+  try {
+    const team = await port.team(actor)
+    if (team.mode === 'solo') return undefined
+    const names = new Map(team.members.map((m) => [m.person_id, m.name]))
+    return {
+      mode: team.mode,
+      me: actor.person_id,
+      members: team.members,
+      nameOf: (id) => (id === actor.person_id ? undefined : names.get(id)),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+/** 定过了的那几档（「刚处理」那一块读它们）。 */
+const DECIDED_STATES: ApprovalState[] = [
+  'approved',
+  'approved_edited',
+  'rejected',
+  'deferred',
+  'applying',
+  'applied',
+  'apply_failed',
+]
+
+interface QueuedCard {
+  card: DeckCard
+  item: ApprovalItem
+  /** WP510：不是发给本人的（只在「全部」里，按钮不给）。 */
+  others?: boolean
+}
+
 async function cardsOfEveryone(
   deps: GatewayDeps,
   actor: WorkstationActor,
-): Promise<{ cards: { card: DeckCard; item: ApprovalItem }[]; tz: number }> {
+  team?: InboxTeamContext,
+): Promise<{ cards: QueuedCard[]; tz: number }> {
   const w = deps.workstation
   if (w === undefined) return { cards: [], tz: 0 }
   const positions = await w.positions(actor)
@@ -108,12 +168,13 @@ async function cardsOfEveryone(
   const now = deps.clock.now()
   const live = (i: { expires_at?: string }): boolean =>
     i.expires_at === undefined || Date.parse(i.expires_at) > Date.parse(now)
-  const seen = new Map<string, { card: DeckCard; item: ApprovalItem }>()
-  const take = (items: readonly ApprovalItem[], position_id: string): void => {
+  const seen = new Map<string, QueuedCard>()
+  const take = (items: readonly ApprovalItem[], position_id: string, others = false): void => {
     for (const item of items) {
       // 定过的（批了 / 不要了 / 稍后）不在队列里：「批了两边一起消失」
       if (seen.has(item.id) || !DECIDABLE_STATES.includes(item.state)) continue
-      if (!can(item) || !live(item)) continue
+      // 别人的卡（「全部」里只看）不问本人能不能批
+      if ((!others && !can(item)) || !live(item)) continue
       const card = projectCard(item, {
         now,
         position_id,
@@ -122,7 +183,13 @@ async function cardsOfEveryone(
       })
       if (card.kind === 'system_alert' || card.kind === 'digest') continue
       if (!isQueueCard(card.kind, card.change_kind)) continue
-      seen.set(item.id, { card, item })
+      // ② / ③：收件人（或认领人）里没有本人的，就是别人的卡（不管从哪条路收进来的）
+      const theirs =
+        others ||
+        (team !== undefined &&
+          !item.routing.recipients.some((r) => r.person === actor.person_id) &&
+          item.routing.assignee !== actor.person_id)
+      seen.set(item.id, theirs ? { card, item, others: true } : { card, item })
     }
   }
   let tz = 0
@@ -138,16 +205,88 @@ async function cardsOfEveryone(
     } catch {
       tz = 0
     }
+    if (team !== undefined) {
+      /*
+       * WP510：② / ③ 里发给本人、却不在本人岗位里的卡（邮箱负责人收的催促卡——负责人不一定做那个岗位），
+       * 和同事们队列里的卡（「全部」里只看）。卡的岗位 id 用本人那一条（决定口子认本人的分配）。
+       */
+      const queue = (person_id: string): Promise<ApprovalItem[]> =>
+        deps.approvals
+          .queue({ workspace_id: actor.workspace_id, person_id, lane: 'mine' })
+          .catch(() => [])
+      take(await queue(actor.person_id), host.position_id)
+      for (const m of team.members) {
+        if (m.person_id === actor.person_id) continue
+        take(await queue(m.person_id), host.position_id, true)
+      }
+    }
   }
-  // 同类合并后代表那一张（与岗位页同一个口径：一行 = 牌堆里的一张）
-  const folded = foldCards(sortCards([...seen.values()].map((x) => x.card)))
-  return {
-    cards: folded.flatMap((card) => {
+  // 同类合并后代表那一张（与岗位页同一个口径：一行 = 牌堆里的一张）；别人的和自己的分开合
+  const fold = (rows: QueuedCard[]): QueuedCard[] =>
+    foldCards(sortCards(rows.map((x) => x.card))).flatMap((card) => {
       const hit = seen.get(card.id)
-      return hit === undefined ? [] : [{ card, item: hit.item }]
-    }),
+      return hit === undefined ? [] : [{ ...hit, card }]
+    })
+  const all = [...seen.values()]
+  return {
+    cards: [
+      ...fold(all.filter((x) => x.others !== true)),
+      ...fold(all.filter((x) => x.others === true)),
+    ],
     tz,
   }
+}
+
+/** WP510：最近 24 小时里同事们（含本人）定过的卡——「刚处理」。 */
+async function handledOf(
+  deps: GatewayDeps,
+  actor: WorkstationActor,
+  team: InboxTeamContext,
+  instances: readonly PositionInstance[],
+): Promise<InboxHandled[]> {
+  const since = Date.parse(deps.clock.now()) - 24 * 3_600_000
+  const seen = new Map<string, ApprovalItem>()
+  for (const m of team.members) {
+    const rows = await deps.approvals
+      .queue({
+        workspace_id: actor.workspace_id,
+        person_id: m.person_id,
+        lane: 'mine',
+        state: DECIDED_STATES,
+      })
+      .catch(() => [] as ApprovalItem[])
+    for (const i of rows) {
+      const d = i.decision
+      if (d === undefined || d.by === 'mandate' || d.followed !== undefined) continue
+      if (!(Date.parse(d.at) >= since)) continue
+      const changeKind = (i.payload as { kind?: unknown } | undefined)?.kind
+      if (
+        !isQueueCard(
+          i.kind as DeckCard['kind'],
+          typeof changeKind === 'string' ? changeKind : undefined,
+        )
+      )
+        continue
+      seen.set(i.id, i)
+    }
+  }
+  const names = new Map(team.members.map((m) => [m.person_id, m.name]))
+  return [...seen.values()]
+    .sort((a, b) => Date.parse(b.decision?.at ?? '') - Date.parse(a.decision?.at ?? ''))
+    .slice(0, 8)
+    .map((i) => {
+      const by = String(i.decision?.by ?? '')
+      const position = positionOfRole(instances, i.role_id)?.position_id
+      return {
+        card_id: i.id,
+        title: i.title,
+        by: { person_id: by, name: names.get(by) ?? '' },
+        self: by === actor.person_id,
+        action: handledAction(i.decision?.action),
+        at: i.decision?.at ?? i.updated_at,
+        ...(position === undefined ? {} : { position }),
+      }
+    })
 }
 
 export function inboxRoutes(): Route[] {
@@ -163,8 +302,17 @@ export function inboxRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        params: [
+          {
+            name: 'scope',
+            in: 'query',
+            required: false,
+            description:
+              'WP510：② / ③ 里「给我的」（mine，缺省）或「全部」（all）；① 个人里不看这一格',
+          },
+        ],
         returns:
-          '{ items: InboxItem[], counts, positions: InboxPosition[], unassigned, guessed: InboxGuess[], brief }',
+          '{ items: InboxItem[], counts, positions: InboxPosition[], unassigned, guessed: InboxGuess[], brief, team? }',
       },
       async (c, deps) => {
         const p = principalOf(c)
@@ -179,7 +327,36 @@ export function inboxRoutes(): Route[] {
             ? []
             : await deps.positions.mine({ ...actor, assignment_id: assignment.id })
 
-        const { cards, tz } = await cardsOfEveryone(deps, actor)
+        // WP510：② / ③ 才有团队那一面（① 个人、没装配：和以前一模一样）
+        const team = await inboxTeamOf(deps, actor)
+        const scope: InboxScope =
+          team !== undefined && c.req.query('scope') === 'all' ? 'all' : 'mine'
+        if (team !== undefined) {
+          // 懒扫：还没定的催促卡按邮箱负责人改派（负责人不在交给兜底的人）
+          try {
+            await deps.teamInbox?.sweep?.(actor)
+          } catch {
+            /* 扫不动不挡收件箱 */
+          }
+        }
+        const { cards, tz } = await cardsOfEveryone(deps, actor, team)
+        const person = (id: string): InboxPerson => ({
+          person_id: id,
+          name: team?.members.find((m) => m.person_id === id)?.name ?? '',
+        })
+        const routes = new Map<string, Promise<OwnerRoute | undefined>>()
+        const routeOf = (account: string): Promise<OwnerRoute | undefined> => {
+          const port = deps.teamInbox
+          if (port === undefined) return Promise.resolve(undefined)
+          let hit = routes.get(account)
+          if (hit === undefined) {
+            hit = Promise.resolve()
+              .then(() => port.ownersOf(actor, account))
+              .catch(() => undefined)
+            routes.set(account, hit)
+          }
+          return hit
+        }
 
         // 消息那一侧：没人接的信、AI 猜着交的、几捆通知
         const port = deps.messages
@@ -209,17 +386,23 @@ export function inboxRoutes(): Route[] {
         )
 
         const items: InboxItem[] = []
-        for (const { card, item } of cards) {
+        for (const { card: projected, item, others } of cards) {
+          // WP510：别人的卡在「全部」里只看——按钮不给（决定口子也只认收件人本人）
+          const card: DeckCard =
+            others === true ? { ...projected, available_actions: [] } : projected
           const inst = positionOfRole(instances, card.role_id)
           const thread = threadOfCard(card)
           const guess =
             (thread === undefined ? undefined : guessByThread.get(thread)) ??
             (card.matter_id === undefined ? undefined : guessByMatter.get(card.matter_id))
+          const row = cardRow(card, item)
+          const recipients = [...new Set(item.routing.recipients.map((r) => r.person))]
           items.push({
             id: `card:${card.id}`,
             type: 'card',
             urgency: inboxUrgencyOfCard(card, now, tz),
-            ...cardRow(card, item),
+            ...row,
+            ...(others === true ? { primary: 'open' as const } : {}),
             at: card.detail.created_at,
             ...(inst === undefined ? {} : { position: inst.position_id }),
             card,
@@ -232,12 +415,21 @@ export function inboxRoutes(): Route[] {
                     confidence: guess.confidence,
                   },
                 }),
+            ...(team === undefined
+              ? {}
+              : { owners: recipients.map(person), mine: others !== true }),
           })
         }
         for (const t of unclaimed) {
           const mail = mailRow(t)
           if (mail === undefined) continue
           const self = mail.suggest?.action === 'self'
+          // WP510：信按这只邮箱的负责人分（没指定负责人的照旧谁都看得到）
+          const route =
+            team === undefined || mail.account === undefined
+              ? undefined
+              : await routeOf(mail.account)
+          const owned = route !== undefined && route.to.length > 0
           items.push({
             id: `mail:${t.thread_id}`,
             type: 'mail',
@@ -246,9 +438,19 @@ export function inboxRoutes(): Route[] {
             primary: self ? 'self' : mail.suggest?.action === 'hand' ? 'hand' : 'open',
             at: mail.last_at,
             mail,
+            ...(team === undefined
+              ? {}
+              : owned
+                ? {
+                    owners: route.to.map(person),
+                    mine: route.to.includes(actor.person_id),
+                    ...(route.fallback ? { fallback_from: route.owners.map(person) } : {}),
+                  }
+                : { mine: true }),
           })
         }
-        const sorted = sortInbox(items)
+        const everything = sortInbox(items)
+        const sorted = team === undefined ? everything : scopeInbox(everything, scope)
 
         // 岗位下拉：本人持着的每个岗位都列（0 件也列，件数灰）；名字从岗位实体，退回消息面那一列
         const names = new Map<string, MessagePositionOption>(
@@ -313,6 +515,17 @@ export function inboxRoutes(): Route[] {
             notices: overview?.notice ?? 0,
             ...(top === undefined ? {} : { top: top.card?.title ?? top.mail?.subject ?? '' }),
           },
+          ...(team === undefined
+            ? {}
+            : {
+                team: {
+                  mode: team.mode,
+                  scope,
+                  mine: scopeInbox(everything, 'mine').length,
+                  all: everything.length,
+                  handled: await handledOf(deps, actor, team, instances),
+                },
+              }),
         }
         return ok(c, view)
       },

@@ -131,6 +131,7 @@ import type { SiteHealthPort } from './routes/site-health.js'
 import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
 import type { StoragePort } from './routes/storage.js'
+import type { TeamInboxPort } from './routes/team-inbox.js'
 import type { TelemetrySettingsPort } from './routes/telemetry.js'
 import type { UpdatePausePort } from './routes/update-pause.js'
 import type { WorkPort } from './routes/work.js'
@@ -1145,6 +1146,11 @@ export interface GatewayDeps {
    * 左栏的「消息」照实说"这台机器上还没连邮箱"，工作台其余一切照常。
    */
   messages?: MessagesPort
+  /**
+   * WP510（决策 1515）：收件箱的团队那一面——谁在看、邮箱负责人、催促卡按负责人分。
+   * 没装配时收件箱照旧（和 ① 个人一样），`/v1/inbox/presence`、`/v1/inbox/team` 回 not_implemented。
+   */
+  teamInbox?: TeamInboxPort
   /** WP20 连接面（连接向导 / 凭据原生表单直填）；没装配时 `/v1/connections/*` 回 not_implemented。 */
   connections?: ConnectionsPort
   /**

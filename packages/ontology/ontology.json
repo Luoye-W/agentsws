@@ -102,6 +102,7 @@
     "packages/contracts/src/standby.ts",
     "packages/contracts/src/subscription.ts",
     "packages/contracts/src/task-text.ts",
+    "packages/contracts/src/team-inbox.ts",
     "packages/contracts/src/team-link.ts",
     "packages/contracts/src/telemetry-testids.ts",
     "packages/contracts/src/telemetry.ts",
@@ -167,7 +168,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "3e01246c38d264d3e78459b763939283",
+  "source_digest": "80e83a0c48ff087b5e9bdd42e21a2c16",
   "objects": [
     {
       "id": "ad",

@@ -108,6 +108,7 @@ import { socialRoutes } from './routes/social.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面（切档向导与"接回本机"）
 import { standbyRoutes } from './routes/standby.js'
 import { storageRoutes } from './routes/storage.js'
+import { teamInboxRoutes } from './routes/team-inbox.js'
 import { telemetryRoutes } from './routes/telemetry.js'
 import { updatePauseRoutes } from './routes/update-pause.js'
 import { workRoutes } from './routes/work.js'
@@ -240,6 +241,7 @@ export function collectRoutes(): Route[] {
     ...workstationRoutes(),
     // WP459（决策 1497）：收件箱——所有岗位的决策卡 + 要你判断的信一条队列
     ...inboxRoutes(),
+    ...teamInboxRoutes(),
     // WP438：报表（看板那几行、一整份、快照、跟 AI 说想看什么 → 固定）
     ...reportRoutes(),
     // WP52（47 J1）数据地图：`/v1/positions/:id/ontology`。排在 workstationRoutes 之后——

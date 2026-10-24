@@ -796,6 +796,17 @@ function routedNoteOf(item: ApprovalItem): { routed_note?: string; reconfirm?: t
   }
 }
 
+/** WP510（决策 1515）：别人定的卡写上是谁（只在宿主给了 `personName` 时）。 */
+function decidedByOf(
+  item: ApprovalItem,
+  ctx: ProjectContext,
+): { decided_by?: { person_id: string; name: string } } {
+  const by = item.decision?.by
+  if (ctx.personName === undefined || by === undefined || by === 'mandate') return {}
+  const name = ctx.personName(by)
+  return name === undefined || name === '' ? {} : { decided_by: { person_id: by, name } }
+}
+
 /** WP232：收件人待定的草稿卡上，按钮不能写「发送」——批了不会发出去。 */
 function manualSendLabels(actions: DeckAction[]): Partial<Record<DeckAction, string>> {
   const out = labelsFor('outbound_draft', actions)
@@ -911,6 +922,7 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     ...(todo_id === undefined ? {} : { todo_id }),
     // WP174：「转给了谁、为什么」——路由真做过判断的卡才有（上级 / 老板 / 改派）
     ...routedNoteOf(item),
+    ...decidedByOf(item, ctx),
     source: sourceOf(item, kind),
     highlights: highlightsOf(item, ctx),
     evidence_chips: evidenceChipsOf(item, ctx),

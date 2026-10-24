@@ -89,6 +89,7 @@ import type { SocialChannelsAssembly } from './social-channels.js'
 import type { SocialServiceAssembly } from './social-service.js'
 import type { StoreDigest } from './store-digest.js'
 import type { SupportJudgment } from './support-judgment.js'
+import type { TeamInbox } from './team-inbox.js'
 import type { WeeklyReviewService } from './weekly-review.js'
 import type { WorkstationDataSource } from './workstation.js'
 
@@ -420,6 +421,8 @@ export interface BrandModuleSet {
   messages: MessagesAssembly
   /** WP442（docs/108 §5.3）：回信跟进（发出去 N 个工作日没回 → 出卡附催促草稿）。 */
   followUp?: MessageFollowUpService
+  /** WP510（决策 1515）：收件箱的团队那一面（邮箱负责人、上次在线、催促卡按负责人分）。 */
+  teamInbox?: TeamInbox
   chat: ChatLane
   /**
    * WP125（72 §1.I / §P0-1）：这个品牌的**客服判断层**。

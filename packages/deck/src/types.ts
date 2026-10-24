@@ -329,6 +329,11 @@ export interface DeckCard {
    * 不转给别人，落回你；点「通过」要点两下。③ 不出（超了就按规矩转人）。
    */
   reconfirm?: true
+  /**
+   * WP510（决策 1515）：**处理留名**——② 同事互联 / ③ 公司里，这张卡是**别人**定的（批 / 不要 / 改了再批 / 稍后）。
+   * 只在宿主给了 `ProjectContext.personName`、且定的人不是看卡的本人时才有；① 个人里永远没有。
+   */
+  decided_by?: { person_id: string; name: string }
   source: DeckSource
   highlights: DeckHighlight[]
   evidence_chips: DeckEvidenceChip[]
@@ -399,6 +404,11 @@ export interface ProjectContext {
    * 不给 = 不标（老行为）。
    */
   wiring?: (item: ApprovalItem) => ExecutionWiring | undefined
+  /**
+   * WP510（只加）：人 id → 名字，只给 ② / ③（① 不给）。回 `undefined` = 不写名字（看卡的本人自己定的也回 `undefined`）。
+   * 给了才在定过的卡上出 `decided_by`（「王五批了」）。
+   */
+  personName?: (person_id: string) => string | undefined
 }
 
 // ── 29 积木 / 数字块 ───────────────────────────────────────────────────

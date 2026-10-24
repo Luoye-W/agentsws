@@ -66,6 +66,50 @@ export interface InboxItem {
    * 改判的就是这封信（`message_id`）。
    */
   guessed?: { message_id: string; position: string; confidence: number }
+  /**
+   * WP510（决策 1515，只在 ② / ③）：这一件是给谁的——卡 = 收件人；信 = 这只邮箱的负责人（没指定负责人的信没有）。
+   * ① 个人里永远没有。
+   */
+  owners?: InboxPerson[]
+  /** WP510（只在 ② / ③）：在不在「给我的」里（`false` = 只在「全部」里看得到，卡上的按钮也不给）。 */
+  mine?: boolean
+  /** WP510：负责人都不在、转给了兜底的人——原来的负责人是谁。 */
+  fallback_from?: InboxPerson[]
+}
+
+/** WP510：收件箱里出现的一位同事。 */
+export interface InboxPerson {
+  person_id: string
+  name: string
+}
+
+/** WP510（决策 1515）：「给我的」/「全部」。 */
+export type InboxScope = 'mine' | 'all'
+
+export const INBOX_SCOPES: readonly InboxScope[] = ['mine', 'all']
+
+/** WP510：刚处理过的一件（「刚处理」那一块：谁、批了还是不要了、哪一张）。 */
+export interface InboxHandled {
+  /** 审批项 id（收件箱那一行是 `card:<id>`）。 */
+  card_id: string
+  title: string
+  by: InboxPerson
+  /** 是不是看的人自己。 */
+  self: boolean
+  action: 'approve' | 'reject' | 'defer' | 'other'
+  at: string
+  position?: string
+}
+
+/** WP510（只在 ② / ③）：收件箱的团队那一面。 */
+export interface InboxTeam {
+  mode: 'peers' | 'company'
+  scope: InboxScope
+  /** 「给我的」几件、「全部」几件（分段上的数）。 */
+  mine: number
+  all: number
+  /** 最近 24 小时里谁处理了什么（新的在前，最多 8 件）。 */
+  handled: InboxHandled[]
 }
 
 /** 「岗位」下拉里的一行（决策 1501 甲：带件数；最后一行是「还没归岗位的信」）。 */
@@ -125,6 +169,8 @@ export interface InboxView {
   unassigned: number
   guessed: InboxGuess[]
   brief: InboxBrief
+  /** WP510：② 同事互联 / ③ 公司里才有；① 个人没有这一格（界面一个字都不多）。 */
+  team?: InboxTeam
 }
 
 const HOUR = 3_600_000
@@ -217,4 +263,17 @@ export function filterInbox(items: readonly InboxItem[], filter: InboxFilter): I
     if (filter.position === INBOX_UNASSIGNED) return i.position === undefined
     return i.position === filter.position
   })
+}
+
+/** WP510：一次决定 → 「刚处理」里那个动词。 */
+export function handledAction(action: string | undefined): InboxHandled['action'] {
+  if (action === 'approve' || action === 'approve_edited') return 'approve'
+  if (action === 'reject') return 'reject'
+  if (action === 'defer') return 'defer'
+  return 'other'
+}
+
+/** WP510：按「给我的 / 全部」挑（没有团队那一面时原样回）。 */
+export function scopeInbox(items: readonly InboxItem[], scope: InboxScope): InboxItem[] {
+  return scope === 'all' ? [...items] : items.filter((i) => i.mine !== false)
 }

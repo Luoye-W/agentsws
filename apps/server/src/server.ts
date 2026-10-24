@@ -1011,6 +1011,7 @@ import {
   needsSupportVoice,
   supportVoiceSection,
 } from './support-voice.js'
+import { createTeamInbox, type TeamDirectory, TeamPresence, teamInboxPort } from './team-inbox.js'
 import { createTeamLink, type TeamLink } from './team-link.js'
 import { createTeamSubscriptionClient, teamSubscriptionNotice } from './team-subscription.js'
 import {
@@ -2964,6 +2965,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let soleOwnerOf: ((ws: string) => PersonId | undefined) | undefined
   /** WP276：同上的同步版（角色定位「谁都能改」、连接「谁接的谁管」要同步判）。 */
   let modeOfWorkspaceSync: ((ws: string) => OrganizationMode | undefined) | undefined
+  /**
+   * WP510（决策 1515）：某个品牌的用法与同事（名字、是不是发起人 / 管理员）——收件箱的团队那一面问它。
+   * 组织面装好之后才填；之前一律当 ① 个人（什么都不多）。
+   */
+  let teamDirectoryOf: ((ws: WorkspaceId) => Promise<TeamDirectory>) | undefined
+  /** WP510：收件箱「谁在看」（全进程一份，内存里）。 */
+  const teamPresence = new TeamPresence()
   const approvalDirectory = createApprovalDirectory({
     roles,
     owner: () => bootstrapOwner,
@@ -9759,6 +9767,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 卡走同一条审批总线：归岗位的会话给做那个岗位的人，没归属的给品牌里第一个持岗位的人（消息页「等对方回」
      * 就地批，决策 1452）；批了经执行器 → 这里的 deliver → 已连邮箱 sendMail（急停、outbox 幂等）。
      */
+    /*
+     * WP510（决策 1515）：收件箱的团队那一面——邮箱负责人、上次在线；② / ③ 里催促卡按邮箱负责人分
+     * （负责人不在交给兜底的人）。① 个人里它什么都不做。
+     */
+    const teamInboxOfBrand = createTeamInbox({
+      workspace_id: ws,
+      clock,
+      ...(dir === undefined ? {} : { dir }),
+      appendEvent,
+      directory: async () =>
+        teamDirectoryOf === undefined ? { mode: 'solo', members: [] } : teamDirectoryOf(ws),
+      mailboxes: () => connections.mailAccounts().map((a) => a.address),
+      holdersOf: (role_id) => [
+        ...new Set(
+          roles.assignments
+            .listByRole(role_id as RoleId, { workspace_id: ws })
+            .filter((a) => a.revoked_at === undefined)
+            .map((a) => a.person_id),
+        ),
+      ],
+      approvals,
+    })
     followUpRef = createMessageFollowUp({
       workspace_id: ws,
       clock,
@@ -9767,11 +9797,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       accounts: () => connections.mailAccounts().map((a) => a.address),
       tz: () => workData.tz_offset_minutes,
       otherFollowUp: (thread_id, refs) => messages.otherFollowUp(thread_id, refs),
-      recipientFor: (position_id) => {
-        if (position_id === undefined) return firstPositionOf(ws)
-        const template = org.positions().find((t) => t.id === position_id)
+      recipientFor: async (position_id, account) => {
+        const template =
+          position_id === undefined ? undefined : org.positions().find((t) => t.id === position_id)
         const duties = template?.roles.map((r) => r.role) ?? []
-        return duties.length === 0 ? firstPositionOf(ws) : positionFor(ws, duties)
+        const base =
+          position_id === undefined || duties.length === 0
+            ? firstPositionOf(ws)
+            : positionFor(ws, duties)
+        if (base === undefined || account === undefined) return base
+        // WP510：② / ③ 里这只邮箱有负责人 → 卡给负责人（① 与没指定负责人照旧）
+        const owners = await teamInboxOfBrand
+          .nudgeRecipients(account, base.role_id)
+          .catch(() => undefined)
+        return owners === undefined ? base : { ...base, recipients: owners }
       },
       approvals,
       applyApproval: (id) => txn.executor.applyApproval(id),
@@ -11347,6 +11386,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       channels,
       messages,
       followUp: followUpRef,
+      teamInbox: teamInboxOfBrand,
       chat,
       chatWidget,
       supportJudgment,
@@ -13560,6 +13600,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP275：审批路由、职责分离、超时升级从这一刻起按模式走（之前没有任何卡）
   modeOfWorkspace = (ws) => organizations.modeOf(ws)
   modeOfWorkspaceSync = (ws) => organizations.modeOfSync(ws)
+  teamDirectoryOf = async (ws) => {
+    const mode = await organizations.modeOf(ws)
+    const record = organizations.organizationOf(ws)
+    const rows = (await identity.members(ws)).filter((m) => m.left_at === undefined)
+    const members: TeamDirectory['members'] = []
+    for (const m of rows) {
+      if (members.some((x) => x.person_id === m.person_id)) continue
+      const p = await identity.getPerson(m.person_id)
+      members.push({
+        person_id: m.person_id,
+        name: p?.name?.trim() || p?.email || m.person_id,
+        admin:
+          m.role === 'owner' ||
+          m.role === 'manager' ||
+          (record !== undefined && canAdministerOrganization(record, m.person_id)),
+      })
+    }
+    return { mode, members }
+  }
   soleOwnerOf = (ws) =>
     organizations.modeOfSync(ws) === 'solo' ? organizations.organizationOf(ws)?.owner_id : undefined
   const company = onboarding.companyProfile()
@@ -16737,8 +16796,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP415：出卡时就标「这一步还没接通」（生产）/「演示」（接了模拟世界）
     executionWiring: (item) => wiringOfItem(item, executionMode),
     // WP194：一次请求绑好分配之后，开一个「算在谁头上」的作用域（打云时带归属头）
-    requestScope: (scope, next) =>
-      withCloudAttribution(cloudAttributionOf(scope.assignment.id), next),
+    requestScope: (scope, next) => {
+      // WP510：上次在线（「负责人不在」按它算）
+      // 只在 ② / ③ 记；只记已经建出来的品牌（不为记一笔去懒建一整套模块）
+      const touchWs = scope.assignment.workspace_id as WorkspaceId
+      const touchMode = modeOfWorkspaceSync?.(touchWs)
+      if (touchMode === 'peers' || touchMode === 'company')
+        brandModules.peek(touchWs)?.teamInbox?.touch(scope.person_id)
+      return withCloudAttribution(cloudAttributionOf(scope.assignment.id), next)
+    },
     halt: kernel.halt,
     // WP215：品牌急停只拦这个品牌的施行与发送（全局急停照旧在上面那一份）
     brandHalt: (ws) =>
@@ -16788,6 +16854,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     peerAccess: (ws) => organizations.modeOfSync(ws) === 'peers',
     // WP113（63）：消息——按请求的品牌取那一只邮箱库
     messages: brandMessagesPort(brandModules),
+    // WP510（决策 1515）：收件箱的团队那一面（谁在看、邮箱负责人、催促卡按负责人分），按品牌
+    teamInbox: teamInboxPort({
+      presence: teamPresence,
+      nowMs: () => Date.parse(clock.now()),
+      brandOf: async (ws) => (await brandModules.forWorkspace(ws as WorkspaceId)).teamInbox,
+    }),
     // WP83（54 §4）：连接目录（按 kind 的总表）与岗位连接清单，也按品牌
     connectionDirectory: connectionDirectoryOf,
     /*
