@@ -503,6 +503,11 @@ export interface WorkspaceProfile {
    * GEO 策略建议按它认品类（不再靠一句话介绍去猜）。没写过就没有。
    */
   category?: string
+  /**
+   * WP452（docs/109 §6.3，决策 1399）：卖的是实物、App 还是别的数字产品。可选；只有投放与 SEO 的建议读它
+   * （Apple 搜索广告只推 App、归因要不要讲 App 那一节）。没填 = 不知道。
+   */
+  offering?: import('./ads-skills.js').BrandOffering
   /** WP248（决策 83）：客服邮箱（给客人写信、话术里留的那一个）。没写过就没有。 */
   support_email?: string
   /**
