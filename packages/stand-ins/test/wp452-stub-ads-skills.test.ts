@@ -56,7 +56,7 @@ describe('WP452 stub 剧本', () => {
     })
     const out = await runAdsSkillScript(
       exec,
-      '实验结果出来了：基准 21200/424，新版 21200/530，想看出提升 20%，每天 6000',
+      '实验结果出来了：基准 21200/424，新版 21200/530，想看出提升 20%，日均 6000',
       ALL,
     )
     expect(calls.map((c) => c.tool)).toEqual(['design_ads_experiment', 'read_ads_experiment'])

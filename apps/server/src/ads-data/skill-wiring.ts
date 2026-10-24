@@ -48,6 +48,13 @@ export function experimentReadoutCard(
   payload: AdsExperimentReadoutPayload,
 ): CreateApprovalInput<AdsExperimentReadoutPayload> {
   const rec = EXPERIMENT_VERDICT_LABEL[payload.recommended]
+  // 建议的那一个排第一（主按钮）；载荷里也带一份（看板投影从载荷读选项）
+  const options = [payload.recommended, ...VERDICTS.filter((v) => v !== payload.recommended)].map(
+    (v) => ({
+      id: v,
+      label: `${EXPERIMENT_VERDICT_LABEL[v]}${v === payload.recommended ? '（建议）' : ''}`,
+    }),
+  )
   return {
     workspace_id: req.workspace_id,
     schema_version: 1,
@@ -60,14 +67,8 @@ export function experimentReadoutCard(
     dedupe_key: `${req.workspace_id}:ads_experiment_readout:${payload.experiment_id ?? req.id}`,
     title: `实验结果：${[...payload.hypothesis].slice(0, 30).join('')}`,
     summary: `建议「${rec.split('：')[0]}」。${payload.readout.reasons[0] ?? ''}`,
-    payload,
-    // 建议的那一个排第一（主按钮）
-    options: [payload.recommended, ...VERDICTS.filter((v) => v !== payload.recommended)].map(
-      (v) => ({
-        id: v,
-        label: `${EXPERIMENT_VERDICT_LABEL[v]}${v === payload.recommended ? '（建议）' : ''}`,
-      }),
-    ),
+    payload: { ...payload, options },
+    options,
     evidence: {
       run_id: req.id as never,
       source_events: [],

@@ -92,7 +92,12 @@ const daysBetween = (a: string, b: string): number =>
 function judge(rule: ExportAuditRule, input: AdsAuditInput): { status: AuditStatus; note: string } {
   const { rows, latest } = input
   if (rows.length === 0)
-    return { status: 'unknown', note: '还没有这家的报表：导出一份拖进来就能判。' }
+    return {
+      status: 'unknown',
+      note: isExportPlatform(input.platform)
+        ? '还没有这家的报表：导出一份拖进来就能判。'
+        : '还没导进这家的数：插件每天从后台导一次（或邮箱里的定时报表），有了就能判。',
+    }
   const fmt = isExportPlatform(input.platform) ? EXPORT_FORMATS[input.platform] : undefined
   const conv = fmt?.conversions_label?.zh ?? '转化'
   const cost = sum(rows, 'cost')

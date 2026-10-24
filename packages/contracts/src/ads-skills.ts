@@ -117,6 +117,8 @@ export interface AdsExperimentReadoutPayload {
   readout: AdsExperimentReadout
   /** 建议选哪个（卡上标「建议」）。 */
   recommended: AdsExperimentVerdict
+  /** 卡上的三个选项（建议的排第一；看板投影从载荷读选项）。出卡时由服务端补。 */
+  options?: { id: AdsExperimentVerdict; label: string }[]
 }
 
 /* ── 盈亏平衡与目标（#14） ──────────────────────────────────── */

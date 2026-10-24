@@ -284,6 +284,7 @@ export function readExperiment(input: {
       reasons: ['至少要两版（第一版是基准）才比得了。'],
     }
   const m = METRIC_ZH[input.plan.metric]
+  const labelOf = (id: string): string => input.arms.find((a) => a.id === id)?.label ?? id
   const comparisons = variants
     .filter((v) => v.units > 0 && control.units > 0)
     .map((v) => {
@@ -328,7 +329,9 @@ export function readExperiment(input: {
   } else if (guardrail_breaches.length > 0) {
     verdict = 'stop'
     for (const b of guardrail_breaches)
-      reasons.push(`「${b.arm}」的${b.metric}变差 ${b.worse_pct}%，超过护栏 ${b.limit_pct}%。`)
+      reasons.push(
+        `「${labelOf(b.arm)}」的${b.metric}变差 ${b.worse_pct}%，超过护栏 ${b.limit_pct}%。`,
+      )
   } else {
     const wins = comparisons.filter((c) => c.significant && c.lift_pct > 0)
     const losses = comparisons.filter((c) => c.significant && c.lift_pct < 0)
@@ -336,12 +339,12 @@ export function readExperiment(input: {
       const best = [...wins].sort((a, b) => b.lift_pct - a.lift_pct)[0] as (typeof wins)[number]
       verdict = 'keep'
       reasons.push(
-        `「${best.arm}」${m.name} ${pct(best.rate)} 对基准 ${pct(best.control_rate)}，提升 ${best.lift_pct}%（p = ${best.p_value}）。`,
+        `「${labelOf(best.arm)}」${m.name} ${pct(best.rate)} 对基准 ${pct(best.control_rate)}，提升 ${best.lift_pct}%（p = ${best.p_value}）。`,
       )
     } else if (losses.length === comparisons.length && losses.length > 0) {
       verdict = 'stop'
       reasons.push(
-        `变体都显著比基准差（${losses.map((l) => `「${l.arm}」${l.lift_pct}%`).join('、')}）。`,
+        `变体都显著比基准差（${losses.map((l) => `「${labelOf(l.arm)}」${l.lift_pct}%`).join('、')}）。`,
       )
     } else {
       // 跑满了没分出高下：看差的上限够不够得着最小提升

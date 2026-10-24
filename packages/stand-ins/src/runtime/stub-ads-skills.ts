@@ -30,7 +30,12 @@ const VERDICT_ZH: Record<string, string> = { keep: '保留', stop: '停', retest
 function pick(text: string, allow: ReadonlySet<string>): string | undefined {
   if (/实验/u.test(text) && /结果/u.test(text) && allow.has(READ_ADS_EXPERIMENT_TOOL))
     return READ_ADS_EXPERIMENT_TOOL
-  if (/落地页|landing/iu.test(text) && allow.has(CHECK_AD_LANDING_TOOL))
+  // 要说「对一遍 / 核对」才走：交出去的「改广告 / 改页面」那件事里也提落地页，别让它再核一遍
+  if (
+    /落地页|landing/iu.test(text) &&
+    /对一遍|对一下|核对|check/iu.test(text) &&
+    allow.has(CHECK_AD_LANDING_TOOL)
+  )
     return CHECK_AD_LANDING_TOOL
   if (/保本|盈亏|break-?even|目标\s*CPA/iu.test(text) && allow.has(CALC_BREAK_EVEN_TOOL))
     return CALC_BREAK_EVEN_TOOL
@@ -114,7 +119,7 @@ export async function runAdsSkillScript(
   }
 
   if (tool === CHECK_AD_LANDING_TOOL) {
-    const url = /https?:\/\/[^\s，。」]+/u.exec(text)?.[0]
+    const url = /https?:\/\/[^\s，。」：；）]+/u.exec(text)?.[0]
     const quoted = [...text.matchAll(/「([^」]+)」/gu)].map((m) => m[1] as string)
     if (url === undefined || quoted.length === 0)
       return {
@@ -149,11 +154,12 @@ export async function runAdsSkillScript(
   const base = pairs[0]
   const variant = pairs[1]
   const mde = numIn(text, /提升\s*(\d+(?:\.\d+)?)\s*%/u)
-  const daily = numIn(text, /每天\s*(\d+)/u)
+  // 「每天」会被当成定时任务认走，所以认「日均」
+  const daily = numIn(text, /(?:日均|每天)\s*(\d+)/u)
   if (base === undefined || variant === undefined || mde === undefined || daily === undefined)
     return {
       answer:
-        '读结果要这几样：基准和新版各自的「展示 / 点击」（比如 21200/424），想看出的提升（比如提升 20%），每天的量（比如每天 6000）。',
+        '读结果要这几样：基准和新版各自的「展示 / 点击」（比如 21200/424），想看出的提升（比如提升 20%），每天的量（比如日均 6000）。',
       staged,
       readTools,
     }
