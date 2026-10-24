@@ -15,7 +15,7 @@
  * |---|---|
  * | 查对象 | `search_creators` `get_creator` `list_collaborations` `list_deliverables` `list_tracked_links` |
  * | 查知识 | （沿用 `search_policies`，不新增） |
- * | 提议动作 | `score_creator` `add_to_campaign` `draft_outreach` `advance_collaboration` `register_deliverable` `review_deliverable` `create_tracked_link` |
+ * | 提议动作 | `score_creator` `add_to_campaign` `draft_outreach` `advance_collaboration` `register_deliverable` `review_deliverable` `create_tracked_link` `tag_creators`（WP505，只动人工标签） |
  *
  * `score_creator` 归「提议动作」是因为 47 J3 的兜底一律最严；它其实只读，
  * 但登记表里没有它对应的 Action，判不出来就排最后——排后面不影响它能被调到。
@@ -178,6 +178,28 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
       type: 'object',
       properties: { creator_id: str('红人 id') },
       required: ['creator_id'],
+    },
+  },
+  {
+    /*
+     * WP505（决策 1772 B）：AI 能打 / 去**人工标签**（归类词，错了好改，不出卡）。只动标签：
+     * 审核决定（通过 / 淘汰 / 待审）AI 改不了，一个工具都没有——那是人的判断，只能人在红人详情里点。
+     */
+    name: 'tag_creators',
+    description:
+      '给红人打标签 / 去标签（只动标签，不出卡，人随时能在红人详情里改回去）。「把这批里做桌搭的都标上」「把 X 的『待联系』去掉」时用它：creator_ids 是红人 id（先用 search_creators / get_creator 拿到），add 是要加的标签，remove 是要去掉的；原有的其他标签不动。标签是归类词（如 桌搭、开箱、美区），每人最多 20 个、每个最多 40 字。**审核决定（通过 / 淘汰 / 待审）你改不了**——用户让你通过或淘汰谁时，告诉他在红人详情的「审核决定」里点。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        creator_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '要改标签的红人 id（一次最多 50 个）',
+        },
+        add: { type: 'array', items: { type: 'string' }, description: '要加上的标签' },
+        remove: { type: 'array', items: { type: 'string' }, description: '要去掉的标签' },
+      },
+      required: ['creator_ids'],
     },
   },
   {

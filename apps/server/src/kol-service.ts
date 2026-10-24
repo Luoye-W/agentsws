@@ -131,7 +131,7 @@ import {
 } from './kol-byo.js'
 import type { KolChannelsAssembly } from './kol-channels.js'
 import { creatorChecksOf } from './kol-checks.js'
-import type { KolMediaCache } from './kol-media.js'
+import { KOL_MEDIA_RECENT_COVERS, type KolMediaCache } from './kol-media.js'
 import {
   maskAddress,
   PAYMENT_STAGES,
@@ -378,6 +378,12 @@ export interface KolServiceAssembly {
    * 与人手点的那一封一个字不差。
    */
   sweepSequences(): Promise<KolSequenceSweep>
+  /**
+   * WP505（决策 1771 B）：这个品牌现在还用得上的红人图片（外站地址）——每个账号**最近一次存入红人池**那份资料里的
+   * 头像、横幅、前 {@link KOL_MEDIA_RECENT_COVERS} 张作品封面（= 详情 / 候选池会去要的那几张）。
+   * 图片缓存清理据此认「没人再引用」。
+   */
+  mediaReferences(): string[]
 }
 
 /** 一轮序列跟进的结果（调度器把它写进任务的 `last_result`）。 */
@@ -3077,6 +3083,25 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       }
     },
     sweepSequences,
+    mediaReferences() {
+      const latest = new Map<string, KolAccountObservation>()
+      for (const o of store.accountObservations()) {
+        if (o.source !== 'manual_save' || o.profile === undefined) continue
+        const best = latest.get(o.account_id)
+        if (best === undefined || Date.parse(o.observed_at) >= Date.parse(best.observed_at))
+          latest.set(o.account_id, o)
+      }
+      const out: string[] = []
+      for (const o of latest.values()) {
+        const p = o.profile
+        if (p === undefined) continue
+        if (p.avatar_url !== undefined) out.push(p.avatar_url)
+        if (p.banner_url !== undefined) out.push(p.banner_url)
+        for (const r of (p.recent_items ?? []).slice(0, KOL_MEDIA_RECENT_COVERS))
+          if (r.thumbnail_url !== undefined) out.push(r.thumbnail_url)
+      }
+      return out
+    },
   }
 }
 

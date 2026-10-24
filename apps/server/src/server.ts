@@ -615,7 +615,9 @@ import {
   type KolMailPort,
   mergeChoiceOf,
 } from './kol-mail.js'
-import { createKolMediaCache, type KolMediaFetch } from './kol-media.js'
+import { createKolMediaCache, type KolMediaFetch, kolMediaIdOf } from './kol-media.js'
+import { createKolMediaFetch, type KolMediaNetOptions } from './kol-media-fetch.js'
+import { createKolMediaJanitor, type KolMediaJanitor } from './kol-media-janitor.js'
 import { kolPaymentApply, kolSampleApply } from './kol-money.js'
 import { createKolPublicClient } from './kol-public-client.js'
 import {
@@ -1694,10 +1696,23 @@ export interface ServerOptions {
   kolFetch?: KolFetch
   /**
    * WP502（决策 1760 B）：存入红人池时把头像 / 横幅 / 作品封面缓存到本机（`kol-media.ts`）。**给了才下载**：
-   * 生产入口给 `{}`（走 `globalThis.fetch`）；测试给 `{ fetch: 本地假响应 }`——测试里从不去真网站取图。
+   * 生产入口给 `{}`（WP505 起走认系统代理的下载器 `kol-media-fetch.ts`）；测试给 `{ fetch: 本地假响应 }`——测试里从不去真网站取图。
    * 不给 = 不下载（界面照旧一个字的头像、色块封面；已经存下的照样显示）。
    */
-  kolMedia?: { fetch?: KolMediaFetch } | false
+  kolMedia?:
+    | {
+        fetch?: KolMediaFetch
+        /**
+         * WP505（决策 1770 B）：没给 `fetch` 时用认系统代理的下载器（`kol-media-fetch.ts`）；这几格**只给测试**——
+         * 假的系统代理读取、本地自签证书、直连改连本地。
+         */
+        net?: Omit<KolMediaNetOptions, 'env' | 'log'>
+        /** WP505（决策 1771 B）：缓存图片合计上限（字节，所有品牌合计）。默认 500 MB。 */
+        maxTotalBytes?: number
+        /** WP505：清理多久跑一次、刚存下多久内不删（毫秒；测试用）。`false` = 不起定时。 */
+        sweep?: { firstMs?: number; everyMs?: number; graceMs?: number } | false
+      }
+    | false
   /**
    * WP155：自带搜索数据 key 那一档直连服务商用的 fetch。生产不传（走 `globalThis.fetch`）；
    * 测试传录好的替身响应——服务商一个都不真打。
@@ -2961,6 +2976,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * `item.workspace_id` 取模块的函数，而不是一个装配期就定死的对象。
    */
   let brands: BrandModules | undefined
+  /** WP505（决策 1771 B）：红人图片缓存的清理（品牌装配里存图时叫它；下面建好品牌容器前建出来）。 */
+  let kolMediaJanitor: KolMediaJanitor | undefined
   cloudLinkChangedSink = () => {
     for (const brand of brands?.loaded() ?? []) brand.ownModels.accountChanged()
   }
@@ -5510,16 +5527,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
     // WP502（决策 1760 B）：这个品牌的红人图片缓存（落在这个品牌自己的目录下）。下载器只有生产入口给
+    // WP505（决策 1770 B）：生产的下载器认系统代理（环境变量 + 操作系统设置，`kol-media-fetch.ts`），不再用内置 fetch
+    const kolMediaLog =
+      options.quiet === true ? undefined : (line: string) => process.stdout.write(`${line}\n`)
     const kolMediaFetch =
       options.kolMedia === undefined || options.kolMedia === false
         ? undefined
-        : (options.kolMedia.fetch ?? (globalThis.fetch as unknown as KolMediaFetch))
+        : (options.kolMedia.fetch ??
+          createKolMediaFetch({
+            env,
+            ...options.kolMedia.net,
+            ...(kolMediaLog === undefined ? {} : { log: kolMediaLog }),
+          }))
     const kolMedia = createKolMediaCache({
       ...(dir === undefined ? {} : { dir: join(dir, 'kol-media') }),
       ...(kolMediaFetch === undefined ? {} : { fetch: kolMediaFetch }),
-      ...(options.quiet === true
-        ? {}
-        : { log: (line: string) => process.stdout.write(`${line}\n`) }),
+      ...(kolMediaLog === undefined ? {} : { log: kolMediaLog }),
+      // WP505（决策 1771 B）：存下一张就叫清理那一跳看看合计超没超上限
+      onStored: () => kolMediaJanitor?.nudge(),
     })
     /**
      * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象，落在这个品牌自己的目录下）。
@@ -11552,6 +11577,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         )
     },
   })
+  /*
+   * WP505（决策 1771 B）：红人图片缓存的清理（没人引用的删掉 + 所有品牌合计的总量上限，按最久没用的先删）。
+   * 只看已经装起来的品牌（`loaded`：不为了清图把品牌装起来）；只有给了下载器的进程（真服务进程 / 显式要的测试）才起定时。
+   */
+  kolMediaJanitor = createKolMediaJanitor({
+    brands: () =>
+      brands?.loaded().map((b) => ({
+        cache: b.kolMedia,
+        references: () => b.kolService.mediaReferences(),
+      })) ?? [],
+    idOf: kolMediaIdOf,
+    ...(options.kolMedia === undefined ||
+    options.kolMedia === false ||
+    options.kolMedia.sweep === false ||
+    options.kolMedia.sweep?.graceMs === undefined
+      ? {}
+      : { graceMs: options.kolMedia.sweep.graceMs }),
+    ...(options.kolMedia === undefined ||
+    options.kolMedia === false ||
+    options.kolMedia.maxTotalBytes === undefined
+      ? {}
+      : { maxTotalBytes: options.kolMedia.maxTotalBytes }),
+    ...(options.quiet === true ? {} : { log: (line: string) => process.stdout.write(`${line}\n`) }),
+  })
+  if (
+    options.kolMedia !== undefined &&
+    options.kolMedia !== false &&
+    options.kolMedia.sweep !== false
+  )
+    kolMediaJanitor.start(options.kolMedia.sweep ?? {})
   brands = createBrandModules({
     bootstrap: workspace.id,
     create: (ws) => assembleBrand(ws),
@@ -17990,6 +18045,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP476：手上没发出去的那一小批发一下就收（没配置是空操作）
       telemetry.close()
       for (const t of contentTimers) clearTimeout(t)
+      kolMediaJanitor?.stop()
       if (teamTimer !== undefined) clearInterval(teamTimer)
       await teamRef?.close()
       // WP215：分配一变就即时对一遍定时——还在做的那几件先做完，别在关库之后再写

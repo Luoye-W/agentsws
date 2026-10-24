@@ -246,6 +246,11 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
       createDeliverable: async () => ({ id: 'dv_2', kind: 'video', due_at: T0 }),
       reviewDeliverable: async () => ({ staged: true, approval_item_id: 'ap_2' }),
       createTrackedLink: async () => ({ id: 'tl_1', url: 'https://x/?utm_source=y' }),
+      // WP505：tag_creators 走人点标签的同一个口子
+      setCreatorTags: async (_a: unknown, id: string, i: { tags: string[] }) => ({
+        creator: { id, display_name: 'Desk' },
+        tags: i.tags,
+      }),
       createCreator: async (_a: unknown, i: { display_name: string }) => ({
         creator: { id: 'cr_new', display_name: i.display_name },
         accounts: [],
@@ -316,6 +321,11 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
         'review_deliverable',
         { deliverable_id: 'dv_1', review: 'changes_requested' },
         (r) => expect((r.data as { approval_item_id: string }).approval_item_id).toBe('ap_2'),
+      ],
+      [
+        'tag_creators',
+        { creator_ids: ['cr_1'], add: ['桌搭'] },
+        (r) => expect((r.data as { rows: number }).rows).toBe(1),
       ],
       [
         'save_creator',

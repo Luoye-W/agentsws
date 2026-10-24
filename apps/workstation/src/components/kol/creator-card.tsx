@@ -80,8 +80,15 @@ const NEXT_BY_STAGE: Readonly<Record<string, NextStep>> = {
   declined: 'view',
 }
 
-/** 这张卡的主按钮。数不可信的先人工看；还没合作的起草开发信。 */
-export function nextStepOf(row: Pick<KolCreatorRowData, 'blocked' | 'collab'>): NextStep {
+/**
+ * 这张卡的主按钮。数不可信的先人工看；还没合作的起草开发信。
+ * WP505（决策 1773 B）：人点过「淘汰」的，还没合作时主按钮是「看看」（打开详情），不再催起草开发信；
+ * 已经在谈的合作照旧按阶段走（淘汰只是标记，进行中的事不替人停）。
+ */
+export function nextStepOf(
+  row: Pick<KolCreatorRowData, 'blocked' | 'collab'> & Partial<Pick<KolCreatorRowData, 'review'>>,
+): NextStep {
+  if (row.collab === undefined && row.review?.decision === 'rejected') return 'view'
   if (row.blocked !== undefined) return 'blocked'
   if (row.collab === undefined) return 'draft'
   return NEXT_BY_STAGE[row.collab.stage] ?? 'view'

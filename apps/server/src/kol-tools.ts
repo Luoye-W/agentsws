@@ -81,6 +81,9 @@ export interface KolToolsOptions {
 /** WP483：一次最多记几个。 */
 export const OBSERVE_MAX = 50
 
+/** WP505：一次最多给几个人改标签。 */
+export const TAG_MAX_CREATORS = 50
+
 /**
  * WP483（决策 1661）：把 ego 读到的观测交给**插件那一条同样的入口**（`ExtensionPort.ingest`：存本机红人库 +
  * 登录了云账号就转发到工坊云端）。「谁采的」照插件那样记在这个人头上（`person_id`），令牌那一格写 `ego`。
@@ -531,6 +534,80 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
           return { status: 'error', reason: `红人库里没有 ${id} 这一条。` }
         }
         return { status: 'ok', data: detail, provenance: [{ type: 'creator', id }] }
+      }
+
+      /*
+       * WP505（决策 1772 B）：AI 打 / 去人工标签。走人点标签的同一个口子（`setCreatorTags`：去空白、不分大小写去重、
+       * 每人最多 20 个），所以规整一个字不差；只在原有标签上加减，别的不动。不出卡（标签是归类词，错了人随手改回去）。
+       * **审核决定这里一格都不碰**——入参里给了 review / decision 也不认（AI 没有改审核的口子）。
+       */
+      case 'tag_creators': {
+        if (port.setCreatorTags === undefined)
+          return { status: 'error', reason: '这一版的红人库还不能改标签。' }
+        const ids = [
+          ...new Set(
+            (Array.isArray(input.creator_ids) ? input.creator_ids : [])
+              .map((v) => (typeof v === 'string' ? v.trim() : ''))
+              .filter((v) => v !== ''),
+          ),
+        ]
+        if (ids.length === 0) return missing('creator_ids')
+        const words = (v: unknown): string[] =>
+          (Array.isArray(v) ? v : [])
+            .map((w) => (typeof w === 'string' ? w.replace(/\s+/g, ' ').trim() : ''))
+            .filter((w) => w !== '')
+        const add = words(input.add)
+        const remove = new Set(words(input.remove).map((w) => w.toLowerCase()))
+        if (add.length === 0 && remove.size === 0) return missing('add 或 remove（至少一个标签）')
+        const rows: {
+          creator_id: string
+          display_name?: string
+          tags?: string[]
+          error?: string
+          dropped?: string[]
+        }[] = []
+        for (const id of ids.slice(0, TAG_MAX_CREATORS)) {
+          const before = await port.creator(actor, id)
+          if (before === undefined) {
+            rows.push({ creator_id: id, error: `红人库里没有 ${id} 这一条。` })
+            continue
+          }
+          const wanted = [
+            ...(before.tags ?? []).filter((t) => !remove.has(t.toLowerCase())),
+            ...add.filter((t) => !remove.has(t.toLowerCase())),
+          ]
+          try {
+            const after = await port.setCreatorTags(actor, id, { tags: wanted })
+            const kept = new Set((after.tags ?? []).map((t) => t.toLowerCase()))
+            const dropped = add.filter(
+              (t) => !remove.has(t.toLowerCase()) && !kept.has(t.toLowerCase()),
+            )
+            rows.push({
+              creator_id: id,
+              display_name: after.creator.display_name,
+              tags: after.tags ?? [],
+              ...(dropped.length === 0 ? {} : { dropped }),
+            })
+          } catch (e) {
+            rows.push({ creator_id: id, error: e instanceof Error ? e.message : String(e) })
+          }
+        }
+        const done = rows.filter((r) => r.error === undefined)
+        const anyDropped = done.some((r) => r.dropped !== undefined)
+        if (done.length === 0)
+          return { status: 'error', reason: rows[0]?.error ?? '一个都没改成。' }
+        return {
+          status: 'ok',
+          data: {
+            rows: done.length,
+            creators: rows,
+            summary: `改了 ${String(done.length)} 个人的标签${rows.length > done.length ? `，${String(rows.length - done.length)} 个没改成（见 error）` : ''}${anyDropped ? '；有的人标签满了（每人最多 20 个），没加上的见 dropped' : ''}。审核决定没动。`,
+            ...(ids.length > TAG_MAX_CREATORS
+              ? { note: `一次最多 ${String(TAG_MAX_CREATORS)} 个，后面的没改` }
+              : {}),
+          },
+          provenance: done.map((r) => ({ type: 'creator', id: r.creator_id })),
+        }
       }
 
       case 'score_creator': {
