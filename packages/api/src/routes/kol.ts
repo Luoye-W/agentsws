@@ -236,6 +236,11 @@ export interface KolCreatorDetail {
   tags?: string[]
   /** WP502（决策 1763 B，只加）：人工审核决定（只在本机，不上云）。没有 = 待审。 */
   review?: KolCreatorReviewView
+  /**
+   * WP508（只加）：同列表行的 `outreach_queue`——批了的批量开发信里排着队（`queued`）或已提上去（`sent`）。
+   * 详情里的起草按钮据此退成次要、排着队的点了只提示一句。不在任何批次里就不带。
+   */
+  outreach_queue?: 'queued' | 'sent'
 }
 
 /**
