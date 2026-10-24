@@ -145,6 +145,7 @@ export * from './schedule.js'
 export * from './search-data.js'
 // WP154「内容与搜索」：六个信号、每日 5 件事、收入归因、GEO、发布前质检的形状
 export * from './seo.js'
+export * from './seo-plan.js'
 // WP389（docs/105 §7）：工坊服务——服务目录、订单（托管 / 结算 / 退回）、报价、凭证、消息、验收
 export * from './service-order.js'
 export * from './setup-card.js'

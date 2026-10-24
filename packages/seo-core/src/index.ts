@@ -31,11 +31,15 @@ export * from './amazon-keywords.js'
 // WP396（docs/106 §13）：自家 Amazon Listing 体检的规则表与判法
 export * from './amazon-listing-check.js'
 export * from './attribution.js'
+// WP450（docs/109 §5.2 #10）：外链体检——来源域名变化、锚文本集中、可疑来源、竞品差距
+export * from './backlinks.js'
 // WP448（docs/109 §5.1 #3–4）：抢词检测（每周）与掉量分诊
 export * from './cannibalization.js'
 export * from './citability.js'
 export * from './citations.js'
 export * from './claim-rules.js'
+// WP450（docs/109 §5.2 #9）：主题簇（按搜索结果重叠度分组）与编辑日历排法
+export * from './cluster.js'
 export * from './comparison.js'
 export * from './content-text.js'
 export * from './daily.js'
@@ -56,10 +60,16 @@ export * from './geo-quality-samples.js'
 export * from './geo-recheck.js'
 export * from './geo-strategy.js'
 export * from './google.js'
+// WP450（docs/109 §5.2 #17）：llms.txt 生成与「有没有、过不过时」
+export * from './llms-txt.js'
 export * from './localize.js'
 export * from './picks.js'
+// WP450：主题簇与外链体检的合成样本（测试、demo、截图）
+export * from './plan-samples.js'
 export * from './ports.js'
 export * from './quality.js'
+// WP450（docs/109 §5.2 #11）：文章改写成社媒稿（只起草；不编经历与数字）
+export * from './repurpose.js'
 export * from './review.js'
 export * from './serp.js'
 export * from './signals.js'
