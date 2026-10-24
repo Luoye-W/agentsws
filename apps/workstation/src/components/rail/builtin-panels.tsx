@@ -33,6 +33,7 @@ import {
   Globe,
   GraduationCap,
   Handshake,
+  History,
   Images,
   Inbox,
   ListChecks,
@@ -49,6 +50,7 @@ import {
 } from 'lucide-react'
 import { lazy } from 'react'
 import { registerKeywordBankBlock } from '@/components/amazon/keyword-bank-block'
+import { ASSISTANT_SEGMENT_PREFIX } from '@/components/free-chat/segment-address'
 import {
   useKnowledgeLibraryStatus,
   usesBrandAssets,
@@ -145,6 +147,11 @@ const MessageRulesBody = lazy(async () => {
 const MessageDigestBody = lazy(async () => {
   const m = await import('@/components/rail/panels/message-digest-panel')
   return { default: m.MessageDigestPanel }
+})
+/** WP511（决策 1546）：助理长对话里以前某一段的原话（小结 / 出处点了在第三栏开）。 */
+const AssistantSegmentBody = lazy(async () => {
+  const m = await import('@/components/free-chat/segment-panel')
+  return { default: m.AssistantSegmentPanel }
 })
 /** WP459：收件箱点开的那一件（只从收件箱开）。 */
 const InboxItemBody = lazy(async () => {
@@ -696,6 +703,17 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     hidden: true,
   })
   registerPanelBody('message-digest', MessageDigestBody)
+  // WP511（决策 1546 / 1765）：助理「打开那一段」——只按地址开（小结、出处点了），不上图标轨
+  registerPanelType({
+    id: 'assistant-segment',
+    label: 'rail.panel.assistant-segment',
+    icon: History,
+    priority: 'builtin',
+    group: 'context',
+    matches: [`${ASSISTANT_SEGMENT_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('assistant-segment', AssistantSegmentBody)
   // WP398：岗位页「词库」块（WP395 的面板留的那一块）
   registerKeywordBankBlock()
 }

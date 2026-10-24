@@ -136,6 +136,21 @@ export interface AssistantThreadView {
   segments: AssistantSegmentView[]
 }
 
+/**
+ * WP511（决策 1546）：以前某一段的原话（一页）。第三栏「打开那一段」用：小结 / 出处点了在右边开当时的原话。
+ * 附件照旧只有名字与字数。
+ */
+export interface AssistantSegmentPageView {
+  segment: AssistantSegmentView
+  /** 这条长对话里第几段（1 起；小结与翻旧账里写的「第 N 段」）。 */
+  n: number
+  /** 这一页从第几句起（1 起）。 */
+  from: number
+  /** 这一段一共几句。 */
+  total: number
+  messages: FreeChatMessageView[]
+}
+
 /** WP352：在以前聊过的里面搜到的一处（小结或原话），带出处。 */
 export interface AssistantHistoryHitView {
   segment_id: string
@@ -474,6 +489,12 @@ export interface FreeChatPort {
     actor: FreeChatActor,
     query: { q: string; since?: string; until?: string },
   ): Promise<AssistantHistoryHitView[]>
+  /** WP511（决策 1546）：以前某一段的原话（一页，只读）。可选。 */
+  segment?(
+    actor: FreeChatActor,
+    segment_id: string,
+    page: { from?: number; limit?: number },
+  ): Promise<AssistantSegmentPageView>
 }
 
 /** 与「问 AI」同一档：能读自己的队列就能用——随便聊只给本人看，不碰任何对外的东西。 */
@@ -743,6 +764,40 @@ export function freeChatRoutes(): Route[] {
             q,
             ...(since === undefined || since === '' ? {} : { since }),
             ...(until === undefined || until === '' ? {} : { until }),
+          }),
+        )
+      },
+    ),
+    route(
+      {
+        ...base,
+        method: 'get',
+        path: '/v1/free-chat/thread/segments/:id',
+        operationId: 'getAssistantSegment',
+        summary:
+          '「助理」以前某一段的原话（WP511，决策 1546；一页，只读）：小结 / 出处点了在第三栏打开当时的原话',
+        params: [
+          { name: 'id', in: 'path' as const, required: true, description: '段 id' },
+          { name: 'from', in: 'query' as const, description: '从第几句起（1 起）' },
+          { name: 'limit', in: 'query' as const, description: '一页几句（默认 50，最多 200）' },
+        ],
+        returns: 'AssistantSegmentPageView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.segment === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的「助理」没有长对话')
+        const num = (k: string): number | undefined => {
+          const v = c.req.query(k)
+          return v === undefined || !/^\d{1,5}$/u.test(v) ? undefined : Number(v)
+        }
+        const from = num('from')
+        const limit = num('limit')
+        return ok(
+          c,
+          await port.segment(actorOf(c), param(c, 'id'), {
+            ...(from === undefined ? {} : { from }),
+            ...(limit === undefined ? {} : { limit }),
           }),
         )
       },

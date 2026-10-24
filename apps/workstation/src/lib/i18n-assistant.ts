@@ -80,6 +80,17 @@ export const ASSISTANT_ZH: Record<string, string> = {
   'assistant.search.placeholder': '搜以前聊过的…',
   'assistant.search.none': '没搜到',
   'assistant.recalled': '出处 · {date}',
+  // WP511（决策 1546）：第三栏「打开那一段」
+  'rail.panel.assistant-segment': '以前聊的那一段',
+  'assistant.segment.head': '第 {n} 段 · {date}',
+  'assistant.segment.summary': '小结',
+  'assistant.segment.earlier': '更早的',
+  'assistant.segment.more': '还有 {n} 句',
+  'assistant.segment.you': '你',
+  'assistant.segment.assistant': '助理',
+  'assistant.segment.report': '回报',
+  'assistant.segment.pick': '点对话里的小结或出处，这里打开当时的原话。',
+  'assistant.topic.open': '打开这一段的原话',
 }
 
 export const ASSISTANT_EN: Record<string, string> = {
@@ -156,4 +167,14 @@ export const ASSISTANT_EN: Record<string, string> = {
   'assistant.search.placeholder': 'Search past chats…',
   'assistant.search.none': 'Nothing found',
   'assistant.recalled': 'Source · {date}',
+  'rail.panel.assistant-segment': 'Earlier conversation',
+  'assistant.segment.head': 'Part {n} · {date}',
+  'assistant.segment.summary': 'Summary',
+  'assistant.segment.earlier': 'Earlier',
+  'assistant.segment.more': '{n} more',
+  'assistant.segment.you': 'You',
+  'assistant.segment.assistant': 'Assistant',
+  'assistant.segment.report': 'Update',
+  'assistant.segment.pick': 'Click a summary or source in the chat to open what was said then.',
+  'assistant.topic.open': 'Open what was said in this part',
 }

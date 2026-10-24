@@ -6,7 +6,7 @@
  * - {@link HistorySearch}：顶部搜索（搜以前聊过的原话与小结，点一条跳到那里）；
  * - {@link NewTopicButton}：「换个话题」；
  *   WP456-T8（§3.7）：搜索、换个话题都是顶栏右边那排图标钮（悬停出字）；
- * - {@link RecalledRefs}：助理翻了以前聊过的，回复下面一排出处（点了跳过去）；
+ * - {@link RecalledRefs}：助理翻了以前聊过的，回复下面一排出处（WP511 起点了在第三栏打开那一段，决策 1546 / 1765）；
  * - {@link ModelSwitchDivider}：WP373，换了模型那一句「上面是 X 答的，接下来用 Y」。
  */
 import { useQuery } from '@tanstack/react-query'
@@ -52,12 +52,16 @@ export function DayDivider({ at }: { at: string }): React.ReactNode {
 
 /**
  * 出现：这条话和上一条不在同一段话题（含刚点了「换个话题」、新段还空着）。上一个话题的小结还没出来时只有线。
+ * WP511（决策 1546 / 1765）：给了 `onOpen` 时那一行小结可点——在第三栏打开那一段的原话。
  */
 export function TopicDivider({
   previous,
+  onOpen,
 }: {
   previous?: AssistantSegment | undefined
+  onOpen?: ((segment: AssistantSegment) => void) | undefined
 }): React.ReactNode {
+  const { t } = useApp()
   const title = previous?.title
   return (
     <div
@@ -67,7 +71,19 @@ export function TopicDivider({
       {...(previous?.summary === undefined ? {} : { title: previous.summary })}
     >
       <span className="h-px flex-1 bg-ws-line" />
-      {title === undefined ? null : <span className="max-w-[60%] truncate">{title}</span>}
+      {title === undefined ? null : previous === undefined || onOpen === undefined ? (
+        <span className="max-w-[60%] truncate">{title}</span>
+      ) : (
+        <button
+          type="button"
+          className="max-w-[60%] truncate hover:text-foreground hover:underline"
+          data-testid="thread-topic-open"
+          aria-label={t('assistant.topic.open')}
+          onClick={() => onOpen(previous)}
+        >
+          {title}
+        </button>
+      )}
       <span className="h-px flex-1 bg-ws-line" />
     </div>
   )

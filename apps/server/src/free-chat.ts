@@ -419,20 +419,18 @@ export function createFreeChatPort(
     store.setThread(actor.person_id, thread.id)
     return thread
   }
+  const segmentView = (g: AssistantSegmentRow) => ({
+    id: g.id,
+    started_at: g.started_at,
+    ...(g.ended_at === undefined ? {} : { ended_at: g.ended_at }),
+    reason: g.reason,
+    ...(g.title === undefined || g.title === '' ? {} : { title: g.title }),
+    ...(g.summary === undefined || g.summary === '' ? {} : { summary: g.summary }),
+    current: g.ended_at === undefined,
+  })
   const threadView = (actor: FreeChatActor) => {
     const row = ensureThread(actor)
-    return {
-      session: view(row),
-      segments: (segments?.list(row.id) ?? []).map((g) => ({
-        id: g.id,
-        started_at: g.started_at,
-        ...(g.ended_at === undefined ? {} : { ended_at: g.ended_at }),
-        reason: g.reason,
-        ...(g.title === undefined || g.title === '' ? {} : { title: g.title }),
-        ...(g.summary === undefined || g.summary === '' ? {} : { summary: g.summary }),
-        current: g.ended_at === undefined,
-      })),
-    }
+    return { session: view(row), segments: (segments?.list(row.id) ?? []).map(segmentView) }
   }
 
   return {
@@ -544,6 +542,27 @@ export function createFreeChatPort(
           ) => {
             const row = ensureThread(actor)
             return searchHistory(segments?.grouped(row.id) ?? [], q).map(publicHit)
+          },
+          // WP511（决策 1546）：以前某一段的原话（第三栏「打开那一段」）——只认本人那条长对话里的段
+          segment: async (
+            actor: FreeChatActor,
+            segment_id: string,
+            page: { from?: number; limit?: number },
+          ) => {
+            const row = ensureThread(actor)
+            const groups = segments?.grouped(row.id) ?? []
+            const i = groups.findIndex((g) => g.seg.id === segment_id)
+            const g = groups[i]
+            if (g === undefined) throw new ApiError('not_found', '没有这一段（可能已经删了）')
+            const from = Math.max(1, page.from ?? 1)
+            const limit = Math.min(200, Math.max(1, page.limit ?? 50))
+            return {
+              segment: segmentView(g.seg),
+              n: i + 1,
+              from,
+              total: g.rows.length,
+              messages: g.rows.slice(from - 1, from - 1 + limit).map(publicMessage),
+            }
           },
           assistant: (actor: FreeChatActor) => (options.assistant as Assistant).state(actor),
           async memories(actor: FreeChatActor) {

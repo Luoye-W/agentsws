@@ -101,6 +101,22 @@ export interface AssistantHistoryHit {
   role?: 'user' | 'assistant'
   title?: string
   snippet: string
+  /** WP511：这条长对话里第几段（1 起）。 */
+  segment_n?: number
+  /** WP511：那一段里第几句（1 起）。 */
+  message_n?: number
+  /** WP511：命中的是附上的资料（名字）。 */
+  attachment?: string
+}
+
+/** WP511（决策 1546）：以前某一段的原话（一页；第三栏「打开那一段」）。 */
+export interface AssistantSegmentPage {
+  segment: AssistantSegment
+  /** 第几段（1 起）。 */
+  n: number
+  from: number
+  total: number
+  messages: FreeChatMessage[]
 }
 
 /** WP350：附上的一份资料（界面只看名字、字数、读不出的那句、抹掉了几处口令）。 */
@@ -354,6 +370,14 @@ export const newAssistantTopic = (): Promise<AssistantThread> =>
 /** WP352：搜以前聊过的。 */
 export const searchAssistantHistory = (q: string): Promise<AssistantHistoryHit[]> =>
   api(`${base}/thread/search?q=${encodeURIComponent(q)}`)
+
+/** WP511：以前某一段的原话（一页，从第 `from` 句起）。 */
+export const getAssistantSegment = (
+  id: string,
+  from = 1,
+  limit = 50,
+): Promise<AssistantSegmentPage> =>
+  api(`${base}/thread/segments/${encodeURIComponent(id)}?from=${from}&limit=${limit}`)
 
 /** WP352：回答开头「换话题了」的记号（服务端分段用，不给人看；流式时可能只到一半）。 */
 const TOPIC_TAG = '<new-topic/>'

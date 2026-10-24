@@ -474,6 +474,8 @@ export type {
   // WP343：「我的助理」
   AssistantHistoryHitView,
   AssistantMemoryView,
+  // WP511：以前某一段的原话（第三栏「打开那一段」）
+  AssistantSegmentPageView,
   AssistantSegmentView,
   AssistantStateView,
   AssistantSuggestionView,

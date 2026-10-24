@@ -247,6 +247,15 @@ describe('WP188 /v1/free-chat 端到端', () => {
     )
     expect(hits.some((h) => h.kind === 'message' && h.snippet.includes('包邮门槛'))).toBe(true)
     expect((await call('GET', '/v1/free-chat/thread/search?q=')).status).toBe(400)
+    // WP511（决策 1546）：以前某一段的原话（第三栏「打开那一段」），一页、只读、只认本人的段
+    const first = thread.segments[0]?.id ?? ''
+    const page = await data<{ n: number; from: number; total: number; messages: unknown[] }>(
+      await call('GET', `/v1/free-chat/thread/segments/${first}?from=1&limit=1`),
+    )
+    expect(page).toMatchObject({ n: 1, from: 1 })
+    expect(page.messages).toHaveLength(1)
+    expect(page.total).toBeGreaterThanOrEqual(1)
+    expect((await call('GET', '/v1/free-chat/thread/segments/seg_nope')).status).toBe(404)
   })
 
   it('「Agents 工坊（用积分）」模板不让填 key', async () => {

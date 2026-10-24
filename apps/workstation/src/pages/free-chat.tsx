@@ -30,6 +30,7 @@ import { Composer, type ComposerToggles } from '@/components/free-chat/composer'
 import { AssistantMessage, UserBubble } from '@/components/free-chat/message'
 import { ComposerModelPicker } from '@/components/free-chat/model-picker'
 import { takePendingAsk } from '@/components/free-chat/pending-ask'
+import { assistantSegmentAddress } from '@/components/free-chat/segment-address'
 import {
   DayDivider,
   dayOf,
@@ -40,6 +41,7 @@ import {
   RecalledRefs,
   TopicDivider,
 } from '@/components/free-chat/thread-bits'
+import { useRailState } from '@/components/rail/rail-state'
 import { ComposerDock } from '@/components/shell/composer-dock'
 import { TopBarAction } from '@/components/shell/top-bar-slots'
 import { useApp } from '@/lib/app-context'
@@ -128,6 +130,8 @@ function AssistantThreadPage(): React.ReactNode {
   const [toggles, setToggles] = useState<ComposerToggles>({ web_search: false, knowledge: false })
   const [live, setLive] = useState<Live | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
+  /** WP511：出处 / 小结点了在第三栏开那一段。 */
+  const rail = useRailState()
   /** WP352：搜索 / 出处跳过来时亮一下的那条。 */
   const [lit, setLit] = useState<string | undefined>(undefined)
   const scroller = useRef<HTMLDivElement>(null)
@@ -201,6 +205,15 @@ function AssistantThreadPage(): React.ReactNode {
     setParams(next, { replace: true })
   }, [thread.data === undefined, messages.data === undefined])
 
+  /**
+   * WP511（决策 1546 / 1765「资料在右」）：出处、小结点了在第三栏打开那一段当时的原话（亮那一句）；
+   * 没有第三栏（单测里只渲染这一页）时退回在中栏跳过去。
+   */
+  const openSegment = (segment_id: string, message_id?: string): boolean =>
+    rail.openAddress(assistantSegmentAddress(segment_id, message_id))
+  const openHit = (hit: AssistantHistoryHit): void => {
+    if (!openSegment(hit.segment_id, hit.message_id)) jump(hit)
+  }
   /** WP352：跳到一条话（搜索命中 / 出处）；命中的是小结就跳到那段开头。 */
   const jump = (hit: AssistantHistoryHit): void => {
     const target =
@@ -466,7 +479,9 @@ function AssistantThreadPage(): React.ReactNode {
     const switched = switches.get(m.id)
     return (
       <>
-        {topic ? <TopicDivider previous={segById.get(prevSeg)} /> : null}
+        {topic ? (
+          <TopicDivider previous={segById.get(prevSeg)} onOpen={(g) => openSegment(g.id)} />
+        ) : null}
         {day && m.at !== '' ? <DayDivider at={m.at} /> : null}
         {switched === undefined ? null : (
           <ModelSwitchDivider from={switched.from} to={switched.to} />
@@ -495,7 +510,7 @@ function AssistantThreadPage(): React.ReactNode {
             onUndoNotes={undoNotes}
           />
           {/* WP352：翻了以前聊过的，出处一排（点了跳过去） */}
-          <RecalledRefs hits={m.recalled ?? []} onJump={jump} />
+          <RecalledRefs hits={m.recalled ?? []} onJump={openHit} />
         </div>
       )}
     </div>
@@ -593,6 +608,7 @@ function AssistantThreadPage(): React.ReactNode {
               {trailingTopic ? (
                 <TopicDivider
                   previous={lastRow === undefined ? undefined : segById.get(segOf(lastRow) ?? '')}
+                  onOpen={(g) => openSegment(g.id)}
                 />
               ) : null}
               {live === undefined ? null : (
