@@ -91,6 +91,7 @@
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
     "packages/contracts/src/search-data.ts",
+    "packages/contracts/src/seo-plan.ts",
     "packages/contracts/src/seo.ts",
     "packages/contracts/src/service-order.ts",
     "packages/contracts/src/setup-card.ts",
@@ -167,7 +168,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "3e01246c38d264d3e78459b763939283",
+  "source_digest": "483ae96eee56ec3af2dbb2554ce709d6",
   "objects": [
     {
       "id": "ad",
