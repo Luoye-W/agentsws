@@ -367,6 +367,9 @@ export function createKolSandbox(options: KolSandboxOptions): KolSandboxAssembly
           secrets.remove(ct.value_ref)
           store.removeRow('creator_contact', ct.id)
         }
+        // WP502：演练的人身上打过的标签 / 审核决定也跟着清
+        store.removeRow('creator_tag', id)
+        store.removeRow('creator_review', id)
         store.removeRow('creator', id)
       }
       world = undefined

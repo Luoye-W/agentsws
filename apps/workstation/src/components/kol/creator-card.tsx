@@ -19,16 +19,21 @@
  *   主页链接放在底下而不是 handle 上：上半张卡整块是「点开详情」的按钮，按钮里不能再套链接。
  * - 三格判断色块（KOLAgents §3「这一条不能砍」）在一行三张卡的宽度（约 300px）下也出：窄到 18rem 以下才退成一行字
  *   （WP416 原来是 20rem，桌面一行三张时三格全退成了一行字）。
+ *
+ * WP502：头像换成存入时缓存到本机的那张（决策 1760 B，没缓存到照旧一个字）；名字下面一行是人自己打的标签
+ * （前 3 个 + 「+N」，一行锁死——KOLAgents「Operator labels」那一行），底下一排补「已通过 / 已淘汰」（1763 B；
+ * 待审不画，只把定过的那几个标出来）。
  */
 import { ExternalLink, Mail, MailX } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
-import { WsAvatar } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { KolCreatorRowData, KolJudgementLevel } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
+import { CreatorAvatar } from './creator-media'
+import { ReviewBadge } from './creator-review'
 import { CHANNEL_SERVICE } from './kol-channel'
 import { CollabProgress } from './segmented-progress'
 
@@ -189,10 +194,13 @@ function Stat({
 export function CreatorCard({
   row,
   handle,
+  assignment,
   onOpen,
   onNext,
 }: {
   row: KolCreatorRowData
+  /** 取本机缓存的头像要带的分配（不给就用当前那条）。 */
+  assignment?: string
   /** 显示用的 `@handle`（调用方统一过 `@`）。 */
   handle: string
   /** 点卡：打开详情。 */
@@ -222,9 +230,11 @@ export function CreatorCard({
         onClick={onOpen}
       >
         <span className="flex min-w-0 items-start gap-2">
-          <WsAvatar
+          <CreatorAvatar
             id={row.creator_id}
             name={row.display_name}
+            mediaUrl={row.avatar_media_url}
+            assignment={assignment}
             className="size-9 shrink-0 text-sm"
           />
           <span className="min-w-0 flex-1">
@@ -242,6 +252,29 @@ export function CreatorCard({
         {row.blocked === undefined ? null : (
           <span className="text-xs leading-snug text-ws-bad" data-testid="kol-blocked">
             {row.blocked}
+          </span>
+        )}
+        {/* 人自己打的标签：一行锁死，前 3 个 + 「+N」（全的在详情里） */}
+        {(row.tags ?? []).length === 0 ? null : (
+          <span
+            className="flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden"
+            data-testid="kol-card-tags"
+          >
+            {(row.tags ?? []).slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                title={tag}
+                className="min-w-0 shrink truncate rounded-full bg-muted px-1.5 text-xs leading-[1.5]"
+                data-testid="kol-card-tag"
+              >
+                {tag}
+              </span>
+            ))}
+            {(row.tags ?? []).length > 3 ? (
+              <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                {t('kol.tags.more', { n: (row.tags ?? []).length - 3 })}
+              </span>
+            ) : null}
           </span>
         )}
         <span
@@ -314,6 +347,12 @@ export function CreatorCard({
         >
           <ExternalLink className="size-3.5" aria-hidden />
         </a>
+        {/* WP502：定过的才标（通过 / 淘汰）；理由在悬停里 */}
+        {row.review === undefined ? null : (
+          <span title={row.review.reason} className="inline-flex">
+            <ReviewBadge review={row.review} />
+          </span>
+        )}
         {/* WP131：自动评分跑过的体检概括数（有才显示） */}
         {row.audit_health === undefined ? null : (
           <span className="text-xs text-muted-foreground" data-testid="kol-audit">

@@ -5629,7 +5629,23 @@ export interface KolCreatorRowData {
     segments: KolStageSegmentData[]
     dwell_days?: number
   }
+  /** WP502（1760 B）：缓存到本机的头像（同源地址，要登录令牌）。没缓存到就没有。 */
+  avatar_media_url?: string
+  /** WP502（1763 B）：人工标签。 */
+  tags?: string[]
+  /** WP502（1763 B）：人工审核决定（没有 = 待审）。 */
+  review?: KolCreatorReviewData
 }
+
+/** WP502（1763 B）：人工审核决定——通过 / 淘汰，一句理由可选。 */
+export interface KolCreatorReviewData {
+  decision: 'approved' | 'rejected'
+  reason?: string
+  decided_at: string
+}
+
+/** WP502：候选池按审核决定筛。 */
+export type KolReviewFilter = 'approved' | 'rejected' | 'pending'
 
 /** WP302：分段进度条的一段（服务端用 kol-core 算好）。 */
 export interface KolStageSegmentData {
@@ -5695,6 +5711,10 @@ export interface KolCreatorDetailData {
   checks?: Record<string, KolCreatorChecksData>
   /** WP500：「采集后自动评分」跑过的云端体检（WP131）。没有就没有。 */
   audit?: { health: number; findings: string[]; at: string }
+  /** WP502（1763 B）：人工标签（只在本机）。 */
+  tags?: string[]
+  /** WP502（1763 B）：人工审核决定（没有 = 待审）。 */
+  review?: KolCreatorReviewData
 }
 
 /** WP500：一个账号的几项估算（插件那几份算法，服务端算好；都是公开页面上的数推出来的）。 */
@@ -5736,6 +5756,9 @@ export interface KolCreatorProfileData {
   bio?: string
   avatar_url?: string
   banner_url?: string
+  /** WP502（1760 B）：缓存到本机的头像 / 横幅（同源地址，要登录令牌）。 */
+  avatar_media_url?: string
+  banner_media_url?: string
   recent_items?: {
     title: string
     views?: number
@@ -5744,6 +5767,12 @@ export interface KolCreatorProfileData {
     comments?: number
     published_at?: string
     published_text?: string
+    /** 外站封面地址（只记着，界面不加载）。 */
+    thumbnail_url?: string
+    /** WP502（1760 B）：缓存到本机的封面（同源地址）。 */
+    thumbnail_media_url?: string
+    /** WP502（1764 B）：原作品链接。 */
+    url?: string
   }[]
 }
 
@@ -5941,20 +5970,68 @@ export interface KolMergeSuggestionData {
 }
 
 export const getKolCreators = (
-  filter: { channel?: KolChannelId; q?: string; batch?: string } = {},
+  filter: {
+    channel?: KolChannelId
+    q?: string
+    batch?: string
+    /** WP502：按人工标签 / 审核决定筛。 */
+    tag?: string
+    review?: KolReviewFilter
+  } = {},
   assignment?: string,
-): Promise<{ rows: KolCreatorRowData[] }> => {
+): Promise<{ rows: KolCreatorRowData[]; tags?: string[] }> => {
   const q = new URLSearchParams()
   if (filter.channel !== undefined) q.set('channel', filter.channel)
   if (filter.q !== undefined && filter.q !== '') q.set('q', filter.q)
   // WP131：插件「回作战室看这批」——只看这一次列表采集收进来的人
   if (filter.batch !== undefined && filter.batch !== '') q.set('batch', filter.batch)
+  if (filter.tag !== undefined && filter.tag !== '') q.set('tag', filter.tag)
+  if (filter.review !== undefined) q.set('review', filter.review)
   const s = q.toString()
   return api(`/v1/kol/creators${s === '' ? '' : `?${s}`}`, withAssignment(assignment))
 }
 
 export const getKolCreator = (id: string, assignment?: string): Promise<KolCreatorDetailData> =>
   api(`/v1/kol/creators/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+/** WP502（1763 B）：整组换掉一个红人的人工标签。 */
+export const setKolCreatorTags = (
+  id: string,
+  tags: string[],
+  assignment?: string,
+): Promise<KolCreatorDetailData> =>
+  api(`/v1/kol/creators/${encodeURIComponent(id)}/tags`, {
+    method: 'PUT',
+    body: { tags },
+    ...withAssignment(assignment),
+  })
+
+/** WP502（1763 B）：人工审核——通过 / 淘汰（理由可选）/ 重置为待审。 */
+export const reviewKolCreator = (
+  id: string,
+  input: { decision: 'approved' | 'rejected' | 'pending'; reason?: string },
+  assignment?: string,
+): Promise<KolCreatorDetailData> =>
+  api(`/v1/kol/creators/${encodeURIComponent(id)}/review`, {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/**
+ * WP502（1760 B）：取一张缓存在本机的红人图片（`/v1/kol/media/<id>`），换成页面内的 `blob:` 地址。
+ * 带令牌与分配头，`<img src>` 带不了——同素材库那一张图的做法（`brandAssetObjectUrl`）。
+ */
+export async function kolMediaObjectUrl(media_url: string, assignment?: string): Promise<string> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  const asg = assignment ?? currentAssignment
+  if (asg !== null) headers.set('X-Assignment', asg)
+  const res = await fetch(media_url, { headers })
+  if (!res.ok) throw new ApiClientError(res.status, { code: 'not_found', message: '' } as never)
+  return URL.createObjectURL(await res.blob())
+}
 
 export const searchKolCreators = (
   input: { channel: KolChannelId; q: string },

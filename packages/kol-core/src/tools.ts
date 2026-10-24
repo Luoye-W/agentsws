@@ -49,7 +49,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   {
     name: 'search_creators',
     description:
-      '在一条渠道上找红人，可以按关键词、也可以只按粉丝区间。没连这条渠道的官方接口时自动退到你自己的红人库 / 公共红人库；几条路回的是同一个形状。要找人、找频道、找账号、拉一批候选时用它。**没有合适的关键词就别编一个**（「YouTube」「频道」这类词说的是渠道，不是要找什么样的人）——留空表示"这条渠道上的人都算候选"。',
+      '在一条渠道上找红人，可以按关键词、也可以只按粉丝区间。没连这条渠道的官方接口时自动退到你自己的红人库 / 公共红人库；几条路回的是同一个形状。给了 tag（人工标签）或 review（人工审核决定）就只在你自己的红人池里筛，每行带 tags / review。要找人、找频道、找账号、拉一批候选时用它。**没有合适的关键词就别编一个**（「YouTube」「频道」这类词说的是渠道，不是要找什么样的人）——留空表示"这条渠道上的人都算候选"。',
     input_schema: {
       type: 'object',
       properties: {
@@ -59,6 +59,14 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
         // WP117b（66 复测 #15）：粉丝区间以前只出现在回话里，从没进过入参
         min_followers: { type: 'number', description: '粉丝数下限（含）' },
         max_followers: { type: 'number', description: '粉丝数上限（含）' },
+        // WP502（决策 1763 B）：按人工标签 / 审核决定筛自己的红人池（给了就只查本机库）
+        tag: str('只看打了这个人工标签的人（只查你自己的红人池）'),
+        review: {
+          type: 'string',
+          enum: ['approved', 'rejected', 'pending'],
+          description:
+            '只看这个人工审核决定的人：approved 已通过 / rejected 已淘汰 / pending 还没定（只查你自己的红人池）',
+        },
       },
     },
   },
@@ -165,7 +173,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   {
     name: 'get_creator',
     description:
-      '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史；存入过红人池的账号还带主页资料（profiles：国家、加入时间、总播放、平均播放、作品数、简介、头像、横幅、近期作品，saved_at 是那一刻）；算得出来的账号带估算（checks：体检的播放 / 粉丝比、点赞率中位数、单条合作参考价区间（美分）、更新规律、粉丝 30 天变化——都是公开页面上的数推出来的，不是平台官方数据）；自动评分做过云端体检的带 audit。',
+      '按 id 取一个红人的全部明细：账号、粉丝与互动、打分、联系方式（脱敏）、合作历史；存入过红人池的账号还带主页资料（profiles：国家、加入时间、总播放、平均播放、作品数、简介、头像、横幅、近期作品，saved_at 是那一刻）；算得出来的账号带估算（checks：体检的播放 / 粉丝比、点赞率中位数、单条合作参考价区间（美分）、更新规律、粉丝 30 天变化——都是公开页面上的数推出来的，不是平台官方数据）；自动评分做过云端体检的带 audit；人打过的标签带 tags，人工审核决定带 review（decision：approved 通过 / rejected 淘汰，reason 是理由；没有 review = 还没审）。近期作品带 url 的是原作品链接。',
     input_schema: {
       type: 'object',
       properties: { creator_id: str('红人 id') },

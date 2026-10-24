@@ -32,6 +32,7 @@ import type {
   KolCreatorChecksView,
   KolCreatorDetail,
   KolCreatorProfileView,
+  KolCreatorReviewView,
   KolCreatorRow,
   KolImportView,
   KolMergeSuggestionView,
@@ -42,7 +43,7 @@ import type {
   KolSearchResult,
   KolStagedView,
 } from '@agentsws/api'
-import { ApiError } from '@agentsws/api'
+import { ApiError, KOL_TAG_MAX_LENGTH, KOL_TAGS_MAX } from '@agentsws/api'
 import type {
   ApprovalBus,
   Assignment,
@@ -115,7 +116,12 @@ import {
   suggestMerges,
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
-import type { KolAccountObservation, KolStore } from './kol.js'
+import type {
+  KolAccountObservation,
+  KolCreatorReviewRow,
+  KolCreatorTagRow,
+  KolStore,
+} from './kol.js'
 import {
   type ByoEndpointConfig,
   type ByoSourceStore,
@@ -125,6 +131,7 @@ import {
 } from './kol-byo.js'
 import type { KolChannelsAssembly } from './kol-channels.js'
 import { creatorChecksOf } from './kol-checks.js'
+import type { KolMediaCache } from './kol-media.js'
 import {
   maskAddress,
   PAYMENT_STAGES,
@@ -274,6 +281,11 @@ export interface KolServiceOptions {
   effectiveConfig(id: AssignmentId): EffectiveConfig
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   random(): number
+  /**
+   * WP502（决策 1760 B）：存入红人池时缓存到本机的红人图片（`kol-media.ts`）。详情 / 候选池据此给同源地址，
+   * `GET /v1/kol/media/:id` 据此回字节。不给 = 没有图（界面照旧一个字的头像、色块封面）。
+   */
+  media?: Pick<KolMediaCache, 'localUrlOf' | 'read'> | undefined
   /**
    * 五条渠道的适配器（WP68）。不给的话"去渠道上找人"那一条照实说没装配——
    * 其余的路（导入、公共库、建联、合作、审核、归因）一条都不少。
@@ -559,7 +571,93 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       ...savedProfilesOf(accounts),
       ...checksOf(accounts),
       ...auditOf(creator.id),
+      ...tagsAndReviewOf(creator.id),
     }
+  }
+
+  /* ── WP502（决策 1763 B）：人工标签与审核决定（只在本机）──────────────── */
+
+  /** 库替身可能没有这两张表的口：读不到就当没有。 */
+  const tagRowOf = (creator_id: string): KolCreatorTagRow | undefined => {
+    try {
+      return store.creatorTags(creator_id)[0]
+    } catch {
+      return undefined
+    }
+  }
+  const reviewRowOf = (creator_id: string): KolCreatorReviewRow | undefined => {
+    try {
+      return store.creatorReviews(creator_id)[0]
+    } catch {
+      return undefined
+    }
+  }
+  const allTagRows = (): KolCreatorTagRow[] => {
+    try {
+      return store.creatorTags()
+    } catch {
+      return []
+    }
+  }
+  const allReviewRows = (): KolCreatorReviewRow[] => {
+    try {
+      return store.creatorReviews()
+    } catch {
+      return []
+    }
+  }
+  const reviewViewOf = (row: KolCreatorReviewRow): KolCreatorReviewView => ({
+    decision: row.decision,
+    ...(row.reason === undefined ? {} : { reason: row.reason }),
+    decided_at: row.decided_at,
+  })
+  const tagsAndReviewOf = (creator_id: string): Pick<KolCreatorDetail, 'tags' | 'review'> => {
+    const tags = tagRowOf(creator_id)?.tags ?? []
+    const review = reviewRowOf(creator_id)
+    return {
+      ...(tags.length === 0 ? {} : { tags }),
+      ...(review === undefined ? {} : { review: reviewViewOf(review) }),
+    }
+  }
+
+  /** 标签规整：去两头空白、并掉连续空白、按不分大小写去重、截到上限。空的丢掉。 */
+  const cleanTags = (input: readonly string[]): string[] => {
+    const out: string[] = []
+    for (const raw of input) {
+      const t = raw.replace(/\s+/g, ' ').trim().slice(0, KOL_TAG_MAX_LENGTH)
+      if (t === '' || out.some((o) => o.toLowerCase() === t.toLowerCase())) continue
+      out.push(t)
+      if (out.length >= KOL_TAGS_MAX) break
+    }
+    return out
+  }
+
+  /** WP502（决策 1760 B）：一份资料里外站图片 → 本机同源地址（缓存到了才有）。 */
+  const withMedia = (profile: KolCreatorProfileView): KolCreatorProfileView => {
+    const media = options.media
+    if (media === undefined) return profile
+    const avatar = media.localUrlOf(profile.avatar_url)
+    const banner = media.localUrlOf(profile.banner_url)
+    return {
+      ...profile,
+      ...(avatar === undefined ? {} : { avatar_media_url: avatar }),
+      ...(banner === undefined ? {} : { banner_media_url: banner }),
+      ...(profile.recent_items === undefined
+        ? {}
+        : {
+            recent_items: profile.recent_items.map((r) => {
+              const cover = media.localUrlOf(r.thumbnail_url)
+              return cover === undefined ? r : { ...r, thumbnail_media_url: cover }
+            }),
+          }),
+    }
+  }
+
+  /** 候选池卡片上的头像：这个账号最近一次存入时的头像缓存到了就给。 */
+  const avatarMediaOf = (account_id: string): string | undefined => {
+    if (options.media === undefined) return undefined
+    const latest = latestSavedProfile(store.accountObservations({ account_id }))
+    return options.media.localUrlOf(latest?.profile?.avatar_url)
   }
 
   /**
@@ -613,7 +711,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     for (const a of accounts) {
       const latest = latestSavedProfile(store.accountObservations({ account_id: a.id }))
       if (latest?.profile !== undefined)
-        out[a.id] = { saved_at: latest.observed_at, ...latest.profile }
+        out[a.id] = withMedia({ saved_at: latest.observed_at, ...latest.profile })
     }
     return Object.keys(out).length === 0 ? {} : { profiles: out }
   }
@@ -1193,11 +1291,26 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         filter.batch === undefined
           ? undefined
           : new Set(store.accountObservations({ batch_id: filter.batch }).map((o) => o.account_id))
+      // WP502（决策 1763 B）：人工标签与审核决定（筛、上卡）
+      const tagRows = new Map(allTagRows().map((r) => [r.creator_id, r.tags]))
+      const reviewRows = new Map(allReviewRows().map((r) => [r.creator_id, r]))
+      const wantTag = filter.tag?.trim().toLowerCase()
       const accounts = store
         .accounts(filter.channel === undefined ? {} : { channel: filter.channel })
         .filter((a) => inBatch === undefined || inBatch.has(a.id))
         .filter((a) => matchesQ(a, filter.q))
         .filter((a) => inBand(a.followers, filter))
+        .filter(
+          (a) =>
+            wantTag === undefined ||
+            wantTag === '' ||
+            (tagRows.get(a.creator_id) ?? []).some((t) => t.toLowerCase() === wantTag),
+        )
+        .filter((a) => {
+          if (filter.review === undefined) return true
+          const decided = reviewRows.get(a.creator_id)?.decision
+          return filter.review === 'pending' ? decided === undefined : decided === filter.review
+        })
       const hasContact = new Set(store.contacts().map((ct) => ct.creator_id))
       // WP131：自动评分跑出来的体检概括数（做成了的才有）
       const audits = new Map(
@@ -1229,6 +1342,16 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           score: score.total,
           ...(score.blocked === undefined ? {} : { blocked: score.blocked }),
           has_contact: hasContact.has(account.creator_id),
+          ...(() => {
+            const avatar = avatarMediaOf(account.id)
+            const tags = tagRows.get(account.creator_id) ?? []
+            const review = reviewRows.get(account.creator_id)
+            return {
+              ...(avatar === undefined ? {} : { avatar_media_url: avatar }),
+              ...(tags.length === 0 ? {} : { tags }),
+              ...(review === undefined ? {} : { review: reviewViewOf(review) }),
+            }
+          })(),
           ...(audits.has(account.creator_id)
             ? {
                 audit_health: audits.get(account.creator_id)?.health as number,
@@ -1276,7 +1399,16 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           })(),
         }),
       )
-      return { rows: rows.slice(0, filter.limit ?? 100) }
+      // 筛选下拉要的：这个品牌红人池里用过的全部标签（按字母 / 拼音排，不分大小写去重）
+      const vocabulary: string[] = []
+      for (const tags of tagRows.values())
+        for (const t of tags)
+          if (!vocabulary.some((v) => v.toLowerCase() === t.toLowerCase())) vocabulary.push(t)
+      vocabulary.sort((a, b) => a.localeCompare(b))
+      return {
+        rows: rows.slice(0, filter.limit ?? 100),
+        ...(vocabulary.length === 0 ? {} : { tags: vocabulary }),
+      }
     },
 
     async search(actor, input) {
@@ -1512,6 +1644,40 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       }
       emit('kol.creator_updated', actor.person_id, { creator_id: id })
       return detailOf(creatorOr404(id))
+    },
+
+    /*
+     * WP502（决策 1763 B）：人工标签 / 审核决定。是人自己的判断，按下就算（不出卡）；只记本机，
+     * 事件里只有 id 与动作，不带标签原文与理由（理由可能写着对这个人的评价）。
+     */
+    setCreatorTags(actor, id, input) {
+      creatorOr404(id)
+      const tags = cleanTags(input.tags)
+      store.saveCreatorTags({ id, creator_id: id, tags, updated_at: clock.now() })
+      emit('kol.creator_tagged', actor.person_id, { creator_id: id, count: tags.length })
+      return detailOf(creatorOr404(id))
+    },
+
+    reviewCreator(actor, id, input) {
+      creatorOr404(id)
+      if (input.decision === 'pending') store.removeRow('creator_review', id)
+      else {
+        const reason = input.reason?.replace(/\s+/g, ' ').trim().slice(0, 300)
+        store.saveCreatorReview({
+          id,
+          creator_id: id,
+          decision: input.decision,
+          ...(reason === undefined || reason === '' ? {} : { reason }),
+          decided_at: clock.now(),
+          decided_by: actor.person_id,
+        })
+      }
+      emit('kol.creator_reviewed', actor.person_id, { creator_id: id, decision: input.decision })
+      return detailOf(creatorOr404(id))
+    },
+
+    creatorMedia(_actor, id) {
+      return options.media?.read(id)
     },
 
     addContact(actor, creator_id, input) {

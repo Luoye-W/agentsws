@@ -53,6 +53,7 @@ export {
   creatorMetrics,
 } from './metrics.js'
 export type { PageCapture, PageCaptureOptions, PageListCapture } from './page/capture.js'
+export { readRecentItemUrls } from './page/itemLinks.js'
 export { CREATOR_CAPTURE_PAGE_BUNDLE } from './page-script.generated.js'
 export {
   creatorCapturePageExpression,
@@ -60,6 +61,7 @@ export {
   PAGE_ARGS_PLACEHOLDER,
   type PageScriptInput,
 } from './page-script.js'
+export { contentUrlOf, derivedContentUrlOf } from './wire/contentUrl.js'
 export {
   type CreatorSaveBody,
   type CreatorSaveRecentItem,

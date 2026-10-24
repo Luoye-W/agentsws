@@ -15,11 +15,14 @@
  *
  * 改的地方（工坊的数据与规矩）：
  * - 样式全换成工坊的令牌 / 共用件（`WsAvatar`、`StatusPill`、`CategoryTag`、`--ws-*`），深浅色跟着主题；
- * - 头像是一个字的圆头像、没有横幅、近期作品没有封面：工坊的壳不加载外站图片（决策 1762 待定）；
+ * - 头像 / 横幅 / 近期作品封面是「存入红人池」时由本机服务缓存下来的（WP502，决策 1760 B），走同源地址；
+ *   壳的「不加载外站图片」不放开，没缓存到的照旧一个字的头像、色块封面（`creator-media.tsx`）；
  * - 「AI 评估」那一格工坊是 `kol-core` 的确定性打分（不是模型），结论 = 总分 + 刷粉护栏那一句 + 最弱的分项；
  * - 体检 / 受众真实性 / 估值是插件面板那几份算法在服务端算好的（`KolCreatorDetail.checks`），
  *   KOLAgents 的云端深度报告（受众地域、付费真实性报告）工坊没有——见报告「缺什么」；
- * - 审核通过 / 否决、实体类型下拉、登记内容、生成追踪链接、折扣码、标签这几节工坊没有对应的数据或接口，不画；
+ * - 人工标签与审核决定（WP502，决策 1763 B）照 KOLAgents 补上（`creator-review.tsx`），只记本机；
+ *   近期作品点了在浏览器里打开原作品（1764 B；KOLAgents 是内容详情抽屉）；
+ * - 实体类型下拉、登记内容、生成追踪链接、折扣码这几节工坊没有对应的数据或接口，不画；
  * - 联系方式只有脱敏形态（服务端就不给明文）；开发信照旧出卡等人批。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -27,7 +30,7 @@ import { ExternalLink, Link2, Mail, TriangleAlert } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
-import { CategoryTag, StatusPill, type Tone, WsAvatar } from '@/components/design'
+import { CategoryTag, StatusPill, type Tone } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -60,7 +63,9 @@ import {
   formatRatio,
   personAccounts,
 } from './creator-display'
+import { CreatorAvatar, CreatorBanner, WorkCover } from './creator-media'
 import { CreatorPlatformBreakdown } from './creator-platform-table'
+import { CreatorTagsPanel, ReviewBadge, ReviewSection } from './creator-review'
 import { atHandle, CHANNEL_SERVICE } from './kol-channel'
 import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
 import { CollabProgress } from './segmented-progress'
@@ -341,17 +346,19 @@ function SavedProfile({ profile: p }: { profile: KolCreatorProfileData }): React
           <span data-testid="kol-profile-facts">{facts.join(' · ')}</span>
         )}
         <span>{t('kol.profile.saved_at', { at: dayOf(p.saved_at) })}</span>
-        {p.avatar_url === undefined ? null : (
+        {/* WP502：缓存到本机的图已经画在头部 / 横幅上了；没缓存到的那张才给外站链接 */}
+        {p.avatar_url === undefined || p.avatar_media_url !== undefined ? null : (
           <a className="underline" href={p.avatar_url} target="_blank" rel="noreferrer">
             {t('kol.profile.avatar')}
           </a>
         )}
-        {p.banner_url === undefined ? null : (
+        {p.banner_url === undefined || p.banner_media_url !== undefined ? null : (
           <a className="underline" href={p.banner_url} target="_blank" rel="noreferrer">
             {t('kol.profile.banner')}
           </a>
         )}
-        {p.avatar_url === undefined && p.banner_url === undefined ? null : (
+        {(p.avatar_url === undefined || p.avatar_media_url !== undefined) &&
+        (p.banner_url === undefined || p.banner_media_url !== undefined) ? null : (
           <Hint text={t('kol.profile.images.hint')} testId="kol-profile-images-hint" />
         )}
       </div>
@@ -1177,14 +1184,20 @@ function ArchiveSection({
   )
 }
 
-/* ── 近期作品（KOLAgents `RecentContentsSection`；没有封面：壳不加载外站图片） ─── */
+/*
+ * ── 近期作品（KOLAgents `RecentContentsSection`）────────────────────────
+ * WP502：封面是存入时缓存到本机的（1760 B，没缓存到是色块）；点一下在浏览器里打开原作品（1764 B，
+ * 没记下链接的那几条点不开）。
+ */
 
 function RecentWorks({
   accounts,
   profiles,
+  assignment,
 }: {
   accounts: readonly Account[]
   profiles: KolCreatorDetailData['profiles']
+  assignment: string
 }): ReactNode {
   const { t } = useApp()
   const multi =
@@ -1202,46 +1215,59 @@ function RecentWorks({
     <section className="flex flex-col gap-2" data-testid="kol-profile-recent">
       <SectionHeading title={t('kol.profile.recent')} hint={t('kol.info.recent.hint')} />
       <ul className="grid grid-cols-2 gap-2">
-        {shown.map((r) => (
-          <li
-            key={r.key}
-            className="flex min-w-0 flex-col gap-1 rounded-lg border border-ws-line p-2"
-            data-testid="kol-recent-item"
-          >
-            <span className="flex min-w-0 items-start gap-1">
-              {multi ? (
-                <BrandIcon
-                  provider={CHANNEL_SERVICE[r.channel]}
-                  size={12}
-                  className="mt-0.5 shrink-0"
-                />
-              ) : null}
+        {shown.map((r) => {
+          const body = (
+            <>
+              <WorkCover mediaUrl={r.thumbnail_media_url} assignment={assignment}>
+                {multi ? <BrandIcon provider={CHANNEL_SERVICE[r.channel]} size={12} /> : undefined}
+              </WorkCover>
+              {/* min-w-0 + line-clamp（KOLAgents：truncate 的子元素会把整栏撑宽） */}
               <span className="line-clamp-2 min-w-0 text-xs font-medium leading-snug">
                 {r.title}
               </span>
-            </span>
-            <span
-              className="ws-num flex min-w-0 flex-wrap gap-x-2 text-ws-tiny text-muted-foreground"
-              data-slot="data"
-            >
-              {[
-                r.views_text ??
-                  (r.views === undefined
+              <span
+                className="ws-num flex min-w-0 flex-wrap gap-x-2 text-ws-tiny text-muted-foreground"
+                data-slot="data"
+              >
+                {[
+                  r.views_text ??
+                    (r.views === undefined
+                      ? undefined
+                      : t('kol.info.recent.views', { n: formatCount(r.views) })),
+                  r.likes === undefined
                     ? undefined
-                    : t('kol.info.recent.views', { n: formatCount(r.views) })),
-                r.likes === undefined
-                  ? undefined
-                  : t('kol.info.recent.likes', { n: formatCount(r.likes) }),
-                r.comments === undefined
-                  ? undefined
-                  : t('kol.info.recent.comments', { n: formatCount(r.comments) }),
-                r.published_text,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-          </li>
-        ))}
+                    : t('kol.info.recent.likes', { n: formatCount(r.likes) }),
+                  r.comments === undefined
+                    ? undefined
+                    : t('kol.info.recent.comments', { n: formatCount(r.comments) }),
+                  r.published_text,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            </>
+          )
+          return (
+            <li key={r.key} className="min-w-0" data-testid="kol-recent-item">
+              {r.url === undefined || !r.url.startsWith('https://') ? (
+                <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-ws-line p-1.5">
+                  {body}
+                </div>
+              ) : (
+                <a
+                  className="group flex min-w-0 flex-col gap-1.5 rounded-lg border border-ws-line p-1.5 transition-colors hover:border-primary/40"
+                  href={r.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={t('kol.recent.open')}
+                  data-testid="kol-recent-open"
+                >
+                  {body}
+                </a>
+              )}
+            </li>
+          )
+        })}
       </ul>
       {items.length > shown.length ? (
         <span className="text-xs text-muted-foreground">
@@ -1284,13 +1310,18 @@ export function CreatorInfoCard({
       data-testid="kol-creator-detail"
       data-creator={view.creator.id}
     >
+      {/* 横幅（KOLAgents W31：认出是不是要找的那个频道最快的一眼；没缓存到整条不画） */}
+      <CreatorBanner mediaUrl={profile?.banner_media_url} assignment={assignment} />
+
       <IdentityBanner assignment={assignment} creatorId={view.creator.id} onRepoint={onRepoint} />
 
       {/* 头部：谁 · 哪个平台（链到他的主页）· 在哪 */}
       <header className="flex items-start gap-3">
-        <WsAvatar
+        <CreatorAvatar
           id={view.creator.id}
           name={view.creator.display_name}
+          mediaUrl={profile?.avatar_media_url}
+          assignment={assignment}
           className="size-12 text-base"
         />
         <div className="flex min-w-0 flex-col gap-1">
@@ -1302,6 +1333,7 @@ export function CreatorInfoCard({
             >
               {view.creator.display_name}
             </h3>
+            <ReviewBadge review={view.review} showPending />
             {score?.blocked === undefined ? null : (
               <StatusPill tone="bad" data-testid="kol-detail-blocked-badge">
                 {t('kol.info.blocked')}
@@ -1421,6 +1453,16 @@ export function CreatorInfoCard({
         <RelationshipHistory collabs={view.collaborations} />
       )}
 
+      {/* 标签（KOLAgents 放在合作历史那一格里）：人自己的归类词，能动手的地方，空着也在 */}
+      <section className="flex flex-col gap-1.5" data-testid="kol-tags-section">
+        <SectionHeading title={t('kol.tags.title')} />
+        <CreatorTagsPanel
+          assignment={assignment}
+          creatorId={view.creator.id}
+          tags={view.tags ?? []}
+        />
+      </section>
+
       {checks === undefined ? null : <RateReferenceSection checks={checks} />}
 
       <QualitySection checks={checks} audit={view.audit} />
@@ -1443,6 +1485,9 @@ export function CreatorInfoCard({
 
       <ProgressSection assignment={assignment} channel={channel} collabs={view.collaborations} />
 
+      {/* 审核决定紧跟合作进度（KOLAgents：同一个动作的两种粒度——值不值得谈 / 谈到哪了） */}
+      <ReviewSection assignment={assignment} view={view} />
+
       <ContactsSection
         assignment={assignment}
         creatorId={view.creator.id}
@@ -1458,7 +1503,7 @@ export function CreatorInfoCard({
 
       <ArchiveSection collabs={view.collaborations} deliverables={view.deliverables} />
 
-      <RecentWorks accounts={accounts} profiles={view.profiles} />
+      <RecentWorks accounts={accounts} profiles={view.profiles} assignment={assignment} />
     </div>
   )
 }

@@ -170,6 +170,22 @@ export interface KolCreatorRow {
     /** 在这一段停了几天。 */
     dwell_days?: number
   }
+  /**
+   * WP502（决策 1760 B，只加）：存入红人池时缓存到本机的头像（同源地址 `/v1/kol/media/<id>`，要登录令牌）。
+   * 没缓存到就没有（卡上照旧一个字的头像）。
+   */
+  avatar_media_url?: string
+  /** WP502（决策 1763 B，只加）：人工标签（只在本机）。没有就不带。 */
+  tags?: string[]
+  /** WP502（决策 1763 B，只加）：人工审核决定（只在本机）。没有 = 待审。 */
+  review?: KolCreatorReviewView
+}
+
+/** WP502（决策 1763 B）：人工审核决定——通过 / 淘汰，一句理由可选。重置为待审 = 删掉这一行。 */
+export interface KolCreatorReviewView {
+  decision: 'approved' | 'rejected'
+  reason?: string
+  decided_at: Iso8601
 }
 
 /** 红人详情（工作台上点开那一屏）。 */
@@ -206,6 +222,10 @@ export interface KolCreatorDetail {
   checks?: Record<string, KolCreatorChecksView>
   /** WP500（只加）：「采集后自动评分」跑过的云端体检（WP131）。没跑过 / 没做成就没有。 */
   audit?: { health: number; findings: string[]; at: Iso8601 }
+  /** WP502（决策 1763 B，只加）：人工标签（只在本机，不上云）。没有就不带。 */
+  tags?: string[]
+  /** WP502（决策 1763 B，只加）：人工审核决定（只在本机，不上云）。没有 = 待审。 */
+  review?: KolCreatorReviewView
 }
 
 /**
@@ -259,6 +279,12 @@ export interface KolCreatorProfileView {
   bio?: string
   avatar_url?: string
   banner_url?: string
+  /**
+   * WP502（决策 1760 B，只加）：存入时缓存到本机的头像 / 横幅（同源地址 `/v1/kol/media/<id>`，要登录令牌）。
+   * 壳不加载外站图片，界面只用这两格；没缓存到就没有。
+   */
+  avatar_media_url?: string
+  banner_media_url?: string
   recent_items?: {
     title: string
     views?: number
@@ -268,6 +294,10 @@ export interface KolCreatorProfileView {
     published_at?: string
     published_text?: string
     thumbnail_url?: string
+    /** WP502（决策 1760 B，只加）：缓存到本机的封面（同源地址）。没缓存到就没有。 */
+    thumbnail_media_url?: string
+    /** WP502（决策 1764 B，只加）：原作品链接（只认这个平台上的一条作品）。没有就点不开。 */
+    url?: string
   }[]
 }
 
@@ -735,8 +765,16 @@ export interface KolPort {
        * 认不出的批次 = 空清单，不是报错。
        */
       batch?: string | undefined
+      /** WP502（决策 1763 B）：只看打了这个标签的人（不分大小写）。 */
+      tag?: string | undefined
+      /** WP502（决策 1763 B）：只看这个审核决定的人（`pending` = 还没定）。 */
+      review?: KolReviewFilter | undefined
     },
-  ): MaybePromise<{ rows: KolCreatorRow[] }>
+  ): MaybePromise<{
+    rows: KolCreatorRow[]
+    /** WP502（只加）：这个品牌红人池里用过的全部标签（筛选下拉用）。一个都没有就不带。 */
+    tags?: string[]
+  }>
   /**
    * 去渠道上找人（48 §5.1 那条链的第一步）。
    *
@@ -764,6 +802,26 @@ export interface KolPort {
   creator(actor: KolActor, id: string): MaybePromise<KolCreatorDetail | undefined>
   createCreator(actor: KolActor, input: KolCreatorInput): MaybePromise<KolCreatorDetail>
   patchCreator(actor: KolActor, id: string, input: KolCreatorPatch): MaybePromise<KolCreatorDetail>
+  /**
+   * WP502（决策 1763 B）：整组换掉这个人的人工标签（去空白、去重、最多 {@link KOL_TAGS_MAX} 个）。只在本机。
+   * 可选方法：老装配不实现时路由回「这一版没有」。
+   */
+  setCreatorTags?(
+    actor: KolActor,
+    id: string,
+    input: { tags: string[] },
+  ): MaybePromise<KolCreatorDetail>
+  /** WP502（决策 1763 B）：人工审核——通过 / 淘汰（理由可选）/ 重置为待审。只在本机。 */
+  reviewCreator?(
+    actor: KolActor,
+    id: string,
+    input: { decision: 'approved' | 'rejected' | 'pending'; reason?: string | undefined },
+  ): MaybePromise<KolCreatorDetail>
+  /** WP502（决策 1760 B）：取一张缓存在本机的红人图片（头像 / 横幅 / 作品封面）。不是本品牌的 / 没有 → `undefined`。 */
+  creatorMedia?(
+    actor: KolActor,
+    id: string,
+  ): MaybePromise<{ bytes: Uint8Array; content_type: string } | undefined>
   addContact(
     actor: KolActor,
     creator_id: string,
@@ -1084,6 +1142,22 @@ const CreatorPatchBody = z.object({
     .optional(),
 })
 
+/** WP502（决策 1763 B）：一个人最多几个标签、一个标签最长几个字（同 KOLAgents 输入框的 40）。 */
+export const KOL_TAGS_MAX = 20
+export const KOL_TAG_MAX_LENGTH = 40
+
+/** WP502：候选池按审核决定筛（`pending` = 还没定）。 */
+export type KolReviewFilter = 'approved' | 'rejected' | 'pending'
+
+const TagsBody = z.object({
+  tags: z.array(z.string().max(KOL_TAG_MAX_LENGTH * 2)).max(KOL_TAGS_MAX * 2),
+})
+
+const CreatorReviewBody = z.object({
+  decision: z.enum(['approved', 'rejected', 'pending']),
+  reason: z.string().max(300).optional(),
+})
+
 const ContactBody = z.object({
   kind: z.enum(['email', 'dm', 'form']),
   /** 明文只在这一格里活一瞬：服务端当场写进加密库，换成 `value_ref`。 */
@@ -1287,8 +1361,18 @@ export function kolRoutes(): Route[] {
             in: 'query',
             description: '只看这一次插件列表采集收进来的人（批次 id，bt_ 开头；WP131）',
           },
+          {
+            name: 'tag',
+            in: 'query',
+            description: '只看打了这个人工标签的人（WP502；不分大小写）',
+          },
+          {
+            name: 'review',
+            in: 'query',
+            description: '只看这个审核决定的人：approved / rejected / pending（还没定）（WP502）',
+          },
         ],
-        returns: '{ rows: KolCreatorRow[] }',
+        returns: '{ rows: KolCreatorRow[]; tags?: string[] }',
       },
       async (c, deps) => {
         const channel = channelQuery(c)
@@ -1297,10 +1381,17 @@ export function kolRoutes(): Route[] {
         const min_followers = intParam(c, 'min_followers')
         const max_followers = intParam(c, 'max_followers')
         const batch = c.req.query('batch')
+        const tag = c.req.query('tag')?.trim()
+        const reviewQ = c.req.query('review')
+        const review = (['approved', 'rejected', 'pending'] as const).find((r) => r === reviewQ)
+        if (reviewQ !== undefined && reviewQ !== '' && review === undefined)
+          throw new ApiError('invalid_input', 'review 只认 approved / rejected / pending')
         return ok(
           c,
           await portOf(deps).creators(actorOf(c), {
             ...(batch === undefined || batch === '' ? {} : { batch }),
+            ...(tag === undefined || tag === '' ? {} : { tag }),
+            ...(review === undefined ? {} : { review }),
             ...(channel === undefined ? {} : { channel }),
             ...(q === undefined || q === '' ? {} : { q }),
             ...(limit === undefined ? {} : { limit }),
@@ -1436,6 +1527,85 @@ export function kolRoutes(): Route[] {
             await body(c, CreatorPatchBody),
           ),
         ),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/kol/creators/:id/tags',
+        operationId: 'setKolCreatorTags',
+        summary:
+          '整组换掉一个红人的人工标签（去空白、去重，最多 20 个、每个最长 40 字；只在本机，不上云）',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CREATOR,
+        params: [{ name: 'id', in: 'path', required: true, description: 'creator_id' }],
+        body: TagsBody,
+        returns: 'KolCreatorDetail',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setCreatorTags === undefined)
+          throw new ApiError('not_implemented', '这一版还不能给红人打标签。')
+        return ok(c, await port.setCreatorTags(actorOf(c), param(c, 'id'), await body(c, TagsBody)))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/kol/creators/:id/review',
+        operationId: 'reviewKolCreator',
+        summary:
+          '人工审核一个红人：通过 / 淘汰（一句理由可选）/ 重置为待审（pending）。只在本机，不上云',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CREATOR,
+        params: [{ name: 'id', in: 'path', required: true, description: 'creator_id' }],
+        body: CreatorReviewBody,
+        returns: 'KolCreatorDetail',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.reviewCreator === undefined)
+          throw new ApiError('not_implemented', '这一版还不能审核红人。')
+        return ok(
+          c,
+          await port.reviewCreator(actorOf(c), param(c, 'id'), await body(c, CreatorReviewBody)),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/kol/media/:id',
+        operationId: 'getKolCreatorMedia',
+        summary:
+          '取一张存入红人池时缓存在本机的红人图片（头像 / 横幅 / 作品封面）——工作台经它同源显示，不加载外站图片',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CREATOR,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '图片 id（32 位十六进制）' },
+        ],
+        returns: '图片字节（没有这张 → 404）',
+      },
+      async (c, deps) => {
+        const id = param(c, 'id')
+        const port = portOf(deps)
+        const out =
+          /^[a-f0-9]{32}$/.test(id) && port.creatorMedia !== undefined
+            ? await port.creatorMedia(actorOf(c), id)
+            : undefined
+        if (out === undefined) throw new ApiError('not_found', '本机没有这张图')
+        return c.body(out.bytes as unknown as ArrayBuffer, 200, {
+          'content-type': out.content_type,
+          'content-length': String(out.bytes.length),
+          'cache-control': 'private, max-age=86400',
+          'x-content-type-options': 'nosniff',
+        })
+      },
     ),
     route(
       {

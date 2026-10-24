@@ -43,6 +43,7 @@ import {
   collectYouTubeSearchCreators,
   type SearchCreatorCandidate,
 } from '../kol/utils/youtubeSearch.js'
+import { readRecentItemUrls } from './itemLinks.js'
 
 /** 与插件内容卡同一张表（插件页面入口的 `CONTENT_SCRAPERS`）。 */
 const CONTENT_SCRAPERS: Record<CapturePlatform, () => ContentSnapshot | null> = {
@@ -79,6 +80,11 @@ export interface PageListCapture {
 export interface PageCapture {
   href: string
   creator?: CreatorSnapshot
+  /**
+   * WP502（决策 1764 B）：`creator.recentItems` 各自的原作品链接（一一对应；页面上找不到的是 `null`）。
+   * 采集器本体不留链接，这一格是读完之后在同一页上按封面 / 标题找回来的（`itemLinks.ts`）。
+   */
+  creator_item_urls?: (string | null)[]
   content?: ContentSnapshot
   bio_link?: BioLinkSnapshot
   list?: PageListCapture
@@ -153,6 +159,8 @@ export function capturePage(options: PageCaptureOptions = {}): PageCapture {
       }
       if (snap) {
         out.creator = snap
+        const urls = readRecentItemUrls(route.platform, snap.recentItems ?? [])
+        if (urls.some((u) => u !== null)) out.creator_item_urls = urls
         read = true
       }
     }

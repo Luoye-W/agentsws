@@ -16,7 +16,7 @@
  *    灰显 + 一句话，而不是悄悄少几行。
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Coins, Megaphone, Search, Upload, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -34,6 +34,7 @@ import {
   getKolCreators,
   type KolCampaignData,
   type KolChannelId,
+  type KolReviewFilter,
   type KolSearchData,
   planKolCampaign,
   revealKolContact,
@@ -107,18 +108,26 @@ function Discovery({
    * 以前搜「数码」只回一句「现在搜不了」，下面「我的红人库」照旧列全部——人得自己一行一行找。
    */
   const [libraryQ, setLibraryQ] = useState('')
+  /* WP502（决策 1763 B）：按审核决定 / 人工标签筛候选池（KOLAgents 红人池那两个筛） */
+  const [reviewFilter, setReviewFilter] = useState<KolReviewFilter | 'all'>('all')
+  const [tagFilter, setTagFilter] = useState('')
   const library = useQuery({
-    queryKey: ['kol-creators', assignment, channel, batch ?? '', libraryQ],
+    queryKey: ['kol-creators', assignment, channel, batch ?? '', libraryQ, reviewFilter, tagFilter],
     queryFn: () =>
       getKolCreators(
         {
           channel,
           ...(batch === undefined ? {} : { batch }),
           ...(libraryQ === '' ? {} : { q: libraryQ }),
+          ...(reviewFilter === 'all' ? {} : { review: reviewFilter }),
+          ...(tagFilter === '' ? {} : { tag: tagFilter }),
         },
         assignment,
       ),
+    // WP502：换筛选时先留着上一份（筛选条与标签下拉不跟着闪没）
+    placeholderData: keepPreviousData,
   })
+  const poolFiltered = reviewFilter !== 'all' || tagFilter !== ''
 
   const search = useMutation({
     mutationFn: () => searchKolCreators({ channel, q }, assignment),
@@ -353,6 +362,50 @@ function Discovery({
               </Button>
             </div>
           )}
+          {/* WP502：审核决定四个筛 + 标签下拉（库里一个标签都没有就不出下拉） */}
+          {!poolFiltered && (library.data?.rows ?? []).length === 0 ? null : (
+            <div className="mb-2 flex flex-wrap items-center gap-1" data-testid="kol-pool-filters">
+              {(['all', 'pending', 'approved', 'rejected'] as const).map((r) => (
+                <Button
+                  key={r}
+                  size="xs"
+                  variant={reviewFilter === r ? 'secondary' : 'ghost'}
+                  aria-pressed={reviewFilter === r}
+                  data-testid="kol-pool-review-filter"
+                  data-review={r}
+                  onClick={() => {
+                    setReviewFilter(r)
+                  }}
+                >
+                  {t(`kol.pool.review.${r}`)}
+                </Button>
+              ))}
+              {(library.data?.tags ?? []).length === 0 && tagFilter === '' ? null : (
+                <select
+                  className="h-6 rounded-md border border-ws-line bg-background px-1.5 text-xs"
+                  aria-label={t('kol.pool.tag')}
+                  title={t('kol.pool.tag')}
+                  value={tagFilter}
+                  data-testid="kol-pool-tag-filter"
+                  onChange={(e) => {
+                    setTagFilter(e.target.value)
+                  }}
+                >
+                  <option value="">{t('kol.pool.tag.all')}</option>
+                  {[
+                    ...new Set([
+                      ...(library.data?.tags ?? []),
+                      ...(tagFilter === '' ? [] : [tagFilter]),
+                    ]),
+                  ].map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
           {library.isPending ? <Skeleton className="h-16 w-full" /> : null}
           {/*
             36 §3 的同一条规矩，**查询这一侧**：取不回来不等于库里没人。
@@ -370,7 +423,11 @@ function Discovery({
           (library.data?.rows ?? []).length === 0 &&
           !library.isPending ? (
             <p className="text-sm text-muted-foreground" data-testid="kol-library-empty">
-              {batch === undefined ? t('kol.library.empty') : t('kol.library.batch.empty')}
+              {poolFiltered
+                ? t('kol.pool.filtered.empty')
+                : batch === undefined
+                  ? t('kol.library.empty')
+                  : t('kol.library.batch.empty')}
             </p>
           ) : null}
           {/*
@@ -386,6 +443,7 @@ function Discovery({
                 key={row.creator_id}
                 row={row}
                 handle={`${atHandle(row.handle)}`}
+                assignment={assignment}
                 onOpen={() => {
                   onOpen(row.creator_id)
                 }}

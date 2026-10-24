@@ -615,6 +615,7 @@ import {
   type KolMailPort,
   mergeChoiceOf,
 } from './kol-mail.js'
+import { createKolMediaCache, type KolMediaFetch } from './kol-media.js'
 import { kolPaymentApply, kolSampleApply } from './kol-money.js'
 import { createKolPublicClient } from './kol-public-client.js'
 import {
@@ -1691,6 +1692,12 @@ export interface ServerOptions {
    * 这五家的接口没有可以随便调的沙箱，所以"形状对不对"只能这么验。
    */
   kolFetch?: KolFetch
+  /**
+   * WP502（决策 1760 B）：存入红人池时把头像 / 横幅 / 作品封面缓存到本机（`kol-media.ts`）。**给了才下载**：
+   * 生产入口给 `{}`（走 `globalThis.fetch`）；测试给 `{ fetch: 本地假响应 }`——测试里从不去真网站取图。
+   * 不给 = 不下载（界面照旧一个字的头像、色块封面；已经存下的照样显示）。
+   */
+  kolMedia?: { fetch?: KolMediaFetch } | false
   /**
    * WP155：自带搜索数据 key 那一档直连服务商用的 fetch。生产不传（走 `globalThis.fetch`）；
    * 测试传录好的替身响应——服务商一个都不真打。
@@ -5502,6 +5509,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       now: () => clock.now(),
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
+    // WP502（决策 1760 B）：这个品牌的红人图片缓存（落在这个品牌自己的目录下）。下载器只有生产入口给
+    const kolMediaFetch =
+      options.kolMedia === undefined || options.kolMedia === false
+        ? undefined
+        : (options.kolMedia.fetch ?? (globalThis.fetch as unknown as KolMediaFetch))
+    const kolMedia = createKolMediaCache({
+      ...(dir === undefined ? {} : { dir: join(dir, 'kol-media') }),
+      ...(kolMediaFetch === undefined ? {} : { fetch: kolMediaFetch }),
+      ...(options.quiet === true
+        ? {}
+        : { log: (line: string) => process.stdout.write(`${line}\n`) }),
+    })
     /**
      * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象，落在这个品牌自己的目录下）。
      * 与红人库并排建，理由一样：记录源要拿它读账号与线程（`social: () => social`）。
@@ -5650,6 +5669,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,
+      media: kolMedia,
       channels: kolChannels,
       publicLibrary: kolPublic,
       /*
@@ -11125,6 +11145,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workData,
       records,
       kol,
+      kolMedia,
       kolService,
       kolSandbox,
       kolMail,
@@ -16069,6 +16090,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return {
         workspaceName: () => brandNameOfWorkspace(ws),
         kol: brand.kol,
+        // WP502（1760 B）：存入红人池时缓存头像 / 横幅 / 封面
+        media: brand.kolMedia,
         secrets: brand.secrets,
         clock,
         random,

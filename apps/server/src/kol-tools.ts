@@ -265,6 +265,40 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
           ...(min_followers === undefined ? {} : { min_followers }),
           ...(max_followers === undefined ? {} : { max_followers }),
         }
+        /*
+         * WP502（决策 1763 B）：按人工标签 / 审核决定筛——这两样只有自己的红人池里有，直接查本机库
+         * （不去渠道上搜、不花积分）。
+         */
+        const tag = str(input.tag)
+        const review = (['approved', 'rejected', 'pending'] as const).find(
+          (r) => r === input.review,
+        )
+        if (tag !== undefined || review !== undefined) {
+          const local = await port.creators(actor, {
+            channel,
+            ...(asked === undefined ? {} : { q: asked }),
+            ...(limit === undefined ? {} : { limit }),
+            ...band,
+            ...(tag === undefined ? {} : { tag }),
+            ...(review === undefined ? {} : { review }),
+          })
+          const cond = [
+            tag === undefined ? undefined : `标签「${tag}」`,
+            review === undefined
+              ? undefined
+              : { approved: '已通过', rejected: '已淘汰', pending: '还没审' }[review],
+          ].filter((x): x is string => x !== undefined)
+          return {
+            ...rowsOf(local.rows, 'creator'),
+            data: {
+              rows: local.rows,
+              object: 'creator',
+              source: 'local_library',
+              criteria: cond.join(' · '),
+              ...(local.tags === undefined ? {} : { tags_in_pool: local.tags }),
+            },
+          }
+        }
         const searchWith = (query: string) =>
           port.search(actor, {
             channel,
