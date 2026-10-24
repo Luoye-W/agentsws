@@ -447,3 +447,17 @@ describe('1796 C：AI 提议停用知识的卡', () => {
     expect(await screen.findByText('已撤销')).toBeDefined()
   })
 })
+
+describe('int/1039：卡片列「知识库 N」不算停用的', () => {
+  it('头上的数 = 没退役、没停用的条数（和卡身三格对得上）', async () => {
+    const { liveKnowledgeCount } = await import('@/components/knowledge/knowledge-library-status')
+    expect(
+      liveKnowledgeCount([
+        { status: 'active' },
+        { status: 'active', disabled_at: NOW },
+        { status: 'retired' },
+        { status: 'proposed' },
+      ]),
+    ).toBe(2)
+  })
+})

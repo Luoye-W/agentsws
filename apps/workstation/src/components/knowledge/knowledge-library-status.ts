@@ -33,8 +33,18 @@ export function usesBrandAssets(props: Pick<RailPanelBodyProps, 'scope'>): boole
   return p !== undefined && BRAND_ASSETS_POSITIONS.includes(p)
 }
 
+/**
+ * 卡片列「知识库 N」的 N：在用的条数——退役的、停用的（WP506 决策 1789 B）都不算，
+ * 和卡身里公共 / 售前 / 售后三格的数对得上（int/1039 实拍时头上 14、卡身 12）。
+ */
+export function liveKnowledgeCount(
+  cards: readonly { status: string; disabled_at?: string | undefined }[],
+): number {
+  return cards.filter((c) => c.status !== 'retired' && c.disabled_at === undefined).length
+}
+
 export function useKnowledgeLibraryStatus(_props: RailPanelBodyProps): CardStatus | undefined {
   const cards = useQuery({ queryKey: ['knowledge-cards'], queryFn: () => listKnowledgeCards() })
   if (cards.data === undefined) return undefined
-  return { count: cards.data.filter((c) => c.status !== 'retired').length }
+  return { count: liveKnowledgeCount(cards.data) }
 }
