@@ -187,6 +187,8 @@ export interface LandingCheckItem {
 }
 
 export interface LandingCheckResult {
+  /** 哪一家的广告（右栏按职责筛）。 */
+  platform?: string
   url: string
   ad_label: string
   items: LandingCheckItem[]

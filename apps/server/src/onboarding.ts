@@ -49,6 +49,7 @@ import type {
   BrandCompetitor,
   BrandInsightField,
   BrandKeywords,
+  BrandOffering,
   Clock,
   EventEnvelope,
   MarketsSource,
@@ -535,6 +536,8 @@ export interface OnboardingAssembly {
     currency?: string
     /** WP335（决策 659）：品类（没写过就没有）。 */
     category?: string
+    /** WP452：卖的是实物 / App / 别的数字产品（没填过就没有）。 */
+    offering?: BrandOffering
     /** WP346：第二版那几格（没写过就没有）——下游四处优先读它们。 */
     subcategory?: string
     positioning?: string
@@ -854,6 +857,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       // WP248（决策 83）：品牌三格；币种没写过按 USD
       ...brandFactsOf(p),
       currency: p.currency ?? DEFAULT_BRAND_CURRENCY,
+      // WP452：卖的是什么（没填过就没有）
+      ...(p.offering === undefined ? {} : { offering: p.offering }),
       set_at: p.set_at,
     }
   }
@@ -1255,8 +1260,16 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           : normalizePostalAddress(input.postal_address)
       // WP248（决策 83）：品牌三格——不给就沿用上一次；空串 = 清空
       const facts = nextBrandFacts(previous, input)
+      // WP452：卖的是什么——不给就沿用上一次；空串 = 清空（不知道）
+      const offering =
+        input.offering === undefined
+          ? previous?.offering
+          : input.offering === ''
+            ? undefined
+            : input.offering
       const next: WorkspaceProfile = {
         legal_name,
+        ...(offering === undefined ? {} : { offering }),
         ...(domain === '' ? {} : { domain }),
         ...(postal_address === undefined ? {} : { postal_address }),
         ...facts,
@@ -1739,6 +1752,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         })(),
         ...(p === undefined ? {} : brandFactsOf(p)),
         ...(p?.currency === undefined ? {} : { currency: p.currency }),
+        ...(p?.offering === undefined ? {} : { offering: p.offering }),
       }
     },
     setBrandFacts(ws, facts) {
@@ -1881,6 +1895,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(previous?.shopify_domain === undefined
           ? {}
           : { shopify_domain: previous.shopify_domain }),
+        // WP452：卖的是什么也不归这一步管
+        ...(previous?.offering === undefined ? {} : { offering: previous.offering }),
         set_at: clock.now(),
       })
     },

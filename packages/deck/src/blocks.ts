@@ -311,6 +311,11 @@ const ADS_POSITION_BLOCKS = (platform: string): BlockDef[] => [
   block(`ads.${platform}.stop_loss_log`, 'table', '止损记录', 'ads.stop_loss_log'),
   block(`ads.${platform}.pixels`, 'table', '像素健康', `ads.pixel_health.${platform}`),
   block(`ads.${platform}.daily_report`, 'table', '日报', 'ads.daily_report'),
+  // WP452：体检（十家一套）、保本线、素材疲劳、广告与落地页——资料，在右栏
+  block(`ads.${platform}.audit`, 'table', '体检', 'ads.export_audit'),
+  block(`ads.${platform}.break_even_calc`, 'table', '保本线', 'ads.break_even_calc'),
+  block(`ads.${platform}.fatigue`, 'table', '素材疲劳', 'ads.creative_fatigue'),
+  block(`ads.${platform}.landing`, 'table', '广告与落地页', 'ads.landing_checks'),
 ]
 
 /**
@@ -338,6 +343,9 @@ const ADS_EXPORT_BLOCKS = (platform: string): BlockDef[] => {
     ),
     block(`ads.${platform}.export_overview`, 'table', '账户概况', 'ads.export_overview', opts),
     block(`ads.${platform}.export_audit`, 'table', '体检', 'ads.export_audit', opts),
+    // WP452：保本线、广告与落地页（只读的平台也能看，都不碰账户）
+    block(`ads.${platform}.break_even_calc`, 'table', '保本线', 'ads.break_even_calc', opts),
+    block(`ads.${platform}.landing`, 'table', '广告与落地页', 'ads.landing_checks', opts),
   ]
 }
 

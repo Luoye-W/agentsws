@@ -15,6 +15,7 @@ import {
   adDesignPrompt,
   breakEvenView,
   buildAdUploadBundle,
+  fatigueThresholdsOf,
   resolveGrossMargin,
   summarizeLineCompare,
 } from '@agentsws/ads-core'
@@ -140,6 +141,7 @@ import {
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
   BRAND_INTAKE_WEB_SEARCH_MAX,
+  brandHasApp,
   brandNameOf,
   builtinConnectNeed,
   CONTENT_CHECK_INTERVAL_MS,
@@ -239,7 +241,12 @@ import {
   ruleFromFact,
   type SearchConsolePort,
 } from '@agentsws/seo-core'
-import { type RedirectProbe, siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
+import {
+  crawlerReadableText,
+  type RedirectProbe,
+  siteDesignPrompt,
+  themeDesignVariables,
+} from '@agentsws/site-core'
 import {
   CONTENT_REJECT_TEXT,
   createSkills,
@@ -283,6 +290,12 @@ import { createAdsActionsService } from './ads-actions/service.js'
 import { composeIntakes, createAdsExportIntake } from './ads-data/export-intake.js'
 import { exportDeckData } from './ads-data/export-view.js'
 import { type AdsDataService, createAdsDataService } from './ads-data/service.js'
+import {
+  adsSkillDeckData,
+  experimentReadoutCard,
+  experimentResultText,
+  fatigueRound,
+} from './ads-data/skill-wiring.js'
 import { autoStopLoss, dayBefore, yesterdayBasis } from './ads-data/stop-loss.js'
 import { createAdsDataStore } from './ads-data/store.js'
 import { ADS_BACKEND_NEED_KIND, createAdsDataToolExecutor } from './ads-data/tools.js'
@@ -5499,7 +5512,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             line_compare: summarizeLineCompare(ads.lineCompareRows()),
           }),
           // WP447：六个新平台（拖进来的报表）的账户概况与体检；托管实例没有看数据的库就不给
-          ...(adsData === undefined ? {} : exportDeckData(adsData)),
+          // WP452：体检十家都给（按品牌读清单、Apple 认品牌档案的「卖的是什么」）；保本线、素材疲劳、落地页核对的最近一次
+          ...(adsData === undefined
+            ? {}
+            : {
+                ...exportDeckData(adsData, {
+                  brand: ws,
+                  ...(() => {
+                    const has = brandHasApp(onboardingRef?.brandProfile(ws).offering)
+                    return has === undefined ? {} : { has_app: has }
+                  })(),
+                }),
+                ...adsSkillDeckData(adsData),
+              }),
         }
       },
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
@@ -6342,6 +6367,52 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 done: (id) => autoStopLossDone.get(id) === doneKey,
                 markDone: (id) => autoStopLossDone.set(id, doneKey),
               })
+              /*
+               * WP452（docs/109 §5.2 #16）：同一轮顺带看素材疲劳——只给建议与换素材需求单，不自动换。
+               * 门槛读职责 yml 的 `thresholds.fatigue_*`（起步值，可改）；`fatigue_auto_request: 0` = 只给建议不下单。
+               */
+              const thresholds = roles.roles.get(holder.role_id)?.thresholds
+              let maxRequests = 5
+              try {
+                const cap = roles
+                  .effectiveConfig(holder.id)
+                  .actions.find((x) => x.id === 'request_design')?.mandate
+                  .caps?.max_design_requests_per_day
+                maxRequests = typeof cap === 'number' ? cap : 5
+              } catch {
+                maxRequests = 5
+              }
+              const designActor = {
+                workspace_id: ws,
+                person_id: holder.person_id,
+                assignment_id: holder.id,
+                role_id: holder.role_id,
+              } as never
+              await fatigueRound({
+                platform,
+                rows: d.rows({
+                  since: new Date(Date.parse(`${d.today()}T00:00:00Z`) - 30 * 86_400_000)
+                    .toISOString()
+                    .slice(0, 10),
+                  until: d.today(),
+                  platform,
+                  levels: ['ad'],
+                }),
+                today: d.today(),
+                thresholds: fatigueThresholdsOf(thresholds),
+                autoRequest: (thresholds?.fatigue_auto_request ?? 1) !== 0,
+                maxRequests,
+                requestDesign: async (need) =>
+                  (
+                    await designService.port.createRequest(designActor, {
+                      title: need.title,
+                      need: need.need,
+                      spec_ids: [],
+                    })
+                  ).request.id,
+                getState: (k) => d.getState?.(k),
+                setState: (k, v) => d.setState?.(k, v),
+              }).catch(() => [])
             },
             seedDailyReport: () =>
               seedAdsDailyReport({
@@ -7161,6 +7232,59 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const rbOptions = options.readonlyBrowser
     // WP228（Luoye 10-05）：托管实例（云上那份）不装——没有浏览器，这一路停用、连接页那一行不显示
     const hostedInstance = hostedBoot !== undefined
+    /**
+     * WP452（docs/109 §5.2 #15）：广告落地页抓两份——不开 JS 的原始页与开 JS 渲染后的那份（复用 WP381 网站体检那一口：
+     * 同一个抓取替身、同一个渲染口；托管实例没有浏览器就只看原始页）。换成「读得到的文字」再交给 ads-core 比。
+     */
+    const adsLandingPage = async (
+      url: string,
+    ): Promise<{ raw?: string; rendered?: string; note?: string }> => {
+      const doFetch =
+        options.siteHealthFetch ?? options.brandIntakeFetch ?? (globalThis.fetch as never)
+      const page = await fetchPage(doFetch, url).catch(() => undefined)
+      if (page === undefined || !page.ok) return { note: page?.reason ?? '落地页没抓到。' }
+      const out: { raw?: string; rendered?: string; note?: string } = {
+        raw: crawlerReadableText(page.html),
+      }
+      const renderer =
+        options.siteHealthRenderer === false || hostedInstance
+          ? undefined
+          : (options.siteHealthRenderer ??
+            createChromeRenderer({ executable: () => browserSettings.get().executable_path }))
+      if (renderer === undefined) return { ...out, note: '这台没有浏览器，只看了不开 JS 的那份。' }
+      try {
+        const host = new URL(url).hostname
+        const html = (await renderer.render([url], [host])).get(url)
+        if (html !== undefined) out.rendered = crawlerReadableText(html)
+        else out.note = '开 JS 那份没渲染出来，只看了原始页。'
+      } catch {
+        out.note = '开 JS 那份没渲染出来，只看了原始页。'
+      }
+      return out
+    }
+    /** WP452：对不上的交给谁就给谁开一件事（网站运营 `dtc.store` / 投放这条自己）；没人担回 `undefined`。 */
+    const adsOpenMatter = async (input: {
+      role_id: string
+      title: string
+      text: string
+    }): Promise<{ matter_id: string } | undefined> => {
+      const holder = roles.assignments
+        .listByWorkspace(ws)
+        .find((a) => a.revoked_at === undefined && a.role_id === input.role_id)
+      if (holder === undefined) return undefined
+      const port = await positionPortFor(ws)
+      const out = await port.open(
+        { workspace_id: ws, person_id: holder.person_id, assignment_id: holder.id },
+        holder.id,
+        {
+          ...fitTaskTitle({ title: input.title, summary: input.text }),
+          role_id: holder.role_id,
+          mode: 'task',
+          detach: true,
+        },
+      )
+      return { matter_id: out.matter.id }
+    }
     // WP246：取数路线的小账（设置 + 每级最近一次结果），每品牌一份
     const readStore = createReadRoutesStore(dir)
     const {
@@ -7803,6 +7927,42 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 } catch {
                   return {}
                 }
+              },
+              // WP452（决策 1399）：品牌档案「卖的是什么」→ Apple 体检有没有 App
+              hasApp: () => brandHasApp(onboardingRef?.brandProfile(ws).offering),
+              // WP452：体检按品牌读清单、保本线、落地页一致性、实验设计与读结果
+              skills: {
+                brand: () => ws,
+                grossMargin: () => resolveGrossMargin(economics.margins())?.margin_pct,
+                landingPage: (url) => adsLandingPage(url),
+                openMatter: (input) => adsOpenMatter(input),
+                experiments: {
+                  add: (req, input) =>
+                    Promise.resolve(
+                      adCreativeService.port.addExperiment(
+                        {
+                          workspace_id: req.workspace_id,
+                          person_id: req.actor.person_id,
+                          assignment_id: req.actor.assignment_id,
+                          role_id: req.actor.role_id,
+                        } as never,
+                        {
+                          hypothesis: input.hypothesis,
+                          change: input.change,
+                          ...(input.platform === 'google' || input.platform === 'meta'
+                            ? { platform: input.platform }
+                            : {}),
+                          plan: input.plan as never,
+                        },
+                      ),
+                    ),
+                  get: (_req, id) => ads.experiment(id) ?? undefined,
+                },
+                readoutCard: async (req, payload) => {
+                  const item = await approvals.create(experimentReadoutCard(req, payload) as never)
+                  return item.state === 'blocked' ? undefined : { id: item.id }
+                },
+                now: () => clock.now(),
               },
             }),
             ownerTools: createOwnerToolExecutor({
@@ -11521,6 +11681,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           { workspace_id: item.workspace_id, person_id: by, assignment_id, role_id: item.role_id },
           item.id,
         )
+      return
+    }
+    // WP452：广告实验「保留 / 停 / 再测」卡——选了哪个就把结论写回这笔实验（投放岗记忆那一条），不改任何广告
+    if (item.kind === 'ads_experiment_readout') {
+      const result = experimentResultText(item)
+      const id = (item.payload as { experiment_id?: unknown }).experiment_id
+      const by = item.decision?.by
+      if (result === undefined || typeof id !== 'string' || brand === undefined) return
+      await Promise.resolve(
+        brand.adCreativeService.port.updateExperiment(
+          {
+            workspace_id: item.workspace_id,
+            person_id: (by === undefined || by === 'mandate'
+              ? item.routing.recipients[0]?.person
+              : by) as PersonId,
+            assignment_id: item.proposer.assignment_id ?? '',
+            role_id: item.role_id,
+          } as never,
+          id,
+          { result },
+        ),
+      ).catch(() => undefined)
       return
     }
     // WP504（决策 1777 A）：批量开发信卡——批了按名单逐个提（每封不再出第二张卡）；没批就收掉「等你确认」
@@ -18294,6 +18476,8 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'kol_campaign' ||
           // WP504：批量开发信卡批了 → 逐个提；没批 → 名单上的「等你确认」收掉
           out.kind === 'kol_outreach_batch' ||
+          // WP452：广告实验「保留 / 停 / 再测」卡选了 → 结论写回实验记忆
+          out.kind === 'ads_experiment_readout' ||
           // WP416：同一人合并卡选了 → 真合 / 记「不是同一个人」（落盘）
           isKolMergeCard(out) ||
           // WP421：B2B 的卡被驳回（回写草稿 / 询盘 / 交接单）

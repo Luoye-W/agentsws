@@ -218,6 +218,18 @@ automation:
     promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
     demotion_triggers: [manual]
 
+# WP452（docs/109 §5.2 #16）：素材疲劳的门槛——**起步值，不是平台规矩**，按你的账户改。
+# 点击率连降几天且比之前最高点低多少 %、频次连涨几天且至少多少、跑多少天算久（只当佐证）、一天少于多少展示不算；
+# fatigue_auto_request: 1 = 有迹象就给设计岗下换素材单（同名单不重下），0 = 只给建议
+thresholds:
+  fatigue_ctr_drop_days: 3
+  fatigue_ctr_drop_pct: 20
+  fatigue_frequency_rise_days: 3
+  fatigue_frequency_min: 2
+  fatigue_long_running_days: 21
+  fatigue_min_daily_impressions: 500
+  fatigue_auto_request: 1
+
 skills:
   - { name: ad-copywriting, tier: open, load: on_demand }
   # WP317（docs/101 §5.1④）：素材流水线的两个子 Agent（标题 / 描述各一份，按需加载）
@@ -228,6 +240,10 @@ skills:
   - { name: audience-research, tier: open, load: on_demand }
   # WP224（docs/91 §2.2 #3）：盈亏线 ROAS = 1 / 毛利率、毛利瀑布（只并排显示，不改止损线）
   - { name: unit-economics, tier: open, load: on_demand }
+  # WP452（docs/109 §5.2 #13）：实验设计与读结果（样本量 / 时长规则算，读完出「保留 / 停 / 再测」卡）
+  - { name: ads-experiment, tier: open, load: on_demand }
+  # WP452（§6.3）：归因怎么并排看（含 App 安装与应用内事件那一节；不接任何归因平台）
+  - { name: ads-attribution, tier: open, load: on_demand }
   - { name: brand-voice, tier: open, load: always }
 
 home_blocks:
@@ -241,6 +257,11 @@ home_blocks:
   - { id: ads.google.pending, placement: queue, component: table, query: ads.pending_budget, default_order: 60, pinnable: true, adaptive: true }
   - { id: ads.google.stop_loss_log, placement: role_view, component: table, query: ads.stop_loss_log, default_order: 70, pinnable: true, adaptive: false }
   - { id: ads.google.pixels, placement: role_view, component: table, query: ads.pixel_health, default_order: 80, pinnable: true, adaptive: true }
+  # WP452：体检（十家一套）、保本线、素材疲劳、广告与落地页——资料，在右栏
+  - { id: ads.google.audit, placement: role_view, component: table, query: ads.export_audit, default_order: 90, pinnable: true, adaptive: false }
+  - { id: ads.google.break_even_calc, placement: role_view, component: table, query: ads.break_even_calc, default_order: 100, pinnable: true, adaptive: false }
+  - { id: ads.google.fatigue, placement: role_view, component: table, query: ads.creative_fatigue, default_order: 110, pinnable: true, adaptive: false }
+  - { id: ads.google.landing, placement: role_view, component: table, query: ads.landing_checks, default_order: 120, pinnable: true, adaptive: false }
 
 grounding:
   # 54 §2：岗位路由在**一个岗位的职责集合内**按职责名 / 描述短语 / 意图词 /
@@ -342,6 +363,16 @@ quick_prompts:
     label: { zh: "两个口径差多少", en: "Attribution gap" }
     prompt: "平台报的转化和订单表里找到的差多少？哪几条差得最离谱，是不是 UTM 没挂对"
     kind: ask
+  # WP452（docs/109 §5.2 #12）：十家共用的体检框架
+  - id: account_audit
+    label: { zh: "账户体检", en: "Account check-up" }
+    prompt: "把这个账户体检一遍：每一项写过 / 不过 / 未知和凭什么，没证据的标未知、告诉我去后台哪一页看"
+    kind: ask
+  # WP452（#14）：保本线——缺的成本项照实问，不拿默认值当事实
+  - id: break_even
+    label: { zh: "算保本 ROAS", en: "Break-even ROAS" }
+    prompt: "帮我算保本 ROAS 和目标 CPA：客单价、毛利、运费、手续费、退货率缺哪样就问我，别按行业平均填"
+    kind: ask
 
 task_examples:
   - id: stop_loss_round
@@ -356,6 +387,11 @@ task_examples:
     title: { zh: "对一遍归因", en: "Reconcile attribution" }
     description: "平台说这个月带了 120 单，财务说没看到这么多。"
     expected_output: "一张两列并排的表（平台口径 / 订单口径），差多少算给你看但**不合并成一个数**；归不上的那些单独一块，每一条写清为什么归不上。"
+  # WP452（docs/109 §5.2 #13）：实验设计与读结果
+  - id: ab_experiment
+    title: { zh: "设计一个 A/B 实验", en: "Design an A/B test" }
+    description: "想试一版新标题，不知道要跑多久、怎么才算赢。"
+    expected_output: "一份实验设计：假设、只变哪一样、按什么拆、每版要多少量、要跑几天（规则算的，最少一周）、看哪几样护栏、什么结果算赢；最小提升和护栏的数先给建议、你点头才定。跑完出一张「保留 / 停 / 再测」卡，选了只记结论、不改广告。"
 
 # WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
 # 查资料的职责默认挂；客服类不挂（不让客服回复夹网页内容）。

@@ -5,6 +5,7 @@
  * （14 §2「数字不经模型手」）；模型写的只有 `title` / `summary` 两行人话。
  */
 import type {
+  AdsBreakEvenResult,
   AdsLineCompareView,
   AiTrafficSummary,
   ApprovalItem,
@@ -12,9 +13,11 @@ import type {
   ApprovalState,
   AssignmentId,
   BreakEvenView,
+  CreativeFatigueRow,
   ExecutionOutcomeView,
   ExecutionWiring,
   Iso8601,
+  LandingCheckResult,
   ObjectRef,
   RiskClass,
   RoleId,
@@ -936,8 +939,14 @@ export interface AdsDeckData {
    * 一家一账户一行。币种 / 时区 / 日期范围照报表写，没写就没有（卡上说「没写」）。不给 = 宿主没接看数据。
    */
   exports?: AdsExportOverview[]
-  /** WP447：六个新平台的体检（一家一份；Apple 没有 App 时只有 `app_only` 那一句）。 */
+  /** WP447：六个新平台的体检（一家一份；Apple 没有 App 时只有 `app_only` 那一句）。WP452：十家都有。 */
   audits?: AdsExportAudit[]
+  /** WP452：最近一次算的保本线（`calc_break_even`）。 */
+  break_even_calc?: AdsBreakEvenResult & { at?: string; margin_from?: string }
+  /** WP452：素材疲劳（每日止损那一轮顺带看的，一家一批）。 */
+  fatigue?: CreativeFatigueRow[]
+  /** WP452：广告与落地页核对（最近几次）。 */
+  landing?: LandingCheckResult[]
 }
 
 /** WP447：一家一账户的概况（`apps/server` 的 `exportOverview`）。 */
@@ -972,6 +981,8 @@ export interface AdsExportAudit {
     status: 'ok' | 'look' | 'unknown' | 'not_applicable'
     note: string
     evidence: 'export' | 'backend'
+    /** WP452：三态（过 / 不过 / 未知；不适用的没有）。 */
+    verdict?: 'pass' | 'fail' | 'unknown'
   }[]
 }
 
