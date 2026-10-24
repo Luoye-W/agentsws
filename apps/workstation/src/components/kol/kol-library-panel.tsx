@@ -75,7 +75,7 @@ import { CreatorCard, stepOpensThread } from './creator-card'
 import { CreatorDetailView } from './creator-pane'
 import { ALL_CHANNELS, atHandle } from './kol-channel'
 import { KOL_LIBRARY, kolHomeOf, useKolCardHome } from './kol-library-status'
-import { Collaborations, channelOfRole, Discovery, ImportAndCampaign } from './kol-panel'
+import { Collaborations, Discovery, ImportAndCampaign } from './kol-panel'
 import { KolSandboxBar } from './kol-sandbox-bar'
 import { refreshCards } from './kol-shared'
 
@@ -994,7 +994,14 @@ function CreatorActions({
           disabled={busy}
           data-testid="kol-detail-draft"
           data-kind="confirm"
-          className={cn(btn, 'bg-ws-brand text-ws-brand-fg hover:opacity-90')}
+          // WP505（决策 1773 B）× WP504：人点过「淘汰」的，起草退成次要样式（还能用，只是不再是这一页的主按钮）
+          data-primary={decision === 'rejected' ? 'false' : 'true'}
+          className={cn(
+            btn,
+            decision === 'rejected'
+              ? 'bg-ws-surface text-ws-body hover:bg-ws-hover'
+              : 'bg-ws-brand text-ws-brand-fg hover:opacity-90',
+          )}
           onClick={() => {
             setBusy(true)
             void run(

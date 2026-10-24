@@ -12,7 +12,7 @@
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useRef, useState } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type {
   KnowledgeCardRow,
   KolCreatorRowData,
@@ -446,6 +446,35 @@ describe('红人库（F1 / F2 / F3）', () => {
     fireEvent.click(screen.getByTestId('library-back'))
     expect(screen.queryByTestId('library-layer')).toBeNull()
     expect((screen.getByTestId('kol-library-search') as HTMLInputElement).value).toBe('desk')
+  })
+
+  it('int/1038 × WP505（1773 B）：库里已淘汰、未合作的卡主按钮是「看看」，点了叠开详情；详情头上的起草退成次要样式', async () => {
+    // 面板会取不止一次（库 + 卡片列那张卡），整个用例里都给这一组
+    const orig = api.getKolCreators.getMockImplementation()
+    api.getKolCreators.mockImplementation(async () => ({
+      rows: [
+        row('cre_desk', 'Desk Fixture', {
+          review: { decision: 'rejected', reason: '受众不对', decided_at: NOW },
+        }),
+        row('cre_mira', 'Mira Builds'),
+      ],
+      tags: [],
+    }))
+    onTestFinished(() => {
+      if (orig !== undefined) api.getKolCreators.mockImplementation(orig)
+    })
+    renderKol()
+    await screen.findAllByTestId('kol-creator-card')
+    const cards = screen.getAllByTestId('kol-creator-card')
+    const rejected = cards.find((c) => c.dataset.creator === 'cre_desk') as HTMLElement
+    const fresh = cards.find((c) => c.dataset.creator === 'cre_mira') as HTMLElement
+    const next = within(rejected).getByTestId('kol-card-next')
+    expect(next.dataset.next).toBe('view')
+    expect(next.textContent).toBe(t('kol.card.next.view'))
+    expect(within(fresh).getByTestId('kol-card-next').dataset.next).toBe('draft')
+    fireEvent.click(next)
+    expect(await screen.findByTestId('library-layer')).toBeDefined()
+    expect(screen.getByTestId('kol-detail-draft').dataset.primary).toBe('false')
   })
 
   it('多选 → 吸顶批量条；发开发信 = 出中栏确认卡（提示带「去看」）；加标签当场生效、撤销就回去', async () => {
