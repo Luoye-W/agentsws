@@ -53,6 +53,8 @@ import {
   type KolFinding,
   kolBranch,
   kolRefs,
+  kolSyncAnswer,
+  kolSyncBranch,
   parseFollowerBand,
   parseQuietDays,
   parseWantedCount,
@@ -789,6 +791,56 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
        * 意图判定与工具计划在 `kol-core` 的剧本里（三个运行时同一份），
        * 这里只负责按计划调工具、把回执翻成事件、最后说一段人话。
        */
+      /*
+       * WP509：「把红人同步到我这张飞书表 <链接>」——调一次 sync_creators_to_sheet（服务端在 ego 里读表头、
+       * 出「同步设置」卡，不直接生效），把它回的那一句原样说出来。不是这种话一个字节不变。
+       */
+      const syncStep = kolSyncBranch(req, threadText)
+      if (syncStep !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: syncStep.tool, input: syncStep.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: syncStep.tool,
+                input: syncStep.input,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        const receipt = res.status === 'ok' ? receiptOf(res.data) : {}
+        if (receipt.approval_item_id !== undefined)
+          sink({
+            type: 'proposal.created',
+            approval_item_id: receipt.approval_item_id,
+            kind: 'policy_change',
+          })
+        const answer = kolSyncAnswer(
+          res.status === 'ok' ? res.data : undefined,
+          res.reason === 'no_tool_executor' ? '这个进程没接工具' : res.reason,
+        )
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = '设同步到表格'
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
       const kol = kolBranch(
         req,
         [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),

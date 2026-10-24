@@ -282,6 +282,8 @@ export async function inspectSyncTable(
     steps: [
       { op: 'read', id: 'page' },
       { op: 'copy', id: 'copy' },
+      // 表只有一两行时缺省那一点（220 / 90）落在表外：换一个靠上的点再截一次
+      { op: 'copy', id: 'copy2', at: { x: 220, y: 60 }, unless: ['copy'] },
     ],
   })
   if (res.state !== 'ok')
@@ -289,7 +291,10 @@ export async function inspectSyncTable(
   const page = res.steps.find((s) => s.id === 'page')?.page
   const block = page === undefined ? undefined : sheetPageBlock(page)
   if (block !== undefined) return { ok: false, code: block, message: syncWhy(block) }
-  const copied = res.steps.find((s) => s.id === 'copy')?.copied ?? []
+  const copied =
+    res.steps.find((s) => s.id === 'copy' && s.ok)?.copied ??
+    res.steps.find((s) => s.id === 'copy2')?.copied ??
+    []
   const table = syncTableOf(copied, syncKindOfUrl(url))
   if (table === undefined) return { ok: false, code: 'unreadable', message: syncWhy('unreadable') }
   const name = tableNameOf(page?.title)
@@ -365,9 +370,11 @@ export function createKolSync(options: KolSyncOptions): KolSync {
   }
   const rowsFor = (sink: KolSyncSink) => {
     const state = store.rows(sink.id)
-    const baseline = new Set(
-      [...state.entries()].filter(([, v]) => v.baseline === true).map(([k]) => k),
-    )
+    // 还没批的：批的那一刻库里已有的人都算「老人」，这会儿就照那样数
+    const baseline =
+      sink.state === 'pending_confirm'
+        ? new Set(kol.creators().map((c) => c.id))
+        : new Set([...state.entries()].filter(([, v]) => v.baseline === true).map(([k]) => k))
     return { state, rows: collectSyncRows(kol, { tz: tz(), email, baseline }) }
   }
   const planFor = (sink: KolSyncSink): SyncPlan & { names: Map<string, string> } => {

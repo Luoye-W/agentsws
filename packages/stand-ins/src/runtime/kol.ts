@@ -384,3 +384,38 @@ export function renderKolAnswer(input: {
 }
 
 export { describeKolRun, parseFollowerBand, parseQuietDays, parseWantedCount }
+
+/* ── WP509：「把红人同步到我这张飞书表 <链接>」──────────────────────────── */
+
+const SYNC_TOOL = 'sync_creators_to_sheet'
+const SYNC_LINK =
+  /https?:\/\/[^\s]*(feishu\.cn|feishu\.net|larksuite\.com|larkoffice\.com)[^\s)）」"]*/iu
+const SYNC_WANTS = /同步(到|进)|sync (to|into)/iu
+const SYNC_STATUS = /同步(得|的)?(怎么样|情况|状态|到哪)/u
+
+/**
+ * WP509：stub 的岔口——红人职责、工具面里有 `sync_creators_to_sheet`、话里有一张飞书表的链接、说的是「同步到」，
+ * 就调一次它（服务端在 ego 里读表头、出「同步设置」卡；不直接生效）。只问「同步得怎么样」就调一次 status。
+ * 不是这种话回 `undefined`（红人剧本的其余路径一个字节不变）。
+ */
+export function kolSyncBranch(
+  req: RunRequest,
+  text: string,
+): { tool: string; input: Record<string, unknown> } | undefined {
+  if (kolChannelOfRole(req.actor.role_id) === undefined) return undefined
+  const has = req.tools.allow.some((t) => t === SYNC_TOOL || t.endsWith(`.${SYNC_TOOL}`))
+  if (!has) return undefined
+  const url = SYNC_LINK.exec(text)?.[0]
+  if (url !== undefined && SYNC_WANTS.test(text))
+    return { tool: SYNC_TOOL, input: { url, instruction: text.trim().slice(0, 2000) } }
+  if (url === undefined && SYNC_STATUS.test(text))
+    return { tool: SYNC_TOOL, input: { action: 'status' } }
+  return undefined
+}
+
+/** 工具回的那一句（服务端已经写成人话）。 */
+export function kolSyncAnswer(data: unknown, failed?: string): string {
+  const o = data !== null && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  if (typeof o.message === 'string' && o.message !== '') return o.message
+  return `这一步没走通：${failed ?? '工具没回话'}。`
+}

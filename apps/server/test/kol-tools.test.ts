@@ -286,6 +286,11 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
           mailStageCard: async (_a: unknown, i: { months?: number }) =>
             `近 ${i.months ?? 12} 个月：1 人`,
         }) as never,
+      // WP509：同步到飞书表（这里只核回执形状；真读表、真写在 wp509-kol-sync*.test.ts）
+      sync: () => ({
+        propose: async () => ({ ok: true, message: '出了一张「同步设置」卡', card_id: 'ap_sync' }),
+        describe: () => '「红人表」在同步',
+      }),
       // WP496：ego 用插件同一套采集器读页（这里只核回执形状；真跑脚本那一段在 wp496-ego-capture.test.ts）
       egoCapture: {
         available: () => true,
@@ -361,6 +366,14 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
         'update_stages_from_mail',
         { months: 6 },
         (r) => expect((r.data as { message: string }).message).toContain('近 6 个月'),
+      ],
+      [
+        'sync_creators_to_sheet',
+        { url: 'https://example.feishu.cn/base/AbcDef123?table=tbl1' },
+        (r) => {
+          expect((r.data as { message: string }).message).toContain('同步设置')
+          expect((r.data as { approval_item_id: string }).approval_item_id).toBe('ap_sync')
+        },
       ],
     ]
     for (const [name, input, check] of cases) {

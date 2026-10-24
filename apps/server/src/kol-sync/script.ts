@@ -225,11 +225,14 @@ const arm = () =>
 const copied = () => page.evaluate(() => window.__agentswsCopy || []);
 const clearCopied = () => page.evaluate(() => { window.__agentswsCopy = []; });
 let canvas;
+// 点画布里哪一格：先按给的（缺省 220 / 90，与只读通道同一点）；表只有一两行、那一点落在表外时退到 220 / 60
+const POINTS = [CFG.at || { x: 220, y: 90 }, { x: 220, y: 60 }];
+let pointAt = 0;
 const clickCell = async () => {
   // 先 Esc 两下：万一停在格内编辑，退出来（不提交）
   await press("Escape");
   await press("Escape");
-  const at = CFG.at || { x: 220, y: 90 };
+  const at = POINTS[pointAt] || POINTS[0];
   const x = canvas.x + Math.min(at.x, canvas.w - 10);
   const y = canvas.y + Math.min(at.y, canvas.h - 10);
   await page.mouse.click(x, y, { label: "select a table cell" });
@@ -238,8 +241,14 @@ const clickCell = async () => {
   await press("Escape");
   await wait(200);
 };
-// 读整张表：点一格（已经选着一格时不再点）→ 全选 → 复制 → Esc
+// 读整张表：点一格（已经选着一格时不再点）→ 全选 → 复制 → Esc；第一次读不到换一个点再试
 const readGrid = async (click = true) => {
+  const got = await readOnce(click);
+  if (got || !click || pointAt + 1 >= POINTS.length) return got;
+  pointAt += 1;
+  return readOnce(true);
+};
+const readOnce = async (click) => {
   if (click) await clickCell();
   await clearCopied();
   await press("ControlOrMeta+A");
