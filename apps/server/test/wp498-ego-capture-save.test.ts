@@ -28,8 +28,8 @@ import type { EgoSpawn } from '../src/ego-write/runner.js'
 import { createExtensionContributor } from '../src/extension-contribute.js'
 import { createExtensionService } from '../src/extension-service.js'
 import { createKolStore } from '../src/kol.js'
-import { createKolService } from '../src/kol-service.js'
 import type { KolPublicFetch } from '../src/kol-public-client.js'
+import { createKolService } from '../src/kol-service.js'
 import { createKolToolExecutor } from '../src/kol-tools.js'
 import { createSecretStore } from '../src/secret-store.js'
 
@@ -498,7 +498,9 @@ describe('WP498 1752 C：存下的主页资料回给红人详情与 get_creator'
     const res = await tools({
       name: 'get_creator',
       input: { creator_id: account?.creator_id },
-      request: { actor: { person_id: 'pr_1', assignment_id: 'asg_1', role_id: 'kol.youtube' } } as never,
+      request: {
+        actor: { person_id: 'pr_1', assignment_id: 'asg_1', role_id: 'kol.youtube' },
+      } as never,
     })
     expect(res.status).toBe('ok')
     expect(
